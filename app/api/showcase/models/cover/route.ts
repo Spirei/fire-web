@@ -6,6 +6,7 @@ import { COVERS_DIR, readStoredModels, setModelCover, validModelId } from "@/lib
 import { SHOWCASE_MODELS } from "@/components/showcase/presets/models";
 import { validateImageContent } from "@/lib/imageSecurity";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
+import { readBinaryBody, RequestBodyTooLargeError } from "@/lib/requestBody";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,11 @@ export async function POST(request: Request) {
   if (!EXTS.includes(ext)) return NextResponse.json({ error: "封面只支持 PNG / JPG / WEBP" }, { status: 400 });
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared && declared > MAX_BYTES) return NextResponse.json({ error: "封面请控制在 6MB 以内" }, { status: 413 });
-  const buffer = Buffer.from(await request.arrayBuffer());
+  let buffer: Buffer;
+  try { buffer = Buffer.from(await readBinaryBody(request, MAX_BYTES)); }
+  catch (error) {
+    return NextResponse.json({ error: error instanceof RequestBodyTooLargeError ? "封面请控制在 6MB 以内" : "没有收到有效的图片内容" }, { status: error instanceof RequestBodyTooLargeError ? 413 : 400 });
+  }
   if (!buffer.length) return NextResponse.json({ error: "没有收到图片内容" }, { status: 400 });
   if (buffer.length > MAX_BYTES) return NextResponse.json({ error: "封面请控制在 6MB 以内" }, { status: 413 });
   const validated = validateImageContent(buffer, ext);

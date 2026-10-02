@@ -84,7 +84,10 @@ export async function GET(request: Request) {
       return new NextResponse(new Uint8Array(buffer), {
         headers: {
           "Content-Type": "application/octet-stream",
-          "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`
+          "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'"
         }
       });
     } catch (err) {
@@ -98,8 +101,9 @@ export async function GET(request: Request) {
         headers: {
           "Content-Type": contentType(name),
           "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
-          "Cache-Control": "private, max-age=60",
-          "X-Content-Type-Options": "nosniff"
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'"
         }
       });
     } catch (err) {

@@ -20,7 +20,7 @@ export async function saveProfile(request: Request, strict = false, emailOnly = 
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new ProfileError("无效的请求体");
   if (strict && Object.keys(body).some(key => !(emailOnly ? ["email", "currentPassword", "code"] : ["username", "nickname", "email", "currentPassword", "code"]).includes(key))) throw new ProfileError("包含不支持修改的字段");
   if (emailOnly && typeof body.email !== "string") throw new ProfileError("请填写邮箱");
-  if (strict && body.code !== undefined && (typeof body.code !== "string" || body.code.length > 64)) throw new ProfileError("验证码格式不正确");
+  if (body.code !== undefined && (typeof body.code !== "string" || body.code.length > 64)) throw new ProfileError("验证码格式不正确");
   const patch: { username?: string; email?: string; nickname?: string } = {};
   for (const key of ["username", "nickname", "email"] as const) {
     if (body[key] === undefined) continue;
@@ -44,9 +44,9 @@ export async function saveProfile(request: Request, strict = false, emailOnly = 
       }
       const existing = patch.email && findUserByEmail(patch.email);
       if (existing && existing.id !== user.id) throw new ProfileError("该邮箱已被其他账号绑定", 409);
-      // Recovery email can reset a password. App profile must not become a
-      // second route around the dedicated email endpoint's second factor.
-      if (strict && (emailOnly || changed) && userTotpEnabled(user.id) && !consumeTotpFactor(user.id, body.code || "")) throw new ProfileError("二次验证失败", 403, 40104);
+      // Recovery email can reset a password. Every client must verify the
+      // second factor before changing that recovery identity.
+      if ((emailOnly || changed) && userTotpEnabled(user.id) && !consumeTotpFactor(user.id, body.code || "")) throw new ProfileError("二次验证失败", 403, 40104);
     }
     const next = updateProfile(user.id, patch);
     if (!next) throw new ProfileError("用户名已被使用", 409);

@@ -77,11 +77,23 @@ function ipv4InCidr(ip: string, cidr: string): boolean {
 
 /** 内置私网 / 回环 / 本机域名判断（不依赖环境变量，保证任何部署下都不外发内网请求） */
 export function isPrivateHost(hostRaw: string): boolean {
-    const host = hostRaw.trim().toLowerCase().replace(/^\[|\]$/g, "");
+    const host = hostRaw.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
     if (!host) return false;
     if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".lan") || host.endsWith(".internal")) return true;
     // IPv6 回环 / 唯一本地地址 / 链路本地
-    if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) return true;
+    if (net.isIP(host) === 6) {
+        if (host === "::" || host === "::1" || /^(?:f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/i.test(host)) return true;
+        // URL canonicalizes embedded IPv4 to hex (e.g. ::ffff:7f00:1).
+        // Expand once so both dotted and hex mapped addresses obey IPv4 rules.
+        let canonical: string;
+        try { canonical = new URL(`http://[${host}]`).hostname.slice(1, -1); }
+        catch { return true; } // Scoped/invalid literals are never sent to an external proxy.
+        const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(canonical);
+        if (mapped) {
+            const value = parseInt(mapped[1], 16) * 65536 + parseInt(mapped[2], 16);
+            return isPrivateHost(`${value >>> 24}.${(value >>> 16) & 255}.${(value >>> 8) & 255}.${value & 255}`);
+        }
+    }
     const ip = ipv4ToInt(host);
     if (ip === null) return false;
     const first = ip >>> 24;
@@ -109,10 +121,24 @@ function matchesNoProxyEnv(hostRaw: string): boolean {
     });
 }
 
+function inputUrl(input: RequestInfo | URL): string {
+    return typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+}
+
+/** Debug output keeps only protocol and host; paths, credentials, queries and fragments are secrets. */
+export function redactedNetworkTarget(input: RequestInfo | URL): string {
+    try {
+        const url = new URL(inputUrl(input));
+        return `${url.protocol}//${url.host}`;
+    } catch {
+        return "[invalid URL]";
+    }
+}
+
 function bypassProxy(input: RequestInfo | URL): boolean {
     let host = "";
     try {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : String(input);
+        const url = inputUrl(input);
         host = new URL(url).hostname;
     } catch {
         return false;
@@ -161,9 +187,11 @@ const fetchWithProxy = undiciFetch as unknown as UndiciFetchFn;
  * 与全局 fetch 签名一致，可平替任何服务端数据源请求。
  */
 export async function proxyFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    // A native Request may carry a body/headers; preserve it in its own fetch runtime.
+    if (typeof input !== "string" && !(input instanceof URL)) return fetch(input, init);
     // 内网 / 回环 / NO_PROXY 命中：直接直连，绝不把内网地址交给代理
     if (bypassProxy(input)) {
-        if (proxyDebug()) console.log(`[proxyFetch] 直连（内网 / NO_PROXY） ${String(input).slice(0, 120)}`);
+        if (proxyDebug()) console.log(`[proxyFetch] 直连（内网 / NO_PROXY） ${redactedNetworkTarget(input)}`);
         return fetch(input, init);
     }
     const cfg = proxyConfig();
@@ -180,14 +208,14 @@ export async function proxyFetch(input: RequestInfo | URL, init?: RequestInit): 
         }
         if (decision.ok) {
             try {
-                if (proxyDebug()) console.log(`[proxyFetch] 走代理 ${cfg.url} ${String(input).slice(0, 120)}`);
-                return (await fetchWithProxy(String(input), {
+                if (proxyDebug()) console.log(`[proxyFetch] 走代理 ${redactedNetworkTarget(cfg.url)} ${redactedNetworkTarget(input)}`);
+                return (await fetchWithProxy(inputUrl(input), {
                     ...(init as Record<string, unknown>),
                     dispatcher: getAgent(cfg.url)
                 })) as Response;
             } catch {
                 /* 代理请求失败 → 回退直连 */
-                if (proxyDebug()) console.log(`[proxyFetch] 代理失败，回退直连 ${String(input).slice(0, 120)}`);
+                if (proxyDebug()) console.log(`[proxyFetch] 代理失败，回退直连 ${redactedNetworkTarget(input)}`);
             }
         }
     }

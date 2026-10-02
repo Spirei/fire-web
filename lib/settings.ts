@@ -7,6 +7,7 @@ import { normalizeModelServices } from "./modelServices";
 import { decryptSecret, encryptSecret } from "./secretStorage";
 import { normalizeMobileNavigationOrder } from "./workspaceNavigation";
 import { normalizeBrandSetting } from "./brand";
+import { assertSmtpPasswordDestination } from "./smtpConfig";
 import fs from "fs";
 import path from "path";
 
@@ -484,6 +485,7 @@ export function getSiteSettings(): SiteSettings {
 export function updateSiteSettings(patch: Partial<SiteSettings> & { clearXueqiuCookie?: boolean }, expectedModelRevision?: string): SiteSettings {
   const db = getDb();
   db.transaction(() => {
+  assertSmtpPasswordDestination(getSiteSettings(), patch);
   if (Array.isArray(patch.modelServices) && getSiteSettings().modelServicesError) throw new Error(getSiteSettings().modelServicesError);
   if (expectedModelRevision !== undefined && modelSettingsRevision() !== expectedModelRevision) throw new ModelSettingsConflictError();
   const upsert = db.prepare(`

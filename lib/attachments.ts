@@ -10,6 +10,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  realpathSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -185,7 +186,7 @@ function ensureRoot() {
 /** 规范化相对路径并阻止路径穿越（.. / 绝对路径 / 空） */
 export function safeRel(raw: string): string {
   const cleaned = String(raw ?? "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
-  if (!cleaned || cleaned.split("/").some((s) => s === "" || s === "." || s === "..")) {
+  if (!cleaned || cleaned.includes("\0") || cleaned.split("/").some((s) => s === "" || s === "." || s === "..")) {
     throw new Error("无效的路径");
   }
   return cleaned;
@@ -194,6 +195,12 @@ export function safeRel(raw: string): string {
 function abs(rel: string): string {
   const target = path.join(ROOT, rel);
   if (!target.startsWith(ROOT + path.sep) && target !== ROOT) throw new Error("路径越界");
+  if (existsSync(ROOT)) {
+    let existing = target;
+    while (!existsSync(existing) && existing !== ROOT) existing = path.dirname(existing);
+    const root = realpathSync(ROOT), resolved = realpathSync(existing);
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) throw new Error("路径越界");
+  }
   return target;
 }
 
@@ -211,8 +218,8 @@ export function listAttachments(rel = ""): { path: string; dirs: AttachmentEntry
   const relPath = rel ? safeRel(rel) : "";
   const dir = abs(relPath);
   if (!existsSync(dir)) return { path: relPath, dirs: [], files: [] };
-  const entries = readdirSync(dir, { withFileTypes: true }).map((e) => {
-    const p = path.join(dir, e.name);
+  const entries = readdirSync(dir, { withFileTypes: true }).filter(e => !e.isSymbolicLink()).map((e) => {
+    const p = abs(relPath ? `${relPath}/${e.name}` : e.name);
     const st = statSync(p);
     const relChild = relPath ? `${relPath}/${e.name}` : e.name;
     return {
@@ -288,7 +295,7 @@ export function readAttachment(rel: string): { buffer: Buffer; name: string } {
   const target = abs(safeRel(rel));
   if (!existsSync(target)) throw new Error("文件不存在");
   const st = statSync(target);
-  if (st.isDirectory()) throw new Error("目标是目录");
+  if (!st.isFile()) throw new Error("目标不是普通文件");
   return { buffer: readFileSync(target), name: path.basename(target) };
 }
 

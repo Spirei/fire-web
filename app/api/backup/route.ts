@@ -49,8 +49,8 @@ export async function PUT(request: Request) {
   const cfg = saveBackupConfig({
     ...getBackupConfig(),
     enabled,
-    intervalHours: Math.round(intervalHours),
-    keep: Math.min(90, Math.round(keep))
+    intervalHours: Math.max(1, Math.min(24 * 365, Math.round(intervalHours))),
+    keep: Math.max(1, Math.min(90, Math.round(keep)))
   });
   return NextResponse.json({ ok: true, config: cfg });
 }

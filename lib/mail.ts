@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { getSiteSettings } from "./settings";
 import { consumeMailPermit, type MailPermit } from "./mailBudget";
 import { normalizeProductName } from "./brand";
+import { sameSmtpDestination, SmtpDestinationError } from "./smtpConfig";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] || char);
@@ -27,15 +28,20 @@ function resolveMailConfig(input?: MailConfigInput) {
   const saved = getMailConfig();
   if (!input) return saved;
   const port = Number(input.port ?? saved.port);
-  return {
+  const config = {
     host: String(input.host ?? saved.host).trim(),
     port: Number.isInteger(port) && port > 0 && port <= 65535 ? port : saved.port,
     secure: typeof input.secure === "boolean" ? input.secure : saved.secure,
     user: String(input.user ?? saved.user).trim(),
-    password: input.password ? String(input.password) : saved.password,
+    password: input.password ? String(input.password) : "",
     fromName: normalizeProductName(String(input.fromName ?? saved.fromName).trim()),
     fromEmail: String(input.fromEmail ?? saved.fromEmail).trim()
   };
+  if (!config.password && saved.password) {
+    if (!sameSmtpDestination(config, saved)) throw new SmtpDestinationError();
+    config.password = saved.password;
+  }
+  return config;
 }
 
 export function mailConfigured() {

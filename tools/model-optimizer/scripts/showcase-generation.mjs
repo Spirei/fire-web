@@ -42,6 +42,13 @@ export async function inspectSource(input) {
   const binHeader = 20 + jsonLength;
   if (bytes.readUInt32LE(binHeader + 4) !== 0x004e4942 || bytes.readUInt32LE(binHeader) !== bytes.length - binHeader - 8) throw new Error("无效 GLB BIN 区块");
   const json = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString());
+  // NodeIO reads URI-backed GLB resources from the local filesystem before optimizing.
+  // Uploaded models must be self-contained, including buffers with no visible textures.
+  for (const key of ['buffers', 'images']) {
+    if (json[key] !== undefined && (!Array.isArray(json[key]) || json[key].some(item => !item || typeof item !== 'object' || Array.isArray(item) || Object.hasOwn(item, 'uri')))) {
+      throw new Error('请使用全部资源内嵌的 GLB，不支持外部文件引用');
+    }
+  }
   const binStart = 28 + jsonLength;
   let rgbaBytes = 0, compressed = 0;
   const textures = [];

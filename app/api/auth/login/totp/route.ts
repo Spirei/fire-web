@@ -1,11 +1,12 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { applySessionCookie, createSession, findUserById, sessionCookieMaxAge } from "@/lib/auth";
+import { applySessionCookie, createSession, findUserById, isTrustedMutationRequest, sessionCookieMaxAge } from "@/lib/auth";
 import { completeLoginTicket } from "@/lib/totpAuth";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
+  if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不受信任" }, { status: 403, headers: { "Cache-Control": "no-store" } });
   if (!rateLimit(`login-totp:${clientIp(request)}`, 40, 15 * 60 * 1000) || !rateLimitGlobal("login-totp", 80, 15 * 60 * 1000)) {
     return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
   }

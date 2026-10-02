@@ -1212,16 +1212,21 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       const res = await fetch("/api/auth/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nickname, email, currentPassword: profilePassword })
+        body: JSON.stringify({ nickname, email, currentPassword: profilePassword, code: profileCode })
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "保存失败");
+      if (!res.ok) {
+        if (data?.requiresSecondFactor === true) setProfileFactorRequired(true);
+        throw new Error(data?.error || "保存失败");
+      }
       if (!data?.user) throw new Error("保存失败，请重试");
       const changedEmail=(data.user.email ?? "").toLowerCase()!==(me.email ?? "").toLowerCase();
       setMe((m) => ({ ...m, nickname: data.user.nickname, email: data.user.email, emailVerified: data.user.emailVerified===true }));
       setNickname(data.user.nickname);
       setEmail(data.user.email);
       setProfilePassword("");
+      setProfileCode("");
+      setProfileFactorRequired(false);
       window.dispatchEvent(new Event("fire:user-updated"));
       setNickMsg({ type: "ok", text: "个人资料已更新" });
       showToast("个人资料已更新");
@@ -1838,6 +1843,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [passwordRecoveryOpen, setPasswordRecoveryOpen] = useState(false);
   const [passwordRecoveryBusy, setPasswordRecoveryBusy] = useState(false);
   const [profilePassword, setProfilePassword] = useState("");
+  const [profileCode, setProfileCode] = useState("");
+  const [profileFactorRequired, setProfileFactorRequired] = useState(false);
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpStatusLoaded, setTotpStatusLoaded] = useState(false);
   const [totpBusy, setTotpBusy] = useState(false);
@@ -3514,7 +3521,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                     </button>
                   ) : undefined}
-                  action={editingProfile ? <div className="flex items-center gap-2"><button type="button" onClick={() => { setNickname(me.nickname ?? ""); setEmail(me.email ?? ""); setProfilePassword(""); setEditingProfile(false); }} className="btn btn-ghost btn-sm">取消</button><button type="button" onClick={saveProfile} className="btn btn-line btn-sm">保存资料</button></div> : undefined}
+                  action={editingProfile ? <div className="flex items-center gap-2"><button type="button" onClick={() => { setNickname(me.nickname ?? ""); setEmail(me.email ?? ""); setProfilePassword(""); setProfileCode(""); setProfileFactorRequired(false); setEditingProfile(false); }} className="btn btn-ghost btn-sm">取消</button><button type="button" onClick={saveProfile} className="btn btn-line btn-sm">保存资料</button></div> : undefined}
                 >
                   <div className="settings-profile-grid">
                     <div className="settings-avatar-side">
@@ -3561,10 +3568,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {!editingProfile && me.email && !me.emailVerified && <div className="sw-row"><div className="sw-row-label"><b>验证邮箱</b><span>点击确认邮件中的链接</span></div><button type="button" disabled={emailVerifyBusy} onClick={()=>void sendEmailConfirmation()} className="btn btn-line btn-sm">{emailVerifyBusy?"发送中…":"发送确认邮件"}</button></div>}
                       {emailVerifyMessage && <p role={emailVerifyState === "error" ? "alert" : "status"} className={`settings-form-message is-${emailVerifyState}`}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/>{emailVerifyState === "error" ? <path d="M12 7v6m0 3h.01"/> : <path d="m8 12 3 3 5-6"/>}</svg><span>{emailVerifyMessage}</span></p>}
                       {editingProfile && email.trim().toLowerCase() !== (me.email ?? "").trim().toLowerCase() && (
-                        <div className="sw-row">
-                          <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要当前密码</span></div>
-                          <div className="ctrl" style={{ flex: 1 }}><PasswordInput type="password" disabled={profileSaving} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
-                        </div>
+                        <>
+                          <div className="sw-row">
+                            <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要当前密码</span></div>
+                            <div className="ctrl" style={{ flex: 1 }}><PasswordInput type="password" disabled={profileSaving} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
+                          </div>
+                          {(totpEnabled || profileFactorRequired) && <div className="sw-row">
+                            <div className="sw-row-label"><b>二次验证码</b><span>验证器验证码或备用码</span></div>
+                            <div className="ctrl" style={{ flex: 1 }}><input disabled={profileSaving} autoComplete="one-time-code" spellCheck={false} maxLength={64} value={profileCode} onChange={(e) => setProfileCode(e.target.value)} placeholder="验证器 6 位数字或备用码" className="sw-row-input" /></div>
+                          </div>}
+                        </>
                       )}
                       {nickMsg && <p className={`settings-form-message ${nickMsg.type === "ok" ? "is-ok" : "is-error"}`}>{nickMsg.text}</p>}
                     </div>

@@ -111,7 +111,11 @@ export function updatePassword(userId: string, newPassword: string): boolean {
   return db.transaction(() => {
     const result = db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, userId);
     // Keeping Web sessions never keeps pre-change App consent or token families.
-    if (result.changes) revokeUserAppGrants(userId);
+    if (result.changes) {
+      revokeUserAppGrants(userId);
+      // A pending second factor only proves the password used before this change.
+      db.prepare("DELETE FROM totp_tickets WHERE user_id = ?").run(userId);
+    }
     return result.changes > 0;
   }).immediate();
 }
@@ -145,21 +149,13 @@ export function getUserByToken(token: string | null): User | null {
     WHERE s.token = ?
   `);
   const digest = sessionDbToken(token);
-  let row = lookup.get(digest) as { expires_at: number; id: string; username: string; nickname: string; uid: string; email: string; avatar: string; role: string; is_test: number } | undefined;
-  // 兼容升级前的明文会话：首次使用即原地迁移为摘要，不强制用户重新登录。
-  if (!row) {
-    row = lookup.get(token) as typeof row;
-    if (row) {
-      try {
-        db.prepare("UPDATE sessions SET token = ? WHERE token = ?").run(digest, token);
-      } catch {
-        return null;
-      }
-    }
-  }
+  // Never fall back to matching the supplied value directly. Old plaintext
+  // tokens and current digests have the same shape; that fallback would make
+  // every digest from a database or backup usable as a login credential.
+  const row = lookup.get(digest) as { expires_at: number; id: string; username: string; nickname: string; uid: string; email: string; avatar: string; role: string; is_test: number } | undefined;
   if (!row) return null;
   if (row.expires_at <= Date.now()) {
-    db.prepare("DELETE FROM sessions WHERE token IN (?, ?)").run(digest, token);
+    db.prepare("DELETE FROM sessions WHERE token = ?").run(digest);
     return null;
   }
   return toUser(row);
@@ -168,7 +164,7 @@ export function getUserByToken(token: string | null): User | null {
 export function deleteSession(token: string | null) {
   if (!token) return;
   if (token.startsWith("fat_") || token.startsWith("frt_")) { revokeAppToken(token); return; }
-  getDb().prepare("DELETE FROM sessions WHERE token IN (?, ?)").run(sessionDbToken(token), token);
+  getDb().prepare("DELETE FROM sessions WHERE token = ?").run(sessionDbToken(token));
 }
 
 export function getCookie(request: Request, name: string): string | null {
@@ -247,7 +243,7 @@ export function deleteOtherSessions(userId: string, keepToken: string | null) {
   revokeUserAppGrants(userId);
   const db = getDb();
   if (keepToken) {
-    db.prepare("DELETE FROM sessions WHERE user_id = ? AND token NOT IN (?, ?)").run(userId, sessionDbToken(keepToken), keepToken);
+    db.prepare("DELETE FROM sessions WHERE user_id = ? AND token != ?").run(userId, sessionDbToken(keepToken));
   } else {
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
   }

@@ -30,7 +30,11 @@ export function readBinaryBody(request: Request, maxBytes: number) {
   return limitedBytes(request.body, request.headers.get("content-length"), maxBytes);
 }
 
-export function readLimitedResponseBytes(response: Response, maxBytes: number) {
+export async function readLimitedResponseBytes(response: Response, maxBytes: number) {
+  if (Number(response.headers.get("content-length")) > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new RequestBodyTooLargeError();
+  }
   return limitedBytes(response.body, response.headers.get("content-length"), maxBytes);
 }
 
@@ -87,32 +91,7 @@ export async function readLimitedJson<T = unknown>(request: Request, maxBytes: n
 
 /** Read a JSON response with a hard byte limit before parsing untrusted upstream data. */
 export async function readLimitedResponseJson<T = unknown>(response: Response, maxBytes: number): Promise<T | null> {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes) throw new RequestBodyTooLargeError();
-  if (!response.body) return null;
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => undefined);
-        throw new RequestBodyTooLargeError();
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  const bytes = await readLimitedResponseBytes(response, maxBytes);
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as T;
   } catch {

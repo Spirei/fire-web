@@ -12,6 +12,7 @@ import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { publicVerificationOrigin } from "@/lib/emailVerification";
 import { isConnectionIconUrl } from "@/lib/appConnectionBrand";
 import { normalizeAppConnectionOrigin } from "@/lib/appConnectionChecks";
+import { SmtpDestinationError } from "@/lib/smtpConfig";
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
@@ -37,7 +38,7 @@ export async function PUT(request: Request) {
   if (body.clearXueqiuCookie !== undefined && typeof body.clearXueqiuCookie !== "boolean") return NextResponse.json({ error: "无效的 Cookie 清除请求" }, { status: 400 });
   if (body.clearXueqiuCookie === true && typeof body.xueqiuCookie === "string" && body.xueqiuCookie.trim()) return NextResponse.json({ error: "不能同时替换和清除 Cookie" }, { status: 400 });
 
-  // 数据源地址仅允许 http(s)，防止配置成 file:// 或内网探测地址（管理端接口）
+  // Administrator-configured gateways may be private; credentials must not be embedded in browser-visible URLs.
   const URL_KEYS = [
     "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl",
     "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl"
@@ -45,8 +46,12 @@ export async function PUT(request: Request) {
   for (const k of URL_KEYS) {
     if (body[k] !== undefined) {
       const value = String(body[k]).trim();
-      if (value && !/^https?:\/\/[^\s]+$/i.test(value)) {
-        return NextResponse.json({ error: `${k} 必须是 http(s):// 开头的地址` }, { status: 400 });
+      if (value) {
+        let url: URL | null = null;
+        try { url = new URL(value); } catch { /* invalid input */ }
+        if (value.length > 2048 || /\s/.test(value) || !url || !["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+          return NextResponse.json({ error: `${k} 必须是有效的 http(s) 地址，不能包含用户名或密码` }, { status: 400 });
+        }
       }
     }
   }
@@ -178,6 +183,7 @@ export async function PUT(request: Request) {
   }, modelServices ? before.modelServicesRevision : undefined); }
   catch (error) {
     if (error instanceof ModelSettingsConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof SmtpDestinationError) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ error: "设置保存失败，本次修改未保存，请重试" }, { status: 500 });
   }
   if (Array.isArray(body.groups)) {

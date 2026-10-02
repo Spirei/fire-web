@@ -10,7 +10,6 @@
     } catch {}
 
 const KEY = "fire-simple-book-v3";
-const KEY_OLD = "fire-simple-book-v2";
 const PAGE_W = {
   home: 680, weather: 680, cashflow: 680, family: 740, calendar: 720, manage: 740,
   update: 740, addItem: 600, editItem: 640, help: 640, invest: 420, addInvest: 600,
@@ -73,13 +72,16 @@ const SIMPLE_BENCHMARKS = [
 ];
 let marketIcons = {};
 
-let S = load();
-let route = { name: "home", cat: "cash", member: "全部", chartKind: "mwr", chartRange: "all", showAll: false, showArchived: false, investSort: "updated", sortMenu: false, impMenu: false, editFlow: false, groupMenu: null, accMenu: false };
+let ledgerOwner = readLedgerOwner();
+let ledgerEpoch = 0;
+let S = load(ledgerOwner);
+let route = initialRoute();
 let updateTarget = null;
 let saveTimer = 0;
 let pendingLedgerWrite = Promise.resolve(true);
 let ledgerWriteFailed = false;
 let loggedIn = false;
+let ledgerAccessDenied = false;
 const PAGES = ["home","weather","cashflow","family","calendar","manage","update","addItem","editItem","help","invest","addInvest","summary","addSummary","account","settings"];
 const RAINBOW = ["#ff5f6d","#ff8a4c","#ffb84d","#b58aff","#8077ff","#4ca9f5","#37c7da","#2bc9a5"];
 let urlLock = false;
@@ -115,6 +117,11 @@ function parseDay(s) {
 }
 function esc(s) {
   return String(s ?? "").replace(/[&<>"'`]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;", "`": "&#96;" }[c]));
+}
+// Inline handlers are parsed first as HTML, then as JavaScript. Escape both
+// layers once: HTML escaping alone cannot preserve JavaScript string boundaries.
+function jsArg(value) {
+  return esc(JSON.stringify(String(value ?? "")));
 }
 function canonicalFlows(a) {
   const hist = (Array.isArray(a.hist) ? a.hist : []).slice().sort((x, y) => String(x.d).localeCompare(String(y.d)));
@@ -154,8 +161,8 @@ function normalize(raw) {
   const savedCf = p.cashflow && Number(p.cashflow.schemaVersion) === 5 ? p.cashflow : {};
   const next = { ...EMPTY, ...p, fx: { ...EMPTY.fx, ...(p.fx || {}) }, cashflow: { ...EMPTY.cashflow, ...savedCf } };
   const cf = next.cashflow;
-  cf.incomeItems = Array.isArray(cf.incomeItems) ? cf.incomeItems : [];
-  cf.expenseItems = Array.isArray(cf.expenseItems) ? cf.expenseItems : [];
+  cf.incomeItems = Array.isArray(savedCf.incomeItems) ? savedCf.incomeItems : [];
+  cf.expenseItems = Array.isArray(savedCf.expenseItems) ? savedCf.expenseItems : [];
   for (const k of ["cash", "fixed", "receivable", "debt", "invest", "snaps", "logs", "members", "summaries"]) next[k] = Array.isArray(p[k]) ? p[k] : [];
   if (!next.members.length) next.members = [{ id: "me", name: "我" }];
   next.invest = next.invest.map((a) => {
@@ -172,74 +179,100 @@ function normalize(raw) {
 function isEmptyBook(b) {
   return !b.cash.length && !b.fixed.length && !b.receivable.length && !b.debt.length && !b.invest.length;
 }
-function load() {
+function readLedgerOwner() { return document.getElementById("win")?.dataset.simpleLedgerUser || ""; }
+function ledgerStorageKey(owner) { return KEY + ":" + encodeURIComponent(owner); }
+function isCurrentLedger(owner, epoch) {
+  return !!owner && ledgerOwner === owner && ledgerEpoch === epoch && readLedgerOwner() === owner;
+}
+function initialRoute() {
+  return { name: "home", cat: "cash", member: "全部", chartKind: "mwr", chartRange: "all", showAll: false, showArchived: false, investSort: "updated", sortMenu: false, impMenu: false, editFlow: false, groupMenu: null, accMenu: false };
+}
+function load(owner) {
   try {
-    const v3 = localStorage.getItem(KEY);
-    if (v3) return normalize(JSON.parse(v3));
-    const v2 = localStorage.getItem(KEY_OLD);
-    if (v2) return normalize(JSON.parse(v2));
+    // The legacy shared keys have no proven owner. Keep them untouched and
+    // rebuild this account's cache from its authenticated server ledger.
+    const cached = owner && localStorage.getItem(ledgerStorageKey(owner));
+    if (cached) return normalize(JSON.parse(cached));
   } catch {}
   return normalize(null);
 }
-function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
+function saveLocal(owner = ledgerOwner, epoch = ledgerEpoch) {
+  if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return;
+  try { localStorage.setItem(ledgerStorageKey(owner), JSON.stringify(S)); } catch {}
+}
 function save() {
-  saveLocal();
+  const owner = ledgerOwner, epoch = ledgerEpoch;
+  if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return;
+  saveLocal(owner, epoch);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return;
     saveTimer = 0;
     void pushRemote();
   }, 450);
 }
 function bookEmpty(b) { return isEmptyBook(b || S); }
 async function hydrate() {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
+  if (!isCurrentLedger(owner, epoch)) return false;
   try {
-    const r = await fetch("/api/v1/simple-ledger", { credentials: "same-origin", cache: "no-store" });
-    if (!r.ok) return false;
-    loggedIn = true;
+    const r = await fetch("/api/v1/simple-ledger", { credentials: "same-origin", cache: "no-store", headers: { "x-simple-ledger-user": owner } });
+    if (!isCurrentLedger(owner, epoch)) return false;
+    if (!r.ok) {
+      loggedIn = false;
+      if ([401, 403, 409].includes(r.status)) denyLedgerAccess(owner, epoch);
+      return false;
+    }
     const j = await r.json();
+    if (!isCurrentLedger(owner, epoch)) return false;
     const remote = normalize(j.data || j);
     // 登录用户以服务端数据为准，避免共享浏览器上的本地缓存串入其他账号。
+    loggedIn = true;
+    ledgerAccessDenied = false;
     S = remote;
-    saveLocal();
-    await pullRates();
+    saveLocal(owner, epoch);
+    await pullRates(owner, epoch);
+    if (!isCurrentLedger(owner, epoch)) return false;
     render({ skipUrl: true });
     restoreDlg();
     return true;
   } catch { return false; }
 }
 function pushRemote() {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
+  if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return Promise.resolve(false);
   const payload = JSON.stringify(S);
   pendingLedgerWrite = pendingLedgerWrite.then(async () => {
-    const ok = await writeRemote(payload);
-    ledgerWriteFailed = !ok;
+    if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return false;
+    const ok = await writeRemote(payload, owner, epoch);
+    if (isCurrentLedger(owner, epoch)) ledgerWriteFailed = !ok;
     return ok;
   });
   return pendingLedgerWrite;
 }
-async function writeRemote(payload) {
-  if (!loggedIn) {
-    try {
-      const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: payload, signal: AbortSignal.timeout(10000) });
-      loggedIn = r.ok;
-      return r.ok;
-    } catch { return false; }
-  }
+async function writeRemote(payload, owner, epoch) {
+  if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return false;
   try {
-    const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: payload, signal: AbortSignal.timeout(10000) });
+    const r = await fetch("/api/v1/simple-ledger", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json", "x-simple-ledger-user": owner }, body: payload, signal: AbortSignal.timeout(10000) });
+    if (!isCurrentLedger(owner, epoch)) return false;
+    if ([401, 403, 409].includes(r.status)) { denyLedgerAccess(owner, epoch); return false; }
+    loggedIn = r.ok;
     return r.ok;
   } catch { return false; }
 }
-async function pullRates() {
+async function pullRates(owner = ledgerOwner, epoch = ledgerEpoch) {
+  if (!isCurrentLedger(owner, epoch)) return;
   try {
     const r = await fetch("/api/rates", { credentials: "same-origin", cache: "no-store" });
     if (!r.ok) return;
     const j = await r.json();
+    if (!isCurrentLedger(owner, epoch)) return;
     const rates = j.rates || {};
     if (!rates.CNY) return;
     S.fx.CNY = 1;
     S.fx.USD = rates.CNY;
     if (rates.HKD) S.fx.HKD = rates.CNY / rates.HKD;
-    saveLocal();
+    saveLocal(owner, epoch);
   } catch {}
 }
 function fxRate(cur) { return (S.fx && S.fx[cur]) || 1; }
@@ -614,21 +647,21 @@ function invFilterSelect() {
       <svg class="dd-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
     </button>
     <div class="dd-menu" id="invFilterMenu" hidden>
-      ${INV_FILTERS.map((f) => `<button type="button" class="dd-item ${cur === f ? "on" : ""}" onclick="setInvFilter('${f}')">${esc(f)}${cur === f ? `<span class="tick">✓</span>` : ""}</button>`).join("")}
+      ${INV_FILTERS.map((f) => `<button type="button" class="dd-item ${cur === f ? "on" : ""}" onclick="setInvFilter(${jsArg(f)})">${esc(f)}${cur === f ? `<span class="tick">✓</span>` : ""}</button>`).join("")}
     </div>
   </div>`;
 }
 function marketSelect(id, value, fnName, extra) {
   const cur = MARKETS.find((m) => m.id === value) || null;
   return `<div class="dd">
-    <button type="button" class="dd-btn block" aria-expanded="false" onclick="toggleDrop('${id}',event)">
+    <button type="button" class="dd-btn block" aria-expanded="false" onclick="toggleDrop(${jsArg(id)},event)">
       ${cur ? marketIco(cur.id, 20) : `<span class="mkt-fb" style="width:20px;height:20px">${globeSvg(12)}</span>`}
       <span>${cur ? esc(cur.label) : "选择市场"}</span>
       <svg class="dd-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
     </button>
-    <div class="dd-menu wide" id="${id}" hidden>
+    <div class="dd-menu wide" id="${esc(id)}" hidden>
       ${MARKETS.map((m) => {
-        const call = extra ? `${fnName}('${extra}','${m.id}')` : `${fnName}('${m.id}')`;
+        const call = extra ? `${fnName}(${jsArg(extra)},${jsArg(m.id)})` : `${fnName}(${jsArg(m.id)})`;
         return `<button type="button" class="dd-item ${value === m.id ? "on" : ""}" onclick="${call}">${marketIco(m.id, 20)}<span>${esc(m.label)}</span>${value === m.id ? `<span class="tick">✓</span>` : ""}</button>`;
       }).join("")}
     </div>
@@ -906,9 +939,9 @@ function home() {
       <button class="weather" type="button" onclick="go('weather')">${weatherSvg()}财务晴雨表</button>
     </div>
     <div class="card lav" style="margin:12px 16px;padding:18px 16px" onclick="go('family')">
-      <div class="split"><span style="font-size:15px">家庭总资产</span><span class="faint">${monthUnupdated(t.last)}</span></div>
+      <div class="split"><span style="font-size:15px">家庭总资产</span><span class="faint">${esc(monthUnupdated(t.last))}</span></div>
       <div class="n" style="margin:8px 0 2px">${num(t.assets)}<small>元</small></div>
-      <div class="faint" style="font-size:12px">${t.empty ? "点此开始记录" : relUpdate(t.last)}</div>
+      <div class="faint" style="font-size:12px">${t.empty ? "点此开始记录" : esc(relUpdate(t.last))}</div>
       <div style="display:flex;align-items:end;gap:16px;margin-top:18px">
         <div style="flex:1">
           <div class="spark">${sparkCols(snaps, dA)}</div>
@@ -923,7 +956,7 @@ function home() {
       <div class="mini inv-home" onclick="go('invest')">
         <div class="split"><b>投资记账</b><span class="chev-round" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="${hasYtd ? tone(ytd) : "faint"}" style="font-size:22px;font-weight:750;margin:10px 0 4px">${hasYtd ? pct(ytd) : "暂无"} <small style="font-size:12px">年化</small></div>
-        <div class="faint" style="font-size:12px">${S.invest.length ? relUpdate(t.last) : "尚未记账"}</div>
+        <div class="faint" style="font-size:12px">${S.invest.length ? esc(relUpdate(t.last)) : "尚未记账"}</div>
         <div class="inv-home-returns">
           <div><span>累计收益</span><b class="${tone(t.pnl)}">${(t.pnl / 10000).toFixed(2)}<small> 万</small></b></div>
           <i></i>
@@ -987,7 +1020,7 @@ function cfPreset(kind, name) {
 }
 function cfIcon(kind, name) {
   const p = cfPreset(kind, name);
-  return `<span class="cf-ico cf-ico-${kind}" aria-hidden="true">${esc(p.icon)}</span>`;
+  return `<span class="cf-ico cf-ico-${esc(kind)}" aria-hidden="true">${esc(p.icon)}</span>`;
 }
 function cfChart(t, compact) {
   const parts = [
@@ -1034,13 +1067,13 @@ function cfEstimatePage(kind) {
   const metric = isIncome ? t.income : t.expenses;
   const groups = isIncome ? "" : cfExpenseGroups(items);
   return `<section class="screen on cf-page cf-estimate">
-    ${navHead(`go('cashflow',{cfStep:'${S.cashflow.completed ? "overview" : "intro"}'})`, `${y} 年现金流`)}
+    ${navHead(`go('cashflow',{cfStep:${jsArg(S.cashflow.completed ? "overview" : "intro")}})`, `${y} 年现金流`)}
     ${cfTabs(kind)}
     <div class="cf-total"><span>${isIncome ? "预估年度收入" : "预估年度支出"}</span><strong>${num(metric)}</strong><em>元</em></div>
     ${isIncome ? "" : `<div class="cf-flow-meta"><span class="income"><i></i>收入 ${num(t.income)} 元</span><span class="surplus"><i></i>结余 ${num(t.surplus)} 元</span></div>${cfChart(t,false)}`}
     <div class="cf-list-head"><b>${isIncome ? "收入项" : "支出项"}</b>${items.length > 1 ? "<span>↕ 排序</span>" : ""}</div>
     ${items.length ? (isIncome ? `<div class="cf-added-list">${items.map((x) => cfItemRow(kind,x)).join("")}</div>` : groups) : `<div class="cf-choice-list">${presets.map((p) => cfChoice(kind,p)).join("")}</div>`}
-    ${items.length ? `<button class="cf-choice cf-more" onclick="openCfPicker('${kind}')">${cfIcon(kind,"更多") }<span>${isIncome ? "添加收入" : "添加支出"}</span><b>＋</b></button>` : `<button class="cf-choice cf-more" onclick="openCfPicker('${kind}')">${cfIcon(kind,"更多") }<span>${isIncome ? "更多其他收入" : "更多其他支出"}</span><b>＋</b></button>`}
+    ${items.length ? `<button class="cf-choice cf-more" onclick="openCfPicker(${jsArg(kind)})">${cfIcon(kind,"更多") }<span>${isIncome ? "添加收入" : "添加支出"}</span><b>＋</b></button>` : `<button class="cf-choice cf-more" onclick="openCfPicker(${jsArg(kind)})">${cfIcon(kind,"更多") }<span>${isIncome ? "更多其他收入" : "更多其他支出"}</span><b>＋</b></button>`}
     ${items.length && unused.length ? `<p class="cf-collapsed-note">其他类别已收起，可从“${isIncome ? "添加收入" : "添加支出"}”继续选择</p>` : ""}
     ${isIncome ? `<button class="cf-next" onclick="goCashflowStep('expense')" aria-label="下一步">→</button>` : `<button class="cf-primary cf-complete" onclick="finishCashflow()">完成</button>`}
   </section>`;
@@ -1053,8 +1086,8 @@ function cfExpenseGroups(items) {
     return `<div class="cf-group ${type}"><div class="cf-group-head"><div><b>${labels[type]}</b><span>总计 ${num(rows.reduce((n,x)=>n+cfAnnual(x),0))} 元/年</span></div>${rows.length > 1 ? "<em>↕ 排序</em>" : ""}</div>${rows.map((x)=>cfItemRow("expense",x)).join("")}</div>`;
   }).join("");
 }
-function cfChoice(kind,p) { return `<button class="cf-choice" onclick="openCfEditor('${kind}','${esc(p.name)}')">${cfIcon(kind,p.name)}<span>${esc(p.name)}</span><b>＋</b></button>`; }
-function cfItemRow(kind,x) { return `<button class="cf-item-row" onclick="openCfEditor('${kind}','${esc(x.name)}','${x.id}')"><span>${esc(x.name)}</span><b>${num(x.amount)} 元/${cfFreqLabel(x.freq)}</b></button>`; }
+function cfChoice(kind,p) { return `<button class="cf-choice" onclick="openCfEditor(${jsArg(kind)},${jsArg(p.name)})">${cfIcon(kind,p.name)}<span>${esc(p.name)}</span><b>＋</b></button>`; }
+function cfItemRow(kind,x) { return `<button class="cf-item-row" onclick="openCfEditor(${jsArg(kind)},${jsArg(x.name)},${jsArg(x.id)})"><span>${esc(x.name)}</span><b>${num(x.amount)} 元/${cfFreqLabel(x.freq)}</b></button>`; }
 function cfOverviewPage() {
   const t = cfTotals(), y = new Date().getFullYear();
   return `<section class="screen on cf-page cf-overview">
@@ -1064,7 +1097,7 @@ function cfOverviewPage() {
       <div class="cf-sankey-card">${cfSankeySvg("combined",false)}<button class="cf-expand" onclick="openCfSankey()" aria-label="展开桑基图"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h6v6M11 19H5v-6"/></svg></button></div>
     </div>
     <div class="cf-track-head"><div><h2>支出预算追踪</h2><p>${y} 年度支出 ${num(t.expenses)} 元</p></div><button type="button" class="cf-track-sort ${route.cfSort ? "on" : ""}" onclick="toggleCfSort()" aria-label="${route.cfSort ? "保存排序" : "支出排序"}" title="${route.cfSort ? "保存排序" : "支出排序"}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h11M8 12h8M8 18h5"/><path d="M4 7l2-2 2 2M4 17l2 2 2-2"/></svg></button></div>
-    <div class="cf-track-list">${(S.cashflow.expenseItems || []).map(x=>`<div class="${route.cfSort?"sortable-asset":""}" ${route.cfSort?`draggable="true" ondragstart="dragCfExpenseStart(event,'${x.id}')" ondragend="dragInvestEnd(event)" ondragover="event.preventDefault()" ondrop="dropCfExpense(event,'${x.id}')"`:""}>${cfTrackCard(x)}</div>`).join("") || `<div class="cf-track-empty">添加支出计划后，将在这里追踪每月预算</div>`}</div>
+    <div class="cf-track-list">${(S.cashflow.expenseItems || []).map(x=>`<div class="${route.cfSort?"sortable-asset":""}" ${route.cfSort?`draggable="true" ondragstart="dragCfExpenseStart(event,${jsArg(x.id)})" ondragend="dragInvestEnd(event)" ondragover="event.preventDefault()" ondrop="dropCfExpense(event,${jsArg(x.id)})"`:""}>${cfTrackCard(x)}</div>`).join("") || `<div class="cf-track-empty">添加支出计划后，将在这里追踪每月预算</div>`}</div>
   </section>`;
 }
 function toggleCfSort(){ route.cfSort=!route.cfSort; route.cfTrackMenu=false; if(!route.cfSort) save(); render({resize:false,keepScroll:true}); }
@@ -1090,7 +1123,7 @@ window.getSimpleCashflowChartData = function () {
 function cfSankeySvg(mode,full,metric) {
   const t=cfTotals();
   if (!t.income && !t.expenses) return `<div class="cf-sankey-empty">完成收支预估后生成现金流向图</div>`;
-  return `<div class="cf-echart" data-mode="${mode||"combined"}" data-full="${full?"true":"false"}" data-metric="${metric||"amount"}"></div>`;
+  return `<div class="cf-echart" data-mode="${esc(mode||"combined")}" data-full="${full?"true":"false"}" data-metric="${esc(metric||"amount")}"></div>`;
 }
 function cfExpenseSankey(W,H,t,items,metric) {
   const leftX=120,midX=470,rightX=800,top=100,bottom=335,total=Math.max(t.expenses,1);
@@ -1121,11 +1154,11 @@ function openCfEditor(kind,name,id) {
   const old = id ? list.find((x)=>x.id===id) : null;
   const p = cfPreset(kind,name), title = name.startsWith("自定义") ? "" : name;
   const heading = old && kind === "income" ? "修改收入" : esc(old ? old.name : name);
-  showCfSheet(`<div class="cf-sheet-head cf-editor-head"><button onclick="closeMask()">×</button><h3>${heading}</h3>${old ? `<button class="cf-top-save" onclick="saveCfItem('${kind}','${old.id}')">保存</button>` : "<span></span>"}</div><div class="cf-editor">
+  showCfSheet(`<div class="cf-sheet-head cf-editor-head"><button onclick="closeMask()">×</button><h3>${heading}</h3>${old ? `<button class="cf-top-save" onclick="saveCfItem(${jsArg(kind)},${jsArg(old.id)})">保存</button>` : "<span></span>"}</div><div class="cf-editor">
     <label>名称<input id="cfName" value="${esc(old ? old.name : title)}" placeholder="输入名称"></label>
-    <label>金额<div class="cf-amount"><select id="cfFreq" onchange="syncCfAnnualHint('${kind}')"><option value="year" ${(old?.freq||"month")==="year"?"selected":""}>每年</option><option value="quarter" ${old?.freq==="quarter"?"selected":""}>每季</option><option value="month" ${(old?.freq||"month")==="month"?"selected":""}>每月</option></select><span class="cf-amount-number"><span class="cf-amount-display" id="cfAmountDisp" aria-hidden="true"></span><input id="cfAmount" class="cf-amount-input" inputmode="decimal" autocomplete="off" value="${old ? esc(formatAmtDigits(old.amount)) : ""}" aria-label="金额" onfocus="onCfAmountInput('${kind}',true)" oninput="onCfAmountInput('${kind}',true)" onblur="paintAmt('cfAmount',false)" onclick="this.setSelectionRange(this.value.length,this.value.length)"></span><span>元</span></div><small class="cf-annual-hint" id="cfAnnualHint">${old ? `年度${kind === "income" ? "收入" : "支出"}金额为 ${num(cfAnnual(old))} 元` : ""}</small></label>
+    <label>金额<div class="cf-amount"><select id="cfFreq" onchange="syncCfAnnualHint(${jsArg(kind)})"><option value="year" ${(old?.freq||"month")==="year"?"selected":""}>每年</option><option value="quarter" ${old?.freq==="quarter"?"selected":""}>每季</option><option value="month" ${(old?.freq||"month")==="month"?"selected":""}>每月</option></select><span class="cf-amount-number"><span class="cf-amount-display" id="cfAmountDisp" aria-hidden="true"></span><input id="cfAmount" class="cf-amount-input" inputmode="decimal" autocomplete="off" value="${old ? esc(formatAmtDigits(old.amount)) : ""}" aria-label="金额" onfocus="onCfAmountInput(${jsArg(kind)},true)" oninput="onCfAmountInput(${jsArg(kind)},true)" onblur="paintAmt('cfAmount',false)" onclick="this.setSelectionRange(this.value.length,this.value.length)"></span><span>元</span></div><small class="cf-annual-hint" id="cfAnnualHint">${old ? `年度${kind === "income" ? "收入" : "支出"}金额为 ${num(cfAnnual(old))} 元` : ""}</small></label>
     ${kind === "expense" ? `<label>类型<div class="cf-types">${[["stable","稳定支出"],["flexible","弹性支出"],["other","其他支出"]].map(([v,l])=>`<button class="${(old?.type||p.type||"other")===v?"on":""}" data-type="${v}" onclick="pickCfType(this)">${l}</button>`).join("")}</div></label><p class="cf-type-help">稳定支出适合房租、房贷、保费等固定或刚性费用；弹性支出适合日常消费与兴趣安排。</p>` : ""}
-    <div class="cf-editor-actions">${old ? `<button class="cf-delete" onclick="deleteCfItem('${kind}','${old.id}')" aria-label="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M9 4h6l1 3H8l1-3ZM7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button>` : `<button class="cf-primary" onclick="saveCfItem('${kind}','')">添加</button>`}</div>
+    <div class="cf-editor-actions">${old ? `<button class="cf-delete" onclick="deleteCfItem(${jsArg(kind)},${jsArg(old.id)})" aria-label="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M9 4h6l1 3H8l1-3ZM7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></button>` : `<button class="cf-primary" onclick="saveCfItem(${jsArg(kind)},'')">添加</button>`}</div>
   </div>`);
   setTimeout(()=>{ document.getElementById("cfAmount")?.focus(); onCfAmountInput(kind,true); },0);
 }
@@ -1212,8 +1245,8 @@ function trendSvg() {
   }
   const first = pts[0] ? pretty(pts[0].at) : "";
   const last = pts.length ? pretty(pts[pts.length - 1].at) : "";
-  grid += `<text x="${L}" y="${H - 6}" font-size="10" fill="var(--faint)">${first}</text>`;
-  if (pts.length > 1) grid += `<text x="${W - 88}" y="${H - 6}" font-size="10" fill="var(--faint)">${last}</text>`;
+  grid += `<text x="${L}" y="${H - 6}" font-size="10" fill="var(--faint)">${esc(first)}</text>`;
+  if (pts.length > 1) grid += `<text x="${W - 88}" y="${H - 6}" font-size="10" fill="var(--faint)">${esc(last)}</text>`;
   const colors = { net: "#2eb789", cash: "#c47a52", inv: "#6b5ea7", fixed: "#5aa7b8", rec: "#6b8cce", debt: "#8a8a8a" };
   let paths = "";
   const xs = pts.map((_, i) => xv(i));
@@ -1262,10 +1295,10 @@ function trendCard() {
     ["debt", "负债", "#8a8a8a"]
   ];
   return `<div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
-    <div class="split"><b>资产趋势</b><div class="range-select"><button type="button" class="ghost-btn" aria-expanded="${!!route.trendRangeOpen}" onclick="event.stopPropagation();route.trendRangeOpen=!route.trendRangeOpen;render({resize:false,keepScroll:true})">${rangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.trendRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${range === v ? "on" : ""}" onclick="event.stopPropagation();setTrendRange('${v}')"><span>${l}</span>${range === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
+    <div class="split"><b>资产趋势</b><div class="range-select"><button type="button" class="ghost-btn" aria-expanded="${!!route.trendRangeOpen}" onclick="event.stopPropagation();route.trendRangeOpen=!route.trendRangeOpen;render({resize:false,keepScroll:true})">${rangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.trendRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${range === v ? "on" : ""}" onclick="event.stopPropagation();setTrendRange(${jsArg(v)})"><span>${l}</span>${range === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
     ${mode === "net"
       ? `<div class="trend-legend"><label><i class="chk on" style="background:#2eb789"></i> 净资产</label></div>`
-      : `<div class="trend-legend">${cats.map(([k, lab, c]) => `<label onclick="toggleTrend('${k}')"><i class="chk ${on[k] ? "on" : ""}" style="background:${on[k] ? c : "transparent"};border:1.5px solid ${c}"></i> ${lab}</label>`).join("")}</div>`}
+      : `<div class="trend-legend">${cats.map(([k, lab, c]) => `<label onclick="toggleTrend(${jsArg(k)})"><i class="chk ${on[k] ? "on" : ""}" style="background:${on[k] ? c : "transparent"};border:1.5px solid ${c}"></i> ${lab}</label>`).join("")}</div>`}
     ${trendSvg()}
     <div class="trend-tabs">
       <button type="button" class="${mode === "all" ? "on" : ""}" onclick="route.trendMode='all';render({resize:false,keepScroll:true})">全部</button>
@@ -1309,7 +1342,7 @@ function family() {
     ${navHead("go('home')", "家庭资产记账")}
     <div class="pills">
       <button class="pill ${route.member === "全部" ? "on" : ""}" onclick="route.member='全部';render({resize:false,keepScroll:true})">全部</button>
-      ${memberList().filter((m) => m.show !== false).map((m) => `<button class="pill ${route.member === m.name ? "on" : ""}" onclick="route.member='${esc(m.name)}';render({resize:false,keepScroll:true})">${esc(m.name)}</button>`).join("")}
+      ${memberList().filter((m) => m.show !== false).map((m) => `<button class="pill ${route.member === m.name ? "on" : ""}" onclick="route.member=${jsArg(m.name)};render({resize:false,keepScroll:true})">${esc(m.name)}</button>`).join("")}
       <button class="manage" onclick="go('manage')">管理 ›</button>
     </div>
     <div class="lav-deep" style="margin:0 16px 12px;padding:16px;border-radius:18px">
@@ -1319,10 +1352,10 @@ function family() {
         </span>
       </div>
       <div class="n">${num(t.assets)}</div>
-      <div class="faint" style="font-size:12px;margin:4px 0 8px">${t.empty ? "尚未记账" : relUpdate(t.last)}</div>
+      <div class="faint" style="font-size:12px;margin:4px 0 8px">${t.empty ? "尚未记账" : esc(relUpdate(t.last))}</div>
       <div class="k">净资产 <b style="color:var(--ink)">${num(t.net)}</b>　负债率 ${t.empty ? "—" : (S.hide ? "****" : t.ratio.toFixed(2) + "%")}</div>
       <div class="inner">
-        <div class="split"><span>${compareLabel}</span><button class="faint" onclick="go('calendar')">资产月历 ›</button></div>
+        <div class="split"><span>${esc(compareLabel)}</span><button class="faint" onclick="go('calendar')">资产月历 ›</button></div>
         <div class="family-change-body">
           <div class="spark">${sparkCols([], dA)}</div>
           <div class="family-change-copy">
@@ -1348,7 +1381,7 @@ function family() {
     ${trendCard()}
     <div class="card" style="margin:0 16px 12px;padding:16px;border-radius:18px">
       <b>更新记录</b>
-      ${logs.length ? `<div class="tl" style="margin-top:12px">${logs.map((g) => `<h4>${md(g.at)}</h4>${g.items.map((it) => `<div class="row-card split"><span>${esc(it.name)}</span><b class="nowrap">${money(it.amount, it.cur)}</b></div>`).join("")}`).join("")}
+      ${logs.length ? `<div class="tl" style="margin-top:12px">${logs.map((g) => `<h4>${esc(md(g.at))}</h4>${g.items.map((it) => `<div class="row-card split"><span>${esc(it.name)}</span><b class="nowrap">${money(it.amount, it.cur)}</b></div>`).join("")}`).join("")}
         ${visibleFamilyLogs().length > 8 && !route.showAll ? `<button class="faint" style="display:block;width:100%;padding:8px" onclick="route.showAll=true;render()">查看更多</button>` : ""}
       </div>` : `<div class="faint" style="text-align:center;padding:28px 8px">暂无更新记录</div>`}
     </div>
@@ -1548,7 +1581,7 @@ function calendarPage() {
   return `<section class="screen on gray">
     ${navHead("go('family')", "资产月历")}
     ${rows.length ? rows.map((s) => `<div class="w-card">
-      <div class="split"><b>${zhDate(s.at)}</b><span class="muted">${num(s.assets)} 元</span></div>
+      <div class="split"><b>${esc(zhDate(s.at))}</b><span class="muted">${num(s.assets)} 元</span></div>
       <div class="k" style="margin-top:8px">负债 ${num(s.debt)}　现金 ${num(s.cash)}　投资 ${num(s.inv)}</div>
     </div>`).join("") : `<div class="w-card faint" style="text-align:center">还没有快照。更新一笔资产后会出现。</div>`}
   </section>`;
@@ -1569,9 +1602,9 @@ function managePage() {
         <div class="avatar" style="background:${colors[i % colors.length]}"><i class="dot l"></i><i class="dot r"></i><i class="smile"></i></div>
         <b>${esc(m.name)}</b>
         ${sorting ? `<div class="mem-shift">
-          <button type="button" onclick="moveMember('${m.id}',-1)">左移</button>
-          <button type="button" onclick="moveMember('${m.id}',1)">右移</button>
-        </div>` : (m.id !== "me" ? `<button class="sub" onclick="removeMember('${m.id}')">移除</button>` : "")}
+          <button type="button" onclick="moveMember(${jsArg(m.id)},-1)">左移</button>
+          <button type="button" onclick="moveMember(${jsArg(m.id)},1)">右移</button>
+        </div>` : (m.id !== "me" ? `<button class="sub" onclick="removeMember(${jsArg(m.id)})">移除</button>` : "")}
       </div>`).join("")}
       ${sorting ? "" : `<button class="mem" type="button" onclick="addMemberDlg()">
         <div class="mem-add">+</div>
@@ -1663,11 +1696,11 @@ function amtField(id, value, cur) {
   return `<div class="amt-field">
     <b class="amt-sym">${meta.symbol}</b>
     <span class="amt-box">
-      <span class="amt-display" id="${id}Disp"></span>
-      <input id="${id}" class="amt-input" inputmode="decimal" autocomplete="off" value="${esc(shown)}" data-empty-display="blank" aria-label="金额"
-        onfocus="onAmtInput('${id}')" oninput="onAmtInput('${id}')" onblur="paintAmt('${id}',false)" onclick="this.setSelectionRange(this.value.length,this.value.length)" />
+      <span class="amt-display" id="${esc(id)}Disp"></span>
+      <input id="${esc(id)}" class="amt-input" inputmode="decimal" autocomplete="off" value="${esc(shown)}" data-empty-display="blank" aria-label="金额"
+        onfocus="onAmtInput(${jsArg(id)})" oninput="onAmtInput(${jsArg(id)})" onblur="paintAmt(${jsArg(id)},false)" onclick="this.setSelectionRange(this.value.length,this.value.length)" />
     </span>
-    <small class="amt-code">${cur || "CNY"}</small>
+    <small class="amt-code">${esc(cur || "CNY")}</small>
   </div>`;
 }
 function addMemberDlg(opts) {
@@ -1744,25 +1777,25 @@ function updateFamily() {
         const value = c.id === "invest" ? vis(S.invest).reduce((n, x) => n + cny(x), 0) : sum(c.list);
         const empty = c.list.length === 0;
         const on = c.id === cur.id ? (c.id === "cash" ? "on-cash" : c.id === "invest" ? "on-inv" : "on-debt") : "";
-        return `${i ? `<span class="cat-next">›</span>` : ""}<button class="cat ${on}" onclick="go('update',{cat:'${c.id}'})">
+        return `${i ? `<span class="cat-next">›</span>` : ""}<button class="cat ${on}" onclick="go('update',{cat:${jsArg(c.id)}})">
           <b>${c.label}</b>
           <span>${empty && value === 0 && c.id !== "debt" ? "待填写" : num(value) + " 元"}</span>
         </button>`;
       }).join("")}
     </div>
-    <button class="hint ${cur.id === "cash" ? "" : "plain"}" onclick="go('help',{cat:'${cur.id}'})"><span>什么是${cur.label}</span><span>›</span></button>
+    <button class="hint ${cur.id === "cash" ? "" : "plain"}" onclick="go('help',{cat:${jsArg(cur.id)}})"><span>什么是${cur.label}</span><span>›</span></button>
     ${grouped.map((g) => `<div>
       <div class="owner-row"><div class="me">${esc(g.owner)}</div>
         <button class="sort-btn ${sorting ? "on" : ""}" type="button" onclick="route.itemSort=!route.itemSort;render({resize:false,keepScroll:true})" aria-label="排序">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 8l4-4 4 4M8 16l4 4 4-4"/></svg>
         </button>
       </div>
-      ${g.items.length ? g.items.map((a) => `<button class="acct" onclick="${sorting ? `moveItem('${cur.id}','${a.id}',1)` : (cur.id === "invest" ? `go('account',{account:'${a.id}'})` : `go('editItem',{cat:'${cur.id}',itemId:'${a.id}'})`)}">
+      ${g.items.length ? g.items.map((a) => `<button class="acct" onclick="${sorting ? `moveItem(${jsArg(cur.id)},${jsArg(a.id)},1)` : (cur.id === "invest" ? `go('account',{account:${jsArg(a.id)}})` : `go('editItem',{cat:${jsArg(cur.id)},itemId:${jsArg(a.id)}})`)}">
         <b>${esc(a.name)}</b>
-        <div class="amt">${money(a.amount, a.cur)}<small>${a.date ? md(a.date) : (a.updated ? relUpdate(a.updated) : "")}${sorting ? " · 点此下移" : ""}</small></div>
+        <div class="amt">${money(a.amount, a.cur)}<small>${esc(a.date ? md(a.date) : (a.updated ? relUpdate(a.updated) : ""))}${sorting ? " · 点此下移" : ""}</small></div>
       </button>`).join("") : `<div class="faint" style="padding:24px;text-align:center">暂无记录</div>`}
     </div>`).join("")}
-    <button class="add-dash" onclick="${cur.id === "invest" ? "go('addInvest')" : `go('addItem',{cat:'${cur.id}'})`}">
+    <button class="add-dash" onclick="${cur.id === "invest" ? "go('addInvest')" : `go('addItem',{cat:${jsArg(cur.id)}})`}">
       <span>${cur.id === "debt" ? "更多负债" : "继续添加"}</span><span>+</span>
     </button>
   </section>`;
@@ -1776,7 +1809,7 @@ function finishUpdate() {
 function helpPage() {
   const c = CATS.find((x) => x.id === route.cat) || CATS[0];
   return `<section class="screen on gray">
-    ${navHead(`go('update',{cat:'${c.id}'})`, `什么是${c.label}`)}
+    ${navHead(`go('update',{cat:${jsArg(c.id)}})`, `什么是${c.label}`)}
     <div class="w-card help"><p>${c.hint}</p><p>金额按记账币种填写，家庭总览会折成人民币显示。</p></div>
   </section>`;
 }
@@ -1787,16 +1820,16 @@ function addItemPage() {
   const ready = d.name.trim() && d.amount !== "" && Number.isFinite(Number(d.amount));
   return `<section class="screen on">
     <div class="add-head">
-      <div class="bar" style="padding:0"><span></span><button class="back" onclick="go('update',{cat:'${cat}'})">×</button></div>
+      <div class="bar" style="padding:0"><span></span><button class="back" onclick="go('update',{cat:${jsArg(cat)}})">×</button></div>
       <h1>添加${meta.label}</h1>
       <div class="ex">参考示例</div>
-      <div class="ex-row">${(EXAMPLES[cat] || []).map((n) => `<button class="ex-chip" type="button" onclick="fillItemExample('${esc(n)}')">${esc(n)}<small>金额 ****</small></button>`).join("")}</div>
+      <div class="ex-row">${(EXAMPLES[cat] || []).map((n) => `<button class="ex-chip" type="button" onclick="fillItemExample(${jsArg(n)})">${esc(n)}<small>金额 ****</small></button>`).join("")}</div>
     </div>
     <div class="add-body">
       <div class="field"><label>名称</label><input value="${esc(d.name)}" placeholder="取个名字吧" oninput="draftItem('name',this.value)" /></div>
       <div class="field"><label>金额</label><input type="number" value="${esc(d.amount)}" placeholder="输入金额" oninput="draftItem('amount',this.value)" /></div>
       <div class="field"><label>币种</label>
-        <div class="types">${CURS.map((c) => `<button type="button" class="${d.cur === c.code ? "on" : ""}" onclick="draftItem('cur','${c.code}');render()">${c.name}</button>`).join("")}</div>
+        <div class="types">${CURS.map((c) => `<button type="button" class="${d.cur === c.code ? "on" : ""}" onclick="draftItem('cur',${jsArg(c.code)});render()">${c.name}</button>`).join("")}</div>
       </div>
       <button class="ok-btn ${ready ? "ready" : ""}" ${ready ? "" : "disabled"} onclick="commitItem()">确定</button>
     </div>
@@ -1806,17 +1839,17 @@ function editItemPage() {
   const cat = route.cat;
   const item = listByCat(cat).find((x) => x.id === route.itemId);
   if (!item) {
-    return `<section class="screen on gray">${navHead(`go('update',{cat:'${cat}'})`, "资产")}<div class="w-card faint" style="text-align:center;padding:28px">没有找到这条记录，或数据仍在同步。</div></section>`;
+    return `<section class="screen on gray">${navHead(`go('update',{cat:${jsArg(cat)}})`, "资产")}<div class="w-card faint" style="text-align:center;padding:28px">没有找到这条记录，或数据仍在同步。</div></section>`;
   }
   return `<section class="screen on">
-    ${navHead(`go('update',{cat:'${cat}'})`, esc(item.name), `<button class="danger" onclick="removeItem('${cat}','${item.id}')">删除</button>`)}
+    ${navHead(`go('update',{cat:${jsArg(cat)}})`, esc(item.name), `<button class="danger" onclick="removeItem(${jsArg(cat)},${jsArg(item.id)})">删除</button>`)}
     <div class="add-body">
-      <div class="field"><label>名称</label><input value="${esc(item.name)}" onchange="patchItem('${cat}','${item.id}',{name:this.value},false)" /></div>
-      <div class="field"><label>金额</label><input type="number" value="${item.amount}" onchange="saveEditAmount('${cat}','${item.id}',this.value)" /></div>
+      <div class="field"><label>名称</label><input value="${esc(item.name)}" onchange="patchItem(${jsArg(cat)},${jsArg(item.id)},{name:this.value},false)" /></div>
+      <div class="field"><label>金额</label><input type="number" value="${esc(item.amount)}" onchange="saveEditAmount(${jsArg(cat)},${jsArg(item.id)},this.value)" /></div>
       <div class="field"><label>币种</label>
-        <div class="types">${CURS.map((c) => `<button type="button" class="${item.cur === c.code ? "on" : ""}" onclick="patchItem('${cat}','${item.id}',{cur:'${c.code}'})">${c.name}</button>`).join("")}</div>
+        <div class="types">${CURS.map((c) => `<button type="button" class="${item.cur === c.code ? "on" : ""}" onclick="patchItem(${jsArg(cat)},${jsArg(item.id)},{cur:${jsArg(c.code)}})">${c.name}</button>`).join("")}</div>
       </div>
-      <button class="ok-btn ready" onclick="commitEdit('${cat}','${item.id}')">保存</button>
+      <button class="ok-btn ready" onclick="commitEdit(${jsArg(cat)},${jsArg(item.id)})">保存</button>
     </div>
   </section>`;
 }
@@ -1938,7 +1971,7 @@ function addSummaryPage() {
     ${navHead("go('invest')", "添加汇总", `<button class="bar-ico" onclick="go('invest')" aria-label="关闭">×</button>`)}
     <div class="w-card"><div class="field"><label>汇总名称</label><input id="summaryName" placeholder="取个名字吧" /></div></div>
     <div class="pad"><b style="font-size:18px">包含资产</b></div>
-    <div class="w-card summary-picker">${vis(S.invest).map((a) => `<label class="summary-check"><span>${esc(a.name)}</span><input type="checkbox" data-summary-id="${a.id}" /><i></i></label>`).join("")}</div>
+    <div class="w-card summary-picker">${vis(S.invest).map((a) => `<label class="summary-check"><span>${esc(a.name)}</span><input type="checkbox" data-summary-id="${esc(a.id)}" /><i></i></label>`).join("")}</div>
     <button class="dock-cta" onclick="saveSummaryDraft()">确定</button>
   </section>`;
 }
@@ -1990,14 +2023,14 @@ function investHome() {
   const ytds = vis(S.invest).map(investStats).filter((s) => s.ytd != null);
   st.ytd = ytds.length ? ytds.reduce((n, s) => n + s.ytd * Math.max(s.net, 0), 0) / Math.max(1, ytds.reduce((n, s) => n + Math.max(s.net, 0), 0)) : null;
   const investActions = `<button class="ghost-btn faint" onclick="openReminder()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align:-2px;margin-right:4px"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21h4"/></svg>${S.reminder ? "每月" + S.reminder + "日" : "记账提醒"}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="vertical-align:-2px;margin-right:4px"><path d="M6 9a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21h4"/></svg>${S.reminder ? "每月" + esc(S.reminder) + "日" : "记账提醒"}
     </button>`;
   return `<section class="screen on">
     ${navHead("go('home')", "投资记账", investActions)}
     <div class="invest-subhead"><b>分组汇总</b></div>
     <div class="summary-strip">
       <div class="inv summary-card" onclick="go('summary')"><div class="k">默认汇总 (元) ${hideBtn()}</div><div class="n" style="margin:6px 0 14px">${num(t.inv)}</div><div class="split"><span class="summary-metric"><span class="summary-metric-label">累计收益</span><b class="summary-metric-value ${S.invest.length ? tone(t.pnl) : "faint"}">${S.invest.length ? num(t.pnl) : "暂无"}</b></span><span class="summary-metric"><span class="summary-metric-label">年化收益率</span><b class="summary-metric-value ${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></span></div></div>
-      ${S.summaries.map((g) => { const x = summaryStats(g); return `<div class="inv summary-card custom-summary" onclick="go('summary',{summaryId:'${g.id}'})"><div class="split"><b>${esc(g.name)}</b><button class="summary-remove" onclick="event.stopPropagation();removeSummary('${g.id}')">×</button></div><div class="n" style="margin:6px 0 14px">${num(x.amount)}</div><div class="split"><span class="summary-metric"><span class="summary-metric-label">累计收益</span><b class="summary-metric-value ${tone(x.pnl)}">${num(x.pnl)}</b></span><span class="faint">${x.rows.length} 项资产</span></div></div>`; }).join("")}
+      ${S.summaries.map((g) => { const x = summaryStats(g); return `<div class="inv summary-card custom-summary" onclick="go('summary',{summaryId:${jsArg(g.id)}})"><div class="split"><b>${esc(g.name)}</b><button class="summary-remove" onclick="event.stopPropagation();removeSummary(${jsArg(g.id)})">×</button></div><div class="n" style="margin:6px 0 14px">${num(x.amount)}</div><div class="split"><span class="summary-metric"><span class="summary-metric-label">累计收益</span><b class="summary-metric-value ${tone(x.pnl)}">${num(x.pnl)}</b></span><span class="faint">${x.rows.length} 项资产</span></div></div>`; }).join("")}
       <button class="add-summary-card" onclick="go('addSummary')"><span>＋</span><b>添加汇总</b></button>
     </div>
     <div class="pad split" style="margin-bottom:8px">
@@ -2013,15 +2046,15 @@ function investHome() {
     ${filteredInvest().length ? filteredInvest().map((a) => {
       const s = investStats(a);
       const unit = a.cur === "USD" ? "美元" : a.cur === "HKD" ? "港元" : "元";
-      return `<div class="asset ${route.sorting ? "sortable-asset" : ""}" ${route.sorting ? `draggable="true" ondragstart="dragInvestStart(event,'${a.id}')" ondragend="dragInvestEnd(event)" ondragover="event.preventDefault()" ondrop="dropInvest(event,'${a.id}')"` : ""}>
+      return `<div class="asset ${route.sorting ? "sortable-asset" : ""}" ${route.sorting ? `draggable="true" ondragstart="dragInvestStart(event,${jsArg(a.id)})" ondragend="dragInvestEnd(event)" ondragover="event.preventDefault()" ondrop="dropInvest(event,${jsArg(a.id)})"` : ""}>
         <div class="split"><div style="display:flex;align-items:center;gap:10px;min-width:0"><div style="display:flex;align-items:center;gap:10px;min-width:0">${a.market ? marketIco(a.market, 22) : ""}</div><div class="asset-name-line" style="display:flex;align-items:baseline;gap:6px;min-width:0;white-space:nowrap"><b style="overflow:hidden;text-overflow:ellipsis">${esc(a.name)}</b><span class="faint" style="font-size:12px;flex:none">· ${daysAgo(a.updated)}</span></div></div>
-          <button class="ghost-btn" onclick="event.stopPropagation();openUpdate('${a.id}')">更新收益</button></div>
-        <div class="metric" onclick="go('account',{account:'${a.id}'})">
+          <button class="ghost-btn" onclick="event.stopPropagation();openUpdate(${jsArg(a.id)})">更新收益</button></div>
+        <div class="metric" onclick="go('account',{account:${jsArg(a.id)}})">
           <div><div class="k">资产 (${unit})</div><b>${num(a.amount)}</b></div>
           <div><div class="k">累计收益 (${unit})</div><b class="${tone(s.pnl)}">${num(s.pnl)}</b></div>
           <div><div class="k">年化收益率</div><b class="${s.ytd == null ? "faint" : tone(s.ytd)}">${s.ytd == null ? "暂无" : pct(s.ytd)}</b></div>
         </div>
-        ${(route.sorting || route.showArchived) ? `<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="archive-sort-btn" type="button" onclick="event.stopPropagation();${route.showArchived ? `restoreArchivedInvest('${a.id}')` : `archiveInvestFromSort('${a.id}')`}">${route.showArchived ? "恢复" : "归档"}</button></div>` : ""}
+        ${(route.sorting || route.showArchived) ? `<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="archive-sort-btn" type="button" onclick="event.stopPropagation();${route.showArchived ? `restoreArchivedInvest(${jsArg(a.id)})` : `archiveInvestFromSort(${jsArg(a.id)})`}">${route.showArchived ? "恢复" : "归档"}</button></div>` : ""}
       </div>`;
     }).join("") : `<div class="faint" style="text-align:center;padding:32px 16px">还没有投资资产</div>`}
     ${route.showArchived ? "" : `<button class="add-dash" onclick="go('addInvest')">+ 添加投资资产</button>`}
@@ -2036,7 +2069,7 @@ function addInvestPage() {
       <div class="bar" style="padding:0"><span></span><button class="back" onclick="go('invest')">×</button></div>
       <h1>添加投资资产</h1>
       <div class="ex">参考示例</div>
-      <div class="ex-row">${EXAMPLES.invest.map((n) => `<button class="ex-chip" type="button" onclick="fillExample('${n}')">${n}<small>金额 ****</small></button>`).join("")}</div>
+      <div class="ex-row">${EXAMPLES.invest.map((n) => `<button class="ex-chip" type="button" onclick="fillExample(${jsArg(n)})">${n}<small>金额 ****</small></button>`).join("")}</div>
     </div>
     <div class="add-body">
       <div class="field"><label><svg class="lab-ico" viewBox="0 0 24 24" fill="none" stroke="#e07a5f" stroke-width="1.8"><path d="M4 20l4.5-1.2L19 8.3a1.5 1.5 0 0 0 0-2.1L17.8 5a1.5 1.5 0 0 0-2.1 0L5.2 15.5 4 20z"/></svg>资产名称</label><input id="invName" placeholder="取个名字吧" value="${esc(d.name)}" oninput="draftField('name',this.value)" /></div>
@@ -2045,13 +2078,13 @@ function addInvestPage() {
         ${marketSelect("draftMarketMenu", d.market || "CN", "pickDraftMarket")}
       </div>
       <div class="field"><label><svg class="lab-ico" viewBox="0 0 24 24" fill="none" stroke="#6b8cff" stroke-width="1.8"><path d="M12 4a8 8 0 1 1-5.6 2.4"/><path d="M12 4v4"/></svg>资产类型</label>
-        <div class="types">${["活钱", "稳健", "长期"].map((b) => `<button type="button" class="${d.bucket === b ? "on" : ""}" onclick="draftField('bucket','${b}');render()">${b}</button>`).join("")}</div>
+        <div class="types">${["活钱", "稳健", "长期"].map((b) => `<button type="button" class="${d.bucket === b ? "on" : ""}" onclick="draftField('bucket',${jsArg(b)});render()">${b}</button>`).join("")}</div>
       </div>
       <button class="more" type="button" onclick="route.more=!route.more;render()">币种等更多设置 ›</button>
       ${route.more ? `<div class="field"><label>币种</label>
-        <div class="types">${CURS.map((c) => `<button type="button" class="${d.cur === c.code ? "on" : ""}" onclick="draftField('cur','${c.code}');render()">${c.name}</button>`).join("")}</div>
+        <div class="types">${CURS.map((c) => `<button type="button" class="${d.cur === c.code ? "on" : ""}" onclick="draftField('cur',${jsArg(c.code)});render()">${c.name}</button>`).join("")}</div>
       </div>
-      <div class="field"><label>预期年化 %</label><input type="number" value="${d.expected}" oninput="draftField('expected',this.value)" /></div>` : ""}
+      <div class="field"><label>预期年化 %</label><input type="number" value="${esc(d.expected)}" oninput="draftField('expected',this.value)" /></div>` : ""}
       <button class="ok-btn ${ready ? "ready" : ""}" type="button" ${ready ? "" : "disabled"} onclick="commitInvest()">确定</button>
     </div>
   </section>`;
@@ -2105,7 +2138,7 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
     <div class="trend-controls"><div class="trend-periods">
       <button class="${range === "month" ? "on" : ""}" onclick="setChartRange('month')">本月</button><button class="${range === "1m" ? "on" : ""}" onclick="setChartRange('1m')">近1月</button><button class="${range === "6m" ? "on" : ""}" onclick="setChartRange('6m')">近6月</button><button class="${range === "ytd" ? "on" : ""}" onclick="setChartRange('ytd')">本年</button><button class="${range === "all" ? "on" : ""}" onclick="setChartRange('all')">全部</button><button class="calendar-pill ${range === "custom" ? "on" : ""}" onclick="openCustomRange()" aria-label="自定义日期" title="自定义日期"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v3M17 3v3M4 9h16"/><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 13h3M13 13h3M8 17h3"/></svg></button>
     </div></div>
-    <div class="trend-legend"><span><i style="background:${lineColor}"></i>${label}</span>${kind === "mwr" ? `<div class="bench-select"><button type="button" onclick="event.stopPropagation();route.benchOpen=!route.benchOpen;render({resize:false,keepScroll:true})"><i style="background:#4a90d9"></i><b>${esc(bench.label)}</b><svg class="bench-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.benchOpen ? `<div class="bench-menu">${SIMPLE_BENCHMARKS.map((x) => `<button type="button" class="${x.key === bench.key ? "on" : ""}" onclick="event.stopPropagation();pickBenchmark('${x.key}')"><span>${esc(x.label)}</span>${x.key === bench.key ? "✓" : ""}</button>`).join("")}</div>` : ""}</div><span><i class="dash"></i>预期收益率 ${expected ? expected + "%" : ""}</span>` : ""}</div>
+    <div class="trend-legend"><span><i style="background:${lineColor}"></i>${label}</span>${kind === "mwr" ? `<div class="bench-select"><button type="button" onclick="event.stopPropagation();route.benchOpen=!route.benchOpen;render({resize:false,keepScroll:true})"><i style="background:#4a90d9"></i><b>${esc(bench.label)}</b><svg class="bench-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.benchOpen ? `<div class="bench-menu">${SIMPLE_BENCHMARKS.map((x) => `<button type="button" class="${x.key === bench.key ? "on" : ""}" onclick="event.stopPropagation();pickBenchmark(${jsArg(x.key)})"><span>${esc(x.label)}</span>${x.key === bench.key ? "✓" : ""}</button>`).join("")}</div>` : ""}</div><span><i class="dash"></i>预期收益率 ${expected ? esc(expected) + "%" : ""}</span>` : ""}</div>
     <div class="scroll-x trend-chart-wrap">
       <svg class="chart" viewBox="0 0 360 170" preserveAspectRatio="xMidYMid meet" onpointermove="moveTrendHover(event,this)" onpointerleave="leaveTrendHover(this)">
         <defs><linearGradient id="trendFill${kind}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${lineColor}" stop-opacity=".34"/><stop offset="1" stop-color="${lineColor}" stop-opacity=".02"/></linearGradient></defs>
@@ -2116,8 +2149,8 @@ function chartBlock(hist, expected, unit = "元", currentPnl = null) {
         <line data-hover-line x1="18" x2="18" y1="24" y2="154" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
         <circle data-hover-main cx="0" cy="0" r="4" fill="var(--card)" stroke="${lineColor}" stroke-width="2" style="display:none;pointer-events:none"/>
         <circle data-hover-bench cx="0" cy="0" r="3.5" fill="var(--card)" stroke="#4a90d9" stroke-width="2" style="display:none;pointer-events:none"/>
-        ${series.map((v,i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(v)}" r="7" fill="transparent" tabindex="0" onclick="toast('${seriesDates[i] || ""}　${kind === "pnl" ? num(v) + " " + unit : pct(v)}')"><title>${seriesDates[i] || ""} ${kind === "pnl" ? num(v) + " " + unit : pct(v)}</title></circle>`).join("")}
-        <text x="18" y="168" font-size="10" fill="var(--faint)">${first}</text><text x="286" y="168" font-size="10" fill="var(--faint)">${last}</text>
+        ${series.map((v,i) => `<circle cx="${xAt(i,series.length)}" cy="${yAt(v)}" r="7" fill="transparent" tabindex="0" onclick="toast(${jsArg((seriesDates[i] || "") + "　" + (kind === "pnl" ? num(v) + " " + unit : pct(v)))})"><title>${esc(seriesDates[i] || "")} ${esc(kind === "pnl" ? num(v) + " " + unit : pct(v))}</title></circle>`).join("")}
+        <text x="18" y="168" font-size="10" fill="var(--faint)">${esc(first)}</text><text x="286" y="168" font-size="10" fill="var(--faint)">${esc(last)}</text>
         <text x="346" y="29" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMax) : scaleMax.toFixed(1) + "%"}</text><text x="346" y="154" text-anchor="end" font-size="9" fill="var(--faint)">${kind === "pnl" ? num(scaleMin) : scaleMin.toFixed(1) + "%"}</text>
       </svg>
       <div class="trend-hover-tip" role="status"><b data-tip-date></b><span><em><i style="background:${lineColor}"></i>${label}</em><strong data-tip-main-value></strong></span>${kind === "mwr" ? `<span><em><i style="background:#4a90d9"></i>${esc(bench.label)}</em><strong data-tip-bench-value></strong></span>` : ""}</div>
@@ -2146,7 +2179,7 @@ function yearBenchmark(hist, y) {
 }
 function yearBenchHeader() {
   const bench = benchMeta();
-  return `<div class="bench-select year-bench-head"><button type="button" onclick="event.stopPropagation();route.yearBenchOpen=!route.yearBenchOpen;route.benchOpen=false;render({resize:false,keepScroll:true})"><b>${esc(bench.label)}</b><svg class="bench-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.yearBenchOpen ? `<div class="bench-menu">${SIMPLE_BENCHMARKS.map((x) => `<button type="button" class="${x.key === bench.key ? "on" : ""}" onclick="event.stopPropagation();pickBenchmark('${x.key}')"><span>${esc(x.label)}</span>${x.key === bench.key ? "✓" : ""}</button>`).join("")}</div>` : ""}</div>`;
+  return `<div class="bench-select year-bench-head"><button type="button" onclick="event.stopPropagation();route.yearBenchOpen=!route.yearBenchOpen;route.benchOpen=false;render({resize:false,keepScroll:true})"><b>${esc(bench.label)}</b><svg class="bench-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.yearBenchOpen ? `<div class="bench-menu">${SIMPLE_BENCHMARKS.map((x) => `<button type="button" class="${x.key === bench.key ? "on" : ""}" onclick="event.stopPropagation();pickBenchmark(${jsArg(x.key)})"><span>${esc(x.label)}</span>${x.key === bench.key ? "✓" : ""}</button>`).join("")}</div>` : ""}</div>`;
 }
 function yearRow(hist, y) {
   const v = yearMwr(hist, y);
@@ -2219,13 +2252,13 @@ function compose(st, accountId, unit = "元") {
     o = o || {};
     const cls = ["fund-flow-card", o.tone ? "fund-flow-card--" + o.tone : "", o.kind && editing ? "fund-flow-card--edit" : ""].filter(Boolean).join(" ");
     let evt = "";
-    if (o.kind) evt = editing ? `onclick="editInvestFlow('${accountId}','${o.kind}')" title="点击修改"` : `ondblclick="editInvestFlow('${accountId}','${o.kind}')" title="双击修改"`;
+    if (o.kind) evt = editing ? `onclick="editInvestFlow(${jsArg(accountId)},${jsArg(o.kind)})" title="点击修改"` : `ondblclick="editInvestFlow(${jsArg(accountId)},${jsArg(o.kind)})" title="双击修改"`;
     return `<div class="${cls}" style="grid-column:${col};grid-row:${row}" ${evt}><span class="fund-flow-label">${label}</span><strong class="fund-flow-value" style="${o.color ? `color:${o.color}` : ""}">${val}</strong></div>`;
   };
-  const d1 = shown.first ? pretty(shown.first) : "--";
-  const d2 = shown.last ? pretty(shown.last) : "--";
+  const d1 = shown.first ? esc(pretty(shown.first)) : "--";
+  const d2 = shown.last ? esc(pretty(shown.last)) : "--";
   return `<div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
-    <div class="split"><span class="ttl"><b>资产构成${canEdit ? `（${unit}）` : ""}</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select dd"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange('${v}')"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
+    <div class="split"><span class="ttl"><b>资产构成${canEdit ? `（${unit}）` : ""}</b>${canEdit ? `<button class="pencil-btn ${editing ? "is-on" : ""}" type="button" onclick="toggleInvestEdit()" title="${editing ? "退出编辑" : "编辑投入 / 转出"}" aria-label="编辑投入转出">${icoPencil()}</button>` : ""}</span><div class="range-select dd"><button type="button" class="ghost-btn" aria-expanded="${!!route.composeRangeOpen}" onclick="event.stopPropagation();route.composeRangeOpen=!route.composeRangeOpen;render({resize:false,keepScroll:true})">${composeRangeLabel}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 6 4 4 4-4"/></svg></button>${route.composeRangeOpen ? `<div class="dd-menu">${[["all","记账以来"],["ytd","今年"],["1y","近 1 年"]].map(([v,l]) => `<button type="button" class="dd-item ${composeRange === v ? "on" : ""}" onclick="event.stopPropagation();setComposeRange(${jsArg(v)})"><span>${l}</span>${composeRange === v ? `<span class="tick">✓</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
     <div class="fund-flow-grid">
       <svg class="fund-flow-links" viewBox="0 0 600 390" preserveAspectRatio="none" aria-hidden="true">
         <path d="M200 104 C200 130 300 119 300 136 M400 104 C400 130 300 119 300 136 M300 136 L300 143"/>
@@ -2257,7 +2290,7 @@ function editInvestFlow(id, kind) {
   const cur = kind === "in" ? (Number(a.inAmt) || 0) : (Number(a.outAmt) || 0);
   showModal(modalShell(lbl, "这是记录，按券商收益手动修正该账户的累计投入 / 转出即可，收益会自动更新。", `
     <input id="flowVal" class="modal-input" type="number" value="${cur}" />
-    <button class="modal-ok" onclick="saveInvestFlow('${id}','${kind}')">保存</button>`));
+    <button class="modal-ok" onclick="saveInvestFlow(${jsArg(id)},${jsArg(kind)})">保存</button>`));
 }
 function saveInvestFlow(id, kind) {
   const a = S.invest.find((x) => x.id === id);
@@ -2339,7 +2372,7 @@ function summary() {
     <div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
       <b>资产比例</b>
       <div class="ratio-bar">${parts.map(([k, v]) => `<i style="width:${t.inv ? v / t.inv * 100 : 0}%;background:${k === "活钱" ? "#d07a8a" : k === "稳健" ? "#5aa7b8" : "var(--bar)"}"></i>`).join("")}</div>
-      ${parts.map(([k, v]) => `<div class="split" style="margin-top:8px"><span>● ${k} ${t.inv ? (v / t.inv * 100).toFixed(1) : "0.0"}%</span><span>¥ ${num(v)}</span></div>`).join("")}
+      ${parts.map(([k, v]) => `<div class="split" style="margin-top:8px"><span>● ${esc(k)} ${t.inv ? (v / t.inv * 100).toFixed(1) : "0.0"}%</span><span>¥ ${num(v)}</span></div>`).join("")}
       ${S.invest.map((a) => {
         const p = t.inv ? cny(a) / t.inv * 100 : 0;
         return `<div class="split faint" style="margin-top:8px;padding-left:16px"><span>${esc(a.name)} ${p.toFixed(1)}%</span><span>${money(a.amount, a.cur)}</span></div>`;
@@ -2360,15 +2393,15 @@ function account() {
     <div class="account-head">
       <button class="back" type="button" onclick="go('invest')" aria-label="返回">${chevLeft()}</button>
       <div class="account-title">${a.market ? marketIco(a.market, 24) : ""}<span>${esc(a.name)}<small>${esc(a.bucket)}</small></span></div>
-      <div class="right"><button class="bar-ico" type="button" onclick="go('settings',{account:'${a.id}'})" aria-label="设置">${icoGear()}</button><button class="bar-ico" type="button" onclick="copySummary('${a.id}')" aria-label="复制摘要">${icoShare()}</button></div>
+      <div class="right"><button class="bar-ico" type="button" onclick="go('settings',{account:${jsArg(a.id)}})" aria-label="设置">${icoGear()}</button><button class="bar-ico" type="button" onclick="copySummary(${jsArg(a.id)})" aria-label="复制摘要">${icoShare()}</button></div>
     </div>
     <div class="card invest-chart-card" style="margin:0 16px;padding:16px;border-radius:16px">
       <div class="split"><span class="k">资产 (${unit}) ${hideBtn()}</span><span class="faint">${daysAgo(a.updated)}</span></div>
       <div class="n">${num(a.amount)}</div>
       <div class="metric">
         <div><div class="k">累计收益</div><b class="${tone(st.pnl)}">${compactSignedNum(st.pnl)}</b></div>
-        <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr','${a.id}')" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
-        <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual','${a.id}')" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
+        <div><div class="k"><span>资金加权收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('mwr',${jsArg(a.id)})" aria-label="了解资金加权收益率">?</button></div><b class="${st.mwr == null ? "faint" : tone(st.mwr)}">${st.mwr == null ? "暂无" : pct(st.mwr)}</b></div>
+        <div><div class="k"><span>年化收益率</span><button class="q" type="button" onclick="event.stopPropagation();openMetricHelp('annual',${jsArg(a.id)})" aria-label="了解年化收益率">?</button></div><b class="${st.ytd == null ? "faint" : tone(st.ytd)}">${st.ytd == null ? "暂无" : pct(st.ytd)}</b></div>
       </div>
       ${chartBlock(st.hist, a.expected || S.expected, unit, st.pnl)}
     </div>
@@ -2377,7 +2410,7 @@ function account() {
     <div class="card" style="margin:12px 16px;padding:16px;border-radius:16px">
       <b>更新记录</b>
       <div class="tl" style="margin-top:12px">
-        ${hist.length ? hist.map((h) => `<h4>${zhDate(h.d)}</h4><div class="row-card split"><span>当天资产金额</span><b>${Number(h.v).toLocaleString("zh-CN")} ${unit}</b></div>${h.inn || h.out ? `<div class="k" style="margin:-4px 0 10px 8px">投入 ${num(h.inn || 0)} ${unit}　转出 ${num(h.out || 0)} ${unit}</div>` : ""}`).join("") : `<div class="faint" style="text-align:center;padding:20px">暂无更新记录</div>`}
+        ${hist.length ? hist.map((h) => `<h4>${esc(zhDate(h.d))}</h4><div class="row-card split"><span>当天资产金额</span><b>${Number(h.v).toLocaleString("zh-CN")} ${unit}</b></div>${h.inn || h.out ? `<div class="k" style="margin:-4px 0 10px 8px">投入 ${num(h.inn || 0)} ${unit}　转出 ${num(h.out || 0)} ${unit}</div>` : ""}`).join("") : `<div class="faint" style="text-align:center;padding:20px">暂无更新记录</div>`}
         ${st.hist.length > 3 && !route.showAll ? `<button class="faint" style="display:block;width:100%" onclick="route.showAll=true;render()">查看更多</button>` : ""}
       </div>
     </div>
@@ -2386,30 +2419,30 @@ function account() {
 function settingsPage() {
   const a = route.account ? S.invest.find((x) => x.id === route.account) : null;
   const grp = a ? (a.group || ledgerGroup(String(a.name), a.market)) : null;
-  const back = a ? `go('account',{account:'${a.id}'})` : "go('summary')";
+  const back = a ? `go('account',{account:${jsArg(a.id)}})` : "go('summary')";
   return `<section class="screen on gray">
     ${navHead(back, "设置")}
     ${a ? `<div class="w-card">
-      <div class="field"><label>名称</label><input value="${esc(a.name)}" onchange="patchInvest('${a.id}',{name:this.value},false)" /></div>
+      <div class="field"><label>名称</label><input value="${esc(a.name)}" onchange="patchInvest(${jsArg(a.id)},{name:this.value},false)" /></div>
       <div class="field"><label>市场</label>${marketSelect("setMarketMenu", a.market || "", "pickInvestMarket", a.id)}</div>
       <div class="field"><label>类型</label>
-        <div class="types">${["活钱", "稳健", "长期"].map((b) => `<button class="${a.bucket === b ? "on" : ""}" onclick="patchInvest('${a.id}',{bucket:'${b}'})">${b}</button>`).join("")}</div>
+        <div class="types">${["活钱", "稳健", "长期"].map((b) => `<button class="${a.bucket === b ? "on" : ""}" onclick="patchInvest(${jsArg(a.id)},{bucket:${jsArg(b)}})">${b}</button>`).join("")}</div>
       </div>
       <div class="field"><label>币种</label>
-        <div class="types">${CURS.map((c) => `<button class="${a.cur === c.code ? "on" : ""}" onclick="patchInvest('${a.id}',{cur:'${c.code}'})">${c.name}</button>`).join("")}</div>
+        <div class="types">${CURS.map((c) => `<button class="${a.cur === c.code ? "on" : ""}" onclick="patchInvest(${jsArg(a.id)},{cur:${jsArg(c.code)}})">${c.name}</button>`).join("")}</div>
       </div>
-      <div class="field"><label>预期年化 %</label><input type="number" value="${a.expected || S.expected}" onchange="patchInvest('${a.id}',{expected:Number(this.value)||0},false)" /></div>
+      <div class="field"><label>预期年化 %</label><input type="number" value="${esc(a.expected || S.expected)}" onchange="patchInvest(${jsArg(a.id)},{expected:Number(this.value)||0},false)" /></div>
       <div class="account-actions">
-        <button class="account-pill archive" onclick="archiveInvest('${a.id}')">${a.archived ? "恢复资产" : "归档资产"}</button>
-        <button class="account-pill delete" onclick="removeItem('invest','${a.id}')">删除</button>
+        <button class="account-pill archive" onclick="archiveInvest(${jsArg(a.id)})">${a.archived ? "恢复资产" : "归档资产"}</button>
+        <button class="account-pill delete" onclick="removeItem('invest',${jsArg(a.id)})">删除</button>
       </div>
     </div>
     ${grp ? `<div class="w-card">
       <div class="field"><label>账本导入 / 导出</label>
-        <div class="types"><button class="ghost-btn" onclick="exportXlsxForGroup('${String(grp).replace(/'/g,"\\'")}')">导出 Excel</button><button class="ghost-btn" onclick="exportBookForGroup('${String(grp).replace(/'/g,"\\'")}')">导出 JSON</button><button class="ghost-btn" onclick="importLedgerToGroup('${String(grp).replace(/'/g,"\\'")}')">导入到该账本</button></div>
+        <div class="types"><button class="ghost-btn" onclick="exportXlsxForGroup(${jsArg(grp)})">导出 Excel</button><button class="ghost-btn" onclick="exportBookForGroup(${jsArg(grp)})">导出 JSON</button><button class="ghost-btn" onclick="importLedgerToGroup(${jsArg(grp)})">导入到该账本</button></div>
       </div>
     </div>` : ""}` : `<div class="w-card">
-      <div class="field"><label>默认预期年化 %</label><input type="number" value="${S.expected}" onchange="S.expected=Number(this.value)||0;save();" /></div>
+      <div class="field"><label>默认预期年化 %</label><input type="number" value="${esc(S.expected)}" onchange="S.expected=Number(this.value)||0;save();" /></div>
     </div>`}
   </section>`;
 }
@@ -2419,12 +2452,12 @@ function datePickerHTML(id, value, max) {
   const maxDay = max || today();
   const selected = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
   return `<div class="cal">
-    <input type="hidden" id="${id}" value="${esc(selected)}" data-max="${esc(maxDay)}" />
-    <button type="button" class="cal-btn${selected ? "" : " is-empty"}" id="${id}Btn" onclick="event.stopPropagation();toggleCal('${id}')">
-      <span class="cal-val" id="${id}Val">${selected ? selected.replaceAll("-", "/") : "选择日期"}</span>
+    <input type="hidden" id="${esc(id)}" value="${esc(selected)}" data-max="${esc(maxDay)}" />
+    <button type="button" class="cal-btn${selected ? "" : " is-empty"}" id="${esc(id)}Btn" onclick="event.stopPropagation();toggleCal(${jsArg(id)})">
+      <span class="cal-val" id="${esc(id)}Val">${selected ? selected.replaceAll("-", "/") : "选择日期"}</span>
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v3M17 3v3M4 9h16"/><rect x="4" y="5" width="16" height="16" rx="3"/></svg>
     </button>
-    <div class="cal-pop" id="${id}Pop" hidden></div>
+    <div class="cal-pop" id="${esc(id)}Pop" hidden></div>
   </div>`;
 }
 function closeCal() {
@@ -2482,7 +2515,7 @@ function renderCal() {
     const disabled = date > max;
     const on = date === selected;
     const isToday = date === now;
-    cells += `<button type="button" ${disabled ? "disabled" : ""} class="${[on ? "on" : "", disabled ? "mute" : ""].filter(Boolean).join(" ")}" onclick="${disabled ? "" : `pickCal('${date}')`}">${day}${isToday && !on ? '<i class="dot"></i>' : ""}</button>`;
+    cells += `<button type="button" ${disabled ? "disabled" : ""} class="${[on ? "on" : "", disabled ? "mute" : ""].filter(Boolean).join(" ")}" onclick="${disabled ? "" : `pickCal(${jsArg(date)})`}">${day}${isToday && !on ? '<i class="dot"></i>' : ""}</button>`;
   }
   pop.innerHTML = `<div class="cal-nav">
       <button type="button" onclick="event.stopPropagation();calMonth(-1)" aria-label="上个月">‹</button>
@@ -2505,7 +2538,7 @@ function openUpdate(id, opts) {
   const meta = curMeta(a.cur);
   const unit = currencyUnit(a.cur);
   const flow = !!route.updateFlow;
-  showModal(modalShell("更新收益", `上次更新（${when}）至今，记下市值变化；有资金进出时一并登记投入或转出。`, `
+  showModal(modalShell("更新收益", `上次更新（${esc(when)}）至今，记下市值变化；有资金进出时一并登记投入或转出。`, `
     <div>
       <span class="modal-lab">资金进出</span>
       <div class="modal-seg">
@@ -2518,7 +2551,7 @@ function openUpdate(id, opts) {
       <div><span class="modal-lab">转出（${unit}）</span><input id="outAmt" class="modal-input" inputmode="decimal" placeholder="可空" oninput="syncUpdateHint()" /></div>
     </div>
     <div>
-      <span class="modal-lab" style="display:flex;justify-content:space-between"><span>当前资产金额</span><span>${meta.name} · ${a.cur}</span></span>
+      <span class="modal-lab" style="display:flex;justify-content:space-between"><span>当前资产金额</span><span>${meta.name} · ${esc(a.cur)}</span></span>
       ${amtField("newAmt", "", a.cur)}
       <div class="modal-hint" aria-live="polite">
         <span id="updHint">现有市值 ${num(a.amount)} ${unit}</span>
@@ -2608,7 +2641,7 @@ function openReminder(opts) {
   showModal(modalShell("记账提醒", "每月几号提醒自己更新投资市值，填 0 即关闭。", `
     <div>
       <span class="modal-lab">每月日期</span>
-      <input id="remDay" class="modal-input" type="number" min="0" max="28" value="${S.reminder || 0}" />
+      <input id="remDay" class="modal-input" type="number" min="0" max="28" value="${esc(S.reminder || 0)}" />
     </div>
   `, `<button type="button" class="modal-cancel" onclick="closeMask()">取消</button>
      <button type="button" class="modal-ok" onclick="S.reminder=Math.max(0,Math.min(28,Number(document.getElementById('remDay').value)||0));save();closeMask();toast(S.reminder?'已设每月'+S.reminder+'日':'已关闭提醒');render()">保存</button>`));
@@ -2694,6 +2727,8 @@ function exportBook(invest) {
   toast("已导出简化版账本");
 }
 async function exportXlsx(invest) {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
+  if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return;
   const list = Array.isArray(invest) ? invest : (Array.isArray(S.invest) ? S.invest : []);
   if (!list.length) { toast("暂无投资账户可导出"); return; }
   toast("正在导出 Excel…");
@@ -2701,15 +2736,17 @@ async function exportXlsx(invest) {
     const r = await fetch("/api/simple-app/tool/export", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invest: list })
     });
-    if (!r.ok) { const j = await r.json().catch(() => null); toast((j && j.error) || "导出失败"); return; }
+    if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) { await r.body?.cancel().catch(() => {}); return; }
+    if (!r.ok) { const j = await r.json().catch(() => null); if (isCurrentLedger(owner, epoch) && !ledgerAccessDenied) toast((j && j.error) || "导出失败"); return; }
     const blob = await r.blob();
+    if (!isCurrentLedger(owner, epoch) || ledgerAccessDenied) return;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "alcor-simple-invest-" + today() + ".xlsx";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     toast("已导出 Excel（有知有行格式）");
-  } catch { toast("导出失败"); }
+  } catch { if (isCurrentLedger(owner, epoch) && !ledgerAccessDenied) toast("导出失败"); }
 }
 function exportBookForGroup(group) {
   const invest = S.invest.filter((x) => x.group === group);
@@ -2722,16 +2759,19 @@ function exportXlsxForGroup(group) {
   exportXlsx(invest);
 }
 function importLedgerToGroup(group) {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
   const inp = document.createElement("input");
   inp.type = "file";
   inp.accept = ".xlsx,.xls,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   inp.onchange = async () => {
+    if (!isCurrentLedger(owner, epoch)) return;
     const file = inp.files && inp.files[0];
     if (!file) return;
     const lower = String(file.name || "").toLowerCase();
     if (lower.endsWith(".json")) {
       const reader = new FileReader();
       reader.onload = () => {
+        if (!isCurrentLedger(owner, epoch)) return;
         let j = null;
         try { j = JSON.parse(String(reader.result)); } catch { toast("文件无法识别"); return; }
         const invest = Array.isArray(j) ? j : (j && Array.isArray(j.invest)) ? j.invest : null;
@@ -2746,6 +2786,7 @@ function importLedgerToGroup(group) {
       const fd = new FormData(); fd.append("file", file);
       const r = await fetch("/api/simple-app/tool/import", { method: "POST", body: fd });
       const j = await r.json().catch(() => null);
+      if (!isCurrentLedger(owner, epoch)) return;
       if (!j || !j.ok) { toast((j && j.error) || "导入失败"); return; }
       const n = mergeInvest(Array.isArray(j.invest) ? j.invest : [], file.name, group);
       toast(n ? `已导入 ${n} 个投资到「${group}」` : "没有新增（账户已在该账本或无数据）");
@@ -2769,14 +2810,16 @@ function applyImportJson(text, fileName) {
   } catch { toast("文件无法识别"); }
 }
 function importBook() {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
   const inp = document.createElement("input");
   inp.type = "file";
   inp.accept = "application/json";
   inp.onchange = () => {
+    if (!isCurrentLedger(owner, epoch)) return;
     const file = inp.files && inp.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => applyImportJson(String(reader.result), file.name);
+    reader.onload = () => { if (isCurrentLedger(owner, epoch)) applyImportJson(String(reader.result), file.name); };
     reader.readAsText(file);
   };
   inp.click();
@@ -2861,16 +2904,18 @@ function mergeLedgerAccount(ex, a) {
   return true;
 }
 function importLedger() {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
   const inp = document.createElement("input");
   inp.type = "file";
   inp.accept = ".xlsx,.xls,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   inp.onchange = async () => {
+    if (!isCurrentLedger(owner, epoch)) return;
     const file = inp.files && inp.files[0];
     if (!file) return;
     const lower = String(file.name || "").toLowerCase();
     if (lower.endsWith(".json")) {
       const reader = new FileReader();
-      reader.onload = () => applyImportJson(String(reader.result), file.name);
+      reader.onload = () => { if (isCurrentLedger(owner, epoch)) applyImportJson(String(reader.result), file.name); };
       reader.readAsText(file);
       return;
     }
@@ -2880,6 +2925,7 @@ function importLedger() {
       fd.append("file", file);
       const r = await fetch("/api/simple-app/tool/import", { method: "POST", body: fd });
       const j = await r.json().catch(() => null);
+      if (!isCurrentLedger(owner, epoch)) return;
       if (!j || !j.ok) { toast((j && j.error) || "导入失败"); return; }
       const list = Array.isArray(j.invest) ? j.invest : [];
       const n = mergeInvest(list, file.name);
@@ -3089,10 +3135,10 @@ function render(opts) {
   if (route.name === "family") {
     setFoot(`<button class="cta" type="button" onclick="go('update',{cat:'cash'})">更新资产</button>`, true);
   } else if (route.name === "account" && route.account) {
-    setFoot(`<button class="cta" type="button" onclick="openUpdate('${route.account}')">更新收益</button>`, true);
+    setFoot(`<button class="cta" type="button" onclick="openUpdate(${jsArg(route.account)})">更新收益</button>`, true);
   } else if (route.name === "update") {
     const idx = CATS.findIndex((c) => c.id === route.cat);
-    const next = idx >= 0 && idx < CATS.length - 1 ? `go('update',{cat:'${CATS[idx + 1].id}'})` : "finishUpdate()";
+    const next = idx >= 0 && idx < CATS.length - 1 ? `go('update',{cat:${jsArg(CATS[idx + 1].id)}})` : "finishUpdate()";
     setFoot(`<button class="fab" type="button" onclick="${next}">→</button>`, false);
   } else {
     setFoot("");
@@ -3132,6 +3178,52 @@ document.addEventListener("keydown", (e) => {
   if (m && m.classList.contains("on")) { closeMask(); return; }
 });
 
+function syncLedgerOwner() {
+  const owner = readLedgerOwner();
+  if (owner === ledgerOwner) return;
+  ledgerEpoch++;
+  ledgerOwner = owner;
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  pendingLedgerWrite = Promise.resolve(true);
+  ledgerWriteFailed = false;
+  loggedIn = false;
+  ledgerAccessDenied = false;
+  S = load(owner);
+  route = initialRoute();
+  updateTarget = null;
+  urlLock = false;
+  closeMask({ silent: true });
+  closeDrop();
+  closeCal();
+  closeSankey();
+  calState = { open: false, id: "", month: null, max: "", selected: "" };
+  skState = { mode: "amt" };
+  trendHoverModel = null;
+  trendHoverPending = null;
+  if (trendHoverFrame) cancelAnimationFrame(trendHoverFrame);
+  trendHoverFrame = 0;
+  yearDetailModel = null;
+}
+
+function denyLedgerAccess(owner, epoch) {
+  if (!isCurrentLedger(owner, epoch)) return;
+  // A different tab can replace the session Cookie while this DOM still names
+  // its old owner. Hide that ledger without overwriting the owner's valid cache.
+  ledgerEpoch++;
+  ledgerAccessDenied = true;
+  loggedIn = false;
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  pendingLedgerWrite = Promise.resolve(true);
+  ledgerWriteFailed = false;
+  S = normalize(null);
+  route = initialRoute();
+  updateTarget = null;
+  closeMask({ silent: true });
+  render({ skipUrl: true });
+}
+
 if (localStorage.getItem("fire-simple-theme") === "dark") document.documentElement.classList.add("dark");
 readUrl();
 loadMarketIcons();
@@ -3147,6 +3239,7 @@ hydrate();
 window.remountSimpleApp = function remountSimpleApp() {
   winEl = document.getElementById("win");
   if (!winEl) return;
+  syncLedgerOwner();
   drag = null;
   bindSimpleWindow();
   scrollObserver?.disconnect();
@@ -3161,21 +3254,25 @@ window.remountSimpleApp = function remountSimpleApp() {
   hydrate();
 };
 window.refreshSimpleApp = async function refreshSimpleApp() {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = 0;
     if (!await pushRemote()) return false;
   }
+  if (!isCurrentLedger(owner, epoch)) return false;
   return hydrate();
 };
 
 // Finish debounced writes before version navigation; never hydrate over local edits here.
 window.flushSimpleApp = async function () {
+  const owner = ledgerOwner, epoch = ledgerEpoch;
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = 0;
     return pushRemote();
   }
   await pendingLedgerWrite;
+  if (!isCurrentLedger(owner, epoch)) return false;
   return ledgerWriteFailed ? pushRemote() : true;
 };

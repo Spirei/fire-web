@@ -505,6 +505,8 @@ export function upsertAsset(input: {
   lastCheckedAt?: string;
   board?: string;
   urlDark?: string;
+  /** User-owned resources apply their own file ownership checks before cleanup. */
+  preserveReplacedFiles?: boolean;
 }): Asset {
   const db = getDb();
   const market = (input.market || "OTHER").trim().toUpperCase();
@@ -542,11 +544,11 @@ export function upsertAsset(input: {
        created_at=assets.created_at,
        updated_at=excluded.updated_at`
   ).run(id, input.type, market, code, name, url, urlDark, marketCap, price, changePct, source, lastCheckedAt, board, updatedAt, updatedAt);
-  if (oldRow?.url && isLocalUrl(oldRow.url) && oldRow.url !== url && !sameLocalFile(oldRow.url, url)) {
+  if (!input.preserveReplacedFiles && oldRow?.url && isLocalUrl(oldRow.url) && oldRow.url !== url && !sameLocalFile(oldRow.url, url)) {
     // 旧文件仍被其它记录引用时保留（removeFileIfUnused 内部判断）
     removeFileIfUnused(oldRow.url);
   }
-  if (oldRow?.url_dark && isLocalUrl(oldRow.url_dark) && oldRow.url_dark !== urlDark && !sameLocalFile(oldRow.url_dark, urlDark)) {
+  if (!input.preserveReplacedFiles && oldRow?.url_dark && isLocalUrl(oldRow.url_dark) && oldRow.url_dark !== urlDark && !sameLocalFile(oldRow.url_dark, urlDark)) {
     removeFileIfUnused(oldRow.url_dark);
   }
   const row = db.prepare("SELECT * FROM assets WHERE id = ?").get(id) as Record<string, unknown>;

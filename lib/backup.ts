@@ -10,6 +10,7 @@
 import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
+import { randomBytes } from "node:crypto";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
@@ -38,20 +39,29 @@ const DEFAULT_CONFIG: BackupConfig = {
 };
 
 let lastCheckAt = 0;
+let runningBackup: Promise<{ name: string; size: number }> | null = null;
+
+function positiveInteger(value: unknown, fallback: number, max: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.max(1, Math.min(max, Math.round(value))) : fallback;
+}
+
+function normalizedConfig(cfg: Partial<BackupConfig>): BackupConfig {
+  return {
+    enabled: typeof cfg.enabled === "boolean" ? cfg.enabled : DEFAULT_CONFIG.enabled,
+    intervalHours: positiveInteger(cfg.intervalHours, DEFAULT_CONFIG.intervalHours, 24 * 365),
+    keep: positiveInteger(cfg.keep, DEFAULT_CONFIG.keep, 90),
+    lastAt: typeof cfg.lastAt === "number" && Number.isFinite(cfg.lastAt) ? Math.max(0, cfg.lastAt) : 0,
+    lastFile: typeof cfg.lastFile === "string" ? cfg.lastFile : "",
+    lastSize: typeof cfg.lastSize === "number" && Number.isFinite(cfg.lastSize) ? Math.max(0, cfg.lastSize) : 0
+  };
+}
 
 export function getBackupConfig(): BackupConfig {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) as Partial<BackupConfig>;
-      return {
-        ...DEFAULT_CONFIG,
-        ...(typeof parsed.enabled === "boolean" ? { enabled: parsed.enabled } : {}),
-        ...(typeof parsed.intervalHours === "number" && parsed.intervalHours > 0 ? { intervalHours: parsed.intervalHours } : {}),
-        ...(typeof parsed.keep === "number" && parsed.keep > 0 ? { keep: parsed.keep } : {}),
-        ...(typeof parsed.lastAt === "number" ? { lastAt: parsed.lastAt } : {}),
-        ...(typeof parsed.lastFile === "string" ? { lastFile: parsed.lastFile } : {}),
-        ...(typeof parsed.lastSize === "number" ? { lastSize: parsed.lastSize } : {})
-      };
+      return normalizedConfig(parsed);
     }
   } catch {
     /* 配置损坏时用默认值 */
@@ -60,10 +70,11 @@ export function getBackupConfig(): BackupConfig {
 }
 
 export function saveBackupConfig(cfg: BackupConfig): BackupConfig {
+  const normalized = normalizedConfig(cfg);
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), "utf8");
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(normalized, null, 2), "utf8");
   try { fs.chmodSync(CONFIG_FILE, 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
-  return cfg;
+  return normalized;
 }
 
 function fmtStamp(d: Date): string {
@@ -117,39 +128,62 @@ export function listBackups(): { name: string; size: number; mtime: number }[] {
 }
 
 /** 立即执行一次备份，返回备份目录名 */
-export async function runBackup(): Promise<{ name: string; size: number }> {
+async function performBackup(): Promise<{ name: string; size: number }> {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   try { fs.chmodSync(BACKUP_DIR, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
-  const name = `fire-${fmtStamp(new Date())}`;
-  const dir = path.join(BACKUP_DIR, name);
-  fs.mkdirSync(dir, { recursive: true });
+  const stamp = `fire-${fmtStamp(new Date())}`;
+  let name = stamp, dir = path.join(BACKUP_DIR, name);
+  // A completed backup in the same second must never be reused or overwritten.
+  for (;;) {
+    try { fs.mkdirSync(dir, { mode: 0o700 }); break; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      name = `${stamp}-${randomBytes(6).toString("hex")}`; dir = path.join(BACKUP_DIR, name);
+    }
+  }
   try { fs.chmodSync(dir, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
 
-  const dbFile = path.join(process.cwd(), "data", "fire.db");
-  const src = new Database(dbFile, { readonly: true, fileMustExist: true });
+  let complete = false;
   try {
-    // 在线备份：生成一致快照（WAL 安全，better-sqlite3 的 backup 为异步）
-    await src.backup(path.join(dir, "fire.db"));
-    try { fs.chmodSync(path.join(dir, "fire.db"), 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
-  } finally {
-    src.close();
-  }
-  copyDir(UPLOADS_DIR, path.join(dir, "uploads"));
-
-  let size = 0;
-  const walk = (p: string) => {
-    for (const en of fs.readdirSync(p, { withFileTypes: true })) {
-      const fp = path.join(p, en.name);
-      if (en.isDirectory()) walk(fp);
-      else size += fs.statSync(fp).size;
+    const dbFile = path.join(process.cwd(), "data", "fire.db");
+    const src = new Database(dbFile, { readonly: true, fileMustExist: true });
+    try {
+      // 在线备份：生成一致快照（WAL 安全，better-sqlite3 的 backup 为异步）
+      await src.backup(path.join(dir, "fire.db"));
+      try { fs.chmodSync(path.join(dir, "fire.db"), 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
+    } finally {
+      src.close();
     }
-  };
-  walk(dir);
+    copyDir(UPLOADS_DIR, path.join(dir, "uploads"));
 
-  const cfg = { ...getBackupConfig(), lastAt: Date.now(), lastFile: name, lastSize: size };
-  saveBackupConfig(cfg);
-  pruneBackups(cfg.keep);
-  return { name, size };
+    let size = 0;
+    const walk = (p: string) => {
+      for (const en of fs.readdirSync(p, { withFileTypes: true })) {
+        const fp = path.join(p, en.name);
+        if (en.isDirectory()) walk(fp);
+        else size += fs.statSync(fp).size;
+      }
+    };
+    walk(dir);
+    complete = true;
+
+    const cfg = { ...getBackupConfig(), lastAt: Date.now(), lastFile: name, lastSize: size };
+    saveBackupConfig(cfg);
+    pruneBackups(cfg.keep);
+    return { name, size };
+  } catch (error) {
+    if (!complete) fs.rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/** Concurrent manual/import/scheduled requests share one consistent snapshot. */
+export function runBackup(): Promise<{ name: string; size: number }> {
+  if (!runningBackup) {
+    runningBackup = performBackup();
+    runningBackup.then(() => { runningBackup = null; }, () => { runningBackup = null; });
+  }
+  return runningBackup;
 }
 
 /** 按计划惰性备份（60 秒节流），由 getDb() 每次访问时触发 */
@@ -162,6 +196,8 @@ export function maybeRunBackup(): void {
   if (cfg.lastAt && now - cfg.lastAt < cfg.intervalHours * 3_600_000) return;
   // 备份会复制整个 uploads，避开首屏磁盘争用
   setTimeout(() => {
+    const current = getBackupConfig();
+    if (!current.enabled || (current.lastAt && Date.now() - current.lastAt < current.intervalHours * 3_600_000)) return;
     runBackup().catch(() => {
       /* 备份失败静默，下个周期重试 */
     });

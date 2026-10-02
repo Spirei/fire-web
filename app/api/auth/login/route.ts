@@ -1,11 +1,12 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { applySessionCookie, authenticateUser, createSession, sessionCookieMaxAge } from "@/lib/auth";
+import { applySessionCookie, authenticateUser, createSession, isTrustedMutationRequest, sessionCookieMaxAge } from "@/lib/auth";
 import { createLoginTicket, userTotpEnabled } from "@/lib/totpAuth";
 import { clientIp, loginIdentityKey, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
+  if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不受信任" }, { status: 403, headers: { "Cache-Control": "no-store" } });
   // 登录限流：同 IP 15 分钟最多 50 次尝试，防暴力破解（全局 100 次/15 分钟兜底）
   if (!rateLimit(`login:${clientIp(request)}`, 50, 15 * 60 * 1000)) {
     logSecurityEvent(request, "", "auth.login.rate_limited", "IP 登录尝试过于频繁");

@@ -35,10 +35,13 @@ export async function GET(
 ) {
   const { path: segs } = await ctx.params;
   const rel = (segs || []).join("/");
-  if (!rel || rel.includes("..") || rel.includes("\0")) {
+  // Next decodes each catch-all segment. An encoded slash must not turn one
+  // public segment into a private reports path after the authorization check.
+  if (!rel || rel.includes("..") || rel.includes("\0") || segs.some(segment => /[\\/]/.test(segment))) {
     return new NextResponse("Bad Request", { status: 400 });
   }
-  if (segs[0] === "reports") { const user = getAuthUser(request); if (!user || !isAdmin(user)) return new NextResponse("Forbidden", { status: 403 }); }
+  const privateReport = segs[0].toLowerCase() === "reports";
+  if (privateReport) { const user = getAuthUser(request); if (!user || !isAdmin(user)) return new NextResponse("Forbidden", { status: 403 }); }
   const normalized = path.normalize(rel);
   const abs = path.join(ROOT, normalized);
   const defaultAbs = path.join(DEFAULT_ROOT, normalized);
@@ -55,7 +58,7 @@ export async function GET(
     } catch {
       // 回退到镜像内置素材：只有这一支才要求路径位于 DEFAULT_ROOT 内（reports 不参与回退）。
       source = defaultAbs;
-      if (segs[0] === "reports" || !fs.realpathSync(source).startsWith(fs.realpathSync(DEFAULT_ROOT) + path.sep)) throw new Error("Invalid path");
+      if (privateReport || !fs.realpathSync(source).startsWith(fs.realpathSync(DEFAULT_ROOT) + path.sep)) throw new Error("Invalid path");
     }
     const stat = fs.statSync(source);
     if (!stat.isFile()) throw new Error("Not a file");
@@ -66,7 +69,7 @@ export async function GET(
       // 运行期上传的素材同样极少变化：先让浏览器复用上次成功加载的副本，再后台静默校验。
       // 车型 / 环境贴图按文件名版本化，直接 immutable，刷新不再重新校验。
       "Cache-Control":
-        segs[0] === "reports"
+        privateReport
           ? "private, no-store"
           : isImmutableAsset(segs)
             ? "public, max-age=31536000, immutable"

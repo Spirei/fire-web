@@ -3,6 +3,7 @@ import path from "node:path";
 import { getDb } from "./db";
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
+const UPLOADS_DIR = path.join(PUBLIC_DIR, "uploads");
 const CELEB_AVATARS_FILE = path.join(process.cwd(), "data", "celebs-avatars.json");
 
 export function isLocalUrl(url: string | undefined | null): url is string {
@@ -19,9 +20,17 @@ function safeDecode(url: string): string {
 
 export function localPathOf(url: string): string {
   const decoded = safeDecode(url);
-  if (!isLocalUrl(decoded) || decoded.includes("\0")) throw new Error("无效的本地素材路径");
-  const target = path.resolve(PUBLIC_DIR, decoded.replace(/^\/+/, ""));
-  if (!target.startsWith(PUBLIC_DIR + path.sep)) throw new Error("本地素材路径越界");
+  if (!isLocalUrl(decoded) || /[\\\0]/.test(decoded) || decoded.split("/").some(segment => segment === "." || segment === "..")) throw new Error("无效的本地素材路径");
+  const target = path.resolve(UPLOADS_DIR, decoded.slice("/uploads/".length));
+  if (!target.startsWith(UPLOADS_DIR + path.sep)) throw new Error("本地素材路径越界");
+  // The upload root may be a mounted volume, but its children must not escape it
+  // through a symlink. Validate the nearest existing parent for new paths too.
+  if (fs.existsSync(UPLOADS_DIR)) {
+    let existing = target;
+    while (!fs.existsSync(existing) && existing !== UPLOADS_DIR) existing = path.dirname(existing);
+    const root = fs.realpathSync(UPLOADS_DIR), real = fs.realpathSync(existing);
+    if (real !== root && !real.startsWith(root + path.sep)) throw new Error("本地素材路径越界");
+  }
   return target;
 }
 
@@ -61,7 +70,11 @@ export function urlReferenced(url: string): boolean {
   }
   const agent = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='feed_agent_profiles'").get()
     ? (db.prepare("SELECT COUNT(*) AS c FROM feed_agent_profiles WHERE image=?").get(url) as {c:number}).c : 0;
-  return a + s + u + c + celebJson + modelServiceRef + agent > 0;
+  const cards = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='custom_cards'").get()
+    ? (db.prepare("SELECT COUNT(*) AS c FROM custom_cards WHERE image=?").get(url) as {c:number}).c : 0;
+  const details = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='card_details'").get()
+    ? (db.prepare("SELECT COUNT(*) AS c FROM card_details WHERE image=?").get(url) as {c:number}).c : 0;
+  return a + s + u + c + celebJson + modelServiceRef + agent + cards + details > 0;
 }
 
 /* 删除本地文件（仅当没有其他引用，避免误删共享图片） */
@@ -156,6 +169,7 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
   if(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='feed_agent_profiles'").get())
     (db.prepare("SELECT image FROM feed_agent_profiles WHERE image IS NOT NULL").all() as {image:string}[]).forEach(r=>addRef(r.image));
   (db.prepare("SELECT image FROM card_details WHERE image <> ''").all() as { image: string }[]).forEach((r) => addRef(r.image));
+  (db.prepare("SELECT image FROM custom_cards WHERE image <> ''").all() as { image: string }[]).forEach((r) => addRef(r.image));
   (
     db.prepare("SELECT value FROM site_settings WHERE key IN ('ico','pwaIcon','homepageBg','siteLogo','appDisplayIcon')").all() as { value: string }[]
   ).forEach((r) => addRef(r.value));

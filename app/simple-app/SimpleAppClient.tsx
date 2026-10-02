@@ -11,7 +11,7 @@ echarts.use([SVGRenderer]);
 
 const WINDOW_KEY = "fire-simple-win";
 
-export default function SimpleAppClient() {
+export default function SimpleAppClient({ userId }: { userId: string }) {
   const [pullDistance, setPullDistance] = useState(0);
   const [pullState, setPullState] = useState<"idle" | "pulling" | "ready" | "refreshing" | "success" | "error">("idle");
   const pullRef = useRef({ active: false, refreshing: false, startX: 0, startY: 0, distance: 0 });
@@ -31,7 +31,7 @@ export default function SimpleAppClient() {
       document.documentElement.classList.remove("simple-app-active", "simple-app-ready");
       document.documentElement.classList.toggle("dark", wasDark);
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     const chartObservers = new Map<HTMLElement, ResizeObserver>();
@@ -233,7 +233,7 @@ export default function SimpleAppClient() {
 
   return (
     <>
-      <div className="win" id="win">
+      <div className="win" id="win" data-simple-ledger-user={userId}>
         <div className="win-bar" id="winBar" title="按住拖动窗口">
           <TimeMachineLink to="full" iconOnly />
           <button type="button" id="pinBtn" title="固定窗口" aria-label="固定窗口" onClick={() => window.togglePin?.()}>

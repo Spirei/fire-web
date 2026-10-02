@@ -7,6 +7,7 @@ import { REGION_CURRENCY } from "./cardCurrencies";
 import { askDeepSeekVision } from "./deepseekVision";
 import { promises as fs } from "node:fs";
 import sharp from "sharp";
+import { readLimitedResponseJson } from "./requestBody";
 
 export interface RecognizedCard {
   name: string;
@@ -85,17 +86,19 @@ async function askVision(imagePath: string, mime: string, prompt: string): Promi
         temperature: 0.1,
         max_tokens: 800
       }),
-      signal: controller.signal
+      signal: controller.signal,
+      redirect: "error"
     });
     if (!res.ok) {
-      console.warn("[card-recognize] DashScope HTTP", res.status, (await res.text().catch(() => "")).slice(0, 200));
+      await res.body?.cancel();
+      console.warn("[card-recognize] DashScope HTTP", res.status);
       return null;
     }
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
-    const content = data.choices?.[0]?.message?.content;
+    const data = await readLimitedResponseJson<{ choices?: Array<{ message?: { content?: unknown } }> }>(res, 1_000_000);
+    const content = data?.choices?.[0]?.message?.content;
     return typeof content === "string" && content.trim() ? content.trim() : null;
-  } catch (err) {
-    console.warn("[card-recognize]", err instanceof Error ? err.message : err);
+  } catch {
+    console.warn("[card-recognize] request failed");
     return null;
   } finally {
     clearTimeout(timer);

@@ -6,6 +6,7 @@
 //   row4: 记录类型 | 记账时间 | 转入转出金额 | 总资产金额 | 投资日志 | 创建时间 | 明细
 //   row5+: 记总资产 / 转入转出 记录
 import ExcelJS from "exceljs";
+import { readSafeXlsxEntries } from "./orderImportXlsx";
 
 export type XlsxHist = { d: string; v?: number | null; inn?: number; out?: number };
 export type XlsxInvest = {
@@ -141,32 +142,13 @@ function worksheetRows(ws: ExcelJS.Worksheet): unknown[][] {
   return rows;
 }
 
-/** Reject malformed/encrypted/oversized XLSX archives before workbook decompression. */
+/** Reject malformed/encrypted/oversized XLSX archives before workbook parsing. */
 export function assertSafeXlsxArchive(input: ArrayBuffer | Buffer) {
   const data = Buffer.isBuffer(input) ? input : Buffer.from(input);
   if (data.length < 22 || data.readUInt32LE(0) !== 0x04034b50) throw new Error("无效的 xlsx 文件");
-  const searchStart = Math.max(0, data.length - 65_557);
-  let eocd = -1;
-  for (let index = data.length - 22; index >= searchStart; index--) {
-    if (data.readUInt32LE(index) === 0x06054b50) { eocd = index; break; }
-  }
-  if (eocd < 0) throw new Error("无效的 xlsx 文件");
-  const entries = data.readUInt16LE(eocd + 10);
-  const directorySize = data.readUInt32LE(eocd + 12);
-  const directoryOffset = data.readUInt32LE(eocd + 16);
-  if (!entries || entries > 2_000 || directoryOffset + directorySize > data.length) throw new Error("xlsx 文件结构过大");
-  let offset = directoryOffset, totalUncompressed = 0;
-  for (let count = 0; count < entries; count++) {
-    if (offset + 46 > data.length || data.readUInt32LE(offset) !== 0x02014b50) throw new Error("无效的 xlsx 文件");
-    const flags = data.readUInt16LE(offset + 8);
-    const compressed = data.readUInt32LE(offset + 20);
-    const uncompressed = data.readUInt32LE(offset + 24);
-    const nameLength = data.readUInt16LE(offset + 28), extraLength = data.readUInt16LE(offset + 30), commentLength = data.readUInt16LE(offset + 32);
-    if ((flags & 1) !== 0 || uncompressed > 20 * 1024 * 1024) throw new Error("xlsx 文件包含不安全内容");
-    totalUncompressed += uncompressed;
-    if (totalUncompressed > 50 * 1024 * 1024 || (compressed > 0 && uncompressed / compressed > 200)) throw new Error("xlsx 文件解压后过大");
-    offset += 46 + nameLength + extraLength + commentLength;
-  }
+  // Validate actual decompression too: hostile central-directory sizes can lie
+  // to ExcelJS/JSZip. Share the bounded reader used by broker-order imports.
+  readSafeXlsxEntries(data);
 }
 
 /** 把「有知有行」xlsx 解析为 simple-app 投资账户数组（未分配 id） */

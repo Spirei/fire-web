@@ -116,3 +116,8 @@ export function customCardImageOf(userId: string, id: string): string {
   const row = getDb().prepare("SELECT image FROM custom_cards WHERE user_id = ? AND id = ?").get(userId, id) as { image: string } | undefined;
   return row?.image ?? "";
 }
+
+/** Shared image metadata must remain while any account still has a custom card. */
+export function customCardImageInUse(image: string): boolean {
+  return !!getDb().prepare("SELECT 1 FROM custom_cards WHERE image = ? LIMIT 1").get(image);
+}

@@ -1,13 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { applySessionCookie, createSession, createUser, findUserByUsername, needsSetup } from "@/lib/auth";
+import { applySessionCookie, createSession, createUser, findUserByUsername, isTrustedMutationRequest, needsSetup } from "@/lib/auth";
 import { validatePassword } from "@/lib/password";
 import { getSiteSettings } from "@/lib/settings";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
+  if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不受信任" }, { status: 403, headers: { "Cache-Control": "no-store" } });
   // 注册限流：同 IP 15 分钟最多 5 次，防批量注册
   if (!rateLimit(`register:${clientIp(request)}`, 20, 15 * 60 * 1000)) {
     return NextResponse.json({ error: "注册过于频繁，请稍后再试" }, { status: 429 });

@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       method: "GET",
       headers: { authorization: `Bearer ${token}` },
       cache: "no-store",
+      redirect: "error",
       signal: AbortSignal.timeout(30_000)
     });
     if (!response.ok) {

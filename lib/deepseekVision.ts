@@ -3,6 +3,7 @@
  * 上层回退本地 Apple Vision，不影响原有链路。
  */
 import { promises as fs } from "node:fs";
+import { readLimitedResponseJson } from "./requestBody";
 
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_MODEL = "deepseek-v4-flash-vision-exp";
@@ -77,20 +78,22 @@ export async function askDeepSeekVision(
         temperature: 0.1,
         max_tokens: maxTokens
       }),
-      signal: controller.signal
+      signal: controller.signal,
+      redirect: "error"
     });
     if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`DeepSeek HTTP ${res.status}: ${detail.slice(0, 300)}`);
+      await res.body?.cancel();
+      console.warn("[deepseek-vision] HTTP", res.status);
+      return null;
     }
-    const data = (await res.json()) as {
+    const data = await readLimitedResponseJson<{
       choices?: Array<{ message?: { content?: unknown } }>;
-    };
-    const content = data.choices?.[0]?.message?.content;
+    }>(res, 1_000_000);
+    const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) return null;
     return content.trim();
-  } catch (err) {
-    console.warn("[deepseek-vision]", err instanceof Error ? err.message : err);
+  } catch {
+    console.warn("[deepseek-vision] request failed");
     return null;
   } finally {
     clearTimeout(timer);

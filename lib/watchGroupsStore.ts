@@ -10,8 +10,10 @@
 
 import { randomBytes } from "crypto";
 import { getDb } from "./db";
-import { assetId, deleteAsset, upsertAsset } from "./assets";
-import { removeFileIfUnused } from "./fileCleanup";
+import { assetId, upsertAsset } from "./assets";
+import { localPathOf, removeFileIfUnused, sameLocalFile } from "./fileCleanup";
+import path from "node:path";
+import fs from "node:fs";
 
 export interface WatchGroupDto {
   id: string;
@@ -164,19 +166,34 @@ export function createWatchGroup(userId: string, name: string): WatchGroupDto {
   return rowToDto(getOwned(userId, id) as WatchGroupRow);
 }
 
+/** Selecting an image does not grant ownership of its underlying file. */
+export function removeWatchGroupIconIfUnused(userId: string, groupId: string, url: string | undefined | null): boolean {
+  if (!url || !/^[A-Za-z0-9_-]+$/.test(userId) || !/^[A-Za-z0-9_-]+$/.test(groupId)) return false;
+  try {
+    const target = localPathOf(url);
+    const ownedRoot = path.join(process.cwd(), "public", "uploads", "asset", "group", userId, groupId);
+    if (path.dirname(target) !== ownedRoot) return false;
+    const realUploads = fs.realpathSync(path.join(process.cwd(), "public", "uploads"));
+    if (path.dirname(fs.realpathSync(target)) !== path.join(realUploads, "asset", "group", userId, groupId)) return false;
+    return removeFileIfUnused(url);
+  } catch { return false; }
+}
+
 /** 分组图标注册进素材库（type=group，防文件清理丢失；同分组多次上传不堆积） */
-function saveGroupAsset(groupId: string, name: string, url: string) {
+function saveGroupAsset(userId: string, groupId: string, name: string, url: string) {
   const db = getDb();
   const assetRowId = assetId("group", "GROUP", groupId);
   if (!url) {
     const row = db.prepare("SELECT url FROM assets WHERE id = ?").get(assetRowId) as { url?: string } | undefined;
     db.prepare("DELETE FROM assets WHERE id = ?").run(assetRowId);
-    if (row?.url) removeFileIfUnused(row.url);
+    if (row?.url) removeWatchGroupIconIfUnused(userId, groupId, row.url);
     return;
   }
-  upsertAsset({ type: "group", market: "GROUP", code: groupId, name, url, source: "auto" });
+  const old = db.prepare("SELECT url FROM assets WHERE id = ?").get(assetRowId) as { url?: string } | undefined;
+  upsertAsset({ type: "group", market: "GROUP", code: groupId, name, url, source: "auto", preserveReplacedFiles: true });
   // upsert 对 manual 旧行有保护逻辑，这里强制覆盖 url / name（分组图标以最新上传为准）
   db.prepare("UPDATE assets SET url = ?, name = ?, updated_at = ? WHERE id = ?").run(url, name, new Date().toISOString(), assetRowId);
+  if (old?.url && old.url !== url && !sameLocalFile(old.url, url)) removeWatchGroupIconIfUnused(userId, groupId, old.url);
 }
 
 export function updateWatchGroup(
@@ -200,7 +217,7 @@ export function updateWatchGroup(
   const icon = input.icon === undefined ? row.icon : input.icon.trim();
   const visible = input.visible === undefined ? row.visible : input.visible;
   db.prepare("UPDATE watch_groups SET name = ?, icon = ?, visible = ? WHERE id = ? AND user_id = ?").run(name, icon, visible, id, userId);
-  if (icon !== row.icon) saveGroupAsset(id, name, icon);
+  if (icon !== row.icon) saveGroupAsset(userId, id, name, icon);
   return rowToDto(getOwned(userId, id) as WatchGroupRow);
 }
 
@@ -215,7 +232,7 @@ export function deleteWatchGroup(userId: string, id: string): boolean {
   const assetRow = db.prepare("SELECT url FROM assets WHERE id = ?").get(assetRowId) as { url?: string } | undefined;
   if (assetRow?.url) {
     db.prepare("DELETE FROM assets WHERE id = ?").run(assetRowId);
-    removeFileIfUnused(assetRow.url);
+    removeWatchGroupIconIfUnused(userId, id, assetRow.url);
   }
   return true;
 }

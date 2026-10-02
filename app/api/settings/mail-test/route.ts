@@ -4,6 +4,7 @@ import { sendTestEmail } from "@/lib/mail";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 import { MailBudgetError } from "@/lib/mailBudget";
 import { readJsonBody } from "@/lib/requestBody";
+import { SmtpDestinationError } from "@/lib/smtpConfig";
 
 export async function POST(request: Request) {
   if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不受信任" }, { status: 403 });
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     await sendTestEmail(user.email, config);
     return NextResponse.json({ ok: true, email: user.email });
   } catch (error) {
+    if (error instanceof SmtpDestinationError) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ error: error instanceof MailBudgetError ? error.message : "发送失败，请检查邮件配置" }, { status: error instanceof MailBudgetError ? 429 : 502 });
   }
 }

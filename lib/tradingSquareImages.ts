@@ -59,6 +59,7 @@ export function isAllowedRemoteImageUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
+    if (parsed.port && parsed.port !== "443") return false;
     if (parsed.username || parsed.password) return false;
     if (!parsed.hostname || isPrivateHostname(parsed.hostname)) return false;
     return isAllowedImageHost(parsed.hostname);

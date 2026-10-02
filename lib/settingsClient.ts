@@ -13,9 +13,31 @@ const CLIENT_KEYS = [
   "tradingSquareTrumpRefreshMinutes", "tradingSquareDuanRefreshMinutes", "dbType", "ticker"
 ] as const satisfies readonly (keyof SiteSettings)[];
 
+/** Legacy URLs may contain credentials; redact the copy without mutating the saved source. */
+function clientSettingValue(key: typeof CLIENT_KEYS[number], value: SiteSettings[typeof CLIENT_KEYS[number]], admin: boolean) {
+  if (!key.endsWith("ApiUrl") || typeof value !== "string") return value;
+  // Data and model APIs are consumed by server routes. Only these public image bases
+  // are used directly by the earnings calendar; keep their non-secret parameters.
+  if (!admin && key !== "usLogoApiUrl" && key !== "cnLogoApiUrl") return "";
+  try {
+    const url = new URL(value);
+    let changed = Boolean(url.username || url.password);
+    url.username = ""; url.password = "";
+    if (!admin) {
+      for (const name of [...url.searchParams.keys()]) {
+        if (/^(?:api[_-]?key|key|token|access[_-]?token|secret|password|signature|auth|authorization)$/i.test(name)) {
+          url.searchParams.delete(name); changed = true;
+        }
+      }
+    }
+    if (!changed) return value;
+    return url.href;
+  } catch { return ""; }
+}
+
 export function clientSettings(settings: SiteSettings, admin: boolean) {
   return {
-    ...Object.fromEntries(CLIENT_KEYS.map(key => [key, settings[key]])),
+    ...Object.fromEntries(CLIENT_KEYS.map(key => [key, clientSettingValue(key, settings[key], admin)])),
     domain: admin ? settings.domain : publicSiteDomain(settings.domain),
     futuHost: admin ? settings.futuHost : "", futuPort: admin ? settings.futuPort : "",
     pgHost: admin ? settings.pgHost : "", pgPort: admin ? settings.pgPort : "",

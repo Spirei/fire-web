@@ -180,7 +180,7 @@ export async function saveWatchGroupIcon(request: Request, groupId: string) {
   const user = getAuthUser(request);
   if (!user) throw new UploadError("未登录", 401);
   if (!/^[a-zA-Z0-9_-]+$/.test(groupId) || !/^[a-zA-Z0-9_-]+$/.test(user.id)) throw new UploadError("分组不存在", 404);
-  const { getOwnedWatchGroup, updateWatchGroup } = await import("./watchGroupsStore");
+  const { getOwnedWatchGroup, updateWatchGroup, removeWatchGroupIconIfUnused } = await import("./watchGroupsStore");
   const group = getOwnedWatchGroup(user.id, groupId);
   if (!group) throw new UploadError("分组不存在", 404);
   if (group.kind !== "custom") throw new UploadError("市场分组不支持自定义图标", 400);
@@ -204,7 +204,7 @@ export async function saveWatchGroupIcon(request: Request, groupId: string) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(assetFilePath(dir, filename), output);
   const updated = updateWatchGroup(user.id, groupId, { icon: url });
-  if (group.icon && group.icon !== url) removeFileIfUnused(group.icon);
+  if (group.icon && group.icon !== url && !sameLocalFile(group.icon, url)) removeWatchGroupIconIfUnused(user.id, groupId, group.icon);
   logSecurityEvent(request, user.id, "group_icon_upload", groupId);
   return updated;
 }

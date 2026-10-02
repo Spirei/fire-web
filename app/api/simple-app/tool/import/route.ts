@@ -1,4 +1,4 @@
-import { readFormBody } from "@/lib/requestBody";
+import { readFormBody, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { NextRequest } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { parseYouzhiyouxing, type XlsxInvest } from "@/lib/simpleLedgerXlsx";
@@ -17,8 +17,9 @@ export async function POST(request: NextRequest) {
   }
   let form: FormData;
   try {
-    form = await readFormBody(request);
-  } catch {
+    form = await readFormBody(request, MAX_FILE_BYTES + 256 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return json({ ok: false, error: "文件不能超过 10MB" }, 413);
     return json({ ok: false, error: "无效请求" }, 400);
   }
   const file = form.get("file");

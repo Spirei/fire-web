@@ -9,6 +9,8 @@ import { normalizeTradingText } from "@/lib/tradingSquareText";
 import { COMMENTS_CACHE_VERSION, commentsFilePath, mapXueqiuComment, readDuanComments, type CommentsCache, type XueqiuComment } from "@/lib/tradingSquareComments";
 import { backfillTrumpTranslations, translateTrumpPostsNow } from "@/lib/tradingSquareTranslate";
 import { proxyFetch } from "@/lib/net";
+import { fetchAllowedRemoteGet, sameOriginRemoteUrl } from "@/lib/remoteFetch";
+import { readLimitedResponseBytes, readLimitedResponseJson } from "@/lib/requestBody";
 import type { FeedPeopleSourceStatus, FeedPersonId } from "@/lib/feedTypes";
 
 const DATA = path.join(process.cwd(), "data");
@@ -103,15 +105,15 @@ async function xueqiuFetch(pathAndQuery: string): Promise<unknown | null> {
   const urls = [`https://api.xueqiu.com${pathAndQuery}`, `https://xueqiu.com${pathAndQuery}`];
   for (const url of urls) {
     try {
-      const response = await proxyFetch(url, { headers, signal: AbortSignal.timeout(12_000), cache: "no-store" });
+      const response = await proxyFetch(url, { headers, signal: AbortSignal.timeout(12_000), cache: "no-store", redirect: "error" });
       const setCookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
       if (setCookies.length && !configured) {
         xueqiuCookie = mergeSetCookie(xueqiuCookie, setCookies);
         headers.Cookie = xueqiuCookie;
       }
       const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("json")) continue;
-      const json = await response.json() as { error_code?: unknown };
+      if (!contentType.includes("json")) { await response.body?.cancel(); continue; }
+      const json = await readLimitedResponseJson<{ error_code?: unknown }>(response, 2_000_000);
       if(xueqiuErrorCode(json?.error_code)===400016)xueqiuAuthRejected=true;
       // Xueqiu uses error_code 0 or "0" for success; a truthy string "0" must not be treated as failure.
       if (!response.ok || (json && typeof json === "object" && xueqiuErrorCode(json.error_code) !== 0)) continue;
@@ -281,19 +283,17 @@ async function downloadImage(author: string, url: string): Promise<string | unde
   if (existing && isLocalPostImageUrl(existing) && !isTinyLocalImage(existing)) return existing;
   try {
     const referer = /xueqiu|imedao|xqimg/i.test(fetchUrl) ? "https://xueqiu.com/" : "https://trumpstruth.org/";
-    const response = await proxyFetch(fetchUrl, {
+    const response = await fetchAllowedRemoteGet(fetchUrl, isAllowedRemoteImageUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         Referer: referer,
         Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
       },
       signal: AbortSignal.timeout(8000),
-      cache: "no-store",
-      redirect: "follow"
+      cache: "no-store"
     });
-    if (!response.ok) return undefined;
-    if (!isAllowedRemoteImageUrl(response.url || fetchUrl)) return undefined;
-    const buf = Buffer.from(await response.arrayBuffer());
+    if (!response.ok || !isAllowedRemoteImageUrl(response.url || fetchUrl)) { await response.body?.cancel(); return undefined; }
+    const buf = Buffer.from(await readLimitedResponseBytes(response, MAX_IMAGE_BYTES));
     if (!buf.length || buf.length > MAX_IMAGE_BYTES) return undefined;
     const ext = sniffImageExt(buf);
     if (!ext || ext === "svg" || ext === "ico") return undefined;
@@ -448,14 +448,14 @@ export async function refreshTrumpPosts(options:{translateBeforeSave?:boolean;ma
     for (let page = 0; page < maxPages && nextUrl; page += 1) {
       let html = "";
       try {
-        const response = await proxyFetch(nextUrl, {
+        const response = await fetchAllowedRemoteGet(nextUrl, url => sameOriginRemoteUrl(url, source), {
           headers: { "User-Agent": "Alcor/1.0 public archive reader" },
           cache: "no-store",
           // 归档站有时单页要 2 秒以上；4 秒太紧会把整次刷新打断（异常直接抛出去、一条都写不进来）
           signal: AbortSignal.timeout(8000)
         });
-        if (!response.ok) break;
-        html = await response.text();
+        if (!response.ok) { await response.body?.cancel(); break; }
+        html = new TextDecoder().decode(await readLimitedResponseBytes(response, 2_000_000));
       } catch {
         // 单页失败就停在已抓到的内容上，不要让整次刷新失败
         break;
@@ -470,6 +470,7 @@ export async function refreshTrumpPosts(options:{translateBeforeSave?:boolean;ma
       }
       const next = html.match(/<a href="([^"]*cursor=[^"]+)"[^>]*>Next Page/i)?.[1];
       nextUrl = next ? new URL(next.replace(/&amp;/g, "&"), source).toString() : "";
+      if (nextUrl && !sameOriginRemoteUrl(nextUrl, source)) nextUrl = "";
       if (existing.length >= 200 && overlap >= 2) nextUrl = "";
     }
     if (incoming.length&&options.translateBeforeSave!==false) {

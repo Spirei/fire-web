@@ -1,7 +1,7 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
-import { getAuthUser } from "@/lib/auth";
-import { createCustomCard, customCardImageOf, deleteCustomCard, listCustomCards } from "@/lib/cardCustom";
+import { getAuthUser, isAdmin } from "@/lib/auth";
+import { createCustomCard, customCardImageInUse, customCardImageOf, deleteCustomCard, listCustomCards } from "@/lib/cardCustom";
 import { upsertAsset, deleteAsset } from "@/lib/assets";
 import { cardAssetId } from "@/lib/cardAssets";
 import { readCardManifest } from "@/lib/cardLibrary";
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
   });
   // 同步登记到「素材库 → 卡片」：和清单里的卡面一样是一条 type=card 的素材，
   // 素材库里能替换 / 删除，卡面库与卡包读的也是这条素材的 url
-  upsertAsset({
+  if (isAdmin(user)) upsertAsset({
     id: cardAssetId(card.image),
     type: "card",
     market: card.region || "OTHER",
@@ -108,6 +108,8 @@ export async function DELETE(request: Request) {
   const removed = deleteCustomCard(user.id, id);
   if (!removed) return NextResponse.json({ error: "这张卡不存在" }, { status: 404 });
   // 素材库 → 卡片 里那条也一起摘掉，避免留下孤儿素材
-  if (image) deleteAsset(cardAssetId(image));
+  // A personal card may reuse a public image. Removing that association must
+  // not grant an ordinary account permission to delete shared assets/files.
+  if (image && isAdmin(user) && !customCardImageInUse(image)) deleteAsset(cardAssetId(image));
   return NextResponse.json({ ok: true }, { headers: NO_STORE });
 }
