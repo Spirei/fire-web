@@ -243,6 +243,27 @@ try {
     assert(cell(future,'2027-02-06').includes('data-tone="unknown"'),'an unverified weekend must remain unknown');
   });
 
+  test('confirmed weekends show only the date while closure details and unknown weekends remain available',()=>{
+    const cell=(html,date)=>html.match(new RegExp('<button[^>]*aria-label="'+date+'；[^]*?</button>'))[0];
+    for(const market of ['ALL','US','HK','CN']) for(const status of ['', '&status=closed']) {
+      const html=render('components/MarketCalendarView.tsx',{},'market='+market+'&month=2026-10'+status+'&day=10');
+      for(const date of ['2026-10-03','2026-10-10']) {
+        const weekend=cell(html,date);
+        assert(weekend.includes('is-quiet-weekend'));
+        assert(!weekend.includes('mc-market-marks')&&!weekend.includes('mc-closure-watermark'));
+        assert(weekend.includes('mc-number')&&!weekend.includes('disabled=""'));
+      }
+      assert(html.includes('class="mc-selected"')&&html.includes('周末休市'),'selected weekends still expose their market schedule');
+    }
+    const holidays=render('components/MarketCalendarView.tsx',{},'market=CN&month=2026-10');
+    assert(cell(holidays,'2026-10-01').includes('mc-market-marks')&&cell(holidays,'2026-10-01').includes('mc-closure-watermark'));
+    const future=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2027-10');
+    const unknown=cell(future,'2027-10-02');
+    assert(!unknown.includes('is-quiet-weekend')&&unknown.includes('mc-unknown-key')&&unknown.includes('data-tone="unknown"'));
+    const filtered=render('components/MarketCalendarView.tsx',{},'market=ALL&month=2026-10&status=half_day');
+    assert(cell(filtered,'2026-10-10').includes('disabled=""'),'status filtering still excludes irrelevant weekends');
+  });
+
   test('closure reasons stay paired with each market and omit ordinary weekends',()=>{
     const cell=(html,date)=>html.match(new RegExp('<button[^>]*aria-label="'+date+'；[^]*?</button>'))[0];
     const reasons=html=>[...html.matchAll(/class="mc-closure-reason" data-market="([A-Z]+)"[^>]*><b>([^]*?)<\/b><span>([^]*?)<\/span>/g)].map(match=>({market:match[1],label:match[2],name:match[3]}));

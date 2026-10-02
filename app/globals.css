@@ -7356,3 +7356,4 @@ html { scrollbar-gutter:stable; }
 .dark .mc-holiday-key { background:#d1b08e; }
 
 .dark .mc-closure-reasons { color:#b7c0cf; }
+.dark .mc-day.is-quiet-weekend { background-color:#20252d;color:#8992a1; }
