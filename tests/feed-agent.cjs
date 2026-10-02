@@ -91,6 +91,8 @@ let count=0;async function test(name,run){db.prepare('DELETE FROM rate_limit').r
     assert(html.includes('role="dialog"'));assert(html.includes('width:100%;height:100%;object-fit:cover;border-radius:50%'));
     assert(html.includes('编辑小人')&&html.includes('更新记录')&&html.includes('完成动态更新'));
     assert.equal((html.match(/aria-label="(?:更新记录|关注来源|运行状态|更新计划|名称与形象)"/g)||[]).length,6);
+    const timezone=process.env.TZ;
+    try{process.env.TZ='UTC';const utc=renderToStaticMarkup(React.createElement(panel.default,{data,tab:'activity',onTabChange(){},onClose(){},onProfileChange(){},onRefresh(){},refreshDisabled:false}));process.env.TZ='America/Los_Angeles';const west=renderToStaticMarkup(React.createElement(panel.default,{data,tab:'activity',onTabChange(){},onClose(){},onProfileChange(){},onRefresh(){},refreshDisabled:false}));assert.equal(utc,west,'container/browser timezone cannot alter first-frame dates or groups');}finally{if(timezone===undefined)delete process.env.TZ;else process.env.TZ=timezone;}
     assert.equal(panel.validFeedAgentTab('invalid'),'activity');assert.equal(panel.validFeedAgentTab('schedule'),'schedule');
   });
   console.log(`${count} feed agent regression groups passed`);
