@@ -13,12 +13,16 @@
 输入（搜索）：{ "cmd": "search", "keyword": "...", "limit": 8 }
 session 由 Node 端按市场时段计算；US 盘前/盘后/夜盘分别取 Futu 快照里的
 pre_price / after_price / overnight_price（含各自涨跌额），其余用 last_price。
+OVERNIGHT 还需 Node 提供美东 sessionStart/sessionEnd（yyyy-MM-dd HH:mm:ss），
+仅同周期且具备夜盘价与涨跌额时采用，缺窗口或旧字段保留常规报价。
 """
 
 import json
 import os
 import sys
 import re
+import math
+from datetime import datetime
 
 
 def _ensure_utf8_io():
@@ -37,7 +41,34 @@ def _num(value):
         n = float(value)
     except (TypeError, ValueError):
         return None
-    return n if n == n else None  # NaN → None
+    return n if math.isfinite(n) else None
+
+
+def _overnight_values(row, item):
+    """Only actual overnight fields in the requested ET cycle may be labeled OVERNIGHT.
+
+    Keep the source timestamp verbatim. Never borrow yesterday's prev_close_price
+    when the overnight change/baseline is absent.
+    """
+    raw_time = str(row.get("update_time") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,9})?", raw_time):
+        return None
+    try:
+        timestamp = datetime.fromisoformat(raw_time)
+        start = datetime.fromisoformat(item.get("sessionStart", ""))
+        end = datetime.fromisoformat(item.get("sessionEnd", ""))
+        if not start <= timestamp < end:
+            return None
+    except (TypeError, ValueError):
+        return None
+    price = _num(row.get("overnight_price"))
+    change = _num(row.get("overnight_change_val"))
+    if price is None or price <= 0 or change is None:
+        return None
+    previous = price - change
+    if not math.isfinite(previous) or previous <= 0:
+        return None
+    return price, change, change / previous * 100, previous
 
 
 def _to_futu_code(market, code):
@@ -372,21 +403,10 @@ def main():
                     if change is not None and price is not None:
                         prev_close = price - change
             elif session == "OVERNIGHT":
-                overnight_price = _num(row.get("overnight_price"))
-                if overnight_price:
-                    price = overnight_price
-                    # 美东 20:00 为交易日分界：旧一天结算归档，夜盘属于新一天。
-                    # 当日盈亏 = 夜盘波动（overnight_price - 今日常规收盘价），
-                    # 即富途官方 overnight_change_val / overnight_change_rate，
-                    # 与券商显示口径一致（夜盘只计小幅波动，不再显示昨天整天盈亏）。
-                    change = _num(row.get("overnight_change_val"))
-                    change_pct = _num(row.get("overnight_change_rate"))
-                    if change is None and prev_close and prev_close > 0:
-                        change = price - prev_close
-                        change_pct = change / prev_close * 100
+                overnight = _overnight_values(row, items_for_symbol[0])
+                if overnight is not None:
+                    price, change, change_pct, prev_close = overnight
                     eff_session = "OVERNIGHT"
-                    if change is not None and price is not None:
-                        prev_close = price - change
 
             if price is None or price <= 0:
                 continue

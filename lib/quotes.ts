@@ -22,9 +22,9 @@ export interface Quote {
   high: number;
   low: number;
   time: string;
-  /** 上一常规交易日收盘价。 */
+  /** 当前涨跌的常规收盘基准；夜盘为本周期 20:00 前的最近常规收盘。 */
   prevClose?: number;
-  /** PRE / AFTER 表示当前 price 已切换为扩展时段有效价。 */
+  /** PRE / AFTER / OVERNIGHT 表示当前 price 已切换为对应扩展时段有效价。 */
   session?: "PRE" | "REGULAR" | "AFTER" | "OVERNIGHT";
   /** 成交量（股/手，腾讯 f36） */
   volume?: number;
@@ -268,7 +268,7 @@ async function fetchQuotesUnshared(items: QuoteItem[]): Promise<Record<string, Q
 
   // 美股盘前/盘后统一覆盖有效价与涨跌口径。失败时保留腾讯常规盘行情，不影响整批。
   // 按代码去重（同一只股可能同时出现在持仓与自选），并把并发从 6 降到 4，降低 Yahoo 限流概率。
-  const usMissing = usItems.filter((item) => result[item.id]);
+  const usMissing = usItems.filter((item) => result[item.id] && !(result[item.id].source === "futu" && result[item.id].session === "OVERNIGHT"));
   if (usMissing.length > 0) {
     const byCode = new Map<string, typeof usMissing>();
     for (const item of usMissing) {
@@ -313,6 +313,8 @@ async function fetchQuotesUnshared(items: QuoteItem[]): Promise<Record<string, Q
   Object.keys(result).forEach((id) => {
     const q = result[id];
     if (!q) return;
+    // An unchanged valid overnight print is not a ghost regular quote.
+    if (q.session === "OVERNIGHT") return;
     const item = items.find((row) => row.id === id);
     if (item && (item.market === "JP" || item.market === "KR")) return;
     if ((q.volume ?? 0) === 0 && (q.amount ?? 0) === 0 && (q.change ?? 0) === 0 && (q.changePct ?? 0) === 0) {

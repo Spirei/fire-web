@@ -59,25 +59,30 @@ async function isFutuAvailable(): Promise<boolean> {
   return ok;
 }
 
-/** 美股当前处于哪个扩展时段；闭市时区分「夜盘」（工作日 20:00-04:00）与普通收盘 */
-function sessionHint(market: string): string {
+/** 美股预期时段及夜盘的美东日期窗口；周日至周四晚 20:00 开始。 */
+export function futuQuoteSessionContext(market: string, now = new Date()) {
   const key = market.toUpperCase();
-  if (key !== "US") return "REGULAR";
+  if (key !== "US") return { session: "REGULAR" };
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
-    weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23"
-  }).formatToParts(new Date());
+  }).formatToParts(now);
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value || "";
-  const weekday = get("weekday") !== "Sat" && get("weekday") !== "Sun";
   const minute = Number(get("hour")) * 60 + Number(get("minute"));
-  const session = marketSessionState("US").session;
-  if (session === "pre") return "PRE";
-  if (session === "post") return "AFTER";
-  if (weekday && (minute >= 1200 || minute < 240)) return "OVERNIGHT";
-  return "REGULAR";
+  const state = marketSessionState("US", now);
+  if (state.session === "pre") return { session: "PRE" };
+  if (state.session === "post") return { session: "AFTER" };
+  if (state.session === "overnight") {
+    const shift = (date: string, days: number) => {
+      const value = new Date(`${date}T12:00:00Z`); value.setUTCDate(value.getUTCDate() + days);
+      return value.toISOString().slice(0, 10);
+    };
+    const start = minute >= 1200 ? state.localDate : shift(state.localDate, -1);
+    return { session: "OVERNIGHT", sessionStart: `${start} 20:00:00`, sessionEnd: `${shift(start, 1)} 04:00:00` };
+  }
+  return { session: "REGULAR" };
 }
 
 function doRunBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 11111): Promise<Record<string, unknown>> {
@@ -139,9 +144,10 @@ function runBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 11
 export async function fetchFutuQuotes(items: Array<Omit<QuoteItem, "market"> & { market: string }>): Promise<Map<string, Quote>> {
   if (items.length === 0 || !(await isFutuAvailable())) return new Map();
   const { futuHost, futuPort } = getSiteSettings();
+  const now = new Date();
   const withSession = items.map((item) => ({
     ...item,
-    session: sessionHint(item.market)
+    ...futuQuoteSessionContext(item.market, now)
   }));
   const parsed = await runBridge({ cmd: "quotes", items: withSession }, futuHost, Number(futuPort) || 11111);
   return new Map(Object.entries((parsed.quotes as Record<string, Quote> | undefined) || {}));

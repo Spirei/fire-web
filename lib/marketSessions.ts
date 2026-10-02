@@ -50,11 +50,14 @@ export function marketSessionState(market: string, now = new Date()): MarketSess
   const weekday = p.weekday !== "Sat" && p.weekday !== "Sun";
   let session: MarketSession = "closed";
   let label = "休市";
-  if (weekday && key === "US") {
-    if (p.minute >= 240 && p.minute < 570) { session = "pre"; label = "盘前"; }
-    else if (p.minute >= 570 && p.minute < 960) { session = "regular"; label = "交易中"; }
-    else if (p.minute >= 960 && p.minute < 1200) { session = "post"; label = "盘后"; }
-    else if (p.minute >= 1200 || p.minute < 240) { session = "overnight"; label = "夜盘"; }
+  if (key === "US") {
+    // Overnight runs Sunday 20:00 through Friday 04:00 ET, not Friday night.
+    const overnight = p.minute >= 1200 ? p.weekday !== "Fri" && p.weekday !== "Sat"
+      : p.minute < 240 && weekday;
+    if (overnight) { session = "overnight"; label = "夜盘"; }
+    else if (weekday && p.minute >= 240 && p.minute < 570) { session = "pre"; label = "盘前"; }
+    else if (weekday && p.minute >= 570 && p.minute < 960) { session = "regular"; label = "交易中"; }
+    else if (weekday && p.minute >= 960 && p.minute < 1200) { session = "post"; label = "盘后"; }
   } else if (weekday && (key === "HK" || key === "CN")) {
     const morningEnd = key === "HK" ? 720 : 690;
     const afternoonEnd = key === "HK" ? 960 : 900;
@@ -74,9 +77,9 @@ export function marketSessionState(market: string, now = new Date()): MarketSess
   const nextSessionMinute = key === "US" ? 240 : key === "JP" || key === "KR" ? 540 : 570;
   // 结算状态跨过当地午夜保持到下一交易时段开始；周末保持最近交易日最终值。
   // 美股 20:00 为交易日分界：夜盘（20:00-04:00）属于新一天，当日盈亏 = 夜盘波动，
-  // 只有周末才算已结算；港股/A股维持 收盘后结算到下一交易时段开始 的旧口径。
+  // 周五20:00至周日20:00维持已结算；港股/A股维持收盘后至下一交易时段的旧口径。
   const pnlSettled =
-    key === "US" ? !weekday : !weekday || p.minute >= settlementMinute || p.minute < nextSessionMinute;
+    key === "US" ? session === "closed" : !weekday || p.minute >= settlementMinute || p.minute < nextSessionMinute;
   const settlementDate = weekday && p.minute >= settlementMinute ? p.date : previousWeekday(p.date);
   return {
     market: key,
@@ -108,8 +111,8 @@ export function marketBoardLabel(market: string, now = new Date()): string {
         : key === "KR" ? "Asia/Seoul"
           : "Asia/Shanghai";
   const weekday = localParts(now, timeZone).weekday;
-  if (weekday === "Sat" || weekday === "Sun") return "休市";
   const session = marketSessionState(market, now).session;
+  if ((weekday === "Sat" || weekday === "Sun") && session !== "overnight") return "休市";
   if (key === "US") {
     if (session === "pre") return "盘前交易";
     if (session === "regular") return "盘中交易";

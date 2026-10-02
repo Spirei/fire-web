@@ -61,6 +61,7 @@ interface YahooResult {
   close: Array<number | null>;
   meta: {
     regularMarketPrice?: number;
+    regularMarketTime?: number;
     previousClose?: number;
     chartPreviousClose?: number;
     regularMarketDayHigh?: number;
@@ -85,7 +86,7 @@ async function fetchYahoo(code: string): Promise<YahooResult> {
   for (const host of YAHOO_HOSTS) {
     try {
       // 走可选代理（STOCKLOG_PROXY）：境外服务器 / 境内直连不稳定时，代理能让
-      // 盘前 / 盘后 / 夜盘行情正常返回；代理不可达会自动回退直连。
+      // 盘前 / 盘后行情正常返回；代理不可达会自动回退直连。
       const response = await proxyFetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, {
         headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
         signal: AbortSignal.timeout(6000)
@@ -125,12 +126,14 @@ export async function fetchUsRegularQuote(codeRaw: string): Promise<UsRegularQuo
   const cached = regularCache.get(code);
   if (cached && Date.now() - cached.at < (cached.value ? SUCCESS_TTL : FAILURE_TTL)) return cached.value;
   try {
-    const { timestamp, meta } = await fetchYahoo(code);
+    const { meta } = await fetchYahoo(code);
     const price = Number(meta.regularMarketPrice);
     const previousClose = Number(meta.previousClose) || Number(meta.chartPreviousClose);
     if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(previousClose) || previousClose <= 0) throw new Error("empty regular quote");
     const change = price - previousClose;
-    const latestTimestamp = timestamp.at(-1);
+    // Extended bars cannot timestamp the separate regular-market price.
+    const regularTime = Number(meta.regularMarketTime);
+    const latestTimestamp = Number.isFinite(regularTime) && regularTime > 0 ? regularTime : null;
     const value: UsRegularQuote = {
       price,
       previousClose,
@@ -140,7 +143,7 @@ export async function fetchUsRegularQuote(codeRaw: string): Promise<UsRegularQuo
       low: Number(meta.regularMarketDayLow) || price,
       volume: Number(meta.regularMarketVolume) || undefined,
       marketCap: Number(meta.marketCap) || undefined,
-      time: latestTimestamp ? new Date(latestTimestamp * 1000).toISOString() : new Date().toISOString()
+      time: latestTimestamp ? new Date(latestTimestamp * 1000).toISOString() : ""
     };
     regularCache.set(code, { at: Date.now(), value });
     return value;
@@ -156,6 +159,9 @@ export async function fetchUsExtendedQuote(codeRaw: string): Promise<UsExtendedQ
   const session = marketSessionState("US").session;
   const wanted: UsExtendedSession | "LATEST" | null = session === "pre" ? "PRE" : session === "post" ? "AFTER" : session === "overnight" ? "OVERNIGHT" : session === "closed" ? "LATEST" : null;
   if (!wanted) return null;
+  // This chart feed declares pre/post coverage, not an overnight quote stream.
+  // Its final 20:00 post-market bar must never become an OVERNIGHT price.
+  if (wanted === "OVERNIGHT") return null;
   // 熔断期内不再逐只发起请求（每只最多 2×6 秒），直接交给腾讯兜底。
   if (Date.now() < yahooDownUntil) return null;
   const code = codeRaw.toUpperCase().replace(/\.(OQ|N|AM|PS|K)$/, "");
@@ -174,7 +180,7 @@ export async function fetchUsExtendedQuote(codeRaw: string): Promise<UsExtendedQ
       const local = nyParts(timestamp);
       const pointSession = local.minute >= 240 && local.minute < 570 ? "PRE"
         : local.minute >= 960 && local.minute < 1200 ? "AFTER"
-        : local.minute >= 1200 || local.minute < 240 ? "OVERNIGHT" : null;
+        : null;
       // 1 日窗口内，扩展时段最新价必须属于美东当天，否则无盘前/盘后成交的标的会被旧日期扩展价覆盖。
       if (wanted === "LATEST") {
         if (pointSession) latest = { price, date: local.date, time: local.time, session: pointSession };
