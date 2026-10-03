@@ -1199,11 +1199,17 @@ export function getDb(): Database.Database {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     try { fs.chmodSync(DATA_DIR, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
     db = new Database(DB_FILE);
-    try { fs.chmodSync(DB_FILE, 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
-    db.pragma("journal_mode = WAL");
-    migrate(db);
-    installRecordsContract(db);
-    seed(db);
+    try {
+      try { fs.chmodSync(DB_FILE, 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
+      db.pragma("journal_mode = WAL");
+      migrate(db);
+      installRecordsContract(db);
+      seed(db);
+    } catch (error) {
+      db.close();
+      db = null; // A failed startup must not expose a partially initialized handle.
+      throw error;
+    }
   }
   return db;
 }

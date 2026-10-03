@@ -23,23 +23,29 @@ export function installRecordsContract(db: Database.Database) {
         result_json TEXT NOT NULL,
         PRIMARY KEY(user_id, request_id)
       );
-      INSERT OR IGNORE INTO record_revisions(user_id,record_id,revision) SELECT user_id,id,revision FROM records;
-      CREATE TRIGGER IF NOT EXISTS records_contract_insert AFTER INSERT ON records BEGIN
+      INSERT OR IGNORE INTO record_revisions(user_id,record_id,revision)
+        SELECT r.user_id,r.id,r.revision FROM records r JOIN users u ON u.id=r.user_id;
+      DROP TRIGGER IF EXISTS records_contract_insert;
+      DROP TRIGGER IF EXISTS records_contract_update;
+      DROP TRIGGER IF EXISTS records_contract_delete;
+      CREATE TRIGGER records_contract_insert AFTER INSERT ON records
+        WHEN EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id) BEGIN
         INSERT INTO record_revisions(user_id,record_id,revision) VALUES(NEW.user_id,NEW.id,1)
           ON CONFLICT(user_id,record_id) DO UPDATE SET revision=record_revisions.revision+1;
         UPDATE records SET revision=(SELECT revision FROM record_revisions WHERE user_id=NEW.user_id AND record_id=NEW.id) WHERE id=NEW.id;
         INSERT INTO record_collections(user_id,revision) VALUES(NEW.user_id,1)
           ON CONFLICT(user_id) DO UPDATE SET revision=record_collections.revision+1;
       END;
-      CREATE TRIGGER IF NOT EXISTS records_contract_update AFTER UPDATE OF
-        name,code,market,price,cost,qty,group_name,watch_group_id,watch_group_sort,note,source,updated_at ON records BEGIN
+      CREATE TRIGGER records_contract_update AFTER UPDATE OF
+        name,code,market,price,cost,qty,group_name,watch_group_id,watch_group_sort,note,source,updated_at ON records
+        WHEN EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id) BEGIN
         INSERT INTO record_revisions(user_id,record_id,revision) VALUES(NEW.user_id,NEW.id,OLD.revision+1)
           ON CONFLICT(user_id,record_id) DO UPDATE SET revision=record_revisions.revision+1;
         UPDATE records SET revision=(SELECT revision FROM record_revisions WHERE user_id=NEW.user_id AND record_id=NEW.id) WHERE id=NEW.id;
         INSERT INTO record_collections(user_id,revision) VALUES(NEW.user_id,1)
           ON CONFLICT(user_id) DO UPDATE SET revision=record_collections.revision+1;
       END;
-      CREATE TRIGGER IF NOT EXISTS records_contract_delete AFTER DELETE ON records
+      CREATE TRIGGER records_contract_delete AFTER DELETE ON records
         WHEN EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id) BEGIN
         INSERT INTO record_revisions(user_id,record_id,revision) VALUES(OLD.user_id,OLD.id,OLD.revision+1)
           ON CONFLICT(user_id,record_id) DO UPDATE SET revision=record_revisions.revision+1;

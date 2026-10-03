@@ -147,5 +147,32 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
  await test('receipt tracking cascades on account deletion without trigger resurrection',async()=>{
   const f=fixture();await create(2,f);assert(auth.deleteUserById(f.user.id));for(const table of ['records','record_operations','record_revisions','record_collections'])assert.equal(db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE user_id=?`).get(f.user.id).n,0);
  });
+ await test('legacy orphan rows survive schema upgrades without foreign-key failures or orphan version state',async()=>{
+  const Database=load('node_modules/better-sqlite3'),old=new Database(path.join(temp,'old-records.db'));
+  old.exec(`CREATE TABLE users(id TEXT PRIMARY KEY);
+    CREATE TABLE records(id TEXT PRIMARY KEY,user_id TEXT,name TEXT,code TEXT,market TEXT,price REAL,cost REAL,qty REAL,group_name TEXT,watch_group_id TEXT,watch_group_sort INTEGER,note TEXT,source TEXT,updated_at TEXT);
+    INSERT INTO users VALUES('valid');
+    INSERT INTO records VALUES('orphan','removed','legacy','OLD','US',10,8,2,'','',0,'','','2020-01-01');
+    INSERT INTO records VALUES('owned','valid','owned','NEW','US',20,10,3,'','',0,'','','2020-01-01');`);
+  try{
+   const migrate=load('lib/recordsSchema.ts').installRecordsContract;migrate(old);migrate(old);
+   assert.equal(old.prepare('SELECT COUNT(*) n FROM records').get().n,2);
+   assert.deepEqual(old.prepare('SELECT user_id,record_id,revision FROM record_revisions').all(),[{user_id:'valid',record_id:'owned',revision:1}]);
+   old.prepare("UPDATE records SET price=11 WHERE id='orphan'").run();assert.equal(old.prepare("SELECT revision FROM records WHERE id='orphan'").get().revision,1);
+   old.prepare("UPDATE records SET price=21 WHERE id='owned'").run();assert.equal(old.prepare("SELECT revision FROM records WHERE id='owned'").get().revision,2);
+  }finally{old.close();}
+ });
+ await test('failed database startup closes its handle and can initialize again after isolated repair',async()=>{
+  const childDir=path.join(temp,'startup-recovery');fs.mkdirSync(path.join(childDir,'data'),{recursive:true});
+  const Database=load('node_modules/better-sqlite3'),broken=new Database(path.join(childDir,'data/fire.db'));
+  broken.exec('CREATE TABLE users(id TEXT PRIMARY KEY)');broken.close();
+  const script=`const fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require(${JSON.stringify(path.join(root,'node_modules/typescript'))});
+    const root=${JSON.stringify(root)},resolve=Module._resolveFilename;Module._resolveFilename=function(id,parent,...rest){return resolve.call(this,id.startsWith('@/')?path.join(root,id.slice(2)):id,parent,...rest);};
+    require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
+    process.env.STOCKLOG_FUTU='off';global.fetch=async()=>{throw Error('disabled');};const database=require(path.join(root,'lib/db.ts'));
+    let rejected=false;try{database.getDb();}catch{rejected=true;}if(!rejected)throw Error('fixture must fail startup');
+    fs.rmSync('data/fire.db');const recovered=database.getDb();if(!recovered.prepare('SELECT 1 FROM users LIMIT 1').get())throw Error('startup did not recover');recovered.close();process.exit(0);`;
+  require('node:child_process').execFileSync(process.execPath,['-e',script],{cwd:childDir,stdio:'pipe',timeout:30000});
+ });
  console.log(`PASS ${count} records contract suites`);
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode||0);});
