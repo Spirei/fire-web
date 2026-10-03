@@ -21,7 +21,7 @@ export function resourceLibraryDiscovery(version: 1 | 2) {
     file_sorts: ["name", "createdAt"], sort_directions: ["asc", "desc"],
     max_upload_bytes: RESOURCE_UPLOAD_LIMIT, quota_bytes: RESOURCE_QUOTA,
     page_size: 30, max_page_size: 100, max_folders: 128, max_folder_depth: 8, max_files: 5000,
-    upload_format: "multipart/form-data", download_auth: "bearer", range_supported: true,
+    upload_format: "multipart/form-data", upload_name_field: "name", download_auth: "bearer", range_supported: true,
     automatic_mutation_replay: false
   };
 }

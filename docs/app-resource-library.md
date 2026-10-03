@@ -41,6 +41,7 @@
     "max_folder_depth": 8,
     "max_files": 5000,
     "upload_format": "multipart/form-data",
+    "upload_name_field": "name",
     "download_auth": "bearer",
     "range_supported": true,
     "automatic_mutation_replay": false
@@ -59,7 +60,7 @@ v1 discovery 的 path 和 received_files_path 分别为 `/api/v1/resource-librar
 | POST | `/folders` | JSON `{category,parentId?:string,name}`；返回 Folder |
 | DELETE | `/folders/{folderId}` | JSON `{revision}`；只允许空目录，返回 `{deletedId}` |
 | GET | `/files?kind=image&folderId=…&sort=name&direction=asc&limit=30&cursor=…` | `{items,nextCursor,usage}`；省略 category 为两个分类的汇总；省略 folderId 为所选分类内所有文件；`folderId=root` 为根目录；kind 可用于所有分类 |
-| POST | `/files` | multipart 单个 file、category、可选 folderId、requestId；返回 File |
+| POST | `/files` | multipart 单个 file、category、可选 folderId、requestId、可选 name（原生必须发送）；返回 File |
 | GET | `/files/{fileId}` | File 元数据 |
 | GET | `/files/{fileId}/content` | 私有二进制，支持单一 bytes Range |
 | DELETE | `/files/{fileId}` | JSON `{revision,requestId}`；返回删除回执 |
@@ -69,6 +70,32 @@ v1 discovery 的 path 和 received_files_path 分别为 `/api/v1/resource-librar
 JSON 沿用 `{code:0,message:"ok",data:…}`。错误 HTTP 400/401/403/404/409/413/415/429/500，业务 code 为 HTTP 状态 × 100 + 1。POST 成功 HTTP 201，其他成功 200；Range 成功 206，越界或多个 Range 为 416。所有资源响应私有且 no-store。
 
 requestId 为 App 在用户确认一次上传/删除时新建的**小写 UUID**。同一用户 requestId 在上传/删除间共用命名空间；重复写请求返回 409，不重复上传或删除。App 不自动重放写入；遇超时/断线先 GET 对应结果。404 仅表示没有已登记的操作，不能证明一个仍在传输的请求不会继续执行，等待原请求停止并由用户决定。500 或 pending 不能当成成功。失败后用户主动重试使用新 requestId；删除仍校验原 revision。
+
+## 原生 multipart 文件名
+
+合约 1 增补：discovery 的 `upload_name_field="name"` 表示支持原名文本字段。原生上传须确认此字段后启用本格式；旧服务器字段缺失时，不发送带反斜杠转义引号或 `filename*` 的请求，不通过重复上传探测兼容性。
+
+文件部分的传输名称固定为 ASCII `upload.bin`，另用普通 multipart 文本字段 `name` 发送原文件名的 **UTF-8 原始字节**。name 不做 JSON、URL/百分号或 HTML 编码，双引号在文本 body 中直接发送，不加反斜杠。整个 multipart 严格使用 CRLF 分隔：
+
+```http
+--AlcorBoundary
+Content-Disposition: form-data; name="name"
+Content-Type: text/plain; charset=UTF-8
+
+中文"引号"%22.png
+--AlcorBoundary
+Content-Disposition: form-data; name="file"; filename="upload.bin"
+Content-Type: application/octet-stream
+
+<原文件二进制字节>
+--AlcorBoundary--
+```
+
+category/requestId/可选 folderId 仍按前表作为普通文本 part 发送；boundary 要选择不会出现在内容中的值。示例不代表只发送上述两个 part。
+
+服务端保留 `name` 的原始 Unicode 字符序列，不进行 NFC/NFD、Latin-1、百分号或引号替换；上传回执、操作查询、元数据及列表均返回同一名称。格式分类使用原名后缀并结合原文件头校验，传输名 `upload.bin` 不决定类型。重复 name、二进制 name 或违反名称规则的输入拒绝，原名不作为磁盘路径。
+
+name 是向后兼容的可选字段：旧请求省略时使用现有解析器的 file.name，其中特殊字符不能承诺原样保留。已验证 Node 22 默认解析器支持中文 UTF-8 header，但拒绝 `filename="中文\"引号\".png"` 和 `filename*`，且把 header 中字面的 `%22` 当作引号；原生不要使用这些方式承载原名。私有下载响应仍通过 HTTP `filename*=UTF-8''…` 返回原名，该响应头与 multipart 请求头是两种不同用途。
 
 ## 字段
 

@@ -19,6 +19,15 @@ async function response(v,action='',method='GET',body,token,headers={}){
 async function call(...args){const r=await response(...args);return {status:r.status,headers:r.headers,...await r.json()};}
 const upload=(v,f,bytes=png,name='相片.png',category='media',id=requestId(),extra={})=>call(v,'files','POST',uploadBody(bytes,name,category,id,extra),f.grant.access_token);
 const direct=(f,name,bytes=png,category='media',id=requestId())=>store.uploadResource(f.user.id,bytes,{name,category,requestId:id},2);
+// Construct the native wire bytes ourselves: FormData serializes quotes differently from Swift.
+function nativeMultipart(v, token, name, id, options={}) {
+ const boundary='AlcorNativeOriginalName-'+id,part=(key,value,type)=>Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"${type?'; filename="field.bin"':''}\r\n${type?'Content-Type: application/octet-stream':'Content-Type: text/plain; charset=UTF-8'}\r\n\r\n${value}\r\n`,'utf8');
+ const transportName=options.quotedHeader?name.replace(/"/g,'\\"'):'upload.bin',parts=[part('category','media'),part('requestId',id)];
+ if(!options.noName)parts.push(part('name',name,options.binaryName));
+ if(options.duplicateName)parts.push(part('name',name));
+ parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${transportName}"\r\nContent-Type: application/octet-stream\r\n\r\n`,'utf8'),png,Buffer.from(`\r\n--${boundary}--\r\n`,'utf8'));
+ return new Request(origin+`/api/v${v}/resource-library/files`,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':`multipart/form-data; boundary=${boundary}`},body:Buffer.concat(parts)});
+}
 async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await run();count++;console.log('PASS '+name);}
 (async()=>{
  await test('same-version discovery, stable category/type/sort/limits, optional scopes and unchanged login',async()=>{
@@ -58,6 +67,28 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
    const op=await call(v,'uploads/'+id,'GET',undefined,f.grant.access_token);assert.equal(op.data.state,'completed');assert.match(op.data.result.downloadPath,new RegExp('/api/v'+v+'/'));assert.equal(op.data.result.name,'测试相片.png');
   }
   assert.equal((await upload(2,f,png,'测试相片.png','media',id)).status,409);assert.equal(store.resourceUsage(f.user.id).fileCount,1);
+ });
+ await test('raw native UTF-8 name part preserves Chinese, quotes, literal percent, emoji and NFD across both versions and disk',async()=>{
+  const names=['中文相片.png','中文"引号".png','中文%22%0D%0A%25.png','emoji😀.png','Cafe\u0301.png','中文"%22😀\u0301".png'];
+  for(const v of [1,2]){
+   const f=fixture();assert.equal(config.resourceLibraryDiscovery(v).upload_name_field,'name');
+   for(const name of names){
+    const id=requestId(),r=await routes[v].POST(nativeMultipart(v,f.grant.access_token,name,id),{params:Promise.resolve({action:['files']})});assert.equal(r.status,201);const item=(await r.json()).data;assert.equal(item.name,name);assert.equal(item.kind,'image');assert.equal(item.mime,'image/png');assert.deepEqual(fs.readFileSync(location(f.user,item.id)),png);
+    const metadata=await call(v,'files/'+item.id,'GET',undefined,f.grant.access_token),op=await call(v,'uploads/'+id,'GET',undefined,f.grant.access_token);assert.equal(metadata.data.name,name);assert.equal(op.data.result.name,name);
+    const list=await call(v,'files?kind=image&sort=name&direction=asc','GET',undefined,f.grant.access_token);assert.equal(list.data.items.find(x=>x.id===item.id).name,name);
+    const content=await response(v,`files/${item.id}/content`,'GET',undefined,f.grant.access_token),encoded=content.headers.get('content-disposition').split("filename*=UTF-8''")[1];assert.equal(decodeURIComponent(encoded),name);assert.deepEqual(Buffer.from(await content.arrayBuffer()),png);
+   }
+  }
+ });
+ await test('ambiguous name fields and invalid names reject without writing; legacy UTF-8 filename remains compatible',async()=>{
+  for(const v of [1,2]){
+   const f=fixture(),invoke=async(name,options={})=>routes[v].POST(nativeMultipart(v,f.grant.access_token,name,requestId(),options),{params:Promise.resolve({action:['files']})});
+   for(const options of [{duplicateName:true},{binaryName:true}])assert.equal((await invoke('中文"引号".png',options)).status,400);
+   for(const name of ['..','目录/a.png','a\\b.png','a\0.png','a\r\n.png','x'.repeat(121)+'.png'])assert.equal((await invoke(name)).status,400);
+   assert.equal(store.resourceUsage(f.user.id).fileCount,0);
+   const old=await invoke('旧版中文.png',{noName:true,quotedHeader:true});assert.equal(old.status,201);assert.equal((await old.json()).data.name,'旧版中文.png');
+   assert.equal((await invoke('中文"引号".png',{noName:true,quotedHeader:true})).status,400);
+  }
  });
  await test('cross-user metadata/download/delete/folders/operations fail 404 without touching either account',async()=>{
   const f=fixture(),id=requestId(),item=(await upload(2,f,png,'a.png','media',id)).data,folder=(await call(2,'folders','POST',{category:'components',name:'Private'},f.grant.access_token)).data;

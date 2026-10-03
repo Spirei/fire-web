@@ -39,9 +39,9 @@ export function resourceCategory(value: unknown): ResourceCategory {
   if (typeof value !== "string" || !RESOURCE_CATEGORIES.includes(value as ResourceCategory)) throw new ResourceError("分类无效");
   return value as ResourceCategory;
 }
-function displayName(value: unknown) {
+function displayName(value: unknown, normalize = true) {
   if (typeof value !== "string" || value !== value.trim() || !value || [...value].length > 120 || Buffer.byteLength(value) > 240 || /[\/\\\x00-\x1f\x7f]/.test(value) || [".", ".."].includes(value)) throw new ResourceError("名称无效");
-  return value.normalize("NFC");
+  return normalize ? value.normalize("NFC") : value;
 }
 export function resourceRequestId(value: unknown) {
   if (typeof value !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value)) throw new ResourceError("requestId 必须为小写 UUID");
@@ -229,7 +229,7 @@ function completeUpload(row: FileRow, requestId: string) {
   }).immediate();
 }
 export function uploadResource(user: string, bytes: Buffer, input: { category: unknown; folderId?: unknown; name: string; requestId: unknown }, version: 1 | 2) {
-  const category = resourceCategory(input.category), name = displayName(input.name), requestId = resourceRequestId(input.requestId);
+  const category = resourceCategory(input.category), name = displayName(input.name, false), requestId = resourceRequestId(input.requestId);
   if (!bytes.length || bytes.length > RESOURCE_UPLOAD_LIMIT) throw new ResourceError("文件须为 1 字节至 50 MiB", 413);
   if (input.folderId !== undefined && typeof input.folderId !== "string") throw new ResourceError("目录无效");
   const folderId = String(input.folderId || ""), format = classify(name, bytes), db = database();

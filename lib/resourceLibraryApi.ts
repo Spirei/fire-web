@@ -42,13 +42,17 @@ export async function resourceLibraryResponse(request: Request, context: Resourc
           let form: FormData;
           try { form = await readFormBody(request, RESOURCE_UPLOAD_LIMIT + 65536); }
           catch (e) { if (e instanceof RequestBodyTooLargeError) throw e; throw new ResourceError("上传格式无效"); }
-          if ([...form.keys()].some(k => !["category", "folderId", "file", "requestId"].includes(k) || form.getAll(k).length !== 1)) throw new ResourceError("上传字段无效");
+          if ([...form.keys()].some(k => !["category", "folderId", "file", "requestId", "name"].includes(k) || form.getAll(k).length !== 1)) throw new ResourceError("上传字段无效");
           const file = form.get("file");
           if (!(file instanceof File)) throw new ResourceError("请选择文件");
+          // Native multipart headers cannot reliably preserve quotes/literal %22.
+          // A UTF-8 text field carries the original name, independent of transport filename.
+          const name = form.has("name") ? form.get("name") : file.name;
+          if (typeof name !== "string") throw new ResourceError("文件名称无效");
           if (!file.size || file.size > RESOURCE_UPLOAD_LIMIT) throw new ResourceError("文件须为 1 字节至 50 MiB", 413);
           const bytes = Buffer.from(await file.arrayBuffer());
           if (authorize() !== user) throw new ResourceError("连接已失效", 401);
-          const response = ok(uploadResource(user, bytes, { category: form.get("category"), name: file.name, folderId: form.has("folderId") ? form.get("folderId") : undefined, requestId: form.get("requestId") }, version));
+          const response = ok(uploadResource(user, bytes, { category: form.get("category"), name, folderId: form.has("folderId") ? form.get("folderId") : undefined, requestId: form.get("requestId") }, version));
           return new Response(response.body, { status: 201, headers: response.headers });
         } finally { uploadSlots.alcorResourceUploads!--; }
       }
