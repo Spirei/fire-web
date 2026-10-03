@@ -7,6 +7,8 @@ import { proxyFetch } from "./net";
 import { MarketDataPool } from "./marketDataPool";
 import { normalizeMarketCode } from "./marketCode";
 import { waitForMarketTask } from "./marketDeadline";
+import { ActiveQuotePool } from "./activeQuotePool";
+import { marketSessionState } from "./marketSessions";
 
 const DEFAULT_QUOTE_URL = "https://qt.gtimg.cn/q=";
 const DEFAULT_SEARCH_URL = "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all";
@@ -51,6 +53,8 @@ export interface Quote {
   marketCap?: number;
   /** 行情来源：futu=富途 / tencent=腾讯兜底 / yahoo=Yahoo 扩展时段兜底 / auto */
   source?: "futu" | "tencent" | "yahoo" | "auto";
+  /** A recent active-pool snapshot was returned while scheduled updates continue. */
+  cached?: boolean;
 }
 
 export interface QuoteItem {
@@ -186,23 +190,61 @@ function quoteNamespace(): string {
   return JSON.stringify([settings.quoteSource, settings.quoteApiUrl, settings.futuHost, settings.futuPort, process.env.STOCKLOG_FUTU, process.env.STOCKLOG_PROXY, process.env.STOCKLOG_EXTENDED_QUOTE]);
 }
 
+const activeQuotes = new ActiveQuotePool({
+  currentNamespace: quoteNamespace,
+  policy: (item, now) => {
+    if (!/^[A-Z0-9._-]{1,40}$/.test(item.code) || !["US", "HK", "CN", "JP", "KR", "ASSET"].includes(item.market)) return undefined;
+    if (item.market === "ASSET") return { intervalMs: 10_000, phase: "ASSET" };
+    const state = marketSessionState(item.market, new Date(now));
+    return { intervalMs: state.active ? 5_000 : 60_000, phase: `${state.localDate}:${state.session}` };
+  },
+  refresh: (items, namespace) => {
+    // This bypasses observe(): proactive refresh never renews demand or recursively schedules itself.
+    if (namespace !== quoteNamespace()) return Promise.resolve({});
+    return sharedQuotes.fetch(items, namespace, fetchQuotesUnshared);
+  }
+});
+
+function activeQuoteSnapshot(items: QuoteItem[], namespace: string): Record<string, Quote> {
+  const result: Record<string, Quote> = Object.create(null);
+  const fresh = sharedQuotes.peek(items, namespace);
+  for (const item of items) {
+    const maxAge = activeQuotes.cacheAge(item, namespace);
+    if (maxAge === undefined) continue;
+    const quote = sharedQuotes.peek([item], namespace, maxAge)[item.id];
+    if (quote) result[item.id] = fresh[item.id] ? quote : { ...quote, cached: true };
+  }
+  return result;
+}
+
+async function readRequestedQuotes(items: QuoteItem[], namespace: string): Promise<Record<string, Quote>> {
+  const snapshot = activeQuoteSnapshot(items, namespace);
+  const missing = items.filter(item => !snapshot[item.id]);
+  return { ...snapshot, ...await sharedQuotes.fetch(missing, namespace, fetchQuotesUnshared) };
+}
+
 export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Quote>> {
-  return sharedQuotes.fetch(items.map(normalizedMarketItem), quoteNamespace(), fetchQuotesUnshared);
+  const normalized = items.map(normalizedMarketItem), namespace = quoteNamespace();
+  activeQuotes.observe(normalized, namespace);
+  return readRequestedQuotes(normalized, namespace);
 }
 
 /** Overview waits briefly; its fallback is public market data, never a cached account total. */
 export async function fetchOverviewQuotes(items: QuoteItem[], maxWaitMs = 1_500) {
   const normalized = items.map(normalizedMarketItem), namespace = quoteNamespace();
+  activeQuotes.observe(normalized, namespace);
   const fresh = sharedQuotes.peek(normalized, namespace);
-  const lookup = sharedQuotes.fetch(normalized, namespace, fetchQuotesUnshared).catch(() => ({} as Record<string, Quote>));
+  const hot = activeQuoteSnapshot(normalized, namespace);
+  const lookup = readRequestedQuotes(normalized, namespace).catch(() => ({} as Record<string, Quote>));
   if (normalized.every(item => fresh[item.id])) return { quotes: fresh, pending: false, cached: [] as string[] };
+  if (normalized.every(item => hot[item.id])) return { quotes: hot, pending: activeQuotes.refreshing(normalized, namespace), cached: Object.keys(hot).filter(id => hot[id].cached) };
   const cached = sharedQuotes.peek(normalized, namespace, 60_000);
   if (normalized.every(item => cached[item.id])) return { quotes: cached, pending: true, cached: Object.keys(cached) };
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const result = await Promise.race([
-      lookup.then(quotes => ({ quotes: { ...cached, ...quotes }, pending: false,
-        cached: Object.keys(cached).filter(id => !quotes[id]) })),
+      lookup.then(quotes => ({ quotes: { ...cached, ...quotes }, pending: activeQuotes.refreshing(normalized, namespace),
+        cached: [...new Set([...Object.keys(cached).filter(id => !quotes[id]), ...Object.keys(quotes).filter(id => quotes[id].cached)])] })),
       new Promise<{ quotes: Record<string, Quote>; pending: boolean; cached: string[] }>(resolve => {
         timer = setTimeout(() => {
           const quotes = sharedQuotes.peek(normalized, namespace, 60_000);

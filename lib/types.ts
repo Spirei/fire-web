@@ -163,6 +163,8 @@ export interface Quote {
   session?: "PRE" | "REGULAR" | "AFTER" | "OVERNIGHT";
   /** 行情来源：futu=富途 / tencent=腾讯兜底 / yahoo=Yahoo 扩展兜底 */
   source?: "futu" | "tencent" | "yahoo" | "auto";
+  /** 近期活跃行情池快照；time、source、session 保留源数据。 */
+  cached?: boolean;
   /** 成交量（腾讯 f36） */
   volume?: number;
   /** 成交额（本地货币，腾讯 f37） */
