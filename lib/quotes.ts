@@ -6,6 +6,7 @@ import { getCryptoQuote } from "./assetQuotes";
 import { proxyFetch } from "./net";
 import { MarketDataPool } from "./marketDataPool";
 import { normalizeMarketCode } from "./marketCode";
+import { waitForMarketTask } from "./marketDeadline";
 
 const DEFAULT_QUOTE_URL = "https://qt.gtimg.cn/q=";
 const DEFAULT_SEARCH_URL = "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all";
@@ -97,78 +98,79 @@ function parseLine(line: string): { symbol: string; fields: string[] } | null {
   return { symbol: match[1], fields: match[2].split("~") };
 }
 
-export async function fetchBatch(symbols: string[]): Promise<Map<string, Quote>> {
+export async function fetchBatch(symbols: string[], signal?: AbortSignal, publish?: (symbol: string, quote: Quote) => void): Promise<Map<string, Quote>> {
   if (symbols.length === 0) return new Map();
   const base = getSiteSettings().quoteApiUrl || DEFAULT_QUOTE_URL;
   const map = new Map<string, Quote>();
   // 腾讯行情接口当前每次请求只返回第一条（批量已失效），改为并发逐条请求
   const CONCURRENCY = 6;
-  for (let i = 0; i < symbols.length; i += CONCURRENCY) {
-    const batch = symbols.slice(i, i + CONCURRENCY);
-    await Promise.all(
-      batch.map(async (symbol) => {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, symbols.length) }, async () => {
+    while (next < symbols.length && !signal?.aborted) {
+      const symbol = symbols[next++];
+      try {
+        const res = await fetch(base + symbol, {
+          headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000)
+        });
+        if (!res.ok) continue;
+        const buffer = await res.arrayBuffer();
+        let text: string;
         try {
-          const res = await fetch(base + symbol, {
-            headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
-            signal: AbortSignal.timeout(8000)
-          });
-          if (!res.ok) return;
-          const buffer = await res.arrayBuffer();
-          let text: string;
-          try {
-            text = new TextDecoder("gbk").decode(buffer);
-          } catch {
-            text = new TextDecoder("utf-8").decode(buffer);
-          }
-          const parsed = parseLine(text);
-          if (!parsed || parsed.fields.length < 35) return;
-          const f = parsed.fields;
-          const price = Number(f[3]);
-          if (!price) return;
-          // 无效代码会被行情源模糊匹配成某个“幽灵”证券：成交量/成交额、涨跌、涨跌幅全为 0，且时间停留在很久以前。
-          // 这类占位行情不是真实股价，直接丢弃，避免“不存在股票却显示股价/市场图标/旧日期”。
-          const change = Number(f[31]) || 0;
-          const changePct = Number(f[32]) || 0;
-          const volume = Number(f[36]) || 0;
-          const amount = Number(f[37]) || 0;
-          // 日股 / 韩股字段口径与美港 A 不完全一致，有现价就收下，避免 0 成交量被当成幽灵行情丢掉。
-          const jpKr = parsed.symbol.startsWith("jp") || parsed.symbol.startsWith("kr");
-          if (!jpKr && volume === 0 && change === 0 && changePct === 0 && amount === 0) return;
-          map.set(parsed.symbol, {
-            name: f[1] || "",
-            price,
-            change,
-            changePct,
-            open: Number(f[5]) || price,
-            high: Number(f[33]) || price,
-            low: Number(f[34]) || price,
-            time: f[30] || "",
-            prevClose: Number(f[4]) || price - (Number(f[31]) || 0),
-            session: "REGULAR",
-            volume,
-            amount,
-            pe: Number(f[39]) || undefined,
-            turnover: Number(f[38]) || 0,
-            amplitude: Number(f[43]) || 0,
-            marketCap: Number(f[44]) > 0 ? Number(f[44]) * 1e8 : undefined,
-            epsTtm: Number(f[47]) || undefined,
-            weekHigh: Number(f[48]) || undefined,
-            weekLow: Number(f[49]) || undefined,
-            pb: Number(f[51]) || undefined,
-            dividendYieldTtm: Number(f[52]) || undefined,
-            volumeRatio: Number(f[55]) || undefined,
-            totalShares: Number(f[62]) || undefined,
-            floatShares: Number(f[63]) || undefined,
-            staticPe: Number(f[65]) || undefined,
-            dividendTtm: Number(f[66]) || undefined,
-            averagePrice: Number(f[67]) || undefined
-          });
+          text = new TextDecoder("gbk").decode(buffer);
         } catch {
-          /* 单条失败不影响其他 */
+          text = new TextDecoder("utf-8").decode(buffer);
         }
-      })
-    );
-  }
+        const parsed = parseLine(text);
+        if (!parsed || parsed.fields.length < 35) continue;
+        const f = parsed.fields;
+        const price = Number(f[3]);
+        if (!price) continue;
+        // 无效代码会被行情源模糊匹配成某个“幽灵”证券：成交量/成交额、涨跌、涨跌幅全为 0，且时间停留在很久以前。
+        // 这类占位行情不是真实股价，直接丢弃，避免“不存在股票却显示股价/市场图标/旧日期”。
+        const change = Number(f[31]) || 0;
+        const changePct = Number(f[32]) || 0;
+        const volume = Number(f[36]) || 0;
+        const amount = Number(f[37]) || 0;
+        // 日股 / 韩股字段口径与美港 A 不完全一致，有现价就收下，避免 0 成交量被当成幽灵行情丢掉。
+        const jpKr = parsed.symbol.startsWith("jp") || parsed.symbol.startsWith("kr");
+        if (!jpKr && volume === 0 && change === 0 && changePct === 0 && amount === 0) continue;
+        const quote: Quote = {
+          name: f[1] || "",
+          price,
+          change,
+          changePct,
+          open: Number(f[5]) || price,
+          high: Number(f[33]) || price,
+          low: Number(f[34]) || price,
+          time: f[30] || "",
+          prevClose: Number(f[4]) || price - (Number(f[31]) || 0),
+          session: "REGULAR",
+          volume,
+          amount,
+          pe: Number(f[39]) || undefined,
+          turnover: Number(f[38]) || 0,
+          amplitude: Number(f[43]) || 0,
+          marketCap: Number(f[44]) > 0 ? Number(f[44]) * 1e8 : undefined,
+          epsTtm: Number(f[47]) || undefined,
+          weekHigh: Number(f[48]) || undefined,
+          weekLow: Number(f[49]) || undefined,
+          pb: Number(f[51]) || undefined,
+          dividendYieldTtm: Number(f[52]) || undefined,
+          volumeRatio: Number(f[55]) || undefined,
+          totalShares: Number(f[62]) || undefined,
+          floatShares: Number(f[63]) || undefined,
+          staticPe: Number(f[65]) || undefined,
+          dividendTtm: Number(f[66]) || undefined,
+          averagePrice: Number(f[67]) || undefined
+        };
+        map.set(parsed.symbol, quote);
+        publish?.(parsed.symbol, quote);
+      } catch {
+        /* 单条失败不影响其他 */
+      }
+    }
+  }));
   return map;
 }
 
@@ -179,149 +181,137 @@ function normalizedMarketItem(item: QuoteItem): QuoteItem {
   return { ...item, code: normalizeMarketCode(item.market, item.code) };
 }
 
-export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Quote>> {
+function quoteNamespace(): string {
   const settings = getSiteSettings();
-  const namespace = JSON.stringify([settings.quoteSource, settings.quoteApiUrl, settings.futuHost, settings.futuPort, process.env.STOCKLOG_FUTU, process.env.STOCKLOG_PROXY]);
-  return sharedQuotes.fetch(items.map(normalizedMarketItem), namespace, fetchQuotesUnshared);
+  return JSON.stringify([settings.quoteSource, settings.quoteApiUrl, settings.futuHost, settings.futuPort, process.env.STOCKLOG_FUTU, process.env.STOCKLOG_PROXY, process.env.STOCKLOG_EXTENDED_QUOTE]);
 }
 
-async function fetchQuotesUnshared(items: QuoteItem[]): Promise<Record<string, Quote>> {
+export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Quote>> {
+  return sharedQuotes.fetch(items.map(normalizedMarketItem), quoteNamespace(), fetchQuotesUnshared);
+}
+
+/** Overview waits briefly; its fallback is public market data, never a cached account total. */
+export async function fetchOverviewQuotes(items: QuoteItem[], maxWaitMs = 1_500) {
+  const normalized = items.map(normalizedMarketItem), namespace = quoteNamespace();
+  const fresh = sharedQuotes.peek(normalized, namespace);
+  const lookup = sharedQuotes.fetch(normalized, namespace, fetchQuotesUnshared).catch(() => ({} as Record<string, Quote>));
+  if (normalized.every(item => fresh[item.id])) return { quotes: fresh, pending: false, cached: [] as string[] };
+  const cached = sharedQuotes.peek(normalized, namespace, 60_000);
+  if (normalized.every(item => cached[item.id])) return { quotes: cached, pending: true, cached: Object.keys(cached) };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      lookup.then(quotes => ({ quotes: { ...cached, ...quotes }, pending: false,
+        cached: Object.keys(cached).filter(id => !quotes[id]) })),
+      new Promise<{ quotes: Record<string, Quote>; pending: boolean; cached: string[] }>(resolve => {
+        timer = setTimeout(() => {
+          const quotes = sharedQuotes.peek(normalized, namespace, 60_000);
+          const freshNow = sharedQuotes.peek(normalized, namespace);
+          resolve({ quotes, pending: true, cached: Object.keys(quotes).filter(id => !freshNow[id]) });
+        }, maxWaitMs);
+      })
+    ]);
+    return result;
+  } finally { clearTimeout(timer); }
+}
+
+async function fetchQuotesUnshared(items: QuoteItem[], publish: (item: QuoteItem, quote: Quote) => void): Promise<Record<string, Quote>> {
   const result: Record<string, Quote> = {};
-  const cryptoItems = items.filter((item) => item.market === "ASSET");
-  await Promise.all(cryptoItems.map(async (item) => {
-    const q = await getCryptoQuote(item.code);
-    if (q) result[item.id] = { name: item.code, price: q.price, change: q.price * q.changePct / 100, changePct: q.changePct, open: q.price, high: q.price, low: q.price, time: new Date().toISOString(), marketCap: q.marketCap, source: "auto" };
-  }));
-  const quoteSource = getSiteSettings().quoteSource || "auto";
-  const usItems = items.filter((item) => item.market === "US");
-  const nonUsItems = items.filter((item) => item.market !== "US" && item.market !== "ASSET");
-
-  // 美股主行情走富途 OpenAPI（盘前/盘后/夜盘口径统一，支持 24 小时行情）；
-  // 港股/A股直接走腾讯（更成熟稳定，且避免与美股混批导致富途桥接超时拖垮整体）。
-  let futuReturnedAny = false;
-  if (quoteSource !== "tencent" && usItems.length > 0) {
-    try {
-      const futuMap = await fetchFutuQuotes(usItems);
-      futuMap.forEach((quote, id) => {
-        result[id] = { ...quote, source: "futu" };
-      });
-      futuReturnedAny = futuMap.size > 0;
-    } catch {
-      /* 富途失败按配置处理 */
+  const signal = AbortSignal.timeout(5_000);
+  const delivered = new Set<string>();
+  const valid = (item: QuoteItem, q: Quote) => Number.isFinite(q.price) && q.price > 0 &&
+    (q.session === "OVERNIGHT" || (q.source === "futu" && (q.session === "PRE" || q.session === "AFTER")) || item.market === "JP" || item.market === "KR" ||
+      (q.volume ?? 0) !== 0 || (q.amount ?? 0) !== 0 || (q.change ?? 0) !== 0 || (q.changePct ?? 0) !== 0);
+  const deliver = (item: QuoteItem) => {
+    const quote = result[item.id];
+    if (!quote || !valid(item, quote)) { delete result[item.id]; return; }
+    if (!delivered.has(item.id)) { delivered.add(item.id); publish(item, quote); }
+  };
+  const tencent = async (rows: QuoteItem[], immediate = false) => {
+    const bySymbol = new Map<string, QuoteItem[]>();
+    for (const item of rows) {
+      const symbol = toTencentSymbol(item.market, item.code);
+      if (symbol) bySymbol.set(symbol, [...(bySymbol.get(symbol) || []), item]);
     }
-  }
-
-  const missing = [...nonUsItems, ...usItems].filter((item) => !result[item.id]);
-  // 强制富途：美股不回退腾讯/Yahoo（OpenD 不可用时美股返回空）；港股/A股仍走腾讯（更成熟稳定）
-  // 本地版没有 OpenD；即使配置从线上带回“仅富途”，整批为空时也要启用公开源。
-  const strictFutu = quoteSource === "futu" && futuReturnedAny;
-  const tencentMissing = strictFutu ? missing.filter((item) => item.market !== "US") : missing;
-  const symbolMap = new Map<string, QuoteItem[]>();
-
-  tencentMissing.forEach((item) => {
-    const symbol = toTencentSymbol(item.market, item.code);
-    if (!symbol) return;
-    const list = symbolMap.get(symbol) || [];
-    list.push(item);
-    symbolMap.set(symbol, list);
-  });
-
-  const symbols = [...symbolMap.keys()];
-  const CHUNK = 45;
-  for (let i = 0; i < symbols.length; i += CHUNK) {
-    const chunk = symbols.slice(i, i + CHUNK);
-    const quotes = await fetchBatch(chunk);
-    chunk.forEach((symbol) => {
-      const quote = quotes.get(symbol);
-      if (!quote) return;
-      symbolMap.get(symbol)!.forEach((item) => {
+    await waitForMarketTask(fetchBatch([...bySymbol.keys()], signal, (symbol, quote) => {
+      if (signal.aborted) return;
+      for (const item of bySymbol.get(symbol) || []) {
         result[item.id] = { ...quote, name: item.code, source: "tencent" };
-      });
-    });
-  }
-  if (strictFutu) return result;
-
-  // 腾讯会漏掉新股、冷门 ETF 或特殊代码。逐只用 Yahoo 常规行情补齐整行。
-  const regularMissing = usItems.filter((item) => !result[item.id]);
-  const FALLBACK_CONCURRENCY = 4;
-  for (let i = 0; i < regularMissing.length; i += FALLBACK_CONCURRENCY) {
-    await Promise.all(regularMissing.slice(i, i + FALLBACK_CONCURRENCY).map(async (item) => {
-      const fallback = await fetchUsRegularQuote(item.code);
-      if (!fallback) return;
-      result[item.id] = {
-        name: item.code,
-        price: fallback.price,
-        change: fallback.change,
-        changePct: fallback.changePct,
-        open: fallback.price,
-        high: fallback.high,
-        low: fallback.low,
-        prevClose: fallback.previousClose,
-        session: "REGULAR",
-        volume: fallback.volume,
-        marketCap: fallback.marketCap,
-        time: fallback.time,
-        source: "yahoo"
-      };
+        if (immediate) deliver(item);
+      }
+    }), signal).catch(() => {});
+  };
+  const crypto = async () => {
+    await Promise.all(items.filter(item => item.market === "ASSET").map(async item => {
+      const q = await waitForMarketTask(getCryptoQuote(item.code), signal).catch(() => null);
+      if (q && !signal.aborted) {
+        result[item.id] = { name: item.code, price: q.price, change: q.price * q.changePct / 100, changePct: q.changePct, open: q.price, high: q.price, low: q.price, time: new Date().toISOString(), marketCap: q.marketCap, source: "auto" };
+        deliver(item);
+      }
     }));
-  }
-
-  // 美股盘前/盘后统一覆盖有效价与涨跌口径。失败时保留腾讯常规盘行情，不影响整批。
-  // 按代码去重（同一只股可能同时出现在持仓与自选），并把并发从 6 降到 4，降低 Yahoo 限流概率。
-  const usMissing = usItems.filter((item) => result[item.id] && !(result[item.id].source === "futu" && result[item.id].session === "OVERNIGHT"));
-  if (usMissing.length > 0) {
-    const byCode = new Map<string, typeof usMissing>();
-    for (const item of usMissing) {
-      const code = item.code.toUpperCase().replace(US_EXCHANGE_SUFFIX, "");
-      const list = byCode.get(code) || [];
-      list.push(item);
-      byCode.set(code, list);
+  };
+  const us = async () => {
+    const usItems = items.filter(item => item.market === "US");
+    if (!usItems.length) return;
+    const quoteSource = getSiteSettings().quoteSource || "auto";
+    let futuReturnedAny = false;
+    if (quoteSource !== "tencent") {
+      try {
+        // Includes queue wait and SDK execution; expired queued work never opens OpenD.
+        const futuSignal = AbortSignal.any([signal, AbortSignal.timeout(2_500)]);
+        const futuMap = await waitForMarketTask(fetchFutuQuotes(usItems, futuSignal), futuSignal);
+        for (const [id, quote] of futuMap) result[id] = { ...quote, source: "futu" };
+        futuReturnedAny = futuMap.size > 0;
+      } catch { /* Preserve the established public-source fallback. */ }
+    }
+    const strictFutu = quoteSource === "futu" && futuReturnedAny;
+    // A valid Futu extended quote is already authoritative. Yahoo only fills gaps.
+    const authoritative = new Set(usItems.filter(item => result[item.id]?.source === "futu" && valid(item, result[item.id]) &&
+      ["PRE", "AFTER", "OVERNIGHT"].includes(result[item.id]?.session || "")).map(item => item.id));
+    for (const item of usItems) if (strictFutu || authoritative.has(item.id)) deliver(item);
+    if (strictFutu) return;
+    await tencent(usItems.filter(item => !result[item.id]));
+    const byCode = new Map<string, QuoteItem[]>();
+    for (const item of usItems) {
+      if (authoritative.has(item.id)) continue;
+      byCode.set(item.code, [...(byCode.get(item.code) || []), item]);
     }
     const codes = [...byCode.keys()];
-    const CONCURRENCY = 4;
-    const extendedMap = new Map<string, Awaited<ReturnType<typeof fetchUsExtendedQuote>>>();
-    for (let i = 0; i < codes.length; i += CONCURRENCY) {
-      await Promise.all(codes.slice(i, i + CONCURRENCY).map(async (code) => {
-        const extended = await fetchUsExtendedQuote(code);
-        extendedMap.set(code, extended);
-      }));
-    }
-    for (const [code, list] of byCode) {
-      const extended = extendedMap.get(code);
-      if (!extended) continue;
-      list.forEach((item) => {
-        if (!result[item.id]) return;
-        // 扩展时段（盘前/盘后）统一以扩展行情自带的最近常规收盘价为基准：
-        // 腾讯在盘前刚开始时仍返回上一交易日的「昨收」，直接用它会把昨日涨跌混进当日盈亏。
-        const previousClose = extended.previousClose;
-        const change = extended.price - previousClose;
-        result[item.id] = {
-          ...result[item.id],
-          price: extended.price,
-          prevClose: previousClose,
-          change,
-          changePct: change / previousClose * 100,
-          time: `${extended.date} ${extended.time}:00`,
-          session: extended.session,
-          source: "yahoo"
-        };
-      });
-    }
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, codes.length) }, async () => {
+      while (next < codes.length && !signal.aborted) {
+        const code = codes[next++], rows = byCode.get(code)!;
+        if (!result[rows[0].id]) {
+          const fallback = await waitForMarketTask(fetchUsRegularQuote(code), signal).catch(() => null);
+          if (fallback && !signal.aborted) for (const item of rows) result[item.id] = {
+            name: item.code, price: fallback.price, change: fallback.change, changePct: fallback.changePct,
+            open: fallback.price, high: fallback.high, low: fallback.low, prevClose: fallback.previousClose,
+            session: "REGULAR", volume: fallback.volume, marketCap: fallback.marketCap, time: fallback.time, source: "yahoo"
+          };
+        }
+        if (result[rows[0].id]) {
+          const extended = await waitForMarketTask(fetchUsExtendedQuote(code), signal).catch(() => null);
+          if (extended && !signal.aborted) for (const item of rows) {
+            const change = extended.price - extended.previousClose;
+            result[item.id] = { ...result[item.id], price: extended.price, prevClose: extended.previousClose,
+              change, changePct: change / extended.previousClose * 100, time: `${extended.date} ${extended.time}:00`,
+              session: extended.session, source: "yahoo" };
+          }
+        }
+        for (const item of rows) deliver(item);
+      }
+    }));
+  };
+  // Each market has its own worker set. Slow HK symbols cannot occupy CN/JP/KR slots.
+  const marketRows = new Map<Market, QuoteItem[]>();
+  for (const item of items) if (item.market !== "US" && item.market !== "ASSET") {
+    marketRows.set(item.market, [...(marketRows.get(item.market) || []), item]);
   }
-  // 统一清洗：行情源（富途/腾讯/Yahoo）对无效代码可能返回“幽灵”行情——
-  // 成交量/成交额、涨跌、涨跌幅全为 0。这类不是真实股价，剔除后详情页可正常显示“无数据”。
-  Object.keys(result).forEach((id) => {
-    const q = result[id];
-    if (!q) return;
-    // An unchanged valid overnight print is not a ghost regular quote.
-    if (q.session === "OVERNIGHT") return;
-    const item = items.find((row) => row.id === id);
-    if (item && (item.market === "JP" || item.market === "KR")) return;
-    if ((q.volume ?? 0) === 0 && (q.amount ?? 0) === 0 && (q.change ?? 0) === 0 && (q.changePct ?? 0) === 0) {
-      delete result[id];
-    }
-  });
-  return result;
+  await waitForMarketTask(Promise.allSettled([
+    crypto(), ...[...marketRows.values()].map(rows => tencent(rows, true)), us()
+  ]), signal).catch(() => {});
+  for (const item of items) deliver(item);
+  return { ...result };
 }
 
 /* ---------- 股票搜索联想（腾讯 smartbox） ---------- */

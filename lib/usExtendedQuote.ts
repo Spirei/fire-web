@@ -1,5 +1,6 @@
 import { marketSessionState } from "./marketSessions";
 import { proxyFetch } from "./net";
+import { waitForMarketTask } from "./marketDeadline";
 
 export type UsExtendedSession = "PRE" | "AFTER" | "OVERNIGHT";
 
@@ -77,41 +78,59 @@ interface YahooRaw {
   meta?: YahooResult["meta"];
 }
 
+const yahooCache = new Map<string, { at: number; value: YahooResult }>();
+const yahooPending = new Map<string, Promise<YahooResult>>();
+
+/** Share the same chart between regular and extended fallbacks; hedge a slow primary. */
 async function fetchYahoo(code: string): Promise<YahooResult> {
-  let lastError: unknown = null;
-  // 只有「服务级」失败（连不上 / 限流 / 非 200）才触发熔断；
-  // 某只标的本身在 Yahoo 查不到（200 但无 result，如下市 / OTC）不算服务不可用，
-  // 否则一只坏标的会把整批标的的 Yahoo 兜底一起关掉。
+  const cached = yahooCache.get(code);
+  if (cached && Date.now() - cached.at < SUCCESS_TTL) return cached.value;
+  const pending = yahooPending.get(code);
+  if (pending) return pending;
+  const task = loadYahoo(code);
+  yahooPending.set(code, task);
+  try {
+    const value = await task;
+    yahooCache.set(code, { at: Date.now(), value });
+    for (const [key, entry] of yahooCache) if (Date.now() - entry.at >= SUCCESS_TTL) yahooCache.delete(key);
+    while (yahooCache.size > 1024) yahooCache.delete(yahooCache.keys().next().value!);
+    return value;
+  } finally { yahooPending.delete(code); }
+}
+
+async function loadYahoo(code: string): Promise<YahooResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error("yahoo deadline")), 2_500);
   let serviceFailure = false;
-  for (const host of YAHOO_HOSTS) {
-    try {
-      // 走可选代理（STOCKLOG_PROXY）：境外服务器 / 境内直连不稳定时，代理能让
-      // 盘前 / 盘后行情正常返回；代理不可达会自动回退直连。
-      const response = await proxyFetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, {
-        headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-        signal: AbortSignal.timeout(6000)
-      });
-      if (!response.ok) {
-        serviceFailure = true;
-        throw new Error(`yahoo ${response.status}`);
+  try {
+    const result = await Promise.any(YAHOO_HOSTS.map(async (host, index) => {
+      try {
+        // Fast primary uses one request. A slow primary no longer delays query2 for 6s.
+        if (index) await waitForMarketTask(new Promise<void>(resolve => setTimeout(resolve, 200)), controller.signal);
+        controller.signal.throwIfAborted();
+        return await waitForMarketTask((async () => {
+          const response = await proxyFetch(`https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1m&range=1d&includePrePost=true&events=div%2Csplits`, {
+            headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: controller.signal
+          });
+          if (!response.ok) throw new Error(`yahoo ${response.status}`);
+          const json = await response.json() as { chart?: { result?: YahooRaw[] } };
+          const raw = json.chart?.result?.[0];
+          if (!raw) throw new Error("empty yahoo result");
+          return { timestamp: Array.isArray(raw.timestamp) ? raw.timestamp : [],
+            close: Array.isArray(raw.indicators?.quote?.[0]?.close) ? raw.indicators.quote[0].close : [], meta: raw.meta ?? {} };
+        })(), controller.signal);
+      } catch (error) {
+        // A missing symbol is not a service outage; retain the existing circuit breaker.
+        if (!(error instanceof Error && error.message === "empty yahoo result")) serviceFailure = true;
+        throw error;
       }
-      const json = (await response.json()) as { chart?: { result?: YahooRaw[] } };
-      const result = json.chart?.result?.[0];
-      if (!result) throw new Error("empty yahoo result");
-      yahooDownUntil = 0;
-      return {
-        timestamp: Array.isArray(result.timestamp) ? result.timestamp : [],
-        close: Array.isArray(result.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : [],
-        meta: result.meta ?? {}
-      };
-    } catch (error) {
-      lastError = error;
-      if (!(error instanceof Error && error.message === "empty yahoo result")) serviceFailure = true;
-      /* 当前主机失败，切下一个；双主机都失败则交给调用方 */
-    }
-  }
-  if (serviceFailure) yahooDownUntil = Date.now() + YAHOO_DOWN_TTL;
-  throw lastError ?? new Error("yahoo unreachable");
+    }));
+    yahooDownUntil = 0;
+    return result;
+  } catch (error) {
+    if (serviceFailure) yahooDownUntil = Date.now() + YAHOO_DOWN_TTL;
+    throw error;
+  } finally { clearTimeout(timeout); controller.abort(); }
 }
 
 function extendedQuoteEnabled(): boolean {

@@ -16,6 +16,7 @@ const cash=load('lib/accountCash.ts'), cashStore=load('lib/accountCashStore.ts')
 let rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.3,GBP:.8,EUR:.9}, quotes={};
 const ratesModule=load('lib/rates.ts'), quotesModule=load('lib/quotes.ts');
 ratesModule.getRates=async()=>rates; quotesModule.fetchQuotes=async()=>quotes;
+quotesModule.fetchOverviewQuotes=async()=>({quotes:await quotesModule.fetchQuotes(),pending:false,cached:[]});
 const route=load('app/api/v1/overview/route.ts');
 let sequence=0,count=0;
 function fixture() {
@@ -118,6 +119,21 @@ async function test(name,run) { rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.
     const f=fixture(); store.createRecord(f.user.id,{name:'Synthetic SG',code:'SGT',market:'SG',qty:1,cost:1,price:13,group:'',note:'',source:''});
     const result=await overview(f); assert.equal(result.totalMarket,30); assert.equal(result.totalAsset,139);
     const record={...f.record,price:'',cost:50}; assert.equal(cash.accountHoldingPrice(record,{}),0); assert.equal(buildOverview([record],rates).totalMarket,0); assert.equal(cash.convertAccountAmount(13,cash.ACCOUNT_MARKET_CURRENCY.SG,rates,'USD'),10);
+  });
+  await test('pending/cache metadata distinguishes record fallback without changing money or quote timestamps',async()=>{
+    const f=fixture(), hk=store.createRecord(f.user.id,{name:'Synthetic HK',code:'00001',market:'HK',qty:1,cost:7,price:14,group:'',note:'',source:''});
+    const read=quotesModule.fetchOverviewQuotes, before=businessSnapshot();
+    quotesModule.fetchOverviewQuotes=async()=>({quotes:{[f.record.id]:{price:12,time:'2026-10-01 23:36:54.780'}},pending:true,cached:[f.record.id,'unrelated-id']});
+    try {
+      const result=await overview(f); assert.equal(result.totalMarket,26); assert.equal(result.totalAsset,135);
+      assert.deepEqual(result.quoteStatus,{pending:true,cached:[f.record.id],missing:[hk.id]});
+      assert.equal(result.valuation.find(x=>x.id===f.record.id).source,'quote');
+      assert.equal(result.valuation.find(x=>x.id===f.record.id).at,'2026-10-01 23:36:54.780');
+      assert.equal(result.valuation.find(x=>x.id===hk.id).source,'record'); assert.deepEqual(businessSnapshot(),before);
+      db.prepare('UPDATE records SET qty=0 WHERE id=?').run(f.record.id);
+      const closed=await overview(f); assert.deepEqual(closed.quoteStatus,{pending:true,cached:[],missing:[hk.id]});
+      assert.equal(closed.valuation.length,1); assert.equal(closed.totalMarket,2);
+    } finally { quotesModule.fetchOverviewQuotes=read; }
   });
   await test('fresh positions and cash form one snapshot after async quotes; changed symbols reject old quotes',async()=>{
     const f=fixture(), fetch=quotesModule.fetchQuotes;

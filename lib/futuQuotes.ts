@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { marketSessionState } from "./marketSessions";
+import { waitForMarketTask } from "./marketDeadline";
 import { getSiteSettings, normalizeFutuHost } from "./settings";
 import type { Quote, QuoteItem } from "./quotes";
 import type { SearchMatch } from "./types";
@@ -85,25 +86,32 @@ export function futuQuoteSessionContext(market: string, now = new Date()) {
   return { session: "REGULAR" };
 }
 
-function doRunBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 11111): Promise<Record<string, unknown>> {
+function doRunBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 11111, signal?: AbortSignal): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const child = spawn("python3", [BRIDGE], {
       stdio: ["pipe", "pipe", "pipe"]
     });
-    const timeout = setTimeout(() => {
+    let stopped: unknown;
+    const stop = (error: unknown) => {
+      stopped = error;
       child.kill("SIGKILL");
-      reject(new Error("futu bridge timeout"));
-    }, 10_000);
+      // Keep the queue occupied until close releases the actual OpenD connection.
+    };
+    const abort = () => stop(signal?.reason);
+    const timeout = setTimeout(() => stop(new Error("futu bridge timeout")), 10_000);
+    signal?.addEventListener("abort", abort, { once: true });
+    const cleanup = () => { clearTimeout(timeout); signal?.removeEventListener("abort", abort); };
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("error", (err) => {
-      clearTimeout(timeout);
+      cleanup();
       reject(err);
     });
     child.on("close", (code) => {
-      clearTimeout(timeout);
+      cleanup();
+      if (stopped !== undefined) { reject(stopped); return; }
       if (code !== 0) {
         reject(new Error(stderr.trim() || `futu bridge exit ${code}`));
         return;
@@ -131,17 +139,21 @@ function doRunBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 
 // 阻塞甚至超时。所有桥接调用（行情/搜索/额度/测试）串行执行，避免偶发超时回退腾讯，
 // 造成当日盈亏等数值在不同刷新间不一致。
 let bridgeQueue: Promise<void> = Promise.resolve();
-function runBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 11111): Promise<Record<string, unknown>> {
-  const task = bridgeQueue.then(() => doRunBridge(input, host, port));
+function runBridge(input: Record<string, unknown>, host = "127.0.0.1", port = 11111, signal: AbortSignal = AbortSignal.timeout(10_000)): Promise<Record<string, unknown>> {
+  const task = bridgeQueue.then(() => {
+    signal.throwIfAborted();
+    return doRunBridge(input, host, port, signal);
+  });
   bridgeQueue = task.then(
     () => undefined,
     () => undefined
   );
-  return task;
+  return waitForMarketTask(task, signal);
 }
 
 /** 主入口：OpenD 可用时拉取富途快照；失败抛错由调用方回退腾讯。 */
-export async function fetchFutuQuotes(items: Array<Omit<QuoteItem, "market"> & { market: string }>): Promise<Map<string, Quote>> {
+export async function fetchFutuQuotes(items: Array<Omit<QuoteItem, "market"> & { market: string }>, signal?: AbortSignal): Promise<Map<string, Quote>> {
+  signal?.throwIfAborted();
   if (items.length === 0 || !(await isFutuAvailable())) return new Map();
   const { futuHost, futuPort } = getSiteSettings();
   const now = new Date();
@@ -149,7 +161,7 @@ export async function fetchFutuQuotes(items: Array<Omit<QuoteItem, "market"> & {
     ...item,
     ...futuQuoteSessionContext(item.market, now)
   }));
-  const parsed = await runBridge({ cmd: "quotes", items: withSession }, futuHost, Number(futuPort) || 11111);
+  const parsed = await runBridge({ cmd: "quotes", items: withSession }, futuHost, Number(futuPort) || 11111, signal);
   return new Map(Object.entries((parsed.quotes as Record<string, Quote> | undefined) || {}));
 }
 

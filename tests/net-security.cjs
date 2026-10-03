@@ -86,8 +86,21 @@ const previous = { STOCKLOG_PROXY: process.env.STOCKLOG_PROXY, NO_PROXY: process
     assert.equal(transfers + tunnels, before); process.env.NO_PROXY = '';
     console.log('PASS explicit NO_PROXY destinations bypass the proxy');
 
-    await assert.rejects(proxyFetch(`${target}/slow`, { signal: AbortSignal.timeout(30) }), error => error.name === 'AbortError');
+    const beforeCancel = direct;
+    await assert.rejects(proxyFetch(`${target}/slow`, { signal: AbortSignal.timeout(30) }), error => ['AbortError','TimeoutError'].includes(error.name));
+    assert.equal(direct,beforeCancel);
     console.log('PASS cancellation terminates an in-flight proxy read without retrying external transport');
+
+    const unavailable=net.createServer(); await listen(unavailable); const unavailablePort=unavailable.address().port; await close(unavailable);
+    process.env.STOCKLOG_PROXY=`http://127.0.0.1:${unavailablePort}`;
+    const isolated=new Module(source,module); isolated.filename=source; isolated.paths=loaded.paths;
+    isolated._compile(ts.transpileModule(fs.readFileSync(source,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,source);
+    const controller=new AbortController(), started=performance.now();
+    const probe=isolated.exports.proxyFetch(`${target}/cancel-probe`,{signal:controller.signal});
+    const aborted=assert.rejects(probe,error=>['AbortError','TimeoutError'].includes(error.name)||/cancelled probe/.test(error.message));
+    setTimeout(()=>controller.abort(new Error('cancelled probe')),25); await aborted;
+    assert(performance.now()-started<250); assert.equal(direct,beforeCancel);
+    console.log('PASS cancellation also bounds proxy preparation and stops retry delays before direct fallback');
   } finally {
     global.fetch = originalFetch;
     for (const [key, value] of Object.entries(previous)) value === undefined ? delete process.env[key] : process.env[key] = value;

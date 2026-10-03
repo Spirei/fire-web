@@ -11,6 +11,7 @@
 
 import net from "node:net";
 import { ProxyAgent, fetch as undiciFetch } from "undici";
+import { setTimeout as delay } from "node:timers/promises";
 
 const PROBE_TTL_OK = 60 * 1000;
 const PROBE_TTL_FAIL = 10 * 1000;
@@ -146,15 +147,19 @@ function bypassProxy(input: RequestInfo | URL): boolean {
     return isPrivateHost(host) || matchesNoProxyEnv(host);
 }
 
-function canReachProxy(url: string): Promise<boolean> {
+function canReachProxy(url: string, signal?: AbortSignal | null): Promise<boolean> {
   const parsed = parseProxyUrl(url);
   if (!parsed) return Promise.resolve(false);
   return new Promise((resolve) => {
     const sock = net.connect({ host: parsed.host, port: parsed.port });
     const done = (ok: boolean) => {
+      signal?.removeEventListener("abort", abort);
       sock.destroy();
       resolve(ok);
     };
+    const abort = () => done(false);
+    if (signal?.aborted) { done(false); return; }
+    signal?.addEventListener("abort", abort, { once: true });
     sock.setTimeout(1500);
     sock.once("connect", () => done(true));
     sock.once("timeout", () => done(false));
@@ -187,6 +192,7 @@ const fetchWithProxy = undiciFetch as unknown as UndiciFetchFn;
  * 与全局 fetch 签名一致，可平替任何服务端数据源请求。
  */
 export async function proxyFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    init?.signal?.throwIfAborted();
     // A native Request may carry a body/headers; preserve it in its own fetch runtime.
     if (typeof input !== "string" && !(input instanceof URL)) return fetch(input, init);
     // 内网 / 回环 / NO_PROXY 命中：直接直连，绝不把内网地址交给代理
@@ -201,8 +207,9 @@ export async function proxyFetch(input: RequestInfo | URL, init?: RequestInit): 
       // 代理首次探测可能因节点预热失败，重试 3 次
       let ok = false;
       for (let i = 0; i < 3 && !ok; i++) {
-        ok = await canReachProxy(cfg.url);
-        if (!ok && i < 2) await new Promise((r) => setTimeout(r, 800));
+        ok = await canReachProxy(cfg.url, init?.signal);
+        init?.signal?.throwIfAborted();
+        if (!ok && i < 2) await delay(800, undefined, { signal: init?.signal ?? undefined });
       }
       decision = { ok, at: Date.now() };
         }
@@ -214,10 +221,12 @@ export async function proxyFetch(input: RequestInfo | URL, init?: RequestInit): 
                     dispatcher: getAgent(cfg.url)
                 })) as Response;
             } catch {
+                init?.signal?.throwIfAborted();
                 /* 代理请求失败 → 回退直连 */
                 if (proxyDebug()) console.log(`[proxyFetch] 代理失败，回退直连 ${redactedNetworkTarget(input)}`);
             }
         }
     }
+    init?.signal?.throwIfAborted();
     return fetch(input, init);
 }
