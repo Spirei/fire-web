@@ -709,7 +709,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       cost: toNum(editForm.cost),
       qty: toNum(editForm.qty),
       group: editForm.group.trim(),
-      note: editForm.note.trim()
+      note: editForm.note.trim(),
+      revision: editRecord.revision
     };
     const ok = await onUpdate(editRecord.id, input);
     setEditSaving(false);

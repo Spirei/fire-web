@@ -7,6 +7,7 @@ import type { RecordInput } from "./types";
 import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
+import { installRecordsContract } from "./recordsSchema";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "fire.db");
@@ -1201,6 +1202,7 @@ export function getDb(): Database.Database {
     try { fs.chmodSync(DB_FILE, 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
     db.pragma("journal_mode = WAL");
     migrate(db);
+    installRecordsContract(db);
     seed(db);
   }
   return db;

@@ -16,6 +16,8 @@ export interface StockRecord {
   note: string;
   source?: string;
   updatedAt: string;
+  /** Persisted version shared by App, Web, orders and imports. */
+  revision?: number;
 }
 
 export interface RecordInput {
@@ -29,6 +31,8 @@ export interface RecordInput {
   watchGroupId?: string;
   note: string;
   source?: string;
+  /** Version captured when an editor opens, not the latest background snapshot. */
+  revision?: number;
 }
 
 export type OrderSide = "buy" | "sell" | "dividend";

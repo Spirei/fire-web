@@ -161,7 +161,7 @@ export function appIdentity(token: string, request: Request): Grant | null {
     const grant=authenticateAppAccess(token,request);
     return grant && (access === "public" || grant.scope.split(" ").includes(access)) ? grant : null;
   }
-  if (path.startsWith("/api/v1/resource-library")) {
+  if (path.startsWith("/api/v1/resource-library") || path.startsWith("/api/v1/records/operations/")) {
     const access = appV2Access(path.replace(/^\/api\/v1\//, "/api/v2/"), method);
     const grant = access ? authenticateAppAccess(token, request) : null;
     return grant && access && grant.scope.split(" ").includes(access) ? grant : null;

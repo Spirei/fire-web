@@ -198,6 +198,8 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | GET | `/api/v2/overview` | portfolio.read |
 | GET | `/api/v2/records` | portfolio.read |
 | POST | `/api/v2/records` | portfolio.write |
+| GET | `/api/v2/records/{id}` | portfolio.read |
+| GET | `/api/v2/records/operations/{requestId}` | portfolio.read |
 | PUT | `/api/v2/records/{id}` | portfolio.write |
 | DELETE | `/api/v2/records/{id}` | portfolio.write |
 | POST | `/api/v2/records/group-assign` | portfolio.write |
@@ -311,13 +313,19 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 <details>
 <summary>记录与总资产</summary>
 
-GET `/api/v2/records?page=1&pageSize=20&market=US` 返回本人数组与 meta={page,pageSize,total}，pageSize 上限100。POST records 示例：
+GET `/api/v2/records?page=1&pageSize=20&market=US` 返回本人数组与 meta={page,pageSize,total,collectionRevision}，pageSize 上限100。后续页携带首个 collectionRevision，集合变化返回40902，应从第一页只读重取，不能合并不同版本的分页。GET records/{id} 返回本人单条记录；记录新增正整数 revision，数值空值仍为 `""`。
+
+安全提交须发现 `auth/config → data.records_contract.version=1`，按所选 v2 的固定路径使用；旧载荷与信封仍兼容。新 POST 示例：
 
 ```json
-{"name":"苹果","code":"AAPL","market":"US","price":210.5,"cost":200,"qty":10,"group":"主账户"}
+{"requestId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","name":"苹果","code":"AAPL","market":"US","price":210.5,"cost":200,"qty":10,"group":"主账户","note":""}
 ```
 
-PUT records/{id} 更新、DELETE 删除。price / qty 不允许负数，cost 可为负数。接口不接受客户端选择其他用户。
+PUT records/{id} 使用完整记录输入，另加 requestId 和读取到的 revision；DELETE 使用 JSON `{requestId,revision}`。price/qty 非负，cost 可为负数。记录、活动、集合版本与操作回执在同一事务提交；重复键返回40901、不再次写入，版本冲突40902，含成交历史的删除40903。安全提交成功 data 仍为已保存记录，DELETE 为 `{deleted:true,id,revision}`；meta={requestId,kind,recordId,revision,collectionRevision}。须核对回执再确认保存；失效401、有效连接缺范围403，旧 portfolio.write 授权可用、只读授权不自动扩大。
+
+断开/超时/500 时仅 GET `/api/v2/records/operations/{requestId}` 查询。data={requestId,kind,recordId,state,code,message,record,deleted,revision,collectionRevision,createdAt,completedAt}；state=completed/failed，GET 成功不能当写成功。record 是原提交快照，删除时 null；404 仅为此刻没有已提交回执，不能断言无写入或自动重放。保持 v1/v2，不用 Cookie、刷新令牌或切版本重发写入；完整冻结字段见 [App 股票记录合约](app-records.md)。
+
+App 与 Web records 为同账户同库。`GET /api/v2/search?q=...` 搜索已有证券，records 新增本人自选/持仓，不能新增全局证券目录；可选 watchGroupId 仅归属本人自定义组，group 是券商，qty 空/0 是自选、正数是持仓快照，不生成成交订单。
 
 GET `/api/v2/overview?currency=USD` 返回持仓估值、现金与总资产。totalMarket 是持仓市值；totalAsset 包含现金。缺汇率或来源异常时金额可为null，并返回完整性与缺失币种，不能按1:1换算。
 

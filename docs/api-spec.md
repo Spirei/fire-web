@@ -310,6 +310,8 @@ GET /api/v1/rates
 | GET | `/api/v1/overview` | 资产总览；`currency` 默认 USD，总额与市场分布均按该币种换算 | 登录 |
 | GET | `/api/v1/records` | 持仓记录列表（分页，支持 `market`/`group`） | 登录 |
 | POST | `/api/v1/records` | 创建持仓记录 | 登录 |
+| GET | `/api/v1/records/{id}` | 本人记录与集合版本 | portfolio.read |
+| GET | `/api/v1/records/operations/{requestId}` | 只读查询原提交结果 | portfolio.read |
 | PUT | `/api/v1/records/{id}` | 更新持仓记录 | 登录 |
 | DELETE | `/api/v1/records/{id}` | 删除持仓记录 | 登录 |
 | GET | `/api/v1/orders` | 查询成交订单（支持 `scope` / `recordId`） | 登录 |
@@ -326,6 +328,10 @@ GET /api/v1/rates
 | GET | `/api/v1/orders/export` | 导出订单 xlsx（`scope` / `market` / `status` / `type` / `start` / `end` / `recordId` / `limit`，`detail=1` 追加明细工作表） | 登录 |
 
 持仓写入约束：`name` 必填且不超过 100 字符，`code` 仅接受字母、数字、点、下划线和连字符且不超过 40 字符；`price`（现价）与 `qty`（数量）不可为负数；`cost`（成本价）允许为负数，以支持返佣、期权收入或累计回款超过投入后的负成本持仓。创建与更新采用相同规则，校验失败返回 `40001` 及对应字段提示。
+
+records 新增显式 `auth/config → data.records_contract.version=1`，按原选择的 v1 使用固定路径。原 POST/PUT/DELETE 兼容；新 POST 加小写 UUID requestId，PUT/DELETE 加 requestId 和读取到的正整数 revision。重复键40901、不再次写入；版本冲突40902，含成交历史的删除40903。成功 data 仍为已保存记录，DELETE 为 `{deleted:true,id,revision}`；meta={requestId,kind,recordId,revision,collectionRevision}。有效连接缺授权403、失效401，Cookie 不补原生范围。
+
+列表 meta 新增 collectionRevision；后续页携带此值，变化返回40902，从第一页只读重取。断开/超时仅 GET records/operations/{requestId} 查询：data.state=completed/failed，嵌套 code/message 与 record/deleted/revision 是原提交结果；GET 成功不能当写成功。404 仅表示此刻无回执，禁止据此自动重放。证券搜索仍为 `/api/v1/search?q=...`，records 只写本人自选/持仓。完整字段、旧授权规则及 Web 同步见 [App 股票记录合约](app-records.md)。
 
 ### 6.3 行情 / 数据
 | 方法 | 路径 | 说明 | 鉴权 |

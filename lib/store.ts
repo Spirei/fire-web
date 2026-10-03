@@ -21,7 +21,8 @@ function rowToRecord(row: Record<string, unknown>): StockRecord {
     watchGroupSort: Number(row.watch_group_sort) || 0,
     note: String(row.note ?? ""),
     source: row.source ? String(row.source) : undefined,
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
+    revision: Number(row.revision)
   };
 }
 
@@ -30,6 +31,11 @@ export function listRecords(userId: string): StockRecord[] {
     .prepare("SELECT * FROM records WHERE user_id = ? ORDER BY updated_at DESC")
     .all(userId) as Record<string, unknown>[];
   return rows.map(rowToRecord);
+}
+
+export function readRecord(userId: string, id: string): StockRecord | null {
+  const row = getDb().prepare("SELECT * FROM records WHERE user_id=? AND id=?").get(userId, id);
+  return row ? rowToRecord(row as Record<string, unknown>) : null;
 }
 
 export function createRecord(userId: string, input: RecordInput): StockRecord {

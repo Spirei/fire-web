@@ -135,6 +135,7 @@ export default async function SlugLayout({
       <main className="app-shell-main flex-1 py-14">
         <CurrencyProvider initialCurrency={currencyCookie ?? null}>
         <RecordsApp
+          key={user.id}
           initialTab={tab.key}
           initialNow={initialNow}
           initialVersion={CURRENT_VERSION.version}

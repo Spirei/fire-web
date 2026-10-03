@@ -45,6 +45,7 @@ import { workspaceForPath, workspaceDestination, type WorkspaceVisit } from "@/l
 import { observeWorkspaceReady } from "@/lib/workspaceTiming";
 import { ownWorkspaceScroll, restoreWorkspaceScroll } from "@/lib/workspaceScroll";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
+import { createRecordsRefresh, RECORDS_WORKSPACES } from "@/lib/recordsRefresh";
 
 // 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
 // 已预读代码直接呈现；首次下载仅使用延迟显露的轻量占位，不显示打开提示。
@@ -163,6 +164,7 @@ export default function RecordsApp({
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
   const recordsRef = useRef(records);
+  const recordsSyncRef = useRef<ReturnType<typeof createRecordsRefresh> | null>(null);
   recordsRef.current = records;
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const quotesRef = useRef<Record<string, Quote>>({});
@@ -691,14 +693,43 @@ export default function RecordsApp({
   }, [activeTab, refreshQuotes]);
 
   useEffect(() => {
-    function reloadRecords() {
-      fetch("/api/records")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((d) => d && setRecords(d));
-    }
-    window.addEventListener("fire:records-updated", reloadRecords);
-    return () => window.removeEventListener("fire:records-updated", reloadRecords);
-  }, []);
+    const sync = createRecordsRefresh(user.id, async signal => {
+      const res = await fetch("/api/records", { signal, cache: "no-store" });
+      if (!res.ok) throw new Error("记录读取失败");
+      const records: unknown = await res.json();
+      if (!Array.isArray(records)) throw new Error("记录格式无效");
+      return { ownerId: res.headers.get("X-Alcor-Account-Id") ?? "", records: records as StockRecord[] };
+    }, next => {
+      // A remote edit can keep the ID but change the security; discard its old quote immediately.
+      const retained = applyQuoteBatches(quotesRef.current, { quotes: {}, completed: new Set() }, recordsRef.current, next);
+      if (Object.keys(retained).length !== Object.keys(quotesRef.current).length) setQuotes(retained);
+      quotesRef.current = retained;
+      recordsRef.current = next;
+      setRecords(next);
+      setValuationReady(next.filter(record => Number(record.qty) > 0 && record.code.trim()).every(record => Number.isFinite(Number(retained[record.id]?.price))));
+    }, Date.now, () => router.refresh());
+    recordsSyncRef.current = sync;
+    const activate = () => sync.setActive(!document.hidden && RECORDS_WORKSPACES.has(activeTabRef.current));
+    const resume = () => { activate(); sync.resume(); };
+    const changed = () => sync.changed();
+    activate();
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("focus", resume);
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("fire:records-updated", changed);
+    return () => {
+      sync.dispose();
+      if (recordsSyncRef.current === sync) recordsSyncRef.current = null;
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("pageshow", resume);
+      window.removeEventListener("fire:records-updated", changed);
+    };
+  }, [user.id, router]);
+
+  useEffect(() => {
+    recordsSyncRef.current?.setActive(!document.hidden && RECORDS_WORKSPACES.has(activeTab));
+  }, [activeTab]);
 
   useEffect(() => {
     window.addEventListener("fire:settings-updated", reloadSettings);
@@ -707,6 +738,7 @@ export default function RecordsApp({
 
   /* ---------- CRUD ---------- */
   async function createRecord(input: RecordInput): Promise<boolean> {
+    recordsSyncRef.current?.invalidate();
     try {
       const res = await fetch("/api/records", {
         method: "POST",
@@ -743,6 +775,7 @@ export default function RecordsApp({
   }
 
   async function updateRecord(id: string, input: RecordInput): Promise<boolean> {
+    recordsSyncRef.current?.invalidate();
     try {
       const res = await fetch(`/api/records/${id}`, {
         method: "PUT",
@@ -754,7 +787,10 @@ export default function RecordsApp({
         return false;
       }
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "保存失败");
+      if (!res.ok) {
+        if (res.status === 409) recordsSyncRef.current?.changed();
+        throw new Error(data?.error || "保存失败");
+      }
       setRecords((prev) => prev.map((r) => (r.id === id ? data : r)));
       window.dispatchEvent(new Event("fire:records-updated"));
       reloadActivities();
@@ -766,14 +802,17 @@ export default function RecordsApp({
   }
 
   async function removeRecord(r: StockRecord) {
-    const res = await fetch(`/api/records/${r.id}`, { method: "DELETE" });
+    recordsSyncRef.current?.invalidate();
+    const res = await fetch(`/api/records/${r.id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revision: r.revision }) });
     if (res.ok) {
       setRecords((prev) => prev.filter((x) => x.id !== r.id));
       showToast(`已删除 ${r.name}`);
       window.dispatchEvent(new Event("fire:records-updated"));
       reloadActivities();
     } else {
-      showToast("删除失败", "err");
+      const data = await res.json().catch(() => null);
+      if (res.status === 409) recordsSyncRef.current?.changed();
+      showToast(data?.error || "删除失败", "err");
     }
   }
 
@@ -801,7 +840,8 @@ export default function RecordsApp({
     }
     // 取消关注：静默移除（不走删除确认弹窗）
     try {
-      const res = await fetch(`/api/records/${r.id}`, { method: "DELETE" });
+      recordsSyncRef.current?.invalidate();
+      const res = await fetch(`/api/records/${r.id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revision: r.revision }) });
       if (res.status === 401) {
         router.replace("/login");
         return false;
