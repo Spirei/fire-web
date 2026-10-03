@@ -4803,7 +4803,7 @@ export const V0_1_48_ENTRY: VersionEntry = {
 };
 
 // 全量版本记录（当前版本 + 历史）都在本文件，供设置页 /「关于」弹窗与健康检查引用。
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_49_ENTRY: VersionEntry = {
   ...V0_1_48_ENTRY,
   version: "v0.1.49",
   date: "2026-10-03",
@@ -4823,10 +4823,22 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_49_ENTRY,
+  version: "v0.1.50",
+  date: "2026-10-04",
+  summary: "备份轮换期间清单保持可读，已完成的新备份及时显示。",
+  software: V0_1_49_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.50" } : item),
+  changes: [
+    { title: "备份轮换期间清单保持可读", desc: "异步清理旧副本时跳过正在删除的目录，其他进程同时移除目录或文件时正常跳过，不再导致整个清单读取失败。新备份完成复制与大小索引后立即可见，保留并发任务共用快照及完整副本保护。补充跨进程目录消失与慢删除期间读取的隔离回归。", kind: "fix" },
+  ]
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_49_ENTRY,
   V0_1_48_ENTRY,
   V0_1_47_ENTRY,
   V0_1_46_ENTRY,

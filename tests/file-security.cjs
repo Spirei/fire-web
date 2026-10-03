@@ -253,6 +253,40 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
       assert.deepEqual(fs.readdirSync('data/backups'), names); assert.deepEqual(backup.getBackupConfig(), before);
     } finally { clearTimeout(timeout); release(); fsp.copyFile = originalCopy; await pending.catch(() => {}); }
   });
+  await test('listing skips directories concurrently removed by another backup process', () => {
+    const backup = load('lib/backup.ts'), before = backup.listBackups(), latest = backup.getBackupConfig().lastFile;
+    const directory = path.join(temp, 'data/backups', latest), originalStat = fs.statSync;
+    fs.statSync = function(file, ...args) {
+      if (String(file) === directory) throw Object.assign(new Error('snapshot removed concurrently'), { code: 'ENOENT' });
+      return originalStat.call(this, file, ...args);
+    };
+    try { const list = backup.listBackups(); assert.equal(list.length, before.length - 1); assert(!list.some(item => item.name === latest)); }
+    finally { fs.statSync = originalStat; }
+  });
+  await test('rotation keeps the completed new snapshot visible while skipping deletion in progress', async () => {
+    const backup = load('lib/backup.ts'), fsp = fs.promises, originalRm = fsp.rm;
+    backup.saveBackupConfig({ ...backup.getBackupConfig(), enabled: false, keep: 1 });
+    let start, release, timeout, deleting;
+    const started = new Promise(resolve => { start = resolve; }), gate = new Promise(resolve => { release = resolve; });
+    fsp.rm = async function(directory, ...args) {
+      if (!deleting && String(directory).startsWith(path.join(temp, 'data/backups') + path.sep)) {
+        deleting = path.basename(directory);
+        await originalRm.call(this, path.join(directory, '.backup-meta.json'), { force: true });
+        start(); await gate;
+      }
+      return originalRm.call(this, directory, ...args);
+    };
+    const pending = backup.runBackup();
+    try {
+      await Promise.race([started, new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('rotation never started')), 2000); })]);
+      clearTimeout(timeout);
+      const list = backup.listBackups(), latest = backup.getBackupConfig().lastFile;
+      assert(list.some(item => item.name === latest), 'completed snapshot must remain visible during retention cleanup');
+      assert(!list.some(item => item.name === deleting), 'partially deleted snapshot must not be traversed');
+      release(); const result = await pending;
+      assert.deepEqual(backup.listBackups().map(item => item.name), [result.name]);
+    } finally { clearTimeout(timeout); release(); fsp.rm = originalRm; await pending.catch(() => {}); }
+  });
   console.log(`PASS ${passed} file security regressions`);
   db.close(); process.chdir(root); fs.rmSync(temp, { recursive: true, force: true }); process.exit(0);
 })().catch(error => { console.error(error); try { db.close(); process.chdir(root); fs.rmSync(temp, { recursive: true, force: true }); } catch {} process.exit(1); });

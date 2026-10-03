@@ -41,6 +41,7 @@ const DEFAULT_CONFIG: BackupConfig = {
 let lastCheckAt = 0;
 let runningBackup: Promise<{ name: string; size: number }> | null = null;
 let activeBackupName: string | null = null;
+const deletingBackupNames = new Set<string>();
 const SIZE_META_FILE = ".backup-meta.json";
 
 function positiveInteger(value: unknown, fallback: number, max: number): number {
@@ -120,7 +121,12 @@ async function pruneBackups(keep: number): Promise<void> {
     return { dir, mtime: (await fs.promises.stat(dir)).mtimeMs };
   }));
   dirs.sort((a, b) => b.mtime - a.mtime);
-  for (const { dir } of dirs.slice(keep)) await fs.promises.rm(dir, { recursive: true, force: true });
+  for (const { dir } of dirs.slice(keep)) {
+    const name = path.basename(dir);
+    deletingBackupNames.add(name);
+    try { await fs.promises.rm(dir, { recursive: true, force: true }); }
+    finally { deletingBackupNames.delete(name); }
+  }
 }
 
 function indexedSize(dir: string, name: string): number | null {
@@ -144,22 +150,28 @@ export function listBackups(): { name: string; size: number; mtime: number }[] {
   if (!fs.existsSync(BACKUP_DIR)) return [];
   return fs
     .readdirSync(BACKUP_DIR, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && e.name !== activeBackupName)
+    .filter((e) => e.isDirectory() && e.name !== activeBackupName && !deletingBackupNames.has(e.name))
     .map((e) => {
-      const p = path.join(BACKUP_DIR, e.name);
-      const st = fs.statSync(p);
-      const indexed = indexedSize(p, e.name);
-      let size = indexed ?? 0;
-      const walk = (dir: string) => {
-        for (const en of fs.readdirSync(dir, { withFileTypes: true })) {
-          const fp = path.join(dir, en.name);
-          if (en.isDirectory()) walk(fp);
-          else size += fs.statSync(fp).size;
-        }
-      };
-      if (indexed === null) walk(p);
-      return { name: e.name, size, mtime: st.mtimeMs };
+      try {
+        const p = path.join(BACKUP_DIR, e.name);
+        const st = fs.statSync(p);
+        const indexed = indexedSize(p, e.name);
+        let size = indexed ?? 0;
+        const walk = (dir: string) => {
+          for (const en of fs.readdirSync(dir, { withFileTypes: true })) {
+            const fp = path.join(dir, en.name);
+            if (en.isDirectory()) walk(fp);
+            else size += fs.statSync(fp).size;
+          }
+        };
+        if (indexed === null) walk(p);
+        return { name: e.name, size, mtime: st.mtimeMs };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
     })
+    .filter((backup): backup is { name: string; size: number; mtime: number } => backup !== null)
     .sort((a, b) => b.mtime - a.mtime);
 }
 
@@ -199,6 +211,7 @@ async function performBackup(): Promise<{ name: string; size: number }> {
     const meta = JSON.stringify({ version: 1, name, payloadSize: size });
     await fs.promises.writeFile(path.join(dir, SIZE_META_FILE), meta, { flag: "wx", mode: 0o600 });
     size += Buffer.byteLength(meta);
+    activeBackupName = null;
 
     const cfg = { ...getBackupConfig(), lastAt: Date.now(), lastFile: name, lastSize: size };
     saveBackupConfig(cfg);
