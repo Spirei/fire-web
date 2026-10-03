@@ -9,7 +9,7 @@ export const APP_CLIENT_ID = "fire-ios";
 export const APP_REDIRECT_URI = "com.fire.app:/oauth/callback";
 export const APP_SCOPE = "portfolio.read portfolio.write";
 // Default connections stay unchanged. Editing identity requires explicit new consent.
-export const APP_SUPPORTED_SCOPES = [...APP_SCOPE.split(" "), "profile.write", "feed.read", "feed.write", "security.read", "security.write"];
+export const APP_SUPPORTED_SCOPES = [...APP_SCOPE.split(" "), "profile.write", "feed.read", "feed.write", "security.read", "security.write", "resources.read", "resources.write"];
 const ACCESS_SECONDS = 15 * 60;
 const REFRESH_IDLE_MS = 30 * 86400_000;
 const REFRESH_MAX_MS = 90 * 86400_000;
@@ -26,7 +26,7 @@ export function parseAppAuthorization(values: Record<string, unknown>): AppAutho
   if (value("client_id") !== APP_CLIENT_ID || value("redirect_uri") !== APP_REDIRECT_URI || value("response_type") !== "code") throw new Error("不支持的 App 或回调地址");
   if (value("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(value("code_challenge"))) throw new Error("无效的授权校验参数");
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(value("state"))) throw new Error("无效的授权请求");
-  if (!scope.includes("portfolio.read") || scope.some(s => !APP_SUPPORTED_SCOPES.includes(s)) || (scope.includes("feed.write") && !scope.includes("feed.read")) || (scope.includes("security.write") && !scope.includes("security.read"))) throw new Error("不支持的授权范围");
+  if (!scope.includes("portfolio.read") || scope.some(s => !APP_SUPPORTED_SCOPES.includes(s)) || (scope.includes("feed.write") && !scope.includes("feed.read")) || (scope.includes("security.write") && !scope.includes("security.read")) || (scope.includes("resources.write") && !scope.includes("resources.read"))) throw new Error("不支持的授权范围");
   const deviceName = value("device_name").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 64);
   return { client_id: APP_CLIENT_ID, redirect_uri: APP_REDIRECT_URI, response_type: "code", code_challenge_method: "S256", code_challenge: value("code_challenge"), scope: [...new Set(scope)].join(" "), state: value("state"), device_name: normalizeAppDeviceName(deviceName) || DEFAULT_APP_DEVICE_NAME };
 }
@@ -95,7 +95,7 @@ function createAppGrant(userId: string, user: SecurityUser, scope: string, devic
 export function createNativeAppGrant(userId: string, scope: string, deviceName: string, preserveGrantId?: string) {
   if (!getDb().inTransaction) throw new Error("App 令牌签发必须位于验证事务中");
   const scopes = scope.split(" ").filter(Boolean);
-  if (!scopes.includes("portfolio.read") || scopes.some(value => !APP_SUPPORTED_SCOPES.includes(value)) || (scopes.includes("feed.write") && !scopes.includes("feed.read")) || (scopes.includes("security.write") && !scopes.includes("security.read"))) throw new Error("不支持的授权范围");
+  if (!scopes.includes("portfolio.read") || scopes.some(value => !APP_SUPPORTED_SCOPES.includes(value)) || (scopes.includes("feed.write") && !scopes.includes("feed.read")) || (scopes.includes("security.write") && !scopes.includes("security.read")) || (scopes.includes("resources.write") && !scopes.includes("resources.read"))) throw new Error("不支持的授权范围");
   const user = getDb().prepare("SELECT password_hash,totp_secret,totp_enabled FROM users WHERE id=?").get(userId) as SecurityUser | undefined;
   if (!user) throw new Error("账户已失效");
   return createAppGrant(userId, user, [...new Set(scopes)].join(" "), deviceName, null,preserveGrantId);
@@ -160,6 +160,11 @@ export function appIdentity(token: string, request: Request): Grant | null {
     if (!access || access === "credential") return null;
     const grant=authenticateAppAccess(token,request);
     return grant && (access === "public" || grant.scope.split(" ").includes(access)) ? grant : null;
+  }
+  if (path.startsWith("/api/v1/resource-library")) {
+    const access = appV2Access(path.replace(/^\/api\/v1\//, "/api/v2/"), method);
+    const grant = access ? authenticateAppAccess(token, request) : null;
+    return grant && access && grant.scope.split(" ").includes(access) ? grant : null;
   }
   const read = method === "GET" && /^\/api\/v1\/(?:auth\/me|overview|records(?:\/[^/]+)?|watch-groups|brokers|assets|celebs|rates|orders(?:\/[^/]+)?|funds|fire-settings|simple-ledger|portfolio-series)$/.test(path);
   const marketRead = ["GET", "POST"].includes(method) && /^\/api\/v1\/(?:quotes|charts|kline|index-kline|kline-sessions|stock-detail|search|earnings)$/.test(path);

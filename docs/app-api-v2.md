@@ -132,3 +132,8 @@ API 文档入口仍为 /api-docs，?version=v1 或 ?version=v2 切换，省略�
 新增公开只读 `GET /api/v2/market-calendar?market=US&year=2026`，仅 v2，无新增 scope。两版 auth/config 均以 market_calendar.path 指向固定 v2 地址。完整合约见 [market-calendar-api.md](market-calendar-api.md)，包括当地日期、半日市、未知年份、临时停市未确认与 ETag。不得改变纽约20:00盈亏归档周期或据未知状态写入业务数据。
 
 休市日历「全部」使用 `/api/v2/market-calendar/batch?year=2026`，data.calendars 按 US/HK/CN 分开保存；单市场继续使用原接口，发现对象新增固定 batch_path。两种方式共用年度版本，不重复抓取官方来源。
+
+
+## App 个人资源库
+
+个人资源库冻结合约 1：`resource_library` discovery、`resources.read/resources.write` 显式授权；默认登录范围不变。两版本共用用户隔离服务，接收文件为构建/影音内容的统一筛选入口。字段、分页/排序、50 MiB 上传、1 GiB 额度、Bearer 私有下载及物理删除回执见 [个人资源库合约](app-resource-library.md)。

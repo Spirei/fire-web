@@ -61,6 +61,14 @@ export const APP_V2_ROUTES = [
   {path:"indices",methods:["GET"],access:"public"},
   {path:"company-profile",methods:["GET"],access:"public"},
   {path:"settings/public",methods:["GET"],access:"public"},
+  {path:"resource-library",methods:["GET"],access:"resources.read"},
+  {path:"resource-library/folders",methods:["GET","POST"],access:"resources.read",writeAccess:"resources.write"},
+  {path:"resource-library/folders/[folderId]",methods:["DELETE"],access:"resources.write"},
+  {path:"resource-library/files",methods:["GET","POST"],access:"resources.read",writeAccess:"resources.write"},
+  {path:"resource-library/files/[fileId]",methods:["GET","DELETE"],access:"resources.read",writeAccess:"resources.write"},
+  {path:"resource-library/files/[fileId]/content",methods:["GET"],access:"resources.read"},
+  {path:"resource-library/uploads/[requestId]",methods:["GET"],access:"resources.read"},
+  {path:"resource-library/deletions/[requestId]",methods:["GET"],access:"resources.read"},
   {path:"feed",methods:["GET"],access:"feed.read"},
   {path:"feed/groups",methods:["GET","POST"],access:"feed.read",writeAccess:"feed.write"},
   {path:"feed/groups/[groupId]",methods:["PUT"],access:"feed.write"},
@@ -75,7 +83,7 @@ export const APP_V2_ROUTES = [
   {path:"feed/posts/[postId]/discussion",methods:["GET","POST"],access:"feed.read",writeAccess:"feed.write"}
 ] as const;
 type Entry = {path:string;methods:readonly string[];access:string;writeAccess?:string};
-const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":segment==="[id]"?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
+const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[folderId]"?"rld_[a-f0-9]{32}":segment==="[fileId]"?"rlf_[a-f0-9]{32}":segment==="[requestId]"?"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}":segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":segment==="[id]"?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
 export function appV2KnownPath(path:string) { return routes.some(item=>item.pattern.test(path)); }
 export function appV2Access(path:string,method:string): string|null {
   // Literal routes must win over dynamic IDs (e.g. watch-groups/reorder).

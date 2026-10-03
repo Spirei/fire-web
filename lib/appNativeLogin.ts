@@ -93,7 +93,7 @@ export async function nativePermissions(request: Request) {
   const initial=currentGrant(request); accountBudget(initial.username);
   return getDb().transaction(()=>{
     const grant=currentGrant(request), requested=body.scope.split(" ").filter(Boolean), scopes=[...new Set([...grant.scope.split(" "),...requested])];
-    if (!requested.length || requested.some(scope=>!APP_SUPPORTED_SCOPES.includes(scope)) || (scopes.includes("security.write")&&!scopes.includes("security.read")) || (scopes.includes("feed.write")&&!scopes.includes("feed.read"))) throw new LoginError("不支持的授权范围",40301,403);
+    if (!requested.length || requested.some(scope=>!APP_SUPPORTED_SCOPES.includes(scope)) || (scopes.includes("security.write")&&!scopes.includes("security.read")) || (scopes.includes("feed.write")&&!scopes.includes("feed.read")) || (scopes.includes("resources.write")&&!scopes.includes("resources.read"))) throw new LoginError("不支持的授权范围",40301,403);
     const verified=body.currentPassword && body.currentPassword.length<=128 ? authenticateUser(grant.username,body.currentPassword) : null;
     if (!verified || verified.id!==grant.user_id) throw new LoginError("当前密码不正确",40103,403);
     return afterPassword(request,userById(grant.user_id)!,scopes.join(" "),grant.device_name,grant.id);

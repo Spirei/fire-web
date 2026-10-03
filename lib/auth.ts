@@ -1,3 +1,4 @@
+import { purgeResourceUser } from "./resourceLibrary";
 import { createHash, randomBytes } from "crypto";
 import { getDb } from "./db";
 import { hashPassword, verifyPassword } from "./password";
@@ -375,6 +376,7 @@ export function deleteUserById(userId: string): boolean {
     const admins = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number };
     if (admins.n <= 1) return false;
   }
+  purgeResourceUser(userId);
   return db.prepare("DELETE FROM users WHERE id = ?").run(userId).changes > 0;
 }
 

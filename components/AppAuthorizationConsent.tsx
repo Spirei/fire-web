@@ -27,6 +27,8 @@ export default function AppAuthorizationConsent({ authorization, account, userna
   const securityWritable = authorization.scope.split(" ").includes("security.write");
   const feedReadable = authorization.scope.split(" ").includes("feed.read");
   const feedWritable = authorization.scope.split(" ").includes("feed.write");
+  const resourcesReadable = authorization.scope.split(" ").includes("resources.read");
+  const resourcesWritable = authorization.scope.split(" ").includes("resources.write");
 
   async function decide(nextDecision: "allow" | "deny") {
     if (inFlight.current || callback) return;
@@ -67,6 +69,8 @@ export default function AppAuthorizationConsent({ authorization, account, userna
         {securityWritable && <div className="app-consent-permission"><SubNavIcon name="password" /><span><strong>管理账户安全</strong><small>验证邮箱、管理验证器和备用码、删除通行密钥与撤销登录设备；敏感操作仍需验证密码</small></span></div>}
         {feedReadable && <div className="app-consent-permission"><SubNavIcon name="source-content" /><span><strong>查看个人动态</strong><small>动态、指示、任务与独立讨论记录</small></span></div>}
         {feedWritable && <div className="app-consent-permission"><SubNavIcon name="pen" /><span><strong>管理个人动态</strong><small>修改指示、生成动态、喜欢、隐藏与 AI 讨论</small></span></div>}
+        {resourcesReadable && <div className="app-consent-permission"><SubNavIcon name="source-reports" /><span><strong>查看个人资源库</strong><small>查看和下载构建、影音内容及接收文件</small></span></div>}
+        {resourcesWritable && <div className="app-consent-permission"><SubNavIcon name="pen" /><span><strong>管理个人资源库</strong><small>上传个人文件、管理空文件夹并永久删除原文件</small></span></div>}
       </section>
     </>}
     {error && <p role="alert" className="app-connection-error">{error}</p>}

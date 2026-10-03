@@ -225,6 +225,17 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
+| GET | `/api/v2/resource-library` | resources.read |
+| GET | `/api/v2/resource-library/folders` | resources.read |
+| POST | `/api/v2/resource-library/folders` | resources.write |
+| DELETE | `/api/v2/resource-library/folders/{folderId}` | resources.write |
+| GET | `/api/v2/resource-library/files` | resources.read |
+| POST | `/api/v2/resource-library/files` | resources.write |
+| GET | `/api/v2/resource-library/files/{fileId}` | resources.read |
+| DELETE | `/api/v2/resource-library/files/{fileId}` | resources.write |
+| GET | `/api/v2/resource-library/files/{fileId}/content` | resources.read |
+| GET | `/api/v2/resource-library/uploads/{requestId}` | resources.read |
+| GET | `/api/v2/resource-library/deletions/{requestId}` | resources.read |
 | GET | `/api/v2/feed` | feed.read |
 | GET | `/api/v2/feed/groups` | feed.read |
 | POST | `/api/v2/feed/groups` | feed.write |
@@ -913,3 +924,8 @@ HTTP `Cache-Control: public, max-age=300, must-revalidate`，`ETag` 含 schemaVe
 单市场请求必须指定单个 `market=US`、`HK` 或 `CN`，响应中的 `data.market` 和全部 `days` 只属于该市场，不混入另一个市场的休市或半日市。切换市场时复用对应市场年度缓存，无缓存再请求；状态筛选由客户端依据 `days[].status` 完成，年度 API 保留完整日期网格。
 
 Web 示例：`/global?section=calendar&market=HK&month=2026-12&status=half_day`。`status` 为 `closed`、`half_day` 或 `unknown`；`closed` 匹配全天休市（`holiday` 或 `weekend`），不改变 API 日期状态。不提供时显示该市场全部日期。再次点击当前状态取消筛选。刷新直接读取 URL，不先显示另一市场。年月合并为 `month=YYYY-MM`，选中日期只记 `day=24`；默认状态省略。旧 calYear/calMonth/calDay/calStatus 地址继续读取，下一次操作转换为精简形式。Web 的 `market=ALL` 仅表示前端三地汇总，单市场 API 不接受 ALL；全部视图使用批量端点或分别请求 US/HK/CN 后汇总。
+
+
+## 个人资源库
+
+冻结合约 1 与字段、分页/排序、类型、限额、结果查询、私有下载、永久删除回执见 [App 个人资源库](app-resource-library.md)。`resource_library` discovery 出现后才启用；resources.write 必须包含 resources.read，基础登录范围保持原样。
