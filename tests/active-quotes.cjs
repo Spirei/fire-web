@@ -55,6 +55,15 @@ async function test(name, run) { await run(); console.log('PASS ' + name); count
     assert.equal(pool.stats().active, 1); assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], [{ market: 'US', code: 'AAPL', id: '["US","AAPL"]' }]);
   });
+  await test('independent module entries reuse the process pool and current source callbacks', async () => {
+    const firstPool = pool;
+    delete require.cache[path.join(root, 'lib/quotes.ts')];
+    const otherEntry = require('../lib/quotes.ts');
+    await advance(3000);
+    const q = (await otherEntry.fetchQuotes([item('other-entry')]))['other-entry'];
+    assert.equal(pool, firstPool); assert.equal(calls.length, 1); assert.equal(q.cached, true);
+    assert.equal(q.time, raw.time); assert.equal(q.source, 'futu');
+  });
   await test('slow scheduled refresh allows fast snapshot reads with original source, time and session', async () => {
     const slow = gate(); load = async rows => { await slow.promise; return new Map(rows.map(row => [row.id, { ...raw, price: 101 }])); };
     await advance(5000); const started = performance.now();

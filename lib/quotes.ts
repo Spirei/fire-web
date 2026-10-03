@@ -178,7 +178,22 @@ export async function fetchBatch(symbols: string[], signal?: AbortSignal, publis
   return map;
 }
 
-const sharedQuotes = new MarketDataPool<Quote>(2_000, quote => Number.isFinite(quote.price) && quote.price > 0);
+interface QuoteRuntime {
+  quotes: MarketDataPool<Quote>;
+  active?: ActiveQuotePool;
+  namespace: typeof quoteNamespace;
+  policy: typeof activeQuotePolicy;
+  load: typeof fetchQuotesUnshared;
+}
+// Next entry points have independent module caches. Keep one public pool per process;
+// update its callbacks on reload so background work uses the current adapters/settings.
+const quoteHost = globalThis as typeof globalThis & { __alcorQuoteRuntimeV1?: QuoteRuntime };
+const quoteRuntime = quoteHost.__alcorQuoteRuntimeV1 ??= {
+  quotes: new MarketDataPool<Quote>(2_000, quote => Number.isFinite(quote.price) && quote.price > 0),
+  namespace: quoteNamespace, policy: activeQuotePolicy, load: fetchQuotesUnshared
+};
+quoteRuntime.namespace = quoteNamespace; quoteRuntime.policy = activeQuotePolicy; quoteRuntime.load = fetchQuotesUnshared;
+const sharedQuotes = quoteRuntime.quotes;
 const sharedCharts = new MarketDataPool<Intraday>(30_000, chart => !chart.stale);
 
 function normalizedMarketItem(item: QuoteItem): QuoteItem {
@@ -190,18 +205,20 @@ function quoteNamespace(): string {
   return JSON.stringify([settings.quoteSource, settings.quoteApiUrl, settings.futuHost, settings.futuPort, process.env.STOCKLOG_FUTU, process.env.STOCKLOG_PROXY, process.env.STOCKLOG_EXTENDED_QUOTE]);
 }
 
-const activeQuotes = new ActiveQuotePool({
-  currentNamespace: quoteNamespace,
-  policy: (item, now) => {
-    if (!/^[A-Z0-9._-]{1,40}$/.test(item.code) || !["US", "HK", "CN", "JP", "KR", "ASSET"].includes(item.market)) return undefined;
-    if (item.market === "ASSET") return { intervalMs: 10_000, phase: "ASSET" };
-    const state = marketSessionState(item.market, new Date(now));
-    return { intervalMs: state.active ? 5_000 : 60_000, phase: `${state.localDate}:${state.session}` };
-  },
+function activeQuotePolicy(item: QuoteItem, now: number) {
+  if (!/^[A-Z0-9._-]{1,40}$/.test(item.code) || !["US", "HK", "CN", "JP", "KR", "ASSET"].includes(item.market)) return undefined;
+  if (item.market === "ASSET") return { intervalMs: 10_000, phase: "ASSET" };
+  const state = marketSessionState(item.market, new Date(now));
+  return { intervalMs: state.active ? 5_000 : 60_000, phase: `${state.localDate}:${state.session}` };
+}
+
+const activeQuotes = quoteRuntime.active ??= new ActiveQuotePool({
+  currentNamespace: () => quoteRuntime.namespace(),
+  policy: (item, now) => quoteRuntime.policy(item, now),
   refresh: (items, namespace) => {
     // This bypasses observe(): proactive refresh never renews demand or recursively schedules itself.
-    if (namespace !== quoteNamespace()) return Promise.resolve({});
-    return sharedQuotes.fetch(items, namespace, fetchQuotesUnshared);
+    if (namespace !== quoteRuntime.namespace()) return Promise.resolve({});
+    return quoteRuntime.quotes.fetch(items, namespace, quoteRuntime.load);
   }
 });
 
