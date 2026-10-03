@@ -200,6 +200,59 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
     assert.equal(backup.listBackups().length, count); assert.deepEqual(backup.getBackupConfig(), before);
     const result = await backup.runBackup(); assert(fs.existsSync(path.join(temp, 'data/backups', result.name, 'fire.db'))); assert.equal(backup.listBackups().length, count + 1);
   });
+  await test('completed backup sizes remain readable without traversing network uploads and reject invalid indexes', () => {
+    const backup = load('lib/backup.ts'), config = backup.getBackupConfig();
+    const directory = path.join(temp, 'data/backups', config.lastFile), metaFile = path.join(directory, '.backup-meta.json');
+    const originalMeta = fs.readFileSync(metaFile, 'utf8'), originalRead = fs.readdirSync;
+    fs.readdirSync = function(directory, ...args) {
+      if (String(directory).includes(path.sep + 'uploads')) throw new Error('network traversal prohibited');
+      return originalRead.call(this, directory, ...args);
+    };
+    try {
+      assert.equal(backup.listBackups().find(item => item.name === config.lastFile).size, config.lastSize);
+      for (const invalid of [JSON.stringify({ version: 1, name: config.lastFile, payloadSize: -1 }), JSON.stringify({ version: 1, name: 'other-snapshot', payloadSize: 1 }), originalMeta + ' '.repeat(1025)]) {
+        fs.writeFileSync(metaFile, invalid);
+        assert.throws(() => backup.listBackups(), /network traversal prohibited/);
+      }
+    } finally { fs.readdirSync = originalRead; fs.writeFileSync(metaFile, originalMeta); }
+  });
+  await test('slow asynchronous backup copies leave completed backups and settings available', async () => {
+    const backup = load('lib/backup.ts'), fsp = fs.promises, originalCopy = fsp.copyFile;
+    backup.saveBackupConfig({ ...backup.getBackupConfig(), enabled: false, keep: 10 });
+    const before = backup.getBackupConfig(), count = backup.listBackups().length;
+    let start, release, timeout, settled = false;
+    const started = new Promise(resolve => { start = resolve; }), gate = new Promise(resolve => { release = resolve; });
+    fsp.copyFile = async function(...args) { start(); await gate; return originalCopy.apply(this, args); };
+    const pending = backup.runBackup(); pending.then(() => { settled = true; }, () => { settled = true; });
+    try {
+      await Promise.race([started, new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('backup never yielded to asynchronous copies')), 2000); })]);
+      clearTimeout(timeout);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(settled, false); assert.deepEqual(backup.getBackupConfig(), before);
+      assert.equal(backup.listBackups().length, count, 'in-progress snapshots must not require a network traversal');
+      release(); const result = await pending;
+      assert.equal(backup.listBackups().length, count + 1);
+      assert.equal(backup.listBackups().find(item => item.name === result.name).size, result.size);
+    } finally { clearTimeout(timeout); release(); fsp.copyFile = originalCopy; await pending.catch(() => {}); }
+  });
+  await test('copy failure waits for outstanding writes before cleaning the failed snapshot', async () => {
+    const backup = load('lib/backup.ts'), fsp = fs.promises, originalCopy = fsp.copyFile;
+    const before = backup.getBackupConfig(), names = fs.readdirSync('data/backups');
+    let otherStarted, release, timeout, calls = 0, settled = false;
+    const started = new Promise(resolve => { otherStarted = resolve; }), gate = new Promise(resolve => { release = resolve; });
+    fsp.copyFile = async function(...args) {
+      if (++calls === 1) { await started; throw new Error('isolated copy failure'); }
+      otherStarted(); await gate; return originalCopy.apply(this, args);
+    };
+    const pending = backup.runBackup(); pending.then(() => { settled = true; }, () => { settled = true; });
+    try {
+      await Promise.race([started, new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('no outstanding copy')), 2000); })]);
+      clearTimeout(timeout); await new Promise(resolve => setImmediate(resolve));
+      assert.equal(settled, false, 'cleanup must wait for outstanding filesystem writes');
+      release(); await assert.rejects(pending, /isolated copy failure/);
+      assert.deepEqual(fs.readdirSync('data/backups'), names); assert.deepEqual(backup.getBackupConfig(), before);
+    } finally { clearTimeout(timeout); release(); fsp.copyFile = originalCopy; await pending.catch(() => {}); }
+  });
   console.log(`PASS ${passed} file security regressions`);
   db.close(); process.chdir(root); fs.rmSync(temp, { recursive: true, force: true }); process.exit(0);
 })().catch(error => { console.error(error); try { db.close(); process.chdir(root); fs.rmSync(temp, { recursive: true, force: true }); } catch {} process.exit(1); });

@@ -40,6 +40,8 @@ const DEFAULT_CONFIG: BackupConfig = {
 
 let lastCheckAt = 0;
 let runningBackup: Promise<{ name: string; size: number }> | null = null;
+let activeBackupName: string | null = null;
+const SIZE_META_FILE = ".backup-meta.json";
 
 function positiveInteger(value: unknown, fallback: number, max: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
@@ -82,38 +84,72 @@ function fmtStamp(d: Date): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-function copyDir(src: string, dest: string) {
-  if (!fs.existsSync(src)) return;
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, entry.name);
-    const d = path.join(dest, entry.name);
-    if (entry.isDirectory()) copyDir(s, d);
-    else if (entry.isFile()) fs.copyFileSync(s, d);
-  }
+async function copyDir(src: string, dest: string): Promise<number> {
+  if (!fs.existsSync(src)) return 0;
+  const files: { src: string; dest: string }[] = [];
+  const collect = async (from: string, to: string) => {
+    await fs.promises.mkdir(to, { recursive: true });
+    for (const entry of await fs.promises.readdir(from, { withFileTypes: true })) {
+      const s = path.join(from, entry.name), d = path.join(to, entry.name);
+      if (entry.isDirectory()) await collect(s, d);
+      else if (entry.isFile()) files.push({ src: s, dest: d });
+    }
+  };
+  await collect(src, dest);
+  let next = 0, size = 0, failed = false;
+  let failure: unknown;
+  // Drain every in-flight copy before removing a failed snapshot.
+  await Promise.all(Array.from({ length: Math.min(4, files.length) }, async () => {
+    while (!failed && next < files.length) {
+      const file = files[next++];
+      try {
+        await fs.promises.copyFile(file.src, file.dest);
+        size += (await fs.promises.stat(file.dest)).size;
+      } catch (error) { if (!failed) failure = error; failed = true; }
+    }
+  }));
+  if (failed) throw failure;
+  return size;
 }
 
-function pruneBackups(keep: number) {
+async function pruneBackups(keep: number): Promise<void> {
   if (!fs.existsSync(BACKUP_DIR)) return;
-  const dirs = fs
-    .readdirSync(BACKUP_DIR, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => path.join(BACKUP_DIR, e.name))
-    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-  dirs.slice(keep).forEach((dir) => {
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
+  const entries = await fs.promises.readdir(BACKUP_DIR, { withFileTypes: true });
+  const dirs = await Promise.all(entries.filter((e) => e.isDirectory()).map(async (e) => {
+    const dir = path.join(BACKUP_DIR, e.name);
+    return { dir, mtime: (await fs.promises.stat(dir)).mtimeMs };
+  }));
+  dirs.sort((a, b) => b.mtime - a.mtime);
+  for (const { dir } of dirs.slice(keep)) await fs.promises.rm(dir, { recursive: true, force: true });
+}
+
+function indexedSize(dir: string, name: string): number | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(path.join(dir, SIZE_META_FILE), "r");
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.size > 1024) return null;
+    const buffer = Buffer.alloc(1025);
+    const length = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    if (length > 1024 || length !== st.size) return null;
+    const meta = JSON.parse(buffer.subarray(0, length).toString("utf8"));
+    if (meta.version !== 1 || meta.name !== name || !Number.isSafeInteger(meta.payloadSize) || meta.payloadSize < 0) return null;
+    const total = meta.payloadSize + length;
+    return Number.isSafeInteger(total) ? total : null;
+  } catch { return null; }
+  finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
 export function listBackups(): { name: string; size: number; mtime: number }[] {
   if (!fs.existsSync(BACKUP_DIR)) return [];
   return fs
     .readdirSync(BACKUP_DIR, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() && e.name !== activeBackupName)
     .map((e) => {
       const p = path.join(BACKUP_DIR, e.name);
       const st = fs.statSync(p);
-      let size = 0;
+      const indexed = indexedSize(p, e.name);
+      let size = indexed ?? 0;
       const walk = (dir: string) => {
         for (const en of fs.readdirSync(dir, { withFileTypes: true })) {
           const fp = path.join(dir, en.name);
@@ -121,7 +157,7 @@ export function listBackups(): { name: string; size: number; mtime: number }[] {
           else size += fs.statSync(fp).size;
         }
       };
-      walk(p);
+      if (indexed === null) walk(p);
       return { name: e.name, size, mtime: st.mtimeMs };
     })
     .sort((a, b) => b.mtime - a.mtime);
@@ -142,6 +178,7 @@ async function performBackup(): Promise<{ name: string; size: number }> {
     }
   }
   try { fs.chmodSync(dir, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
+  activeBackupName = name;
 
   let complete = false;
   try {
@@ -154,25 +191,21 @@ async function performBackup(): Promise<{ name: string; size: number }> {
     } finally {
       src.close();
     }
-    copyDir(UPLOADS_DIR, path.join(dir, "uploads"));
-
-    let size = 0;
-    const walk = (p: string) => {
-      for (const en of fs.readdirSync(p, { withFileTypes: true })) {
-        const fp = path.join(p, en.name);
-        if (en.isDirectory()) walk(fp);
-        else size += fs.statSync(fp).size;
-      }
-    };
-    walk(dir);
+    let size = await copyDir(UPLOADS_DIR, path.join(dir, "uploads"));
+    for (const entry of await fs.promises.readdir(dir, { withFileTypes: true })) {
+      if (entry.isFile()) size += (await fs.promises.stat(path.join(dir, entry.name))).size;
+    }
     complete = true;
+    const meta = JSON.stringify({ version: 1, name, payloadSize: size });
+    await fs.promises.writeFile(path.join(dir, SIZE_META_FILE), meta, { flag: "wx", mode: 0o600 });
+    size += Buffer.byteLength(meta);
 
     const cfg = { ...getBackupConfig(), lastAt: Date.now(), lastFile: name, lastSize: size };
     saveBackupConfig(cfg);
-    pruneBackups(cfg.keep);
+    await pruneBackups(cfg.keep);
     return { name, size };
   } catch (error) {
-    if (!complete) fs.rmSync(dir, { recursive: true, force: true });
+    if (!complete) await fs.promises.rm(dir, { recursive: true, force: true });
     throw error;
   }
 }
@@ -181,7 +214,8 @@ async function performBackup(): Promise<{ name: string; size: number }> {
 export function runBackup(): Promise<{ name: string; size: number }> {
   if (!runningBackup) {
     runningBackup = performBackup();
-    runningBackup.then(() => { runningBackup = null; }, () => { runningBackup = null; });
+    const release = () => { runningBackup = null; activeBackupName = null; };
+    runningBackup.then(release, release);
   }
   return runningBackup;
 }
