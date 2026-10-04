@@ -78,6 +78,7 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | `celebs/[id]` | GET | public |
 | `celebs/[id]/returns` | GET | public |
 | `quotes` | POST | public |
+| `quote-subscriptions` | GET,POST,DELETE | portfolio.read；写入 portfolio.write |
 | `charts` | POST | public |
 | `kline` | GET | public |
 | `index-kline` | GET | public |
@@ -137,3 +138,9 @@ API 文档入口仍为 /api-docs，?version=v1 或 ?version=v2 切换，省略�
 ## App 个人资源库
 
 个人资源库冻结合约 1：`resource_library` discovery、`resources.read/resources.write` 显式授权；默认登录范围不变。两版本共用用户隔离服务，接收文件为构建/影音内容的统一筛选入口。字段、分页/排序、50 MiB 上传、1 GiB 额度、Bearer 私有下载及物理删除回执见 [个人资源库合约](app-resource-library.md)。
+
+## 用户行情订阅与共享池
+
+`auth/config.quote_subscriptions_contract` 返回固定 `/api/v2/quote-subscriptions`。行情批量、总览、完整个股详情的认证读取自动登记本人需求，App 不必先订阅才能读取。也可 GET 查看本人列表、POST `{items:[{market,code}]}` 显式订阅/续期、DELETE 同格式取消部分或 `{all:true}` 清空本人；私有读取需 portfolio.read、写入需 portfolio.write，不扩权。单次最多100只、请求64KiB、本人256只；规范代码去重，返回 market/code、最后请求和到期 Unix 毫秒时间、hot/dormant。详细契约见 [用户行情订阅](api-spec-v2.md)。
+
+本人需求存入 SQLite，七天无人请求自动到期，90秒无人读取暂停主动更新，后台更新和列表查询不续期。首次认证需求在重启后恢复未到期条目。共享行情按市场独立容量和调度，同证券跨用户只读一份公共报价，不共享持仓与资金；取消/到期仅释放本人需求，其他读者仍需时保留。取消不删除持仓，下次行情读取重新登记；历史读取不登记。公共报价仍为进程内缓存，多服务器不统一调度。

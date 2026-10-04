@@ -3,6 +3,7 @@ import { listRecords } from "@/lib/store";
 import { fail, ok } from "@/lib/api";
 import { getRates } from "@/lib/rates";
 import { fetchOverviewQuotes } from "@/lib/quotes";
+import { trackQuoteRequest } from "@/lib/quoteSubscriptionRequests";
 import { buildOverview } from "@/lib/overview";
 import { readAccountCash } from "@/lib/accountCashStore";
 import { getDb } from "@/lib/db";
@@ -20,7 +21,9 @@ async function overview(request: Request) {
   const currency = new URL(request.url).searchParams.get("currency")?.toUpperCase() || "USD";
   if (!Number.isFinite(rates[currency]) || rates[currency] <= 0) return fail(40001, "不支持的汇总币种", 400);
   const records = listRecords(user.id);
-  const snapshot = await fetchOverviewQuotes(records.filter(r => Number(r.qty) > 0));
+  const items = records.filter(r => Number(r.qty) > 0);
+  const tracked = await trackQuoteRequest(request, items);
+  const snapshot = await fetchOverviewQuotes(items, 1_500, { tracked });
   // Read again after quote I/O, so account writes cannot leave an old holdings/new cash pair.
   return getDb().transaction(() => {
     if (!getAuthUser(request)) return fail(40101, "登录或连接已失效", 401);

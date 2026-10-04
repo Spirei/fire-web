@@ -242,6 +242,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v2/orders",
   "/api/v2/orders/[id]",
   "/api/v2/overview",
+  "/api/v2/quote-subscriptions",
   "/api/v2/quotes",
   "/api/v2/rates",
   "/api/v2/records",

@@ -1,7 +1,11 @@
 import type { QuoteItem } from "./quotes";
+import { publicQuoteItems, QUOTE_DEMAND_HOT_MS, QUOTE_DEMAND_IDLE_MS, type PublicQuoteDemand } from "./quoteDemand";
 
 interface Policy { intervalMs: number; phase: string }
-interface Candidate { item: QuoteItem; requestedAt: number; phase: string }
+interface Candidate {
+  item: QuoteItem; requestedAt: number; phase: string;
+  anonymousAt?: number; anonymousReads: number; subscribedAt?: number; subscribedReads: number;
+}
 interface Active extends Candidate { nextRefresh: number; failures: number }
 interface Job { entries: Array<[string, Active]>; namespace: string }
 
@@ -33,8 +37,8 @@ export class ActiveQuotePool {
     this.now = options.now ?? Date.now;
     this.setTimer = options.setTimer ?? setTimeout;
     this.clearTimer = options.clearTimer ?? clearTimeout;
-    this.idleMs = options.idleMs ?? 7 * 24 * 60 * 60 * 1_000;
-    this.hotMs = options.hotMs ?? 90_000;
+    this.idleMs = options.idleMs ?? QUOTE_DEMAND_IDLE_MS;
+    this.hotMs = options.hotMs ?? QUOTE_DEMAND_HOT_MS;
     this.repeatMs = options.repeatMs ?? this.idleMs;
     this.capacity = options.capacity ?? 256;
     this.candidateCapacity = options.candidateCapacity ?? 1024;
@@ -46,37 +50,77 @@ export class ActiveQuotePool {
     if (namespace !== this.namespace) this.reset(namespace);
     const now = this.now();
     this.expire(now);
-    const unique = new Map(items.map(item => {
-      const id = JSON.stringify([item.market, item.code]);
-      return [id, { market: item.market, code: item.code, id }];
-    }));
-    for (const [key, item] of unique) {
+    for (const item of publicQuoteItems(items)) {
+      const key = item.id;
       const policy = this.options.policy(item, now);
       if (!item.code || !policy) continue;
-      const active = this.active.get(key);
-      if (active) {
-        const sleeping = now - active.requestedAt >= this.hotMs;
-        active.requestedAt = now;
-        if (sleeping || active.phase !== policy.phase) active.nextRefresh = now;
-        continue;
-      }
-      const candidate = this.candidates.get(key);
-      if (candidate && this.active.size >= this.capacity) {
-        // Make room for current demand before dormant securities. Never evict an in-flight hot reader.
-        const dormant = [...this.active].filter(([, entry]) => now - entry.requestedAt >= this.hotMs)
-          .sort((a, b) => a[1].requestedAt - b[1].requestedAt)[0];
-        if (dormant) this.active.delete(dormant[0]);
-      }
-      if (candidate && this.active.size < this.capacity) {
-        this.candidates.delete(key);
-        this.active.set(key, { item, requestedAt: now, nextRefresh: now, phase: candidate.phase, failures: 0 });
-      } else {
-        this.candidates.delete(key);
-        this.candidates.set(key, { item, requestedAt: now, phase: policy.phase });
-      }
+      const entry = this.active.get(key) ?? this.candidates.get(key) ?? this.create(item, now);
+      const previousAt = entry.requestedAt;
+      entry.anonymousAt = now; entry.anonymousReads = Math.min(2, entry.anonymousReads + 1);
+      this.admit(key, entry, previousAt, now);
     }
-    while (this.candidates.size > this.candidateCapacity) this.candidates.delete(this.candidates.keys().next().value!);
+    this.trimCandidates();
     this.arm();
+  }
+
+  /** Merge aggregate user demand; no user identifier crosses into the public pool. */
+  reconcileSubscriptions(changes: PublicQuoteDemand[], namespace: string, replace = false) {
+    if (this.stopped) return;
+    if (namespace !== this.namespace) this.reset(namespace);
+    const now = this.now(); this.expire(now);
+    const selected = new Map<string, PublicQuoteDemand>();
+    for (const change of changes) {
+      const item = publicQuoteItems([change.item])[0];
+      if (item) selected.set(item.id, { ...change, item });
+    }
+    if (replace) for (const [key, entry] of [...this.candidates, ...this.active]) {
+      if (entry.subscribedAt !== undefined && !selected.has(key)) selected.set(key, { item: entry.item });
+    }
+    for (const change of selected.values()) {
+      const item = publicQuoteItems([change.item])[0];
+      if (!item || !this.options.policy(item, now)) continue;
+      const at = change.requestedAt;
+      const entry = this.active.get(item.id) ?? this.candidates.get(item.id) ?? this.create(item, at ?? now);
+      const previousAt = entry.requestedAt;
+      entry.subscribedAt = Number.isFinite(at) && at! > now - this.idleMs ? Math.min(now, at!) : undefined;
+      entry.subscribedReads = entry.subscribedAt === undefined ? 0 : Math.min(2, Math.max(1, change.reads ?? 1));
+      this.admit(item.id, entry, previousAt, now);
+    }
+    this.trimCandidates(); this.arm();
+  }
+
+  private create(item: QuoteItem, at: number): Candidate {
+    return { item, requestedAt: at, phase: (this.options.policy(item, at) ?? this.options.policy(item, this.now()))!.phase,
+      anonymousReads: 0, subscribedReads: 0 };
+  }
+
+  private admit(key: string, entry: Candidate, previousAt: number, now: number) {
+    entry.requestedAt = Math.max(entry.anonymousAt ?? -Infinity, entry.subscribedAt ?? -Infinity);
+    if (!Number.isFinite(entry.requestedAt)) { this.active.delete(key); this.candidates.delete(key); return; }
+    const ready = entry.anonymousReads + entry.subscribedReads >= 2;
+    const active = this.active.get(key);
+    if (active && ready) {
+      if (now - previousAt >= this.hotMs || active.phase !== this.options.policy(entry.item, now)!.phase) active.nextRefresh = now;
+      return;
+    }
+    if (active) this.active.delete(key);
+    if (ready) {
+      const marketEntries = [...this.active].filter(([, current]) => current.item.market === entry.item.market);
+      if (marketEntries.length >= this.capacity) {
+        const dormant = marketEntries.filter(([, current]) => now - current.requestedAt >= this.hotMs)
+          .sort((a, b) => a[1].requestedAt - b[1].requestedAt)[0];
+        if (dormant && entry.requestedAt >= dormant[1].requestedAt) this.active.delete(dormant[0]);
+        else { this.candidates.set(key, entry); return; }
+      }
+      this.candidates.delete(key);
+      this.active.set(key, { ...entry, nextRefresh: now, failures: 0 });
+    } else this.candidates.set(key, entry);
+  }
+
+  private trimCandidates() {
+    if (this.candidates.size <= this.candidateCapacity) return;
+    const ordered = [...this.candidates].sort((a, b) => a[1].requestedAt - b[1].requestedAt);
+    for (const [key] of ordered.slice(0, this.candidates.size - this.candidateCapacity)) this.candidates.delete(key);
   }
 
   /** A snapshot is usable only within this market's interval and the same session. */
@@ -103,7 +147,9 @@ export class ActiveQuotePool {
     const now = this.now();
     const hot = [...this.active.values()].filter(entry => now - entry.requestedAt < this.hotMs).length;
     return { active: this.active.size, hot, dormant: this.active.size - hot, candidates: this.candidates.size,
-      refreshing: this.jobs.size, timerArmed: this.timer !== undefined };
+      refreshing: this.jobs.size, timerArmed: this.timer !== undefined,
+      markets: Object.fromEntries([...new Set([...this.active.values()].map(entry => entry.item.market))]
+        .map(market => [market, [...this.active.values()].filter(entry => entry.item.market === market).length])) };
   }
 
   dispose() { this.stopped = true; this.reset(""); }
@@ -116,8 +162,17 @@ export class ActiveQuotePool {
   }
 
   private expire(now: number) {
-    for (const [key, entry] of this.candidates) if (now - entry.requestedAt >= this.repeatMs) this.candidates.delete(key);
-    for (const [key, entry] of this.active) if (now - entry.requestedAt >= this.idleMs) this.active.delete(key);
+    for (const [map, anonymousMs] of [[this.candidates, this.repeatMs], [this.active, this.idleMs]] as const) {
+      for (const [key, entry] of map) {
+        if (entry.anonymousAt !== undefined && now - entry.anonymousAt >= anonymousMs) { entry.anonymousAt = undefined; entry.anonymousReads = 0; }
+        if (entry.subscribedAt !== undefined && now - entry.subscribedAt >= this.idleMs) { entry.subscribedAt = undefined; entry.subscribedReads = 0; }
+        entry.requestedAt = Math.max(entry.anonymousAt ?? -Infinity, entry.subscribedAt ?? -Infinity);
+        if (!Number.isFinite(entry.requestedAt)) map.delete(key);
+        else if (map === this.active && entry.anonymousReads + entry.subscribedReads < 2) {
+          this.active.delete(key); this.candidates.set(key, entry);
+        }
+      }
+    }
   }
 
   private arm() {
@@ -126,9 +181,13 @@ export class ActiveQuotePool {
     if (this.stopped) return;
     const now = this.now();
     let due = Infinity;
-    for (const entry of this.candidates.values()) due = Math.min(due, entry.requestedAt + this.repeatMs);
+    for (const entry of this.candidates.values()) {
+      if (entry.anonymousAt !== undefined) due = Math.min(due, entry.anonymousAt + this.repeatMs);
+      if (entry.subscribedAt !== undefined) due = Math.min(due, entry.subscribedAt + this.idleMs);
+    }
     for (const entry of this.active.values()) {
-      due = Math.min(due, entry.requestedAt + this.idleMs);
+      if (entry.anonymousAt !== undefined) due = Math.min(due, entry.anonymousAt + this.idleMs);
+      if (entry.subscribedAt !== undefined) due = Math.min(due, entry.subscribedAt + this.idleMs);
       if (now - entry.requestedAt < this.hotMs) {
         due = Math.min(due, entry.requestedAt + this.hotMs);
         if (!this.jobs.has(entry.item.market)) due = Math.min(due, entry.nextRefresh);

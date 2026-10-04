@@ -1,5 +1,6 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { fetchQuotes } from "@/lib/quotes";
+import { trackQuoteRequest } from "@/lib/quoteSubscriptionRequests";
 import { fillEtfMarketCaps } from "@/lib/etfMarketCap";
 import { marketResponse } from "@/lib/marketResponse";
 import { parseMarket } from "@/lib/store";
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
     }));
   if (items.length === 0) return fail(40001, "没有有效的股票代码", 400);
   try {
-    const quotes = await fetchQuotes(items);
+    const tracked = await trackQuoteRequest(request, items);
+    const quotes = await fetchQuotes(items, { tracked });
     if (body.includeMarketCap !== false) await fillEtfMarketCaps(items, quotes);
     return await marketResponse(request, { quotes });
   } catch {

@@ -1,6 +1,7 @@
 import { readJsonBody } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { fetchQuotes } from "@/lib/quotes";
+import { trackQuoteRequest } from "@/lib/quoteSubscriptionRequests";
 import { fillEtfMarketCaps } from "@/lib/etfMarketCap";
 import { parseMarket } from "@/lib/store";
 import type { QuoteItem } from "@/lib/quotes";
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
   if (items.length === 0) return NextResponse.json({ error: "没有有效的股票代码" }, { status: 400 });
 
   try {
-    const quotes = await fetchQuotes(items);
+    const tracked = await trackQuoteRequest(request, items);
+    const quotes = await fetchQuotes(items, { tracked });
     // 完整报价补 ETF 市值；只需现价的持仓刷新可跳过份额查询。
     if (body.includeMarketCap !== false) await fillEtfMarketCaps(items, quotes);
     return NextResponse.json({ quotes });

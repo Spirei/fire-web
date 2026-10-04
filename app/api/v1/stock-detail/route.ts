@@ -1,4 +1,5 @@
 import { fetchQuotes } from "@/lib/quotes";
+import { trackQuoteRequest } from "@/lib/quoteSubscriptionRequests";
 import { fetchDailyKline } from "@/lib/kline";
 import { getRates } from "@/lib/rates";
 import { multiCurrencyCap, MARKET_CURRENCY } from "@/lib/currency";
@@ -41,8 +42,10 @@ export async function GET(request: Request) {
   }
 
   const id = `${market}:${code}`;
+  const items = [{ id, market, code }];
+  const tracked = await trackQuoteRequest(request, items);
   const [quoteRes, ratesRes, klineRes] = await Promise.allSettled([
-    fetchQuotes([{ id, market, code }]),
+    fetchQuotes(items, { tracked }),
     getRates(),
     includeKline ? fetchDailyKline(market, code, 320) : Promise.resolve([])
   ]);
@@ -92,7 +95,9 @@ export async function GET(request: Request) {
           dividendTtm: quote.dividendTtm ?? null,
           averagePrice: quote.averagePrice ?? null,
           marketCap: marketCapRaw > 0 ? marketCapRaw : null,
-          time: quote.time
+          time: quote.time,
+          source: quote.source,
+          ...(quote.cached ? { cached: true } : {})
         }
       : null,
     marketCap,

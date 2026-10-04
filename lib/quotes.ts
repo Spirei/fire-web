@@ -9,6 +9,7 @@ import { normalizeMarketCode } from "./marketCode";
 import { waitForMarketTask } from "./marketDeadline";
 import { ActiveQuotePool } from "./activeQuotePool";
 import { marketSessionState } from "./marketSessions";
+import { QUOTE_DEMAND_MARKETS, type PublicQuoteDemand } from "./quoteDemand";
 
 const DEFAULT_QUOTE_URL = "https://qt.gtimg.cn/q=";
 const DEFAULT_SEARCH_URL = "https://smartbox.gtimg.cn/s3/?v=2&q={q}&t=all";
@@ -187,9 +188,12 @@ interface QuoteRuntime {
 }
 // Next entry points have independent module caches. Keep one public pool per process;
 // update its callbacks on reload so background work uses the current adapters/settings.
-const quoteHost = globalThis as typeof globalThis & { __alcorQuoteRuntimeV1?: QuoteRuntime };
-const quoteRuntime = quoteHost.__alcorQuoteRuntimeV1 ??= {
-  quotes: new MarketDataPool<Quote>(2_000, quote => Number.isFinite(quote.price) && quote.price > 0),
+const quoteHost = globalThis as typeof globalThis & { __alcorQuoteRuntimeV2?: QuoteRuntime; __alcorQuoteRuntimeV1?: QuoteRuntime };
+const previousQuotes = quoteHost.__alcorQuoteRuntimeV1?.quotes;
+quoteHost.__alcorQuoteRuntimeV1?.active?.dispose();
+delete quoteHost.__alcorQuoteRuntimeV1;
+const quoteRuntime = quoteHost.__alcorQuoteRuntimeV2 ??= {
+  quotes: previousQuotes ?? new MarketDataPool<Quote>(2_000, quote => Number.isFinite(quote.price) && quote.price > 0),
   namespace: quoteNamespace, policy: activeQuotePolicy, load: fetchQuotesUnshared
 };
 quoteRuntime.namespace = quoteNamespace; quoteRuntime.policy = activeQuotePolicy; quoteRuntime.load = fetchQuotesUnshared;
@@ -206,7 +210,7 @@ function quoteNamespace(): string {
 }
 
 function activeQuotePolicy(item: QuoteItem, now: number) {
-  if (!/^[A-Z0-9._-]{1,40}$/.test(item.code) || !["US", "HK", "CN", "JP", "KR", "ASSET"].includes(item.market)) return undefined;
+  if (!/^[A-Z0-9._-]{1,40}$/.test(item.code) || !QUOTE_DEMAND_MARKETS.includes(item.market as typeof QUOTE_DEMAND_MARKETS[number])) return undefined;
   if (item.market === "ASSET") return { intervalMs: 10_000, phase: "ASSET" };
   const state = marketSessionState(item.market, new Date(now));
   return { intervalMs: state.active ? 5_000 : 60_000, phase: `${state.localDate}:${state.session}` };
@@ -221,6 +225,11 @@ const activeQuotes = quoteRuntime.active ??= new ActiveQuotePool({
     return quoteRuntime.quotes.fetch(items, namespace, quoteRuntime.load);
   }
 });
+
+export function quoteDemandNamespace() { return quoteRuntime.namespace(); }
+export function syncQuoteSubscriptions(changes: PublicQuoteDemand[], replace = false) {
+  activeQuotes.reconcileSubscriptions(changes, quoteDemandNamespace(), replace);
+}
 
 function activeQuoteSnapshot(items: QuoteItem[], namespace: string): Record<string, Quote> {
   const result: Record<string, Quote> = Object.create(null);
@@ -240,16 +249,16 @@ async function readRequestedQuotes(items: QuoteItem[], namespace: string): Promi
   return { ...snapshot, ...await sharedQuotes.fetch(missing, namespace, fetchQuotesUnshared) };
 }
 
-export async function fetchQuotes(items: QuoteItem[]): Promise<Record<string, Quote>> {
+export async function fetchQuotes(items: QuoteItem[], demand?: { tracked: boolean }): Promise<Record<string, Quote>> {
   const normalized = items.map(normalizedMarketItem), namespace = quoteNamespace();
-  activeQuotes.observe(normalized, namespace);
+  if (!demand?.tracked) activeQuotes.observe(normalized, namespace);
   return readRequestedQuotes(normalized, namespace);
 }
 
 /** Overview waits briefly; its fallback is public market data, never a cached account total. */
-export async function fetchOverviewQuotes(items: QuoteItem[], maxWaitMs = 1_500) {
+export async function fetchOverviewQuotes(items: QuoteItem[], maxWaitMs = 1_500, demand?: { tracked: boolean }) {
   const normalized = items.map(normalizedMarketItem), namespace = quoteNamespace();
-  activeQuotes.observe(normalized, namespace);
+  if (!demand?.tracked) activeQuotes.observe(normalized, namespace);
   const fresh = sharedQuotes.peek(normalized, namespace);
   const hot = activeQuoteSnapshot(normalized, namespace);
   const lookup = readRequestedQuotes(normalized, namespace).catch(() => ({} as Record<string, Quote>));

@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from "./password";
 import type { User } from "./types";
 import { emailVerified } from "./emailVerification";
 import { appIdentity, revokeAppToken, revokeUserAppGrants } from "./appAuth";
+import { releaseUserQuoteSubscriptions } from "./quoteSubscriptionRequests";
 
 export const SESSION_COOKIE = "fire_session";
 export const LEGACY_SESSION_COOKIE = "sto" + "cklog_session";
@@ -377,6 +378,8 @@ export function deleteUserById(userId: string): boolean {
     if (admins.n <= 1) return false;
   }
   purgeResourceUser(userId);
+  // The foreign key also cascades on DELETE; update a running shared pool immediately.
+  releaseUserQuoteSubscriptions(userId);
   return db.prepare("DELETE FROM users WHERE id = ?").run(userId).changes > 0;
 }
 

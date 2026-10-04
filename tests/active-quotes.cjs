@@ -42,7 +42,7 @@ Module._load = function(id, parent, ...rest) {
   return originalLoad.call(this, id, parent, ...rest);
 };
 global.fetch = async () => { throw Error('No real network permitted'); };
-const { fetchQuotes, fetchOverviewQuotes } = require('../lib/quotes.ts');
+const { fetchQuotes, fetchOverviewQuotes, syncQuoteSubscriptions } = require('../lib/quotes.ts');
 const item = (id, code = 'AAPL') => ({ id, code, market: 'US' });
 let count = 0;
 async function test(name, run) { await run(); console.log('PASS ' + name); count++; }
@@ -93,6 +93,20 @@ async function test(name, run) { await run(); console.log('PASS ' + name); count
     slow.release(); const fresh = (await read)['third-day']; await flush();
     assert.equal(fresh.price, 123); assert.equal(fresh.cached, undefined); assert.equal(fresh.time, '2026-10-07 11:02:03');
     await advance(7 * DAY); assert.equal(pool.stats().active, 0); assert.equal(timers.size, 0);
+  });
+  await test('tracked foreground and overview reads do not create anonymous leases that survive private cancellation', async () => {
+    load = async rows => new Map(rows.map(row => [row.id, raw]));
+    const security = { market: 'US', code: 'GOOG', id: 'private-owner' };
+    syncQuoteSubscriptions([{ item: security, requestedAt: now, reads: 2 }]);
+    const before = calls.length;
+    assert.equal((await fetchQuotes([security], { tracked: true }))['private-owner'].price, 100);
+    await advance(0);
+    await fetchQuotes([{ ...security, id: 'second-owner' }], { tracked: true });
+    await fetchOverviewQuotes([security], 1500, { tracked: true });
+    assert.equal(calls.length, before + 1); assert.equal(pool.stats().active, 1);
+    syncQuoteSubscriptions([{ item: security }]);
+    assert.equal(pool.stats().active, 0); assert.equal(pool.stats().candidates, 0);
+    await advance(90_000); assert.equal(calls.length, before + 1); assert.equal(timers.size, 0);
   });
   await test('source changes invalidate prior active snapshots before the next foreground read', async () => {
     load = async rows => new Map(rows.map(row => [row.id, raw]));

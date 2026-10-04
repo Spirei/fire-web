@@ -266,6 +266,9 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | GET | `/api/v2/celebs/{id}` | public |
 | GET | `/api/v2/celebs/{id}/returns` | public |
 | POST | `/api/v2/quotes` | public |
+| GET | `/api/v2/quote-subscriptions` | portfolio.read |
+| POST | `/api/v2/quote-subscriptions` | portfolio.write |
+| DELETE | `/api/v2/quote-subscriptions` | portfolio.write |
 | POST | `/api/v2/charts` | public |
 | GET | `/api/v2/kline` | public |
 | GET | `/api/v2/index-kline` | public |
@@ -347,6 +350,23 @@ quotes data={quotes:{证券ID:报价}}，charts data={charts:{证券ID:分时}}�
 GET `/api/v2/assets` 或 assets/lookup 读取目录/匹配图标。POST upload 只用于明确 profile.write 的本人头像，不开放公共素材管理员写入；multipart kind=avatar、file，最大5MiB并校验内容。图片URL按当前origin解析，公开资源不会授予个人资料权限。
 
 </details>
+
+### 用户行情订阅（v2）
+
+两版 `auth/config` 的 `quote_subscriptions_contract` 声明固定 `/api/v2/quote-subscriptions`、读写 scope、支持市场、单次100只、每用户256只、七天空闲到期和90秒热需求。客户端先检查该能力；自动登记行情读取不需要额外请求。历史 K 线、分时、`stock-detail?view=history` 和订阅列表查询不登记或续期。
+
+| 操作 | 请求 | 效果 |
+| --- | --- | --- |
+| 查看 | GET `/api/v2/quote-subscriptions`，可选 `?market=HK` | 仅返回本人未到期订阅，不续期 |
+| 订阅/续期 | POST `/api/v2/quote-subscriptions`，`{"items":[{"market":"HK","code":"700"}]}` | 规范代码去重，更新本人期限，立即具备入池资格 |
+| 取消部分 | DELETE 同路径，`{"items":[{"market":"HK","code":"00700"}]}` | 只移除本人所列需求 |
+| 清空本人 | DELETE 同路径，`{"all":true}` | 只移除本人全部需求 |
+
+只接受 App Bearer；GET 需 `portfolio.read`，POST/DELETE 需 `portfolio.write`，不增加旧授权范围。证券支持 US/HK/CN/JP/KR/ASSET；请求不携带记录ID、用户ID或金额，未知字段/市场/无效代码/超过100只为400，超过64KiB为413，超出本人256只为409且整批不写入。自动登记超过本人容量时只淘汰本人的最久未读订阅，不阻塞行情读取。
+
+成功 `data={subscriptions:[{market:"HK",code:"00700",lastRequestedAt:1791014890000,expiresAt:1791619690000,state:"hot"}]}`；时间为 Unix 毫秒，`state` 为最近90秒仍有需求的 `hot` 或保留但暂停主动读取的 `dormant`，不代表报价新鲜度、交易所正在开市或强制实时推送。响应 `no-store, private`，不含其他订阅者及用户账户信息。
+
+每个用户分别以最后真实请求时间计算七天期限，后台更新与列表查询不续期。取消、到期及删除账户只释放本人需求，其他用户或匿名读者仍需该证券时继续保留共享报价；取消不改变持仓、自选、订单或资金，下次实际行情读取会重新登记。已开始的共享报价读取允许完成，但结果不会重新创建已取消的订阅。订阅与到期清理持久化；重启后第一次认证需求恢复未过期条目，休眠证券不会因恢复而批量读取上游。共享调度仍限当前服务进程，多个服务器尚不统一源站任务。
 
 ### 6.1 个股详情
 
@@ -524,7 +544,7 @@ Web“公司”页与 iOS App 共用同一份公司资料契约。
 
 服务端分时缓存 30 秒，行情结果共享 2 秒。列表页建议只请求当前可见证券（Web 当前每页 6 只）；iOS 前台活跃时建议每 30 秒刷新分时，进入后台或非交易时段停止轮询。
 
-v1/v2 共用活跃行情池，App 无需额外订阅接口：同一规范证券七天内第二次独立请求后进入主动更新，同一次请求的重复记录只计一次。最近90秒仍有读取时按市场独立调度（现有时段判断为活跃时目标五秒，午休/闭市/周末六十秒，加密货币十秒），90秒无人请求后休眠，下次读取恢复，连续七天无人请求自动移除；后台更新不续期。每市场一批、每批最多20只，失败退避；池最多256只，首次需求最多1024只，容量满优先淘汰最久未读的休眠条目。需求为进程内公共证券记录，重启后重建，不保存用户或账户金额。
+v1/v2 共用按市场分开的公共行情池。已认证的批量报价、资产总览和完整个股详情读取会自动登记本人证券需求；同一请求的重复记录与代码别名只计一次，第二次独立请求后入池。最近90秒仍有读取时按市场独立调度（现有时段判断为活跃时目标五秒，午休/闭市/周末六十秒，加密货币十秒），无人读取后休眠，下次读取恢复；连续七天无人请求自动释放，后台更新不续期。每市场独立最多256个活跃条目、一个在途批次、每批20只，首次/待准入需求最多1024只；容量满时优先释放同市场最久未读的休眠条目。公共报价池只保留市场和规范代码，价格不持久化，不共享用户持仓或账户金额。本人订阅存入私有数据库，首次认证行情或订阅读取恢复未到期需求；匿名需求仍为进程内记录。
 
 七天是需求保留期限，不是报价有效期。活跃市场最多十秒、闭市最多六十秒、加密货币最多十五秒的同一时段池快照可先返回；其中超出两秒共享缓存的报价带可选 `cached:true`，保留真实 `time/source/session`，超龄或时段改变继续正常读取。总览的 `quoteStatus.cached` 包含这些记录，`pending` 包含已到期排队或进行中的池更新；原有一分钟总览兜底与缺失状态保持。市场时段判断不推断节假日或临时停市，实际报价时间仍以源数据为准。完整规则见 [资产总览与活跃行情池](api-spec.md)。
 

@@ -8,6 +8,7 @@ import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
 import { installRecordsContract } from "./recordsSchema";
+import { installQuoteSubscriptions } from "./quoteSubscriptionsSchema";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "fire.db");
@@ -1204,6 +1205,7 @@ export function getDb(): Database.Database {
       db.pragma("journal_mode = WAL");
       migrate(db);
       installRecordsContract(db);
+      installQuoteSubscriptions(db);
       seed(db);
     } catch (error) {
       db.close();
