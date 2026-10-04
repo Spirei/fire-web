@@ -60,11 +60,11 @@ security.version 为2，read_scope / write_scope 为 security.read / security.wr
 </details>
 
 <details>
-<summary>额外权限 · 用户明确申请后重新验证</summary>
+<summary>额外权限 · 用户明确申请</summary>
 
-POST `/api/v2/auth/permissions`，携带当前 App Bearer：`{client_id:"fire-ios",scope:"profile.write",currentPassword}`。scope 为明确申请的范围，最终并入原 scope，security.write/feed.write 需各自 read；普通登录、启动及恢复连接不能自动扩权。
+POST `/api/v2/auth/permissions`，携带当前 App Bearer：`{client_id:"fire-ios",scope:"profile.write"}`。scope 为明确申请的范围，最终并入原 scope，security.write/feed.write 需各自 read；普通登录、启动及恢复连接不能自动扩权。
 
-无二步验证直接返回 authenticated；启用二步返回 purpose:"permissions" 的挑战，完成 login/totp 时必须携带同一来源 grant 的当前有效 access token（刷新后的同 grant token 可用）。另一用户/另一 grant 不能消费挑战。
+有效本人连接明确申请后直接返回 authenticated，不要求密码或二次验证码，也不创建 permissions 挑战。native_login.version=2，permissions_authentication="current_grant"，permissions_requires_password=false，permissions_requires_2fa=false；旧客户端的 currentPassword 字段仍接受但不使用。只有实际修改邮箱、密码、两步验证、删除密钥/设备/账号等敏感操作才校验凭据，登录验证保持不变。
 
 成功产生新 grant，返回 replaces_grant_id；旧 grant 权限不变。客户端原子保存新 access、refresh 与 origin/grant/apiVersion 后再撤销旧 grant。失败、取消、过期或限流不清旧连接；只有当前 Bearer 确实无效时返回 HTTP401/40101或40102。
 
@@ -111,7 +111,7 @@ Authorization: Bearer fat_<App access token>
 | feed.read / feed.write | 本人动态读取 / 编辑、生成和讨论 |
 | security.read / security.write | 本人账户安全读取 / 管理 |
 
-所有授权必须有 portfolio.read；默认 portfolio.read portfolio.write 保持不变。feed.write 必须同时有 feed.read，security.write 必须同时有 security.read。可选范围必须由用户明确请求，经原生扩权重新验证或网页 PKCE 同意；刷新令牌或切换版本不增加权限。App 授权不继承网站管理员权限。
+所有授权必须有 portfolio.read；默认 portfolio.read portfolio.write 保持不变。feed.write 必须同时有 feed.read，security.write 必须同时有 security.read。可选范围必须由用户明确请求，经有效本人连接显式申请或网页 PKCE 同意；刷新令牌或切换版本不增加权限。App 授权不继承网站管理员权限。
 
 </details>
 

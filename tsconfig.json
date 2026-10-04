@@ -40,6 +40,8 @@
     "node_modules",
     ".next-dev",
     ".next",
-    ".next-qa"
+    ".next-qa",
+    "data",
+    "public"
   ]
 }

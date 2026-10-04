@@ -9,12 +9,15 @@
 ```json
 {
   "supported": true,
-  "version": 1,
+  "version": 2,
   "api_version": 2,
   "client_id": "fire-ios",
   "login_path": "/api/v2/auth/login",
   "two_factor_path": "/api/v2/auth/login/totp",
   "permissions_path": "/api/v2/auth/permissions",
+  "permissions_authentication": "current_grant",
+  "permissions_requires_password": false,
+  "permissions_requires_2fa": false,
   "scope": "portfolio.read portfolio.write",
   "scopes_supported": ["portfolio.read", "portfolio.write", "profile.write", "feed.read", "feed.write", "security.read", "security.write"],
   "factors": ["totp", "backup_code"],
@@ -74,17 +77,17 @@
 
 ## 明确申请额外权限
 
-基础登录不走网页 OAuth 同意。用户明确执行修改头像/资料、账户安全或动态操作后，客户端展示将申请的权限并要求重新验证账户；不能在启动、恢复或普通登录时自动申请所有权限。
+基础登录不走网页 OAuth 同意。用户明确执行修改头像/资料、账户安全或动态操作后，客户端展示将申请的权限，由有效本人连接确认；不能在启动、恢复或普通登录时自动申请所有权限。
 
 `POST /api/v2/auth/permissions`，携带当前有效 App access token：
 
 ```json
-{"client_id":"fire-ios","scope":"profile.write","currentPassword":"当前密码"}
+{"client_id":"fire-ios","scope":"profile.write"}
 ```
 
 `scope` 是本次明确申请的权限；只允许已公布 scope，最终 scope 是原 grant 与请求的并集。`security.write` 必须同时具有或申请 `security.read`；`feed.write` 同理要求 `feed.read`。不允许管理员、文件导出或其他未公布权限。
 
-无需二步时返回 `authenticated`；开启二步时先返回上述挑战结构，`purpose` 为 `permissions`，完成 `/auth/login/totp` 时须携带当前有效、同一 grant 的 Bearer。refresh 后的新 access token 可完成该 grant 的挑战，另一用户或另一 grant 不可。响应中的 `replaces_grant_id` 指向旧 grant。
+有效本人连接明确申请后直接返回 `authenticated`，不要求密码或二次验证码，不创建权限挑战。发现 `native_login.version=2`，`permissions_authentication="current_grant"`，`permissions_requires_password=false`，`permissions_requires_2fa=false`。旧 `currentPassword` 字段兼容接受但不使用；实际敏感写操作仍校验凭据。响应中的 `replaces_grant_id` 指向旧 grant。
 
 成功产生新 grant，旧 grant 保留原权限；客户端先原子保存新凭据及 `origin/grant/apiVersion`，切换成功后按原 `auth/revoke` 撤销旧连接。失败、取消、挑战过期或限流都不能清除旧凭据。不要单独保存 access 而丢弃新 refresh，也不要在失败时重放写请求。
 
@@ -95,7 +98,7 @@
 | 400 | 40002 | 请求体、类型或固定 client 无效 | 修正请求 |
 | 403 | 40103 | 账号密码/当前密码不正确 | 保留旧连接，显示登录错误 |
 | 403 | 40104 | 验证码或备用码不正确 | 保留旧连接，可在挑战有效期间重试 |
-| 403 | 40105 | 挑战无效、已使用、过期或账户安全状态改变 | 重新开始本次登录/扩权，保留旧连接 |
+| 403 | 40105 | 挑战无效、已使用、过期或账户安全状态改变 | 重新开始本次登录，保留旧连接 |
 | 403 | 40301 | 来源或请求权限不允许 | 不降级，不清旧连接 |
 | 429 | 42901 | IP、账户、全局或挑战尝试限额 | 等待/重新开始；保留旧连接 |
 | 401 | 40101/40102 | 仅扩权时当前 App Bearer 缺失或失效 | 沿用现有连接恢复策略 |
@@ -107,4 +110,4 @@ access 为 15 分钟，refresh 轮换、30 天空闲/90 天最长、重复 refre
 
 ## 服务端验证
 
-`tests/app-native-login.cjs` 的14组回归只使用临时 SQLite，覆盖发现、完整 User 与头像、普通用户权限、Web 会话隔离、请求和共享限流、挑战过期与重放、备用码原子消费、扩权绑定与刷新轮换、异步撤销、设备数量限制和脱敏审计。旧二步密钥成功加密迁移时，仅同步仍对应同一安全状态的 grant/原生挑战摘要绑定，不增加权限、不恢复撤销或旧状态；验证拒绝与内部失败回滚迁移。全量 review、独立类型检查、生产构建与公开/部署审计另行执行；客户端仍需以实际部署发现为准。
+`tests/app-native-login.cjs` 的15组回归只使用临时 SQLite，覆盖发现、完整 User 与头像、普通用户权限、Web 会话隔离、请求和共享限流、挑战过期与重放、备用码原子消费、免密扩权、敏感写操作仍受保护与刷新轮换、异步撤销、设备数量限制和脱敏审计。旧二步密钥成功加密迁移时，仅同步仍对应同一安全状态的 grant/原生挑战摘要绑定，不增加权限、不恢复撤销或旧状态；验证拒绝与内部失败回滚迁移。全量 review、独立类型检查、生产构建与公开/部署审计另行执行；客户端仍需以实际部署发现为准。

@@ -42,7 +42,7 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
  await test('explicit native upgrade keeps the old connection and grants the same identity access on either selected version',async()=>{
   const f=fixture(),old=grant(f.user,native.APP_SCOPE),permissions=load('app/api/v2/auth/permissions/route.ts');
   const upgrade=async(scope,currentPassword)=>{const response=await permissions.POST(new Request(origin+'/api/v2/auth/permissions',{method:'POST',headers:{authorization:'Bearer '+old.access_token,'content-type':'application/json'},body:JSON.stringify({client_id:'fire-ios',scope,currentPassword})}));return {status:response.status,...await response.json()};};
-  assert.equal((await upgrade('feed.read feed.write','wrong')).code,40103);
+  assert.equal((await upgrade('feed.read feed.write')).status,200);
   assert.equal((await upgrade('feed.write',password)).status,403);
   assert.equal((await call(1,'groups','GET',undefined,old.access_token)).status,403);
   const result=await upgrade('feed.read feed.write',password);assert.equal(result.status,200);assert.equal(result.data.apiVersion,2);assert.equal(result.data.replaces_grant_id,old.grant_id);

@@ -39,8 +39,8 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
   }
   const f=fixture();assert.throws(()=>grant(f.user,'portfolio.read resources.write'));
   const permissions=load('app/api/v2/auth/permissions/route.ts'),base=grant(f.user,native.APP_SCOPE);
-  const upgrade=async(scope,pwd=password)=>{const r=await permissions.POST(new Request(origin+'/api/v2/auth/permissions',{method:'POST',headers:{authorization:'Bearer '+base.access_token,'content-type':'application/json'},body:JSON.stringify({client_id:'fire-ios',scope,currentPassword:pwd})}));return {status:r.status,...await r.json()};};
-  assert.equal((await upgrade('resources.write')).status,403);assert.equal((await upgrade('resources.read resources.write','wrong')).code,40103);
+  const upgrade=async(scope,pwd=undefined)=>{const r=await permissions.POST(new Request(origin+'/api/v2/auth/permissions',{method:'POST',headers:{authorization:'Bearer '+base.access_token,'content-type':'application/json'},body:JSON.stringify({client_id:'fire-ios',scope,currentPassword:pwd})}));return {status:r.status,...await r.json()};};
+  assert.equal((await upgrade('resources.write')).status,403);assert.equal((await upgrade('resources.read resources.write',undefined)).status,200);
   const elevated=await upgrade('resources.read resources.write');assert.equal(elevated.status,200);assert(elevated.data.scope.includes('resources.write'));assert(native.authenticateAppAccess(base.access_token,new Request(origin+'/api/v2/auth/me')));
   for(const v of [1,2])assert.equal((await call(v,'','GET',undefined,elevated.data.access_token)).status,200);
  });

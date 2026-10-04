@@ -31,7 +31,7 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | `auth/config` | GET | public |
 | `auth/login` | POST | credential |
 | `auth/login/totp` | POST | credential |
-| `auth/permissions` | POST | portfolio.read；当前密码与已开启的二步验证 |
+| `auth/permissions` | POST | 有效本人 App grant；明确申请 scope，不重复验证密码/二步 |
 | `market-calendar` | GET | public（仅 v2） |
 | `market-calendar/batch` | GET | public（仅 v2） |
 | `auth/token` | POST | credential |
@@ -109,7 +109,7 @@ security接口的完整payload见 native-account-security-v1.md，将其中/api/
 
 ## App 内账号密码登录
 
-两版 auth/config 的 native_login 声明固定 v2 登录、二步与扩权路径。基础登录仅授予 portfolio.read portfolio.write，返回15分钟 access、轮换 refresh、grant、apiVersion 与同 auth/me 的完整 User；不建立 Web 会话。TOTP/备用码使用5分钟、最多8次、单次成功消费的独立摘要挑战。额外 profile/feed/security 权限由用户明确申请并重新校验，成功签发新 grant，客户端原子保存后再撤销旧 grant；失败保留旧连接。
+两版 auth/config 的 native_login 声明固定 v2 登录、二步与扩权路径。基础登录仅授予 portfolio.read portfolio.write，返回15分钟 access、轮换 refresh、grant、apiVersion 与同 auth/me 的完整 User；不建立 Web 会话。TOTP/备用码使用5分钟、最多8次、单次成功消费的独立摘要挑战。额外 profile/feed/security 权限由用户通过有效本人连接明确申请，不重复验证密码或二步，成功签发新 grant，客户端原子保存后再撤销旧 grant；失败保留旧连接。
 
 完整发现、请求、响应和错误码见 [native-app-login-v2.md](native-app-login-v2.md)。未声明 native_login 的服务器不可猜端点或降级为 v1 长期 Web token。测试只使用临时数据库，不表示线上已部署；新登录凭证和既有 PKCE 凭证使用同一刷新、撤销和设备管理服务。
 

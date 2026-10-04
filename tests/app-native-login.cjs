@@ -23,14 +23,14 @@ const valid=token=>native.authenticateAppAccess(token,new Request(origin+'/api/v
 const call=async(route,path,body,token,headers)=>{const res=await routes[route].POST(req(path,body,token,headers));return {status:res.status,headers:res.headers,...await res.json()};};
 const login=(f,changes={},headers={})=>call('login','login',{...loginBody(f),...changes},undefined,headers);
 const factor=(challenge,code,token)=>call('factor','login/totp',{client_id:'fire-ios',challenge_token:challenge,code},token);
-const permissions=(f,scope,currentPassword=password)=>call('permissions','permissions',{client_id:'fire-ios',scope,currentPassword},f.old.access_token);
+const permissions=(f,scope,currentPassword=undefined)=>call('permissions','permissions',{client_id:'fire-ios',scope,currentPassword},f.old.access_token);
 const pending=token=>db.prepare('SELECT * FROM app_login_challenges WHERE token_hash=?').get(native.appTokenHash(token));
 async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await run();console.log('PASS '+name);count++;}
 (async()=>{
  await test('both config versions explicitly discover fixed v2 native paths and base scope',async()=>{
   for(const v of [1,2]){
    const route=load(`app/api/v${v}/auth/config/route.ts`),body=await(await route.GET(new Request(origin+`/api/v${v}/auth/config`))).json(),c=body.data.native_login;
-   assert(c.supported);assert.equal(c.api_version,2);assert.equal(c.version,1);assert.equal(c.client_id,'fire-ios');assert.equal(c.scope,native.APP_SCOPE);
+   assert(c.supported);assert.equal(c.api_version,2);assert.equal(c.version,2);assert.equal(c.permissions_authentication,"current_grant");assert.equal(c.permissions_requires_password,false);assert.equal(c.permissions_requires_2fa,false);assert.equal(c.client_id,'fire-ios');assert.equal(c.scope,native.APP_SCOPE);
    assert.equal(c.login_path,'/api/v2/auth/login');assert.equal(c.two_factor_path,'/api/v2/auth/login/totp');assert.equal(c.permissions_path,'/api/v2/auth/permissions');assert.equal(c.challenge_expires_in,300);
   }
  });
@@ -80,7 +80,7 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
   assert.equal((await factor(c,'bad-code')).code,40104);assert.equal(row(f.user.id).totp_secret,f.secret);assert(valid(f.old.access_token));assert.equal(pending(c).attempts,1);
  });
  await test('successful legacy factor migration preserves existing grants and pending challenges without reviving invalid ones',async()=>{
-  const f=fixture(true,true),c=(await permissions(f,'profile.write')).data.challenge_token,other=(await login(f)).data.challenge_token;
+  const f=fixture(true,true),c=(await login(f)).data.challenge_token,other=(await login(f)).data.challenge_token;
   const invalid=db.transaction(()=>native.createNativeAppGrant(f.user.id,native.APP_SCOPE,'stale')).immediate();
   db.prepare("UPDATE app_grants SET security_stamp='older-state' WHERE id=?").run(invalid.grant_id);
   const revoked=db.transaction(()=>native.createNativeAppGrant(f.user.id,native.APP_SCOPE,'revoked')).immediate();native.revokeAppGrant(revoked.grant_id);
@@ -95,21 +95,31 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
   assert.deepEqual(row(f.user.id),before);assert.equal(pending(c).attempts,0);assert(valid(f.old.access_token));assert.equal((await factor(c,f.backup)).status,200);
  });
  await test('explicit permissions create a separate grant while old scopes remain unchanged',async()=>{
-  const f=fixture();assert.equal((await permissions(f,'admin')).code,40301);assert.equal((await permissions(f,'security.write')).code,40301);assert.equal((await permissions(f,'profile.write','wrong')).code,40103);
+  const f=fixture();assert.equal((await permissions(f,'admin')).code,40301);assert.equal((await permissions(f,'security.write')).code,40301);assert.equal((await permissions(f,'profile.write','wrong')).status,200);
   const r=await permissions(f,'profile.write');assert.equal(r.status,200);assert.equal(r.data.replaces_grant_id,f.old.grant_id);assert.notEqual(r.data.grant_id,f.old.grant_id);assert.equal(r.data.user.capabilities.profileWrite,true);assert.equal(r.data.user.capabilities.twoFactorWrite,false);assert.equal(valid(f.old.access_token).scope,native.APP_SCOPE);
   const browser=auth.createSession(f.user.id),denied=await call('permissions','permissions',{client_id:'fire-ios',scope:'security.read',currentPassword:password},undefined,{cookie:'fire_session='+browser});assert.equal(denied.status,401);
  });
- await test('permission challenges bind the source grant and accept its rotated access token',async()=>{
-  const f=fixture(true),other=fixture(),c=(await permissions(f,'security.read security.write')).data.challenge_token;
-  assert.equal(pending(c).source_grant_id,f.old.grant_id);assert.equal((await factor(c,f.backup,other.old.access_token)).code,40105);assert(pending(c));assert(valid(other.old.access_token));
-  const same=db.transaction(()=>native.createNativeAppGrant(f.user.id,native.APP_SCOPE,'another')).immediate();assert.equal((await factor(c,f.backup,same.access_token)).code,40105);assert(valid(same.access_token));
-  const rotated=native.refreshAppTokens('fire-ios',f.old.refresh_token);const done=await factor(c,f.backup,rotated.access_token);assert.equal(done.status,200);assert.equal(done.data.replaces_grant_id,f.old.grant_id);assert.equal(done.data.user.capabilities.twoFactorWrite,true);assert.equal(valid(rotated.access_token).scope,native.APP_SCOPE);
+ await test('explicit permissions require no password or factor and leave sensitive mutations protected',async()=>{
+  const f=fixture(true),before=row(f.user.id),challenges=db.prepare('SELECT COUNT(*) n FROM app_login_challenges').get().n;
+  const rotated=native.refreshAppTokens('fire-ios',f.old.refresh_token);
+  const r=await call('permissions','permissions',{client_id:'fire-ios',scope:'security.read security.write'},rotated.access_token);
+  assert.equal(r.status,200);assert.equal(r.data.status,'authenticated');assert.equal(r.data.challenge_token,undefined);assert.equal(r.data.replaces_grant_id,f.old.grant_id);assert.equal(r.data.user.capabilities.twoFactorWrite,true);
+  assert.deepEqual(row(f.user.id),before);assert.equal(db.prepare('SELECT COUNT(*) n FROM app_login_challenges').get().n,challenges);assert.equal(valid(rotated.access_token).scope,native.APP_SCOPE);
+  const security=load('lib/appSecurity.ts');
+  const denied=await security.securityResponse(()=>security.mutateTotp(req('totp/disable',{},r.data.access_token),'disable'));
+  assert.equal(denied.status,403);assert.equal((await denied.json()).code,40103);assert.deepEqual(row(f.user.id),before);
  });
  await test('revocation during permission body reading blocks upgrade without a Cookie fallback',async()=>{
   const f=fixture(),body=load('lib/requestBody.ts'),read=body.readJsonBody,browser=auth.createSession(f.user.id),before=db.prepare('SELECT COUNT(*) n FROM app_grants').get().n;
   body.readJsonBody=async(...args)=>{const result=await read(...args);native.revokeAppGrant(f.old.grant_id);return result;};
   try{const r=await call('permissions','permissions',{client_id:'fire-ios',scope:'profile.write',currentPassword:password},f.old.access_token,{cookie:'fire_session='+browser});assert.equal(r.code,40102);}finally{body.readJsonBody=read;}
   assert.equal(db.prepare('SELECT COUNT(*) n FROM app_grants').get().n,before);assert(auth.getUserByToken(browser));
+ });
+ await test('permission grant failure preserves the source connection and credentials',async()=>{
+  const f=fixture(true),before=row(f.user.id),count=db.prepare('SELECT COUNT(*) n FROM app_grants').get().n;
+  db.exec("CREATE TEMP TRIGGER permissions_fail BEFORE INSERT ON app_grants BEGIN SELECT RAISE(ABORT,'internal detail'); END");
+  try{const r=await permissions(f,'security.read security.write');assert.equal(r.status,500);assert(!JSON.stringify(r).includes('internal detail'));}finally{db.exec('DROP TRIGGER permissions_fail');}
+  assert.deepEqual(row(f.user.id),before);assert(valid(f.old.access_token));assert.equal(db.prepare('SELECT COUNT(*) n FROM app_grants').get().n,count);
  });
  await test('device cap retains the grant being explicitly upgraded even when it is oldest',async()=>{
   const f=fixture();db.prepare('UPDATE app_grants SET created_at=? WHERE id=?').run(Date.now()-1000,f.old.grant_id);

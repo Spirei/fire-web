@@ -17,10 +17,10 @@ v1 的路径使用 `/api/v1`。`feed_contract.version` 是本合约修订号，�
 用户主动开启动态时，按发现中的 `native_login.permissions_path` 调用固定 v2 原生扩权：
 
 ```json
-{"client_id":"fire-ios","scope":"feed.read feed.write","currentPassword":"<用户本次输入>"}
+{"client_id":"fire-ios","scope":"feed.read feed.write"}
 ```
 
-携带原 App Bearer。无二步时返回 `status:authenticated`；有二步时返回 `purpose:permissions` 的5分钟独立挑战，再携带同一 grant 的有效 Bearer，向 `native_login.two_factor_path` 提交 `{client_id,challenge_token,code}`。成功返回新的 access/refresh、scope、grant_id、user 和 `replaces_grant_id`；先原子保存新凭据并确认本人身份，再用原 grant 的凭据撤销旧连接。失败、取消或保存未确认时保留旧连接，不自动重放写入。详见 [原生登录与扩权](api-spec-v2.md)。
+携带原 App Bearer。直接返回 `status:authenticated`，不要求密码或二次验证码；发现声明 `permissions_authentication:current_grant`。成功返回新的 access/refresh、scope、grant_id、user 和 `replaces_grant_id`；先原子保存新凭据并确认本人身份，再用原 grant 的凭据撤销旧连接。失败、取消或保存未确认时保留旧连接，不自动重放写入。详见 [原生登录与扩权](api-spec-v2.md)。
 
 原生扩权响应 `apiVersion:2` 描述该凭证签发端点；它不要求已有 v1 连接切换业务前缀，新 grant 可继续使用原选定版本。也可沿用已有网页 PKCE，明确同意原 scope 加动态范围。普通 token 刷新、页面切换和登录不增加权限。
 

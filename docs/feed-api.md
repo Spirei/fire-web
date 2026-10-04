@@ -8,7 +8,7 @@
 
 - `feed.read`：本人动态、指示、任务、讨论。
 - `feed.write`：修改指示、生成、喜欢/隐藏、讨论，必须同时申请 `feed.read`。
-- 默认/旧 grant 不扩权；App 通过原生明确扩权并重新验证密码/因子，或网页PKCE明确同意取得权限，`portfolio.write` 不能代替动态权限。有效grant缺权限返回40301，保留连接。
+- 默认/旧 grant 不扩权；App 通过有效本人连接明确申请额外权限，或网页PKCE明确同意取得权限，`portfolio.write` 不能代替动态权限。有效grant缺权限返回40301，保留连接。
 - `/api/v1/auth/config` 增加 `feed_path,feed_scopes`；`auth/me.capabilities` 增加实际 `feedRead,feedWrite`。跨账号资源统一 404，不接受 `userId`。
 - 两版发现的可选 `feed_contract` 修订1声明本版 `groups_path` 和 `subscriptions_test_path`，用于确认App分组管理及订阅测试已放行。App本轮仅使用news，完整冻结合约见 [App新闻动态](app-feed-news.md)。
 
