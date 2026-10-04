@@ -40,6 +40,25 @@ export function poolQuery(params: Pick<URLSearchParams, "get">, admin: boolean) 
     query: (params.get("q") ?? "").slice(0, 80), page: Math.max(1, Math.min(1000, Math.floor(Number(params.get("p")) || 1))) };
 }
 
+/** Retain occupied positions; fill vacancies without moving other cards. */
+export function poolSlots(keys: string[], previous: Array<string | null>, capacity: number, selected?: string): Array<string | null> {
+  const unique = [...new Set(keys)], available = new Set(unique);
+  const slots = Array.from({ length: capacity }, (_, index) => {
+    const key = previous[index];
+    return key && available.has(key) ? key : null;
+  });
+  const assigned = new Set(slots.filter((key): key is string => !!key));
+  for (const key of unique) {
+    if (assigned.has(key)) continue;
+    const empty = slots.indexOf(null);
+    if (empty < 0) break;
+    slots[empty] = key; assigned.add(key);
+  }
+  // A selection from any list page is visible in both sizes of the box.
+  if (selected && available.has(selected) && !assigned.has(selected)) slots[capacity - 1] = selected;
+  return slots;
+}
+
 /** Stable slots prevent a routine snapshot update from shuffling the whole box. */
 export function tokenPose(key: string, index: number) {
   let hash = 2166136261;
@@ -47,6 +66,6 @@ export function tokenPose(key: string, index: number) {
   const n = hash >>> 0;
   return { x: 24 + ([2, 3, 1, 4, 0, 5][index % 6]) * 10.5 + (n % 5 - 2) * .5,
     y: 44 + ([1, 0, 2][Math.floor(index / 6)]) * 13 + ((n >>> 4) % 5 - 2) * .4,
-    mobileX: 25 + ([1, 2, 0, 3][index % 4]) * 16.5, mobileY: 43 + ([1, 0, 2][Math.floor(index / 4) % 3]) * 12.8,
+    mobileX: 25 + ([1, 2, 0, 3][index % 4]) * 16.5, mobileY: 44.2 + ([1, 0, 2][Math.floor(index / 4) % 3]) * 12.8,
     rotation: (n % 15) - 7, delay: Math.min(index, 12) * 65 };
 }

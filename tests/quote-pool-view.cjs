@@ -46,6 +46,22 @@ const rows=()=>db.prepare('SELECT * FROM quote_subscriptions ORDER BY user_id,ma
   assert.equal(routing.workspaceDestination('unknown',tabs,memory,'tab'),null);
   const pos=Array.from({length:18},(_,n)=>model.tokenPose('US:SYM'+n,n));assert(pos.every(p=>p.x>=19&&p.x<=81&&p.y>=39&&p.y<=75));
   assert.deepEqual(model.tokenPose('HK:00700',3),model.tokenPose('HK:00700',3));console.log('PASS expiry, candidate state, URL validation and deterministic bounded box positions');
+  const keys=Array.from({length:30},(_,n)=>'US:SYM'+n);
+  let desktop=model.poolSlots(keys,[],18), mobile=model.poolSlots(desktop.filter(Boolean),[],12);
+  const beforeSlots=[...desktop];
+  desktop=model.poolSlots([...keys].reverse(),desktop,18);assert.deepEqual(desktop,beforeSlots,'background reordering cannot move cards');
+  desktop=model.poolSlots(keys.filter(key=>key!==keys[2]),desktop,18);
+  assert.equal(desktop[2],keys[18]);assert.equal(desktop[3],beforeSlots[3]);
+  for(const selected of [keys[29],keys[28],keys[27],keys[0]]){
+    desktop=model.poolSlots(keys,desktop,18,selected);mobile=model.poolSlots(desktop.filter(Boolean),mobile,12,selected);
+    assert(desktop.includes(selected)&&mobile.includes(selected));
+    assert(mobile.filter(Boolean).every(key=>desktop.includes(key)));
+    assert.equal(new Set(mobile.filter(Boolean)).size,mobile.filter(Boolean).length);
+  }
+  desktop=model.poolSlots([keys[27]],desktop,18,keys[27]);mobile=model.poolSlots(desktop.filter(Boolean),mobile,12,keys[27]);
+  assert.equal(desktop.filter(Boolean).length,1);assert.equal(mobile.filter(Boolean).length,1);
+  assert.deepEqual(model.poolSlots([],desktop,18),Array(18).fill(null));
+  console.log('PASS stable vacancies, overflow selection, independent mobile slots and filter removal');
   const Pool=require(path.join(root,'lib/activeQuotePool.ts')).ActiveQuotePool;
   let now=1000,timers=0,reads=0;
   const pool=new Pool({now:()=>now,currentNamespace:()=> 'public',policy:()=>({intervalMs:5000,phase:'REGULAR'}),refresh:async()=>{reads++;return{};},setTimer:()=>{timers++;return{unref(){}};},clearTimer:()=>{}});

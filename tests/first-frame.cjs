@@ -84,6 +84,30 @@ try {
     assert(ordinary.includes('腾讯控股')&&!ordinary.includes('Apple')&&!ordinary.includes('共享池'));
     const jp=render('components/views/QuotePoolView.tsx',props,'m=JP');
     assert(!jp.includes('pool-token-slot')&&jp.includes('暂无订阅股票'));
+    const excluded=render('components/views/QuotePoolView.tsx',props,'m=HK&s=hot&stock=HK.00700');
+    assert(!excluded.includes('pool-selection-close')&&!excluded.includes('pool-row-detail'),'filtered selection cannot survive visually');
+    assert(html.includes('最近请求')&&html.includes('释放时间')&&html.includes('pool-row-detail'));
+    assert(html.includes('aria-label="清空股票搜索"')&&html.includes('aria-expanded="true"'));
+  });
+  test('quote pool waits for IME completion and clears page/selection when the query changes',()=>{
+    const previousWindow=global.window, at=Date.UTC(2026,9,4), calls=[];
+    global.window={location:{pathname:'/quote-pool',search:'?p=2&stock=HK.00700'},history:{replaceState:(_state,_title,url)=>calls.push(url)}};
+    query=new URLSearchParams('p=2&stock=HK.00700');
+    const snapshot={scope:'mine',at,entries:[{market:'HK',code:'00700',name:'腾讯控股',state:'dormant',lastRequestedAt:at,expiresAt:at+604800000}]};
+    try {
+      const harness=frameHarness('components/views/QuotePoolView.tsx',{
+        '@/lib/workspacePanel':{useWorkspaceActive:()=>false,useWorkspaceLocationGuard:()=>()=>true,useWorkspaceSearchParams:()=>query},
+        '@/lib/useQuotePoolSnapshot':{useQuotePoolSnapshot:()=>({snapshot,visible:true,busy:false,error:'',refresh(){}})}
+      });
+      const props={admin:false,onNavigate(){}};
+      let tree=harness.render(props), input=elements(tree).find(e=>e.type==='input');
+      input.props.onCompositionStart();input.props.onChange({target:{value:'腾'}});
+      tree=harness.render(props);input=elements(tree).find(e=>e.type==='input');
+      assert.equal(input.props.value,'腾');assert.equal(calls.length,0);
+      input.props.onCompositionEnd({currentTarget:{value:'腾讯'}});
+      assert.equal(calls.length,1);const url=new URL(calls[0],'http://localhost');
+      assert.equal(url.searchParams.get('q'),'腾讯');assert(!url.searchParams.has('p')&&!url.searchParams.has('stock'));
+    } finally {global.window=previousWindow;}
   });
   test('single market month calendar restores URL before effects',()=>{
     const html=render('components/views/GlobalPreviewView.tsx',{initialNow:Date.UTC(2026,9,2)},'section=calendar&calYear=2026&calDay=2026-12-24');
