@@ -143,6 +143,26 @@ export class ActiveQuotePool {
       });
   }
 
+  /** Inspect leases without expiry writes, timer changes, or a source read. */
+  snapshot(namespace: string) {
+    if (this.stopped || namespace !== this.namespace) return [];
+    const now = this.now();
+    const rows = [];
+    for (const [key, entry] of [...this.candidates, ...this.active]) {
+      const admitted = this.active.has(key);
+      const anonymous = entry.anonymousAt !== undefined && now - entry.anonymousAt < (admitted ? this.idleMs : this.repeatMs);
+      const subscribed = entry.subscribedAt !== undefined && now - entry.subscribedAt < this.idleMs;
+      const lastRequestedAt = Math.max(anonymous ? entry.anonymousAt! : -Infinity, subscribed ? entry.subscribedAt! : -Infinity);
+      if (!Number.isFinite(lastRequestedAt)) continue;
+      const ready = (anonymous ? entry.anonymousReads : 0) + (subscribed ? entry.subscribedReads : 0) >= 2;
+      rows.push({ market: entry.item.market, code: entry.item.code, lastRequestedAt,
+        expiresAt: lastRequestedAt + this.idleMs,
+        state: admitted && ready ? (now - lastRequestedAt < this.hotMs ? "hot" as const : "dormant" as const) : "candidate" as const,
+        updating: admitted && ready && [...this.jobs.values()].some(job => job.namespace === namespace && job.entries.some(([id, current]) => id === key && current === entry)) });
+    }
+    return rows;
+  }
+
   stats() {
     const now = this.now();
     const hot = [...this.active.values()].filter(entry => now - entry.requestedAt < this.hotMs).length;

@@ -10,7 +10,7 @@ import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
-import { IconArrowsExchange, IconChartHistogram, IconCalendarPause } from "@tabler/icons-react";
+import { IconArrowsExchange, IconChartHistogram, IconCalendarPause, IconBox } from "@tabler/icons-react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { sharedRead } from "@/lib/sharedRead";
 import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
@@ -443,7 +443,7 @@ function SectionIcon({ section }: { section: GlobalSection }) {
   return <Icon className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" />;
 }
 
-export default function GlobalPreviewView({ pageSize, initialNow }: { pageSize?: number; initialNow?: number }) {
+export default function GlobalPreviewView({ pageSize, initialNow, onOpenPool }: { pageSize?: number; initialNow?: number; onOpenPool?: () => void }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
@@ -479,6 +479,7 @@ export default function GlobalPreviewView({ pageSize, initialNow }: { pageSize?:
             <span className="sr-only">：{description}</span>
           </button>
         ))}
+        <button type="button" className="global-section-button" onClick={onOpenPool} onPointerEnter={() => { void import("@/components/views/QuotePoolView"); }} aria-label="股票池"><IconBox className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" /><span>股票池</span></button>
       </nav>
       <div key={section} className="global-section-panel">
         {section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}

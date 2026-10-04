@@ -77,6 +77,7 @@ export const API_REQUEST_ROUTES = [
   "/api/managed-upload/[...path]",
   "/api/private-reports/[...path]",
   "/api/pwa-icon",
+  "/api/quote-pool",
   "/api/quotes",
   "/api/rates",
   "/api/records",

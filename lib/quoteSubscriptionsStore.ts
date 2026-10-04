@@ -34,6 +34,13 @@ export class QuoteSubscriptionsStore {
       state: now - row.last_requested_at < QUOTE_DEMAND_HOT_MS ? "hot" : "dormant" }));
   }
 
+  /** Read private demand without initializing the scheduler or renewing a lease. */
+  demands(userId: string): PublicQuoteDemand[] {
+    const rows = this.db.prepare("SELECT market,code,last_requested_at,reads FROM quote_subscriptions WHERE user_id=? AND last_requested_at>? ORDER BY last_requested_at DESC")
+      .all(userId, this.cutoff()) as Row[];
+    return rows.map(row => ({ item: this.item(row), requestedAt: row.last_requested_at, reads: row.reads }));
+  }
+
   touch(userId: string, items: QuoteItem[], explicit = false): PublicQuoteDemand[] {
     const normalized = publicQuoteItems(items);
     if (explicit && normalized.length > this.limit()) throw new QuoteSubscriptionLimitError();

@@ -62,6 +62,7 @@ const UsersView = preloadedWorkspace("users", dynamic(() => import("@/components
 const AssetLibraryView = preloadedWorkspace("library", dynamic(() => import("@/components/views/AssetLibraryView"), { loading: WorkspaceLoading }));
 const CardLibraryView = preloadedWorkspace("cards", dynamic(() => import("@/components/views/CardLibraryView"), { loading: WorkspaceLoading }));
 const AttachmentsView = preloadedWorkspace("attachments", dynamic(() => import("@/components/views/AttachmentsView"), { loading: WorkspaceLoading }));
+const QuotePoolView = preloadedWorkspace("quote-pool", dynamic(() => import("@/components/views/QuotePoolView"), { loading: WorkspaceLoading }));
 const GlobalPreviewView = preloadedWorkspace("global", dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading }));
 const AssetPnlAnalysisView = preloadedWorkspace("pnl", dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading }));
 const AssistantView = preloadedWorkspace("assistant", dynamic(() => import("@/components/views/AssistantView"), { loading: WorkspaceLoading }));
@@ -73,7 +74,7 @@ const FourDoorNavigator = lazy(() => import("@/components/FourDoorNavigator"));
 // 预览也按需下载：关闭时不把插图代码打入主页面；开启时与交互代码并行加载。
 const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"));
 
-type TabKey = "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
+type TabKey = "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -133,7 +134,8 @@ export default function RecordsApp({
   initialFlagIcons = {},
   initialAssetLibrary = null,
   initialCardLibrary = null,
-  initialFeed = null
+  initialFeed = null,
+  initialQuotePool = null
 }: {
   initialTab: string;
   initialNow: number;
@@ -155,6 +157,7 @@ export default function RecordsApp({
   initialFlagIcons?: Record<string, string>;
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
+  initialQuotePool?: import("@/lib/quotePoolView").PoolBootstrap | null;
   initialFeed?: import("@/lib/feedTypes").FeedChrome | import("@/lib/feedTypes").FeedPayload | null;
 }) {
   const router = useRouter();
@@ -188,6 +191,7 @@ export default function RecordsApp({
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [panelDirection, setPanelDirection] = useState("none");
+  const navigationTab = activeTab === "quote-pool" ? "global" : activeTab;
   const [mountedTabs, setMountedTabs] = useState<TabKey[]>(() => [initialTab as TabKey]);
   const [panelEpoch, setPanelEpoch] = useState<Partial<Record<TabKey, number>>>({});
   const activeTabRef = useRef(activeTab);
@@ -1035,7 +1039,7 @@ export default function RecordsApp({
   const managementPanelDataStamp = useMemo(() => ({}), [user, initialSettings, initialAssetLibrary, initialCardLibrary]);
   const assistantPanelDataStamp = useMemo(() => ({}), [user, initialSymbol, initialAssistantHistory, navigateFromAssistant]);
   const independentPanelStamps: Partial<Record<TabKey, object>> = {
-    settings: settingsPanelDataStamp, global: globalPanelDataStamp,
+    settings: settingsPanelDataStamp, global: globalPanelDataStamp, "quote-pool": globalPanelDataStamp,
     trading: feedPanelDataStamp, celebs: celebsPanelDataStamp, earnings: earningsPanelDataStamp,
     users: managementPanelDataStamp, attachments: managementPanelDataStamp,
     library: managementPanelDataStamp, cards: managementPanelDataStamp, assistant: assistantPanelDataStamp
@@ -1110,9 +1114,9 @@ export default function RecordsApp({
                   onDragEnd={() => { tabDragKeyRef.current = null; }}
                   title={`${t.label}（可拖动排序）`}
                   aria-label={t.label}
-                  aria-current={activeTab === t.key ? "page" : undefined}
+                  aria-current={navigationTab === t.key ? "page" : undefined}
                   className={`fire-sidebar-item flex h-[42px] w-full cursor-grab items-center gap-3 rounded-[10px] px-3 text-[15px] font-medium active:cursor-grabbing ${
-                    activeTab === t.key
+                    navigationTab === t.key
                       ? "fire-sidebar-item-active text-ink dark:text-white"
                       : "text-muted hover:bg-black/[.05] hover:text-ink dark:hover:bg-[#2a2a2a]"
                   }`}
@@ -1139,7 +1143,7 @@ export default function RecordsApp({
 
       {/* 内容区 */}
       <div ref={contentRef} className="records-content min-w-0 flex-1">
-        {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} order={mobileNavigationOrder} activeKey={activeTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
+        {activeTab !== "settings" && <WorkspaceNavigation items={sidebarTabs} order={mobileNavigationOrder} activeKey={navigationTab} onPrepare={key => preloadView(key as TabKey)} onSelect={key => {
           if (key === activeTab) return;
           selectTab(key as TabKey);
         }} />}
@@ -1223,7 +1227,8 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" ? initialNow : 0} />}
-          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} />}
+          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} onOpenPool={() => navigateFromAssistant("/quote-pool")} />}
+          {activeTab === "quote-pool" && <QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateFromAssistant} />}
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}

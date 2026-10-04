@@ -241,7 +241,7 @@ function fontHeaderFixture(ext) {
     assert(css.includes('.sv-center :is(.sc-setting-row,.sc-account-card) strong { font-family:inherit; font-synthesis:none; font-weight:var(--site-entry-weight,400)!important; }'));
     assert(css.includes('svg { color:inherit!important; opacity:.72; filter:none; transition:none!important; }'));
     assert(css.includes(',.fire-sidebar-item-active,[aria-current="page"]) svg { opacity:1; }'));
-    assert(app.includes('aria-current={activeTab === t.key ? "page" : undefined}'));
+    assert(app.includes('aria-current={navigationTab === t.key ? "page" : undefined}'));
     assert(!app.includes('fire-sidebar-item-active font-semibold'));
     assert.equal(accentVariables('white')['--site-action-icon-filter'], 'brightness(0)');
     assert.equal(accentVariables('brown')['--site-action-icon-filter'], 'brightness(0) invert(1)');
@@ -258,7 +258,7 @@ function fontHeaderFixture(ext) {
     assert(app.includes('panelBuiltStamp.current.get(tab) !== panelDataStamp'));
     assert(!css.includes('content-visibility: hidden;'), 'hidden workspaces must stay display:none on every browser');
     assert(app.includes('<WorkspacePanel active={active}'));
-    assert.equal((app.match(/loading: WorkspaceLoading/g)||[]).length,16);
+    assert.equal((app.match(/loading: WorkspaceLoading/g)||[]).length,17);
     assert(css.includes('.records-content { min-width:0; isolation:isolate; overflow-anchor:none; scroll-behavior:auto; }'));
     assert(css.includes('html.fire-workspace-switching body'));
     assert(css.includes('scroll-behavior: auto;'));

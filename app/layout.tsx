@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./quote-pool.css";
 import "@/styles/time-machine.css";
 import TimeMachine from "@/components/TimeMachine";
 import "@/styles/responsive-base.css";

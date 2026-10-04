@@ -22,6 +22,7 @@ import { listWatchGroups } from "@/lib/watchGroupsStore";
 import { getAssistantHistoryState } from "@/lib/assistantHistory";
 import { feedBootstrap } from "@/lib/feedGeneration";
 import { CURRENT_VERSION } from "@/lib/versions";
+import { readQuotePool } from "@/lib/quotePoolData";
 import { passkeySettingsSnapshot } from "@/lib/passkeySettingsSnapshot";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,7 @@ export default async function SlugLayout({
     ?.slice(CURRENCY_COOKIE_NAME.length + 1) as CurrencyCode | undefined;
   const currencyFlagCode = displayCurrencyFlagCode(currencyCookie);
   // 资产盈亏分析：应用壳内隐藏页签（不进导航菜单），直接按路径进入
-  const specialTab = path === "/asset-pnl-analysis"
+  const specialTab = path === "/quote-pool" ? { key: "quote-pool" } : path === "/asset-pnl-analysis"
     ? { key: "pnl" }
     : path === "/assistant"
       ? (settings.tabs.find((item) => item.key === "assistant") ?? { key: "assistant" })
@@ -80,6 +81,7 @@ export default async function SlugLayout({
 
   // 后台首屏数据在服务端鉴权后直接读取。避免浏览器再次串行请求
   // /api/auth/me → records / activities / settings，首帧不再被全局转圈遮挡。
+  const initialQuotePool = tab.key === "quote-pool" ? { mine: readQuotePool(user.id, "mine"), ...(isAdmin(user) ? { shared: readQuotePool(user.id, "shared") } : {}) } : null;
   const initialRecords = listRecords(user.id);
   // 自选股分组随记录一并进入服务端首屏，避免刷新时客户端请求完成前只显示“全部”。
   const initialWatchGroups = tab.key === "watchlist" ? listWatchGroups(user.id) : [];
@@ -156,6 +158,7 @@ export default async function SlugLayout({
           initialAssetLibrary={initialAssetLibrary}
           initialCardLibrary={initialCardLibrary}
           initialFeed={initialFeed}
+          initialQuotePool={initialQuotePool}
           initialSettings={{
             title: settings.title,
             logoText: settings.logoText,

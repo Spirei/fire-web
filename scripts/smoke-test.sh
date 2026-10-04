@@ -38,6 +38,7 @@ check "跳转目标为登录页" 1 "$(echo "$LOGIN_LOC" | grep -c '/login')"
 
 echo "== 认证 =="
 check "me 未登录返回 401" 401 "$(code "$BASE/api/auth/me")"
+check "股票池未登录拒绝" 401 "$(code "$BASE/api/quote-pool")"
 check "请求日志未登录拒绝" 401 "$(code "$BASE/api/request-logs")"
 check "请求日志实时订阅未登录拒绝" 401 "$(code "$BASE/api/request-logs/events")"
 check "错误密码被拒绝"      401 "$(code -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' --data-binary "@$WRONG_BODY")"
@@ -67,6 +68,12 @@ done
 DEPLOY_STATUS_EXPECT=404
 if [ "$ACCOUNT_ROLE" = admin ]; then DEPLOY_STATUS_EXPECT=200; fi
 check "部署状态页按账号权限访问" "$DEPLOY_STATUS_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/deploy-status")"
+
+check "股票池页面登录读取" 200 "$(code -b "$JAR_ACCOUNT" "$BASE/quote-pool")"
+check "本人股票池登录读取" 200 "$(code -b "$JAR_ACCOUNT" "$BASE/api/quote-pool?scope=mine")"
+SHARED_POOL_EXPECT=403
+if [ "$ACCOUNT_ROLE" = admin ]; then SHARED_POOL_EXPECT=200; fi
+check "共享股票池按账号权限访问" "$SHARED_POOL_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/api/quote-pool?scope=shared")"
 
 # 公开数据接口：交易广场 / 行情 / 分时 / 汇率（交易广场页面曾整页 500，接口也要有兜底检查）
 echo "== 公开数据接口 =="

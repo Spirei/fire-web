@@ -226,6 +226,13 @@ const activeQuotes = quoteRuntime.active ??= new ActiveQuotePool({
   }
 });
 
+export function readActiveQuotePool() {
+  // Next can retain the previous scheduler instance across a module reload.
+  // Add the new read-only inspector without resetting its leases or jobs.
+  if (typeof activeQuotes.snapshot !== "function") activeQuotes.snapshot = ActiveQuotePool.prototype.snapshot;
+  return activeQuotes.snapshot(quoteDemandNamespace());
+}
+
 export function quoteDemandNamespace() { return quoteRuntime.namespace(); }
 export function syncQuoteSubscriptions(changes: PublicQuoteDemand[], replace = false) {
   activeQuotes.reconcileSubscriptions(changes, quoteDemandNamespace(), replace);

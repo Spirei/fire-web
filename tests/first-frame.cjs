@@ -70,6 +70,21 @@ function elements(tree) {
   return[tree,...elements(tree.props.children)];
 }
 try {
+  test('quote pool restores private scope, market, search and selected stock in its first frame',()=>{
+    const at=Date.UTC(2026,9,4), hk={market:'HK',code:'00700',name:'腾讯控股',icon:'/hk.svg',state:'dormant',updating:false,lastRequestedAt:at,expiresAt:at+604800000};
+    const us={...hk,market:'US',code:'AAPL',name:'Apple',icon:'/us.svg'};
+    const initial={mine:{scope:'mine',at,entries:[hk]},shared:{scope:'shared',at,entries:[hk,us]}};
+    const props={initial,admin:true,onNavigate:()=>{}};
+    const html=render('components/views/QuotePoolView.tsx',props,'scope=mine&m=HK&q=腾讯&stock=HK.00700');
+    assert(html.includes('腾讯控股')&&html.includes('/hk.svg')&&!html.includes('Apple'));
+    assert(html.includes('value="腾讯"')&&html.includes('aria-label="关闭股票信息"'));
+    assert(html.includes('aria-label="收纳盒，1 个已入池标的"'));
+    assert(!html.includes('正在读取股票池')&&!html.includes('盒子还是空的'));
+    const ordinary=render('components/views/QuotePoolView.tsx',{...props,admin:false},'scope=shared');
+    assert(ordinary.includes('腾讯控股')&&!ordinary.includes('Apple')&&!ordinary.includes('共享池'));
+    const jp=render('components/views/QuotePoolView.tsx',props,'m=JP');
+    assert(!jp.includes('pool-token-slot')&&jp.includes('暂无订阅股票'));
+  });
   test('single market month calendar restores URL before effects',()=>{
     const html=render('components/views/GlobalPreviewView.tsx',{initialNow:Date.UTC(2026,9,2)},'section=calendar&calYear=2026&calDay=2026-12-24');
     assert(html.includes('2026')&&html.includes('休市日历'));
