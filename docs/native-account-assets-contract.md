@@ -1,4 +1,4 @@
-# App 资产合约 v1（2026-10-05，冻结；已实现并验证，待镜像发布）
+# App 资产合约 v1（2026-10-05，冻结；发布状态按提交分别核对）
 
 完整联调样本：[fixtures/account-assets-v1.json](fixtures/account-assets-v1.json)。该文件由本仓库真实计算服务在隔离临时数据库中生成，包含两个虚构持仓市场、两笔虚构成交及虚构现金；不是用户账户，不含密码、Token或真实邮件信息。`schemaVersion:1` 的 data 结构在 v1/v2 相同，样本外层包含标准成功信封。
 
@@ -8,11 +8,29 @@
 
 Web 与 iOS 独立。共享合约路径：`fire-web/docs/native-account-assets-contract.md`。本轮仅新增资产读取及显式现金股票/ETF资料声明，不扩展旧授权、不创建虚构历史，不把 legacy orders GET 用于后台资产刷新（该旧接口会结算挂单）。
 
+## 旧记录兼容与发布核对（本轮）
+
+2026-10-05 17:23 北京时间只读核对生产 `/api/health`：buildSha=`4d6151c61ff6403ae922b25407d9dce5b18dd97d`，版本v0.1.51。该提交镜像于16:32北京完成手动发布任务（GitHub Actions 运行编号37282168697，event=workflow_dispatch），生产能力已存在；此前“尚未发布”只描述当时状态。本轮兼容修复尚未部署，推送不等于生产运行此修复。
+
+旧 `buildOverview` 用 price×qty 和 cost×qty；`orders.executeOrder/fillPendingRow` 把 amount 写为 qty×price，费用另列；`tradeAccounting.applyOrder` 也沿此单位合约计算成本和股息。这足以证明**应用原台账的记账单位**，不足以证明证券是正股、ETF或期权。无需数据库迁移或逐项确认即可恢复原台账估值，绝不补证券类型、乘100、造历史或宣称是券商期权合约市值。
+
+新增 `positions.valuationBasis:"legacy_record_unit"|"owner_declared_unit"|"unavailable"`，`valuationUnitMultiplier:1|null`。仅在没有本人声明行时使用 legacy_record_unit，单位乘数1指原 price/cost 每个 qty 记账单位，**不是** instrument.multiplier（证券合约乘数）。旧记录 instrument.kind=unknown、multiplier=null、source=unavailable 保持不变；iOS不得因 kind=unknown 丢弃已可计算的 marketValue/cost/holdingPnl，应以 active/valuationComplete/金额缺失判断，并可提示“原台账单位”。有匹配的股票/ETF本人声明时为 owner_declared_unit；显式 unknown 或身份变更后作废的声明为 unavailable，不能被兼容路径覆盖，只有这些记录需要本人按既有CAS资料接口确认。
+
+可恢复字段：positions 原币/换算市值、摊薄成本、持仓盈亏和权重，markets 原币/换算市值与盈亏，summary 总市值/总成本/持仓盈亏/真实币种现金/总资产。数据来源齐全时完整可用；缺单价、成本、币种/汇率、现金来源或订单身份不匹配仍缺失，绝不以0补全。现金和已有订单沿同一记录单位，订单身份须与当前持仓匹配。平均成本仍要求真实从零完整周期；没有历史不得生成。读取不写 records、声明、订单、资金或回执，无真实账户迁移范围。
+
+iOS严格放行条件：连接的匿名发现必须有 `features.legacy_record_valuation === "stored_unit_price_times_quantity"`；行 valuationBasis=legacy_record_unit、valuationUnitMultiplier=1，且 instrument.kind=unknown/multiplier=null/source=unavailable/revision=0/identityMatches=false/updatedAt=null。这组条件对应后端“没有声明行”，并非所有kind未知都允许。实际金额仍需独立检查null/valuationComplete；价格或数量不能据字段名自行补零。旧服务没有新增能力/字段时保持原严格判断，不放行legacy。用户显式unknown即使revision>0且identityMatches=true，也必须valuationBasis=unavailable/valuationUnitMultiplier=null；作废行亦如此，不可按kind或source单独推断。
+
+本轮验证：24组隔离资产回归、16组原资产总览、17组records、10组v2、5组接口目录、166组页面回归及63项本地只读巡检通过，类型检查通过；兼容回归对照首页同源汇总，并检查读取前后业务表不变。
+
+新增完整标准信封样本：[旧记录完整可用](fixtures/account-assets-legacy-v1.json)、[旧记录与本人显式未知混合](fixtures/account-assets-legacy-unknown-v1.json)。前者无证券声明但totalMarket=142/totalCost=102/totalCash=457/totalAsset=599，类型全unknown；后者新增显式unknown活跃仓，旧记录金额仍可显示，完整总市值和总资产为null，不用部分和冒充总额。两者由真实计算服务在临时数据库生成，均无真实账户写入。
+
+features 新增 `legacy_record_valuation:"stored_unit_price_times_quantity"`；schemaVersion/路径/权限不变。今日同源价格变化可由iOS使用首页完整周期输入，必须区别于本接口真实账户 dayPnl，后者继续null；市场现金和期权/标的合并继续不可用。现有首页overview只作计算口径对照，不在资产请求拼接另一时点/账户的overview结果。
+
 ## 发现与权限
 
 本次兼容新增字段：`cash.nativeBalancesByCurrency:Record<string,number>|null`、`cash.sourceComplete:boolean`，用于显示无需汇率换算的真实原币现金。只有底层现金来源和证券单位可核对时 sourceComplete=true；缺汇率不会隐藏原币现金，汇总现金 totalCash 及旧 balancesByCurrency/complete 仍保持原来的缺失规则。App不得把 sourceComplete 当作已换算总额完整。
 
-`positions.valuationUnavailableReason:string|null` 说明估值缺失原因：instrument_unclassified（证券类型待确认）、unsupported_position_quantity（数量缺失或不支持）、missing_price（缺少所选口径报价）、missing_exchange_rate（缺汇率/币种）、invalid_valuation_amount（金额不可计算）。完整估值为null原因，不把未知值显示为零。
+`positions.valuationUnavailableReason:string|null` 说明估值缺失原因：instrument_unclassified（本人声明未知或原声明已失效）、unsupported_position_quantity（数量缺失或不支持）、missing_price（缺少所选口径报价）、missing_exchange_rate（缺汇率/币种）、invalid_valuation_amount（金额不可计算）。完整估值为null原因，不把未知值显示为零。
 
 平均成本只核对当前从零开仓周期：更早已结束周期缺少数量快照，不再阻断一个可以独立核对的新周期；当前周期缺快照、身份不匹配、链条无法对平，或历史成交日期无法确定，仍返回缺失。版本、权限及旧字段保持兼容。
 
@@ -34,9 +52,9 @@ v1 的所有路径替换为 `/api/v1`。新私有接口仅 App Bearer，Cookie �
 
 - `schemaVersion:1, accountId, profile:{accountId,username,nickname,uid,avatar}, collectionRevision, snapshotRevision, asOf, currency, options:{currency,costMethod,usPrice}`。
 - `summary:{totalMarket,totalCost,holdingPnl,totalCash,totalAsset,holdingsComplete,costComplete,cashComplete,totalAssetComplete,dayPnl,dayPnlPct,dayPnlUnavailableReason,unconvertedCurrencies}`。金额为 currency，百分比为百分数。未知项 null；有不完整持仓时总市值和总资产 null，不能显示部分和当完整总额。无持仓的真实零与未知分开。
-- `cash:{balancesByCurrency:object|null,complete,source:"account_cash_reconciliation",marketAllocationAvailable:false}`。含 Web 同口径真实资金流水、成交现金和借记/预付卡现金；有来源不足、未知证券单位的成交或缺汇率则不完整。现金只有币种归集；USD 不等于美股市场现金，不分摊至市场。
-- `positions:[]` 全量本人记录，含 active 标记，便于客户端固定持仓分组、多市场/退市/清仓筛选。每行 `recordId,recordRevision,name,code,market,broker,currency,instrument,qty,price,priceSource,priceAt,quoteSession,quoteSource,quoteCached,cost,dilutedCost,averageOpenCost,costMethod,averageCostComplete,costUnavailableReason,cycleStartedAt,nativeMarketValue,nativeCostValue,nativeHoldingPnl,valuationCurrency,marketValue,costValue,holdingPnl,holdingPnlPct,dayPnl,dayPnlPct,dayPnlUnavailableReason,weightPct,clearedAt,clearedToday,active,valuationComplete,rawRecord`。nativeMarketValue 原币，marketValue/costValue/holdingPnl 为显示币种；qty/price/cost 为原记录单位及原币单价。`rawRecord` 与原 records 模型相同。
-- `instrument:{kind:"cash_equity"|"etf"|"unknown",listingStatus:"listed"|"delisted"|"unknown",multiplier:1|null,underlyingRecordId:null,source:"owner_declared"|"unavailable",revision,identityMatches,updatedAt}`。旧记录不自动猜类型，需本人显式声明 cash_equity/etf 后才计算数量×单价。未知类型金额 null。代码/市场被改后旧声明失效，需新 recordRevision 再确认。名称不推断 ETF、期权或退市状态。
+- `cash:{balancesByCurrency:object|null,complete,source:"account_cash_reconciliation",marketAllocationAvailable:false}`。含 Web 同口径真实资金流水、成交现金和借记/预付卡现金；有来源不足、未知证券单位的成交或缺汇率则不完整。未声明旧记录的成交沿用原台账单位；现金只有币种归集；USD 不等于美股市场现金，不分摊至市场。
+- `positions:[]` 全量本人记录，含 active 标记，便于客户端固定持仓分组、多市场/退市/清仓筛选。每行 `recordId,recordRevision,name,code,market,broker,currency,instrument,valuationBasis,valuationUnitMultiplier,qty,price,priceSource,priceAt,quoteSession,quoteSource,quoteCached,cost,dilutedCost,averageOpenCost,costMethod,averageCostComplete,costUnavailableReason,cycleStartedAt,nativeMarketValue,nativeCostValue,nativeHoldingPnl,valuationCurrency,marketValue,costValue,holdingPnl,holdingPnlPct,dayPnl,dayPnlPct,dayPnlUnavailableReason,weightPct,clearedAt,clearedToday,active,valuationComplete,rawRecord`。nativeMarketValue 原币，marketValue/costValue/holdingPnl 为显示币种；qty/price/cost 为原记录单位及原币单价。`rawRecord` 与原 records 模型相同。
+- `instrument:{kind:"cash_equity"|"etf"|"unknown",listingStatus:"listed"|"delisted"|"unknown",multiplier:1|null,underlyingRecordId:null,source:"owner_declared"|"unavailable",revision,identityMatches,updatedAt}`。旧记录不自动猜类型；没有声明行时沿用原 records/overview 的记录单位记账，类型仍 unknown。本人显式声明 unknown 或已作废的声明行仍阻断估值，不覆盖其意图。代码/市场被改后旧声明失效，需新 recordRevision 再确认。名称不推断 ETF、期权或退市状态。
 - `markets:[]` 含有活跃持仓或今日订单的市场：`market,currency,valuationCurrency,nativeMarketValue,nativeHoldingPnl,date,timeZone,positionCount,marketValue,holdingPnl,cash:null,cashUnavailableReason,dayPnl:null,sessionStatus:"unknown"`。currency 标原市场结算币种；valuationCurrency 等于顶层 currency，marketValue/holdingPnl 均为该显示币种；nativeMarketValue/nativeHoldingPnl 为currency原币。空市场与未知市场不伪造现金。
 - `todayOrders:{items:TradeOrder[],count,available:true,emptyReason:null|"no_recorded_orders_today",dateBasis:"exchange_local_calendar_date",timeZones,unknownDateOrderIds,settlesPendingOrders:false}`。真实 trade_orders；包括记录的 filled/pending/cancelled/expired，count 为 items 数量；历史没有订单就是空，绝不从持仓倒造。逐市场本地日历日，不按设备时区，也不把美股夜盘交易周期等同日历日。未知市场时区/无效成交时间列入 unknownDateOrderIds，不猜今日。无分页截断，不执行挂单结算。订单字段使用既有 TradeOrder（id/orderNo/recordId/market/code/name/side/status/qty/price/fees/amount/realizedPnl/positionQtyBefore/positionCostBefore/positionQtyAfter/positionCostAfter/broker/note/orderType/triggerPrice/tif/expiresAt/session/triggerStatus/tradedAt/createdAt）。
 - `unavailable` 列出未具备的数据能力。
@@ -45,7 +63,7 @@ v1 的所有路径替换为 `/api/v1`。新私有接口仅 App Bearer，Cookie �
 
 当日账户和持仓盈亏本轮均 null：现有 quote.prevClose 不证明昨日持仓/资金/完整交易周期，更不能 `(现价-昨收)*现有数量` 冒充真实当日资产盈亏。今日清仓只来自当前仍为空且最后一笔真实卖出降至零的记录，按该市场本地日历日；qty 原始 null 不单独当成零。退市仅本人声明。
 
-observed 使用实际获得的行情或 record.price 并携带来源/时间/实际 session；regular 美股仅使用实际 session=REGULAR 报价，缺失 null，不把盘前盘后价格当盘中，不假造常规快照。不存在独立 regular 报价源/完整夜盘基准。市场智能交易排序能力 false；不能凭时钟假装市场真实开市。期权乘数、衍生品身份/标的关系与合并展示能力 false，所有未声明证券不可用普通股票公式；不可通过现有现金股票 orders 写入期权。
+observed 使用实际获得的行情或 record.price 并携带来源/时间/实际 session；regular 美股仅使用实际 session=REGULAR 报价，缺失 null，不把盘前盘后价格当盘中，不假造常规快照。不存在独立 regular 报价源/完整夜盘基准。市场智能交易排序能力 false；不能凭时钟假装市场真实开市。期权乘数、衍生品身份/标的关系与合并展示能力 false，旧记录单位记账不证明证券为股票，也不提供期权合约估值；不可通过现有现金股票 orders 写入期权。
 
 ## 证券资料维护（用户显式提交）
 
@@ -91,6 +109,7 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
     "listing_status": "owner_declared",
     "average_open_cost": "reconciled_zero_opening_cycle_only",
     "diluted_cost": "stored_position_cost",
+    "legacy_record_valuation": "stored_unit_price_times_quantity",
     "account_day_pnl": false,
     "position_day_pnl": false,
     "extended_hours": "observed_quote_only",
@@ -108,7 +127,7 @@ iOS 用 features.smart_market_sort/underlying_merge/derivatives 禁用相应操�
 
 positions 新增 `valuationCurrency:string`，固定等于顶层 currency；`nativeCostValue:number|null` 和 `nativeHoldingPnl:number|null` 为行 currency 的原币金额。markets 新增 `valuationCurrency:string`、`nativeMarketValue:number|null`、`nativeHoldingPnl:number|null`。markets.currency 是市场原币，marketValue/holdingPnl 是 valuationCurrency；App 按原币展示时必须用 nativeMarketValue/nativeHoldingPnl，不得给 USD 金额贴 HKD 标签。缺显示汇率不影响已有原币值。
 
-positions.weightPct 分母为**全账户所有 active 持仓的完整显示币种总市值**，不含现金，不是同市场。任何持仓缺类型/价格/汇率，或总市值为0时所有行 null。百分比数字12.34表示12.34%。
+positions.weightPct 分母为**全账户所有 active 持仓的完整显示币种总市值**，不含现金，不是同市场。任何持仓缺可用记账单位/价格/汇率，或总市值为0时所有行 null。百分比数字12.34表示12.34%。
 
 ### TradeOrder 精确类型
 

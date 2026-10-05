@@ -19,6 +19,15 @@ function declaration(record: StockRecord, stored: Instrument | undefined) {
     source: current ? "owner_declared" : "unavailable", revision: stored?.revision ?? 0,
     identityMatches: !!current, updatedAt: stored?.updated_at ?? null };
 }
+/** Legacy records/orders already store price and cost per recorded quantity unit.
+ * This preserves their accounting contract without asserting a security type or
+ * an exchange contract multiplier. Explicit unknown/invalidated declarations win.
+ */
+export function assetValuationBasis(record: StockRecord, stored: Instrument | undefined) {
+  if (!stored) return "legacy_record_unit" as const;
+  return stored.market === record.market && stored.code === record.code && stored.kind !== "unknown"
+    ? "owner_declared_unit" as const : "unavailable" as const;
+}
 export function instrumentSnapshot(userId: string, recordId: string) {
   const record = readRecord(userId, recordId);
   if (!record) throw new RecordsError("持仓记录不存在", 404);
@@ -102,7 +111,8 @@ export function buildAssets(userId: string, profile: { username: string; nicknam
   const monetary = new Map<string, { market: number | null; cost: number | null; pnl: number | null; nativeMarket: number | null; nativePnl: number | null }>();
   const positions = records.map(record => {
     const instrument = declaration(record, instrumentByRecord.get(record.id)), currency = ACCOUNT_MARKET_CURRENCY[record.market] ?? null;
-    const known = instrument.multiplier === 1, qty = numeric(record.qty), quote = quotes[record.id];
+    const valuationBasis = assetValuationBasis(record, instrumentByRecord.get(record.id));
+    const known = valuationBasis !== "unavailable", qty = numeric(record.qty), quote = quotes[record.id];
     const quotePrice = numeric(quote?.price) !== null && quote.price >= 0 ? quote.price : null, regularAllowed = record.market !== "US" || options.usPrice === "observed" || quote?.session === "REGULAR";
     const candidatePrice = regularAllowed ? quotePrice ?? (record.market !== "US" || options.usPrice === "observed" ? numeric(record.price) : null) : null;
     const price = candidatePrice !== null && candidatePrice >= 0 ? candidatePrice : null;
@@ -128,7 +138,7 @@ export function buildAssets(userId: string, profile: { username: string; nicknam
       else valuationUnavailableReason = "invalid_valuation_amount";
     }
     return { recordId: record.id, recordRevision: record.revision, name: record.name, code: record.code, market: record.market, broker: record.group,
-      currency, instrument, qty, price, priceSource, priceAt: price === null ? null : priceSource === "quote" ? quote.time : record.updatedAt,
+      currency, instrument, valuationBasis, valuationUnitMultiplier: known ? 1 : null, qty, price, priceSource, priceAt: price === null ? null : priceSource === "quote" ? quote.time : record.updatedAt,
       quoteSession: priceSource === "quote" ? quote.session ?? null : null, quoteSource: priceSource === "quote" ? quote.source ?? null : null,
       quoteCached: priceSource === "quote" ? quote.cached ?? false : false,
       cost: known ? cost : null, dilutedCost: known ? diluted : null, averageOpenCost: known ? economic.average : null,
@@ -145,9 +155,9 @@ export function buildAssets(userId: string, profile: { username: string; nicknam
   const active = positions.filter(p => p.active), holdingComplete = active.every(p => p.marketValue !== null), costComplete = active.every(p => p.costValue !== null);
   const totalMarket = holdingComplete ? active.reduce((n, p) => n + monetary.get(p.recordId)!.market!, 0) : null;
   const totalCost = costComplete ? active.reduce((n, p) => n + monetary.get(p.recordId)!.cost!, 0) : null;
-  // Unknown units cannot safely be used in either equity-derived cash or legacy filled-order cash.
+  // Existing orders use recorded quantity units; explicit unknown/invalidated units still block cash.
   const positionByRecord = new Map(positions.map(p => [p.recordId, p]));
-  const unitsComplete = orders.filter(o => o.status === "filled").every(o => { const p = positionByRecord.get(o.recordId); return p && p.instrument.multiplier === 1 && p.currency !== null && p.market === o.market && p.code === o.code; });
+  const unitsComplete = orders.filter(o => o.status === "filled").every(o => { const p = positionByRecord.get(o.recordId); return p && p.valuationUnitMultiplier === 1 && p.currency !== null && p.market === o.market && p.code === o.code; });
   const balances = reconcileAccountCash(cash.balances, cash.cardCash, cash.investmentEquities, nativeHoldings);
   const linkedComplete = cash.investmentEquities.every(e => !active.some(p => p.market === e.market && p.nativeMarketValue === null));
   const cashSourceComplete = cash.sourceComplete && unitsComplete && linkedComplete && Object.values(balances).every(Number.isFinite);

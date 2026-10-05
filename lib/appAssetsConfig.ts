@@ -8,7 +8,7 @@ export function assetsDiscovery(version: 1 | 2) {
     features: { cash_by_currency: true, cash_by_market: false, today_orders: true, order_reads_settle: false,
       instrument_declarations: ["cash_equity", "etf", "unknown"], derivatives: false, underlying_merge: false,
       listing_status: "owner_declared", average_open_cost: "reconciled_zero_opening_cycle_only",
-      diluted_cost: "stored_position_cost", account_day_pnl: false, position_day_pnl: false,
+      diluted_cost: "stored_position_cost", legacy_record_valuation: "stored_unit_price_times_quantity", account_day_pnl: false, position_day_pnl: false,
       extended_hours: "observed_quote_only", regular_hours_price_selection: false, smart_market_sort: false },
     defaults: { currency: "USD", cost_method: "diluted", us_price: "observed" },
     unavailable_values: "null", legacy_fallback: ["records", "overview"],

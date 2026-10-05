@@ -3,12 +3,12 @@
   "message": "ok",
   "data": {
     "schemaVersion": 1,
-    "accountId": "u-d4ff5b0c621af5d5",
+    "accountId": "u-b014eb60ebb87a93",
     "profile": {
-      "accountId": "u-d4ff5b0c621af5d5",
-      "username": "fixture_owner",
-      "nickname": "Fixture Account",
-      "uid": "1",
+      "accountId": "u-b014eb60ebb87a93",
+      "username": "legacy_fixture_owner",
+      "nickname": "Legacy Fixture",
+      "uid": "2",
       "avatar": ""
     },
     "collectionRevision": 4,
@@ -108,24 +108,24 @@
     ],
     "positions": [
       {
-        "recordId": "r-8cf5eb454d627dc1",
+        "recordId": "r-6b56b3af0244477e",
         "recordRevision": 3,
-        "name": "Fixture Equity",
-        "code": "USFIX",
+        "name": "Legacy Unit Position",
+        "code": "LEGACYUS",
         "market": "US",
         "broker": "Broker",
         "currency": "USD",
         "instrument": {
-          "kind": "cash_equity",
+          "kind": "unknown",
           "listingStatus": "unknown",
-          "multiplier": 1,
+          "multiplier": null,
           "underlyingRecordId": null,
-          "source": "owner_declared",
-          "revision": 1,
-          "identityMatches": true,
-          "updatedAt": "2026-10-05T09:28:04.745Z"
+          "source": "unavailable",
+          "revision": 0,
+          "identityMatches": false,
+          "updatedAt": null
         },
-        "valuationBasis": "owner_declared_unit",
+        "valuationBasis": "legacy_record_unit",
         "valuationUnitMultiplier": 1,
         "qty": 6,
         "price": 12,
@@ -159,9 +159,9 @@
         "valuationComplete": true,
         "valuationUnavailableReason": null,
         "rawRecord": {
-          "id": "r-8cf5eb454d627dc1",
-          "name": "Fixture Equity",
-          "code": "USFIX",
+          "id": "r-6b56b3af0244477e",
+          "name": "Legacy Unit Position",
+          "code": "LEGACYUS",
           "market": "US",
           "price": 10,
           "cost": 7,
@@ -170,29 +170,29 @@
           "watchGroupId": "",
           "watchGroupSort": 0,
           "note": "",
-          "updatedAt": "2026-10-05T09:28:04.746Z",
+          "updatedAt": "2026-10-05T09:28:04.771Z",
           "revision": 3
         }
       },
       {
-        "recordId": "r-7cd26f18e73b97ea",
+        "recordId": "r-ef5d11d2e747aafe",
         "recordRevision": 1,
-        "name": "Fixture ETF",
-        "code": "HKFIX",
+        "name": "Legacy HK Unit Position",
+        "code": "LEGACYHK",
         "market": "HK",
         "broker": "Broker",
         "currency": "HKD",
         "instrument": {
-          "kind": "etf",
+          "kind": "unknown",
           "listingStatus": "unknown",
-          "multiplier": 1,
+          "multiplier": null,
           "underlyingRecordId": null,
-          "source": "owner_declared",
-          "revision": 1,
-          "identityMatches": true,
-          "updatedAt": "2026-10-05T09:28:04.746Z"
+          "source": "unavailable",
+          "revision": 0,
+          "identityMatches": false,
+          "updatedAt": null
         },
-        "valuationBasis": "owner_declared_unit",
+        "valuationBasis": "legacy_record_unit",
         "valuationUnitMultiplier": 1,
         "qty": 7,
         "price": 70,
@@ -226,9 +226,9 @@
         "valuationComplete": true,
         "valuationUnavailableReason": null,
         "rawRecord": {
-          "id": "r-7cd26f18e73b97ea",
-          "name": "Fixture ETF",
-          "code": "HKFIX",
+          "id": "r-ef5d11d2e747aafe",
+          "name": "Legacy HK Unit Position",
+          "code": "LEGACYHK",
           "market": "HK",
           "price": 70,
           "cost": 60,
@@ -237,7 +237,7 @@
           "watchGroupId": "",
           "watchGroupSort": 0,
           "note": "",
-          "updatedAt": "2026-10-05T09:28:04.745Z",
+          "updatedAt": "2026-10-05T09:28:04.770Z",
           "revision": 1
         }
       }
@@ -245,12 +245,12 @@
     "todayOrders": {
       "items": [
         {
-          "id": "o-1b6441fcf72c5ea6",
-          "orderNo": "0027462969",
-          "recordId": "r-8cf5eb454d627dc1",
+          "id": "o-bb359dbe083c9ebe",
+          "orderNo": "2576138875",
+          "recordId": "r-6b56b3af0244477e",
           "market": "US",
-          "code": "USFIX",
-          "name": "Fixture Equity",
+          "code": "LEGACYUS",
+          "name": "Legacy Unit Position",
           "side": "sell",
           "status": "filled",
           "qty": 4,
@@ -271,15 +271,15 @@
           "session": "",
           "triggerStatus": "",
           "tradedAt": "2026-10-05T14:00:00.000Z",
-          "createdAt": "2026-10-05T09:28:04.746Z"
+          "createdAt": "2026-10-05T09:28:04.771Z"
         },
         {
-          "id": "o-83b006fd3ff298a6",
-          "orderNo": "0621543851",
-          "recordId": "r-8cf5eb454d627dc1",
+          "id": "o-1300ab3e2ab38af9",
+          "orderNo": "1082521455",
+          "recordId": "r-6b56b3af0244477e",
           "market": "US",
-          "code": "USFIX",
-          "name": "Fixture Equity",
+          "code": "LEGACYUS",
+          "name": "Legacy Unit Position",
           "side": "buy",
           "status": "filled",
           "qty": 10,
@@ -300,7 +300,7 @@
           "session": "",
           "triggerStatus": "",
           "tradedAt": "2026-10-05T13:30:00.000Z",
-          "createdAt": "2026-10-05T09:28:04.746Z"
+          "createdAt": "2026-10-05T09:28:04.770Z"
         }
       ],
       "count": 2,
@@ -334,6 +334,6 @@
       "underlying_merge",
       "verified_live_market_status"
     ],
-    "snapshotRevision": "fc1ecc712f317e6c84988a5ef55c53153bd0ec7a1f8b722f0bfbf13276406627"
+    "snapshotRevision": "518fa5879597e113f6861d2a67916b8fb66eee38b2c16abd0a47f01f957b8398"
   }
 }

@@ -31,7 +31,7 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
   for(const v of [1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(origin+`/api/v${v}/auth/config`)),d=(await r.json()).data,c=d.account_assets;assert.equal(c.version,1);for(const key of ['snapshot_path','instrument_path','operation_path'])assert(c[key].startsWith(`/api/v${v}/account-assets`));assert.equal(c.features.derivatives,false);assert.equal(c.features.account_day_pnl,false);assert.equal(c.automatic_mutation_replay,false);assert.equal(d.scope,'portfolio.read portfolio.write');}
  });
  await test('unknown security units stay unavailable; real empty and cash are distinct from missing',async()=>{
-  const f=fixture(),r=record(f);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});
+  const f=fixture(),r=record(f);await classify(f,r,{kind:'unknown'});funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});
   const s=(await call(1,f)).data.data;assert.equal(s.positions[0].instrument.kind,'unknown');assert.equal(s.positions[0].marketValue,null);assert.equal(s.summary.totalMarket,null);assert.equal(s.summary.totalAsset,null);assert.equal(s.summary.totalCash,100);assert.equal(s.summary.dayPnl,null);
   const e=fixture(),empty=(await call(2,e)).data.data;assert.equal(empty.summary.totalMarket,0);assert.equal(empty.summary.totalAsset,0);assert.equal(empty.todayOrders.count,0);assert.equal(empty.todayOrders.emptyReason,'no_recorded_orders_today');
  });
@@ -83,7 +83,7 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
  });
  await test('FX, unknown order units, regular-session gaps and declared delisting preserve nulls',async()=>{
   const f=fixture(),r=record(f,{market:'HK'});await classify(f,r,{listingStatus:'delisted'});delete rates.HKD;let s=(await call(1,f)).data.data;assert.equal(s.summary.totalAsset,null);assert(s.summary.unconvertedCurrencies.includes('HKD'));assert.equal(s.positions[0].instrument.listingStatus,'delisted');
-  const u=record(f,{code:'UNCLASSIFIED',qty:0,cost:''});orders.executeOrder({userId:f.user.id,recordId:u.id,side:'buy',qty:1,price:10,fees:0});s=(await call(2,f)).data.data;assert.equal(s.summary.totalCash,null);
+  const u=record(f,{code:'UNCLASSIFIED',qty:0,cost:''});await classify(f,u,{kind:'unknown'});orders.executeOrder({userId:f.user.id,recordId:u.id,side:'buy',qty:1,price:10,fees:0});s=(await call(2,f)).data.data;assert.equal(s.summary.totalCash,null);
   const g=fixture(),us=record(g);await classify(g,us);quotes={[us.id]:{price:20,time:'actual',session:'PRE'}};s=(await call(1,g,'?usPrice=regular')).data.data;assert.equal(s.positions[0].price,null);assert.equal(s.summary.totalMarket,null);
  });
  await test('opaque snapshot revision changes for real account inputs, not observation timestamp',async()=>{
@@ -111,7 +111,7 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
   for(const v of [1,2]){const s=(await call(v,f)).data.data;assert.equal(s.cash.sourceComplete,true);assert.equal(s.cash.nativeBalancesByCurrency.HKD,700);assert.equal(s.cash.complete,false);assert.equal(s.cash.balancesByCurrency,null);assert.equal(s.summary.totalCash,null);assert.equal(s.positions[0].valuationUnavailableReason,'missing_exchange_rate');}
  });
  await test('unclassified transaction units never become available native cash',async()=>{
-  const f=fixture(),r=record(f,{qty:0,cost:''});orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:1,price:10,fees:0});
+  const f=fixture(),r=record(f,{qty:0,cost:''});await classify(f,r,{kind:'unknown'});orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:1,price:10,fees:0});
   const s=(await call(2,f)).data.data;assert.equal(s.cash.sourceComplete,false);assert.equal(s.cash.nativeBalancesByCurrency,null);assert.equal(s.positions[0].valuationUnavailableReason,'instrument_unclassified');
  });
  await test('a verified fresh zero-opening cycle recovers from an incomplete older closed cycle',async()=>{
@@ -132,7 +132,43 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
   const s=(await call(2,f)).data.data;assert.equal(s.positions[0].clearedAt,null);assert.equal(s.positions[0].clearedToday,false);assert(s.todayOrders.unknownDateOrderIds.includes(sold.id));
   assert.equal(assets.assetLocalDate(Date.now(),'constructor'),null);
  });
+ await test('legacy undeclared records preserve existing overview accounting without writes or classification',async()=>{
+  const f=fixture(),us=record(f),hk=record(f,{market:'HK',code:'HKLEGACY',qty:7,price:70,cost:60,name:'Option ETF name is not type evidence'});
+  funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});
+  const before=snapshot();onQuotes=items=>assert.deepEqual(new Set(items.map(r=>r.id)),new Set([us.id,hk.id]));
+  for(const v of [1,2]){
+   const s=(await call(v,f)).data.data;
+   const old=load('lib/overview.ts').buildOverview(store.listRecords(f.user.id),rates,{},'USD',load('lib/accountCashStore.ts').readAccountCash(f.user.id));
+   for(const field of ['totalMarket','totalCost','totalCash','totalAsset'])assert.equal(s.summary[field],old[field]);
+   assert.equal(s.summary.holdingPnl,old.totalPnl);assert.equal(s.summary.totalAsset,190);
+   assert(s.positions.every(p=>p.instrument.kind==='unknown'&&p.instrument.multiplier===null&&p.instrument.source==='unavailable'));
+   assert(s.positions.every(p=>p.valuationBasis==='legacy_record_unit'&&p.valuationUnitMultiplier===1&&p.valuationUnavailableReason===null));
+   assert.equal(s.positions.find(p=>p.recordId===hk.id).nativeMarketValue,490);assert.equal(s.summary.dayPnl,null);
+   assert.deepEqual(snapshot(),before);
+  }
+ });
+ await test('legacy real orders restore cash and average basis only from verified accounting chains',async()=>{
+  const f=fixture(),r=record(f,{qty:0,cost:''});funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:500,direction:1});
+  orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:10,price:10,fees:2});orders.executeOrder({userId:f.user.id,recordId:r.id,side:'sell',qty:4,price:15,fees:1});
+  const before=snapshot();for(const v of [1,2]){const s=(await call(v,f,'?costMethod=average_open')).data.data;assert.equal(s.cash.nativeBalancesByCurrency.USD,457);assert.equal(s.summary.totalCash,457);assert.equal(s.positions[0].averageOpenCost,10.2);assert.equal(s.positions[0].instrument.kind,'unknown');assert.equal(s.todayOrders.count,2);assert.deepEqual(snapshot(),before);}
+  db.prepare('UPDATE trade_orders SET position_qty_before=NULL WHERE user_id=?').run(f.user.id);
+  assert.equal((await call(1,f,'?costMethod=average_open')).data.data.positions[0].averageOpenCost,null);
+ });
+ await test('legacy fallback never overrides explicit unknown or revived invalidated identities',async()=>{
+  const f=fixture(),r=record(f);assert.equal((await call(1,f)).data.data.summary.totalMarket,20);
+  await classify(f,r,{kind:'unknown'});onQuotes=items=>assert.equal(items.length,0);
+  let s=(await call(2,f)).data.data;assert.equal(s.positions[0].valuationBasis,'unavailable');assert.equal(s.summary.totalMarket,null);
+  onQuotes=null;await classify(f,r);db.prepare("UPDATE records SET code='OTHER' WHERE id=?").run(r.id);db.prepare('UPDATE records SET code=? WHERE id=?').run(r.code,r.id);
+  s=(await call(1,f)).data.data;assert.equal(s.positions[0].valuationBasis,'unavailable');assert.equal(s.summary.totalMarket,null);
+ });
+ await test('legacy missing prices costs FX and mismatched order identity remain missing',async()=>{
+  const f=fixture(),r=record(f,{price:'',cost:''});let s=(await call(1,f)).data.data;assert.equal(s.positions[0].valuationUnavailableReason,'missing_price');assert.equal(s.summary.totalMarket,null);assert.equal(s.summary.totalCost,null);
+  store.updateRecord(r.id,f.user.id,{...r,price:10,cost:5});orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:1,price:10,fees:0});
+  db.prepare("UPDATE records SET code='REIDENTIFIED' WHERE id=?").run(r.id);s=(await call(2,f)).data.data;assert.equal(s.cash.sourceComplete,false);assert.equal(s.summary.totalCash,null);
+  const g=fixture(),hk=record(g,{market:'HK'});delete rates.HKD;s=(await call(1,g)).data.data;assert.equal(s.positions[0].nativeMarketValue,20);assert.equal(s.summary.totalMarket,null);assert.equal(s.positions[0].valuationUnavailableReason,'missing_exchange_rate');
+ });
  if(process.env.ALCOR_ASSET_FIXTURE_OUT){
+  rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuotes=null;
   const f=fixture(),us=record(f,{qty:0,cost:'',code:'USFIX',name:'Fixture Equity'}),hk=record(f,{code:'HKFIX',market:'HK',qty:7,price:70,cost:60,name:'Fixture ETF'});
   await classify(f,us);await classify(f,hk,{kind:'etf'});funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:500,direction:1});
   orders.executeOrder({userId:f.user.id,recordId:us.id,side:'buy',qty:10,price:10,fees:2,tradedAt:'2026-10-05T13:30:00.000Z'});
@@ -140,6 +176,17 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
   const quote={[us.id]:{name:'Fixture Equity',price:12,change:2,changePct:20,open:10,high:12,low:10,prevClose:10,time:'2026-10-05T14:30:00.000Z',session:'REGULAR',source:'auto'},[hk.id]:{name:'Fixture ETF',price:70,change:0,changePct:0,open:70,high:70,low:70,prevClose:70,time:'2026-10-05T08:00:00.000Z',session:'REGULAR',source:'auto'}};
   const data=db.transaction(()=>assets.buildAssets(f.user.id,{username:'fixture_owner',nickname:'Fixture Account',uid:'1',avatar:''},rates,quote,{currency:'USD',costMethod:'diluted',usPrice:'observed'},Date.parse('2026-10-05T14:30:00.000Z')))();
   fs.writeFileSync(process.env.ALCOR_ASSET_FIXTURE_OUT,JSON.stringify({code:0,message:'ok',data},null,2)+'\n');
+  const legacy=fixture(),legacyUS=record(legacy,{qty:0,cost:'',code:'LEGACYUS',name:'Legacy Unit Position'}),legacyHK=record(legacy,{market:'HK',code:'LEGACYHK',qty:7,price:70,cost:60,name:'Legacy HK Unit Position'});
+  funds.createFundTransaction({userId:legacy.user.id,currency:'USD',type:'deposit',amount:500,direction:1});
+  orders.executeOrder({userId:legacy.user.id,recordId:legacyUS.id,side:'buy',qty:10,price:10,fees:2,tradedAt:'2026-10-05T13:30:00.000Z'});
+  orders.executeOrder({userId:legacy.user.id,recordId:legacyUS.id,side:'sell',qty:4,price:15,fees:1,tradedAt:'2026-10-05T14:00:00.000Z'});
+  const legacyQuotes={[legacyUS.id]:quote[us.id],[legacyHK.id]:quote[hk.id]};
+  const legacyData=()=>db.transaction(()=>assets.buildAssets(legacy.user.id,{username:'legacy_fixture_owner',nickname:'Legacy Fixture',uid:'2',avatar:''},rates,legacyQuotes,{currency:'USD',costMethod:'diluted',usPrice:'observed'},Date.parse('2026-10-05T14:30:00.000Z')))();
+  const complete=legacyData();assert.equal(complete.summary.totalAsset,599);assert(complete.positions.every(p=>p.instrument.kind==='unknown'&&p.valuationBasis==='legacy_record_unit'));
+  fs.writeFileSync(path.join(path.dirname(process.env.ALCOR_ASSET_FIXTURE_OUT),'account-assets-legacy-v1.json'),JSON.stringify({code:0,message:'ok',data:complete},null,2)+'\n');
+  const explicit=record(legacy,{code:'EXPLICITUNKNOWN',qty:1,price:10,cost:5,name:'Owner Explicit Unknown'});await classify(legacy,explicit,{kind:'unknown'});
+  const mixed=legacyData();assert.equal(mixed.summary.totalMarket,null);assert.equal(mixed.positions.find(p=>p.recordId===explicit.id).valuationBasis,'unavailable');
+  fs.writeFileSync(path.join(path.dirname(process.env.ALCOR_ASSET_FIXTURE_OUT),'account-assets-legacy-unknown-v1.json'),JSON.stringify({code:0,message:'ok',data:mixed},null,2)+'\n');
  }
  console.log(`${count} asset contract tests passed`);
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{try{db.close();fs.rmSync(temp,{recursive:true,force:true});}catch{}});

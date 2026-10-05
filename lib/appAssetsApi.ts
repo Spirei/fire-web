@@ -8,7 +8,7 @@ import { fail, ok } from "./api";
 import { readJsonBody, RequestBodyTooLargeError } from "./requestBody";
 import { RecordsError } from "./recordsContract";
 import { rateLimit } from "./rateLimit";
-import { assetOperation, buildAssets, declareInstrument, instrumentRows, instrumentSnapshot, type AssetOptions } from "./appAssets";
+import { assetOperation, assetValuationBasis, buildAssets, declareInstrument, instrumentRows, instrumentSnapshot, type AssetOptions } from "./appAssets";
 
 function assetGrant(request: Request) {
   try { assertAppOrigin(request); } catch { throw new RecordsError("请求来源不受信任", 403); }
@@ -46,8 +46,7 @@ export async function assetsResponse(request: Request, action: "snapshot" | "ins
     const records = listRecords(initial.user_id), declarations = instrumentRows(initial.user_id);
     const declarationByRecord = new Map(declarations.map(d => [d.record_id, d]));
     const items = records.filter(r => {
-      const d = declarationByRecord.get(r.id);
-      return Number(r.qty) > 0 && d && d.market === r.market && d.code === r.code && d.kind !== "unknown";
+      return Number(r.qty) > 0 && assetValuationBasis(r, declarationByRecord.get(r.id)) !== "unavailable";
     });
     // Read existing public quote cache/provider only; do not create private subscriptions or settle orders.
     const snapshot = await fetchOverviewQuotes(items, 1_500);
