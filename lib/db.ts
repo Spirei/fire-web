@@ -8,6 +8,7 @@ import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
 import { installRecordsContract } from "./recordsSchema";
+import { installAccountChanges } from "./accountChangeSchema";
 import { installQuoteSubscriptions } from "./quoteSubscriptionsSchema";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -1206,6 +1207,7 @@ export function getDb(): Database.Database {
       migrate(db);
       installRecordsContract(db);
       installQuoteSubscriptions(db);
+      installAccountChanges(db);
       seed(db);
     } catch (error) {
       db.close();

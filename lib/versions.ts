@@ -4823,7 +4823,7 @@ const V0_1_49_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_50_ENTRY: VersionEntry = {
   ...V0_1_49_ENTRY,
   version: "v0.1.50",
   date: "2026-10-04",
@@ -4840,10 +4840,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_50_ENTRY,
+  version: "v0.1.51",
+  date: "2026-10-05",
+  summary: "App 分步验证原密码与当前邮箱后修改账户信息。",
+  software: V0_1_50_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.51" } : item),
+  changes: [{ kind: "feature", title: "App分步修改密码与邮箱", desc: "原密码验证后设置新密码，当前邮箱六位验证码验证后设置新邮箱，无需重复TOTP。v1/v2提供能力发现与固定路径，验证凭证五分钟有效、一次性绑定用户、用途、发起授权及身份版本；持久重发冷却、验证码尝试次数与邮件额度共用。成功修改撤销全部登录和App授权，新邮箱保持未验证，旧接口合同兼容；补充临时数据库安全回归。" }]
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_50_ENTRY,
   V0_1_49_ENTRY,
   V0_1_48_ENTRY,
   V0_1_47_ENTRY,

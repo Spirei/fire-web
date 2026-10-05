@@ -175,7 +175,7 @@ export function appIdentity(token: string, request: Request): Grant | null {
   const feedRead = method === "GET" && /^\/api\/v1\/feed(?:\/(?:groups|profile|jobs(?:\/fj-[a-f0-9]{24})?|posts\/fp-[a-f0-9]{24}(?:\/discussion)?))?$/.test(path);
   const feedWrite = (method === "PUT" && /^\/api\/v1\/feed\/(?:groups\/(?:default|fg-[a-f0-9]{24})|profile|preferences|posts\/fp-[a-f0-9]{24})$/.test(path)) || (method === "POST" && /^\/api\/v1\/feed\/(?:groups|subscriptions\/test|profile\/avatar|refresh|posts\/fp-[a-f0-9]{24}\/discussion)$/.test(path));
   const securityRead = method === "GET" && /^\/api\/v1\/auth\/(?:email-verification|totp|passkeys|security-devices)$/.test(path);
-  const securityWrite = (method === "POST" && /^\/api\/v1\/auth\/(?:email-verification\/(?:request|confirm)|totp\/(?:setup|confirm|disable|backup-codes)|passkeys\/(?:register-options|register-verify))$/.test(path)) || (method === "DELETE" && /^\/api\/v1\/auth\/(?:passkeys|security-devices)$/.test(path));
+  const securityWrite = (method === "POST" && /^\/api\/v1\/auth\/(?:password-change\/(?:verify|confirm)|email-change\/(?:request|verify|confirm)|email-verification\/(?:request|confirm)|totp\/(?:setup|confirm|disable|backup-codes)|passkeys\/(?:register-options|register-verify))$/.test(path)) || (method === "DELETE" && /^\/api\/v1\/auth\/(?:passkeys|security-devices)$/.test(path));
   // New security handlers check explicit scope and report 403 without invalidating a live grant.
   if (!securityRead && !securityWrite && !read && !marketRead && !write && !profileWrite && !accountWrite && !feedRead && !feedWrite) return null;
   try { assertAppOrigin(request); } catch { return null; }
