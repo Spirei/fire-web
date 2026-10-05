@@ -44,7 +44,11 @@ export async function assetsResponse(request: Request, action: "snapshot" | "ins
     authorize();
     if (!Number.isFinite(rates[currency]) || rates[currency] <= 0) throw new RecordsError("缺少显示币种汇率");
     const records = listRecords(initial.user_id), declarations = instrumentRows(initial.user_id);
-    const items = records.filter(r => Number(r.qty) > 0 && declarations.some(d => d.record_id === r.id && d.market === r.market && d.code === r.code && d.kind !== "unknown"));
+    const declarationByRecord = new Map(declarations.map(d => [d.record_id, d]));
+    const items = records.filter(r => {
+      const d = declarationByRecord.get(r.id);
+      return Number(r.qty) > 0 && d && d.market === r.market && d.code === r.code && d.kind !== "unknown";
+    });
     // Read existing public quote cache/provider only; do not create private subscriptions or settle orders.
     const snapshot = await fetchOverviewQuotes(items, 1_500);
     return getDb().transaction(() => {
@@ -53,7 +57,8 @@ export async function assetsResponse(request: Request, action: "snapshot" | "ins
       if (!user) throw new RecordsError("账号已失效", 401);
       const current = listRecords(initial.user_id);
       const original = new Map(records.map(r => [r.id, `${r.market}:${r.code}:${r.revision}`]));
-      const quotes = Object.fromEntries(current.filter(r => original.get(r.id) === `${r.market}:${r.code}:${r.revision}` && snapshot.quotes[r.id]).map(r => [r.id, { ...snapshot.quotes[r.id], cached: snapshot.cached.includes(r.id) || !!snapshot.quotes[r.id].cached }]));
+      const cached = new Set(snapshot.cached);
+      const quotes = Object.fromEntries(current.filter(r => original.get(r.id) === `${r.market}:${r.code}:${r.revision}` && snapshot.quotes[r.id]).map(r => [r.id, { ...snapshot.quotes[r.id], cached: cached.has(r.id) || !!snapshot.quotes[r.id].cached }]));
       return ok(buildAssets(initial.user_id, { username: user.username, nickname: user.nickname ?? "", uid: user.uid ?? "", avatar: user.avatar ?? "" }, rates, quotes, options));
     })();
   } catch (error) {

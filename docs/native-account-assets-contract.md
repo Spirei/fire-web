@@ -10,6 +10,14 @@ Web 与 iOS 独立。共享合约路径：`fire-web/docs/native-account-assets-c
 
 ## 发现与权限
 
+本次兼容新增字段：`cash.nativeBalancesByCurrency:Record<string,number>|null`、`cash.sourceComplete:boolean`，用于显示无需汇率换算的真实原币现金。只有底层现金来源和证券单位可核对时 sourceComplete=true；缺汇率不会隐藏原币现金，汇总现金 totalCash 及旧 balancesByCurrency/complete 仍保持原来的缺失规则。App不得把 sourceComplete 当作已换算总额完整。
+
+`positions.valuationUnavailableReason:string|null` 说明估值缺失原因：instrument_unclassified（证券类型待确认）、unsupported_position_quantity（数量缺失或不支持）、missing_price（缺少所选口径报价）、missing_exchange_rate（缺汇率/币种）、invalid_valuation_amount（金额不可计算）。完整估值为null原因，不把未知值显示为零。
+
+平均成本只核对当前从零开仓周期：更早已结束周期缺少数量快照，不再阻断一个可以独立核对的新周期；当前周期缺快照、身份不匹配、链条无法对平，或历史成交日期无法确定，仍返回缺失。版本、权限及旧字段保持兼容。
+
+优化验证：20组资产合约测试、166组页面与设置回归、原资产总览/records/v2迁移/接口文档回归及63项本地只读巡检通过。历史成交时间无效时，不猜清仓日期，列入unknownDateOrderIds。证券声明、订单和日期在单次快照内建立索引；复用固定市场的时区格式器，不缓存用户账户响应。
+
 匿名同源 `GET /api/v{1,2}/auth/config` 的 `data.account_assets.version===1` 才启用。本连接固定选定的 v1/v2，不跨版本重试、不追随外部路径。不存在能力时保留既有 records/overview；已声明但读取失败应显示失败，不用另一账号缓存兜底。
 
 ```json

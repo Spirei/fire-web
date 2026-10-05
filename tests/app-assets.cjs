@@ -104,6 +104,34 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
   const reply=await load('app/api/v1/account-assets/instruments/[recordId]/route.ts').GET(request(1,f,'/instruments/'+r.id),{params});assert.equal(reply.status,401);
   const g=fixture(),rr=record(g);const replies=await Promise.all([1,2].map(v=>call(v,g,'/instruments/'+rr.id,'PUT',declare(g,rr))));assert.deepEqual(replies.map(r=>r.status).sort(),[200,409]);
  });
+ await test('missing FX preserves trustworthy native cash including equity reconciliation',async()=>{
+  const f=fixture(),r=record(f,{market:'HK',qty:7,price:100});await classify(f,r);
+  const simple=load('lib/simpleStore.ts');simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{market:'HK',cur:'HKD',amount:1400}]});
+  delete rates.HKD;
+  for(const v of [1,2]){const s=(await call(v,f)).data.data;assert.equal(s.cash.sourceComplete,true);assert.equal(s.cash.nativeBalancesByCurrency.HKD,700);assert.equal(s.cash.complete,false);assert.equal(s.cash.balancesByCurrency,null);assert.equal(s.summary.totalCash,null);assert.equal(s.positions[0].valuationUnavailableReason,'missing_exchange_rate');}
+ });
+ await test('unclassified transaction units never become available native cash',async()=>{
+  const f=fixture(),r=record(f,{qty:0,cost:''});orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:1,price:10,fees:0});
+  const s=(await call(2,f)).data.data;assert.equal(s.cash.sourceComplete,false);assert.equal(s.cash.nativeBalancesByCurrency,null);assert.equal(s.positions[0].valuationUnavailableReason,'instrument_unclassified');
+ });
+ await test('a verified fresh zero-opening cycle recovers from an incomplete older closed cycle',async()=>{
+  const f=fixture(),r=record(f,{qty:0,cost:''});await classify(f,r);
+  const old=orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:2,price:10,fees:0,tradedAt:'2026-10-01T13:30:00Z'}).order;
+  orders.executeOrder({userId:f.user.id,recordId:r.id,side:'sell',qty:2,price:12,fees:0,tradedAt:'2026-10-02T13:30:00Z'});
+  orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:3,price:20,fees:3,tradedAt:'2026-10-03T13:30:00Z'});
+  db.prepare('UPDATE trade_orders SET position_qty_before=NULL WHERE id=?').run(old.id);
+  for(const v of [1,2]){const s=(await call(v,f,'?costMethod=average_open')).data.data;assert.equal(s.positions[0].averageOpenCost,21);assert.equal(s.positions[0].averageCostComplete,true);assert.equal(s.positions[0].cycleStartedAt,'2026-10-03T13:30:00.000Z');}
+  db.prepare("UPDATE trade_orders SET position_qty_before=NULL WHERE traded_at='2026-10-03T13:30:00.000Z' AND user_id=?").run(f.user.id);
+  assert.equal((await call(1,f,'?costMethod=average_open')).data.data.positions[0].averageOpenCost,null);
+ });
+ await test('invalid historical dates remain unassigned and cannot invent a clearing date',async()=>{
+  const f=fixture(),r=record(f,{qty:0,cost:''});await classify(f,r);
+  orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:1,price:10,fees:0});
+  const sold=orders.executeOrder({userId:f.user.id,recordId:r.id,side:'sell',qty:1,price:12,fees:0}).order;
+  db.prepare("UPDATE trade_orders SET traded_at='invalid' WHERE id=?").run(sold.id);
+  const s=(await call(2,f)).data.data;assert.equal(s.positions[0].clearedAt,null);assert.equal(s.positions[0].clearedToday,false);assert(s.todayOrders.unknownDateOrderIds.includes(sold.id));
+  assert.equal(assets.assetLocalDate(Date.now(),'constructor'),null);
+ });
  if(process.env.ALCOR_ASSET_FIXTURE_OUT){
   const f=fixture(),us=record(f,{qty:0,cost:'',code:'USFIX',name:'Fixture Equity'}),hk=record(f,{code:'HKFIX',market:'HK',qty:7,price:70,cost:60,name:'Fixture ETF'});
   await classify(f,us);await classify(f,hk,{kind:'etf'});funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:500,direction:1});
