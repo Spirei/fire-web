@@ -179,47 +179,47 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
       try { assert(snapshot.prepare('SELECT 1 FROM users WHERE id=?').get(owner.id)); } finally { snapshot.close(); }
       assert.equal(fs.readFileSync(path.join(temp, 'data/backups', result.name, 'uploads/backup-fixture.txt'), 'utf8'), 'backup fixture');
       const followup = await backup.runBackup(); assert.equal(calls, 2); assert.notEqual(followup.name, result.name);
-      assert(followup.name.startsWith(result.name + '-')); assert.equal(backup.listBackups().length, 2); assert.equal(backup.getBackupConfig().enabled, false);
+      assert(followup.name.startsWith(result.name + '-')); assert.equal((await backup.listBackups()).length, 2); assert.equal(backup.getBackupConfig().enabled, false);
     } finally { Database.prototype.backup = original; global.Date = RealDate; }
   });
-  await test('scheduled backup respects disablement after its delayed check', () => {
+  await test('scheduled backup respects disablement after its delayed check', async () => {
     const backup = load('lib/backup.ts'), now = Date.now, timeout = global.setTimeout; let callback;
     Date.now = () => now() + 60_001;
     global.setTimeout = fn => { callback = fn; return 1; };
     try {
       backup.saveBackupConfig({ ...backup.getBackupConfig(), enabled: true, lastAt: 0 }); backup.maybeRunBackup(); assert.equal(typeof callback, 'function');
-      backup.saveBackupConfig({ ...backup.getBackupConfig(), enabled: false }); callback(); assert.equal(backup.listBackups().length, 2);
+      backup.saveBackupConfig({ ...backup.getBackupConfig(), enabled: false }); callback(); assert.equal((await backup.listBackups()).length, 2);
     } finally { Date.now = now; global.setTimeout = timeout; }
   });
   await test('failed snapshots remove incomplete directories and release the shared backup lock', async () => {
     const backup = load('lib/backup.ts'), Database = require('better-sqlite3'), original = Database.prototype.backup;
-    const count = backup.listBackups().length, before = backup.getBackupConfig();
+    const count = (await backup.listBackups()).length, before = backup.getBackupConfig();
     Database.prototype.backup = () => Promise.reject(new Error('isolated backup failure'));
     try { await assert.rejects(backup.runBackup(), /isolated backup failure/); }
     finally { Database.prototype.backup = original; }
-    assert.equal(backup.listBackups().length, count); assert.deepEqual(backup.getBackupConfig(), before);
-    const result = await backup.runBackup(); assert(fs.existsSync(path.join(temp, 'data/backups', result.name, 'fire.db'))); assert.equal(backup.listBackups().length, count + 1);
+    assert.equal((await backup.listBackups()).length, count); assert.deepEqual(backup.getBackupConfig(), before);
+    const result = await backup.runBackup(); assert(fs.existsSync(path.join(temp, 'data/backups', result.name, 'fire.db'))); assert.equal((await backup.listBackups()).length, count + 1);
   });
-  await test('completed backup sizes remain readable without traversing network uploads and reject invalid indexes', () => {
+  await test('completed backup sizes remain readable without traversing network uploads and reject invalid indexes', async () => {
     const backup = load('lib/backup.ts'), config = backup.getBackupConfig();
     const directory = path.join(temp, 'data/backups', config.lastFile), metaFile = path.join(directory, '.backup-meta.json');
-    const originalMeta = fs.readFileSync(metaFile, 'utf8'), originalRead = fs.readdirSync;
-    fs.readdirSync = function(directory, ...args) {
+    const originalMeta = fs.readFileSync(metaFile, 'utf8'), originalRead = fs.promises.readdir;
+    fs.promises.readdir = async function(directory, ...args) {
       if (String(directory).includes(path.sep + 'uploads')) throw new Error('network traversal prohibited');
       return originalRead.call(this, directory, ...args);
     };
     try {
-      assert.equal(backup.listBackups().find(item => item.name === config.lastFile).size, config.lastSize);
+      assert.equal((await backup.listBackups()).find(item => item.name === config.lastFile).size, config.lastSize);
       for (const invalid of [JSON.stringify({ version: 1, name: config.lastFile, payloadSize: -1 }), JSON.stringify({ version: 1, name: 'other-snapshot', payloadSize: 1 }), originalMeta + ' '.repeat(1025)]) {
         fs.writeFileSync(metaFile, invalid);
-        assert.throws(() => backup.listBackups(), /network traversal prohibited/);
+        await assert.rejects(backup.listBackups(), /network traversal prohibited/);
       }
-    } finally { fs.readdirSync = originalRead; fs.writeFileSync(metaFile, originalMeta); }
+    } finally { fs.promises.readdir = originalRead; fs.writeFileSync(metaFile, originalMeta); }
   });
   await test('slow asynchronous backup copies leave completed backups and settings available', async () => {
     const backup = load('lib/backup.ts'), fsp = fs.promises, originalCopy = fsp.copyFile;
     backup.saveBackupConfig({ ...backup.getBackupConfig(), enabled: false, keep: 10 });
-    const before = backup.getBackupConfig(), count = backup.listBackups().length;
+    const before = backup.getBackupConfig(), count = (await backup.listBackups()).length;
     let start, release, timeout, settled = false;
     const started = new Promise(resolve => { start = resolve; }), gate = new Promise(resolve => { release = resolve; });
     fsp.copyFile = async function(...args) { start(); await gate; return originalCopy.apply(this, args); };
@@ -229,10 +229,10 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
       clearTimeout(timeout);
       await new Promise(resolve => setImmediate(resolve));
       assert.equal(settled, false); assert.deepEqual(backup.getBackupConfig(), before);
-      assert.equal(backup.listBackups().length, count, 'in-progress snapshots must not require a network traversal');
+      assert.equal((await backup.listBackups()).length, count, 'in-progress snapshots must not require a network traversal');
       release(); const result = await pending;
-      assert.equal(backup.listBackups().length, count + 1);
-      assert.equal(backup.listBackups().find(item => item.name === result.name).size, result.size);
+      assert.equal((await backup.listBackups()).length, count + 1);
+      assert.equal((await backup.listBackups()).find(item => item.name === result.name).size, result.size);
     } finally { clearTimeout(timeout); release(); fsp.copyFile = originalCopy; await pending.catch(() => {}); }
   });
   await test('copy failure waits for outstanding writes before cleaning the failed snapshot', async () => {
@@ -241,37 +241,36 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
     let otherStarted, release, timeout, calls = 0, settled = false;
     const started = new Promise(resolve => { otherStarted = resolve; }), gate = new Promise(resolve => { release = resolve; });
     fsp.copyFile = async function(...args) {
-      if (++calls === 1) { await started; throw new Error('isolated copy failure'); }
-      otherStarted(); await gate; return originalCopy.apply(this, args);
+      calls++; otherStarted(); await gate; throw new Error('isolated copy failure');
     };
     const pending = backup.runBackup(); pending.then(() => { settled = true; }, () => { settled = true; });
     try {
       await Promise.race([started, new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('no outstanding copy')), 2000); })]);
       clearTimeout(timeout); await new Promise(resolve => setImmediate(resolve));
-      assert.equal(settled, false, 'cleanup must wait for outstanding filesystem writes');
+      assert.equal(settled, false, 'cleanup must wait for the active filesystem write'); assert.equal(calls, 1, 'copies are serialized to leave server workers free');
       release(); await assert.rejects(pending, /isolated copy failure/);
       assert.deepEqual(fs.readdirSync('data/backups'), names); assert.deepEqual(backup.getBackupConfig(), before);
     } finally { clearTimeout(timeout); release(); fsp.copyFile = originalCopy; await pending.catch(() => {}); }
   });
-  await test('listing skips directories concurrently removed by another backup process', () => {
-    const backup = load('lib/backup.ts'), before = backup.listBackups(), latest = backup.getBackupConfig().lastFile;
-    const directory = path.join(temp, 'data/backups', latest), originalStat = fs.statSync;
-    fs.statSync = function(file, ...args) {
+  await test('listing skips directories concurrently removed by another backup process', async () => {
+    const backup = load('lib/backup.ts'), before = (await backup.listBackups()), latest = backup.getBackupConfig().lastFile;
+    const directory = path.join(temp, 'data/backups', latest), originalStat = fs.promises.stat;
+    fs.promises.stat = async function(file, ...args) {
       if (String(file) === directory) throw Object.assign(new Error('snapshot removed concurrently'), { code: 'ENOENT' });
       return originalStat.call(this, file, ...args);
     };
-    try { const list = backup.listBackups(); assert.equal(list.length, before.length - 1); assert(!list.some(item => item.name === latest)); }
-    finally { fs.statSync = originalStat; }
+    try { const list = (await backup.listBackups()); assert.equal(list.length, before.length - 1); assert(!list.some(item => item.name === latest)); }
+    finally { fs.promises.stat = originalStat; }
   });
   await test('rotation keeps the completed new snapshot visible while skipping deletion in progress', async () => {
-    const backup = load('lib/backup.ts'), fsp = fs.promises, originalRm = fsp.rm;
+    const backup = load('lib/backup.ts'), fsp = fs.promises, originalRm = fsp.rmdir;
     backup.saveBackupConfig({ ...backup.getBackupConfig(), enabled: false, keep: 1 });
     let start, release, timeout, deleting;
     const started = new Promise(resolve => { start = resolve; }), gate = new Promise(resolve => { release = resolve; });
-    fsp.rm = async function(directory, ...args) {
-      if (!deleting && String(directory).startsWith(path.join(temp, 'data/backups') + path.sep)) {
+    fsp.rmdir = async function(directory, ...args) {
+      if (!deleting && path.dirname(String(directory)) === path.join(temp, 'data/backups')) {
         deleting = path.basename(directory);
-        await originalRm.call(this, path.join(directory, '.backup-meta.json'), { force: true });
+        // The final directory removal happens after serial file cleanup.
         start(); await gate;
       }
       return originalRm.call(this, directory, ...args);
@@ -280,12 +279,12 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
     try {
       await Promise.race([started, new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('rotation never started')), 2000); })]);
       clearTimeout(timeout);
-      const list = backup.listBackups(), latest = backup.getBackupConfig().lastFile;
+      const list = (await backup.listBackups()), latest = backup.getBackupConfig().lastFile;
       assert(list.some(item => item.name === latest), 'completed snapshot must remain visible during retention cleanup');
       assert(!list.some(item => item.name === deleting), 'partially deleted snapshot must not be traversed');
       release(); const result = await pending;
-      assert.deepEqual(backup.listBackups().map(item => item.name), [result.name]);
-    } finally { clearTimeout(timeout); release(); fsp.rm = originalRm; await pending.catch(() => {}); }
+      assert.deepEqual((await backup.listBackups()).map(item => item.name), [result.name]);
+    } finally { clearTimeout(timeout); release(); fsp.rmdir = originalRm; await pending.catch(() => {}); }
   });
   console.log(`PASS ${passed} file security regressions`);
   db.close(); process.chdir(root); fs.rmSync(temp, { recursive: true, force: true }); process.exit(0);

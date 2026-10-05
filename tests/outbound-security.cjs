@@ -5,7 +5,8 @@ const root = path.resolve(__dirname, '..'), temp = fs.mkdtempSync(path.join(os.t
 const resolve = Module._resolveFilename;
 Module._resolveFilename = function (id, parent, ...rest) { return resolve.call(this, id.startsWith('@/') ? path.join(root, id.slice(2)) : id, parent, ...rest); };
 require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, file);
-process.chdir(temp); process.env.NODE_ENV = 'production'; process.env.INITIAL_ADMIN_USERNAME = ''; process.env.INITIAL_ADMIN_PASSWORD = '';
+process.chdir(temp);
+process.env.NODE_ENV = 'production'; process.env.INITIAL_ADMIN_USERNAME = ''; process.env.INITIAL_ADMIN_PASSWORD = '';
 process.env.STOCKLOG_FUTU = 'off'; process.env.STOCKLOG_PROXY = 'off'; process.env.FIRE_APP_ORIGIN = 'https://outbound.example.test';
 global.fetch = async () => { throw Error('External network disabled'); };
 const load = file => require(path.join(root, file));

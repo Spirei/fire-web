@@ -12,6 +12,7 @@ import { logSecurityEvent } from "./securityAudit";
 type Purpose = "password" | "email";
 type State = {user_id:string;grant_id:string;purpose:Purpose;stage:string;identity_version:number;security_stamp:string;email:string;code_hash:string;attempts:number;expires_at:number;created_at:number};
 const ttl = 300_000;
+const emailCodeTtl = 30 * 60_000;
 const validToken = (token:string) => /^[A-Za-z0-9_-]{43}$/.test(token);
 function currentStamp(userId:string) {
   return appSecurityStamp(getDb().prepare("SELECT password_hash,totp_enabled,totp_secret FROM users WHERE id=?").get(userId) as {password_hash:string;totp_enabled:number;totp_secret:string});
@@ -54,8 +55,8 @@ export async function accountChange(request:Request,purpose:Purpose,action:"requ
       const challenge=randomBytes(32).toString("base64url"), code=randomInt(0,1_000_000).toString().padStart(6,"0"), now=Date.now();
       db.prepare("DELETE FROM app_account_changes WHERE (user_id=? AND purpose='email') OR (expires_at<=? AND created_at<=?)").run(grant.user_id,now,now-60_000);
       db.prepare("INSERT INTO app_account_changes(token_hash,user_id,grant_id,purpose,stage,identity_version,security_stamp,email,code_hash,expires_at,created_at) VALUES(?,?,?,'email','code',?,?,?,?,?,?)")
-        .run(appTokenHash(challenge),grant.user_id,grant.id,identityVersion(grant.user_id),currentStamp(grant.user_id),row.email,appTokenHash(`${challenge}:${code}`),now+ttl,now);
-      return {challenge,code,email:row.email,expiresAt:now+ttl};
+        .run(appTokenHash(challenge),grant.user_id,grant.id,identityVersion(grant.user_id),currentStamp(grant.user_id),row.email,appTokenHash(`${challenge}:${code}`),now+emailCodeTtl,now);
+      return {challenge,code,email:row.email,expiresAt:now+emailCodeTtl};
     }).immediate();
     try {await sendAccountEmailChangeCode(delivery.email,delivery.code,permit!);} catch {
       db.prepare("UPDATE app_account_changes SET expires_at=0,code_hash='' WHERE token_hash=?").run(appTokenHash(delivery.challenge));

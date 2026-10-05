@@ -12,7 +12,7 @@
 | 验证当前邮箱 | POST `/api/v{1或2}/auth/email-change/verify` | `{challenge:string,code:string}`（六位数字，保留前导零） | `{ok:true,proof:string,expiresAt:number}` |
 | 设置新邮箱 | POST `/api/v{1或2}/auth/email-change/confirm` | `{proof:string,email:string}` | `{ok:true,reauthenticationRequired:true}` |
 
-响应外壳沿用 `{code:0,message:"ok",data:...}`；失败外壳 `{code:number,message:string}`。时间为 Unix 毫秒。凭证随机 32 字节 base64url（43 字符），数据库只存摘要。challenge 与 proof 各五分钟有效；proof 一次性绑定用途、本人、发起 grant、账户身份版本及安全状态，刷新 access token但仍是同一 grant可继续；另一 grant 不可使用。验证原密码不会消耗 TOTP，验证邮箱也不需要密码/TOTP。发送只送到数据库当前绑定邮箱，不接收客户端指定收件人；没有邮箱返回40902，SMTP未配置50301，发送失败 HTTP502/50002且凭证失效。
+响应外壳沿用 `{code:0,message:"ok",data:...}`；失败外壳 `{code:number,message:string}`。时间为 Unix 毫秒。凭证随机 32 字节 base64url（43 字符），数据库只存摘要。邮箱 challenge 三十分钟有效，proof 五分钟有效；proof 一次性绑定用途、本人、发起 grant、账户身份版本及安全状态，刷新 access token但仍是同一 grant可继续；另一 grant 不可使用。验证原密码不会消耗 TOTP，验证邮箱也不需要密码/TOTP。发送只送到数据库当前绑定邮箱，不接收客户端指定收件人；没有邮箱返回40902，SMTP未配置50301，发送失败 HTTP502/50002且凭证失效。
 
 重发冷却60秒按用户持久保存，跨 grant/版本/重启共享；每用户5次/15分钟、10次/24小时。额外共用 SMTP 收件人预算：1次/分钟、8次/小时、20次/日，verification类5次/小时、10次/日，全站100次/小时、500次/日。发送失败也计额度。成功重发使该用户之前的邮箱 challenge 与 proof失效；验证码最多5次错误尝试，失败次数事务提交，成功后立即失效。新验证密码会替换该用户原有密码proof。
 
@@ -43,7 +43,7 @@
         "confirm_path": "/api/v2/auth/email-change/confirm",
         "verification": "current_email_code",
         "code_digits": 6,
-        "challenge_ttl_seconds": 300,
+        "challenge_ttl_seconds": 1800,
         "retry_after_seconds": 60,
         "max_attempts": 5,
         "requires_password": false,
@@ -56,3 +56,14 @@
 ```
 
 上面是 config 的 `data` 内局部字段，不是顶层响应；v1只有路径中的v2变为v1，合同version仍为1。confirm成功仅返回`ok`与`reauthenticationRequired`，不返回user或signedOutOthers。所有新流程响应为`Cache-Control: private, no-store`。
+
+## 统一邮件模板与 App 联动
+
+- `GET /api/v1/config` 和 `GET /api/v2/config` 的 `data.mail_templates` 提供 `version: 1`、对应版本的 `path`、`template_ids` 和 `style: "alcor-brand-v1"`。
+- `GET /api/v{1,2}/auth/mail-templates` 返回当前保存的文字模板（`email_change`、`password_reset`、`email_verification`、`test`）、品牌样式及横幅路径。原有 App envelope 规则不变。模板接口不返回 SMTP 配置或任何真实验证码。
+- `email_change` 与 `password_reset` 使用六位验证码，邮件验证码为 30 分钟有效；验证成功后用于提交修改的凭证为 5 分钟有效、成功提交后一次性消费。修改邮箱接口从 `data.security.account_change.email.challenge_ttl_seconds` 读取 1800，不要硬编码旧 300。
+- `email_verification` 保持既有邮箱确认链接与 App 一次性凭证合同，30 分钟有效。样式改造不会把它改成新的六位验证码接口。
+- 所有真实发信与管理员预览使用同一渲染器，最新网站 Logo 与名称组成浅黄青绿品牌横幅，嵌入邮件，不依赖外部图片地址。App 的申请、校验、确认接口会自动使用对应模板；不需要客户端发送邮件 HTML。
+- 管理员入口 `/settings?sub=cron&anchor=mail-templates` 可编辑每种模板的标题、主题、正文和落款，支持 `{{email}}`、`{{minutes}}`、`{{name}}`、`{{siteName}}`。手机/桌面预览只使用模拟数据，不发送邮件或创建凭证。
+
+- 横幅 `banner_path: "/api/system-assets/mail-banner"` 每次读取当前网站 Logo 配置，接口禁止缓存；邮件发送时将当前图片嵌入 CID，已发出的邮件保留当时的品牌快照。管理员预览同样实时读取品牌配置，Logo保留原比例。

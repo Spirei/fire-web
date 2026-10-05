@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   maybeRunBackup(); // 顺带触发一次计划检查
   return NextResponse.json({
     config: getBackupConfig(),
-    backups: listBackups()
+    backups: await listBackups()
   });
 }
 
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   if (denied) return denied;
   try {
     const result = await runBackup();
-    return NextResponse.json({ ok: true, ...result, backups: listBackups() });
+    return NextResponse.json({ ok: true, ...result, backups: await listBackups() });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "备份失败" },

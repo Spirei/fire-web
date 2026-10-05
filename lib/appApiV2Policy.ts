@@ -1,5 +1,6 @@
 /** App contract allowlist. Native password login never creates a Cookie/Web session. */
 export const APP_V2_ROUTES = [
+  {path:"auth/mail-templates",methods:["GET"],access:"public"},
   {path:"auth/config",methods:["GET"],access:"public"},
   {path:"auth/login",methods:["POST"],access:"credential"},
   {path:"auth/login/totp",methods:["POST"],access:"credential"},

@@ -1143,3 +1143,17 @@ App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，
 ## App 个人资源库
 
 个人资源库冻结合约 1：`resource_library` discovery、`resources.read/resources.write` 显式授权；默认登录范围不变。两版本共用用户隔离服务，接收文件为构建/影音内容的统一筛选入口。字段、分页/排序、50 MiB 上传、1 GiB 额度、Bearer 私有下载及物理删除回执见 [个人资源库合约](app-resource-library.md)。
+
+
+## 分步账户验证与邮件模板
+
+邮件六位验证码30分钟有效，验证后修改凭证5分钟一次性有效，成功撤销全部登录与App授权。完整请求与发现字段见 `docs/native-account-change-contract.md`。
+
+| 方法 | 路径 | 授权 |
+| --- | --- | --- |
+| GET | `/api/v1/auth/mail-templates` | public |
+| POST | `/api/v1/auth/password-change/verify` | security.write |
+| POST | `/api/v1/auth/password-change/confirm` | security.write |
+| POST | `/api/v1/auth/email-change/request` | security.write |
+| POST | `/api/v1/auth/email-change/verify` | security.write |
+| POST | `/api/v1/auth/email-change/confirm` | security.write |

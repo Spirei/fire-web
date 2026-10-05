@@ -7389,3 +7389,41 @@ html { scrollbar-gutter:stable; }
 .dark .feed-theme{--feed-agent-connected:#36bb69;--feed-agent-bolt:#fff;--feed-agent-menu:#28292bf2}
 .feed-theme{--feed-windmill:#4e91d6}
 .dark .feed-theme{--feed-windmill:#79ade5}
+
+/* Mail editor follows the settings theme; the message preview retains email's light paper. */
+.mail-template-settings{container-type:inline-size;min-width:0}
+.mail-template-toolbar{position:sticky;top:0;z-index:2;background:var(--sc-dialog-bg,#fff);padding-top:4px;padding-bottom:8px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.mail-template-preview-switch{display:flex;flex:none;border:1px solid var(--edge,#dedfe3);border-radius:999px;padding:3px;background:var(--bg-gray,#f5f5f5)}
+.mail-template-preview-switch button{min-width:58px;min-height:36px;touch-action:manipulation;padding:7px 16px;border-radius:999px;font-size:13px;color:inherit}
+.mail-template-preview-switch button[aria-pressed=true]{background:#fff;color:#252525}
+.mail-template-grid{display:grid;grid-template-columns:minmax(240px,1fr) minmax(0,414px);gap:28px;align-items:start}
+.mail-template-settings[data-preview="desktop"] .mail-template-grid{grid-template-columns:minmax(260px,1fr) minmax(0,664px)}
+.mail-template-editor,.mail-template-preview{min-width:0}
+.mail-template-editor fieldset{display:grid;gap:16px;min-width:0}
+.mail-template-editor label{display:grid;gap:8px;font-size:13px}
+.mail-template-editor label>span{font-weight:600}
+.mail-template-editor input,.mail-template-editor textarea{width:100%;padding:12px;border:1px solid #dedfe3;border-radius:12px;background:#fff;color:#252525;font:inherit;resize:vertical}
+.mail-template-variables{margin-top:12px;font-size:12px;color:#777;line-height:1.8;overflow-wrap:anywhere}
+.mail-template-subject{font-size:13px;line-height:1.6;margin-bottom:12px;overflow-wrap:anywhere}
+.mail-template-canvas{display:flex;justify-content:center;overflow:hidden;padding:12px;border:1px solid #e5e5e5;border-radius:16px;background:#eee}
+.mail-template-frame{position:relative;flex:none}
+.mail-template-canvas iframe{position:absolute;left:0;top:0;display:block;height:780px;transform-origin:top left;border:0;border-radius:4px;background:white;color-scheme:light}
+.dark .mail-template-toolbar{background:var(--sc-dialog-bg,#1c2024)}
+.dark .mail-template-preview-switch{border-color:#414141;background:#242424}
+.dark .mail-template-preview-switch button[aria-pressed=true]{background:#414141;color:#f3f3f3}
+.dark .mail-template-editor input,.dark .mail-template-editor textarea{border-color:#414141;background:#242424;color:#f3f3f3}
+.dark .mail-template-canvas{border-color:#414141;background:#1b1b1b}
+.dark .mail-template-variables{color:#a0a0a0}
+@media(max-width:900px){.mail-template-grid,.mail-template-settings[data-preview="desktop"] .mail-template-grid{grid-template-columns:1fr}.mail-template-canvas{padding:8px}.mail-template-settings{container-type:inline-size;min-width:0}
+.mail-template-toolbar{position:sticky;top:0;z-index:2;background:var(--sc-dialog-bg,#fff);padding-top:4px;padding-bottom:8px;gap:12px}}
+
+/* The preview needs a true 640px desktop viewport, independently of dialog width. */
+.sc-detail-dialog[data-detail="mail-templates"]{width:min(880px,calc(100vw - 64px));max-width:880px;transition:width 180ms ease}
+.sc-detail-dialog[data-detail="mail-templates"]:has(.mail-template-settings[data-preview="desktop"]){width:min(1140px,calc(100vw - 64px));max-width:1140px}
+.sc-detail-dialog[data-detail="mail-templates"] .sc-detail-dialog-scroll{overflow-x:hidden}
+.sv-center .sw-page-head h2{font-size:20px;font-weight:600;line-height:28px}
+.sv-center .sw-page-head[data-detail-open="true"]{visibility:hidden}
+@container(max-width:940px){.mail-template-settings[data-preview="desktop"] .mail-template-grid{grid-template-columns:minmax(0,1fr)}}
+@container(max-width:720px){.mail-template-grid,.mail-template-settings[data-preview="desktop"] .mail-template-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:767px){.sc-detail-dialog[data-detail="mail-templates"],.sc-detail-dialog[data-detail="mail-templates"]:has(.mail-template-settings[data-preview="desktop"]){width:100%;max-width:100%;transition:none}}
+@media(prefers-reduced-motion:reduce){.sc-detail-dialog[data-detail="mail-templates"]{transition:none}}

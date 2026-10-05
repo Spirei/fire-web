@@ -4,6 +4,7 @@ import { consumeTotpFactor, readTotpSecret, userTotpEnabled } from "./totpAuth";
 import { emailVerified } from "./emailVerification";
 
 const RESET_TTL_MS = 5 * 60 * 1000;
+const EMAIL_CODE_TTL_MS = 30 * 60 * 1000;
 export const PASSWORD_RESET_COOLDOWN_SECONDS = 60;
 
 function tokenHash(token: string) {
@@ -52,7 +53,7 @@ export function consumePasswordResetToken(token: string, update: (userId: string
   }).immediate();
 }
 
-export const PASSWORD_RESET_MINUTES = RESET_TTL_MS / 60_000;
+export const PASSWORD_RESET_MINUTES = EMAIL_CODE_TTL_MS / 60_000;
 
 export function newResetChallenge() { return randomBytes(32).toString("base64url"); }
 
@@ -76,7 +77,7 @@ export function issuePasswordResetCode(userId: string, beforeIssue?: (email: str
     db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ? OR expires_at <= ?").run(userId, now);
     db.prepare("DELETE FROM password_reset_codes WHERE expires_at <= ? AND created_at <= ?").run(now, now - 60_000);
     db.prepare("INSERT OR REPLACE INTO password_reset_codes (user_id, challenge_hash, code_hash, password_hash, email, attempts, expires_at, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)")
-      .run(userId, tokenHash(challenge), tokenHash(`${challenge}:${code}`), user.password_hash, user.email, now + RESET_TTL_MS, now);
+      .run(userId, tokenHash(challenge), tokenHash(`${challenge}:${code}`), user.password_hash, user.email, now + EMAIL_CODE_TTL_MS, now);
     return { challenge, code, email: user.email };
   }).immediate();
 }

@@ -5,6 +5,8 @@ import { createContext, useContext } from "react";
 export const SettingsSectionSelection = createContext<{ active: string; anchors: readonly string[] } | null>(null);
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
+  mail: (<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></>),
+  "mail-templates": (<><path d="M4 3h11l5 5v13H4Z"/><path d="M15 3v5h5M8 12h8M8 16h4"/></>),
   typography: (<><path d="m3 17 4-11 4 11M4.5 13h5M14 10c3-2 6 0 6 3v4m0-4h-3a2 2 0 1 0 3 2M3 21h18"/></>),
   website: (<><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M6 6.5h.01M9 6.5h.01M6 13h2M6 16h2"/><path d="m15 11 .9 2.1L18 14l-2.1.9L15 17l-.9-2.1L12 14l2.1-.9Z"/></>),
   account: (<><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></>),

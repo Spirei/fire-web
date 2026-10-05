@@ -81,7 +81,7 @@ const proof=async(f,purpose='password',version=1)=>{
   }
  });
  await test('email code is single-use, attempts persist and resend cooldown survives consumption',async()=>{
-  const f=secure(fixture(true));const r=await step(f,'email','request');assert.equal(r.status,200); const c=r.data.challenge, code=mailSent.at(-1).code;
+  const f=secure(fixture(true));const r=await step(f,'email','request');assert.equal(r.status,200); assert(Math.abs(r.data.expiresAt-Date.now()-30*60_000)<2000);const c=r.data.challenge, code=mailSent.at(-1).code;
   const second=connect(f.user,f.browser,full);
   assert.equal((await step(f,'email','verify',{challenge:c,code},1,second.access_token)).code,40003);
   assert.equal((await step(f,'email','request')).status,429);

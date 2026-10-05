@@ -1,4 +1,5 @@
 "use client";
+import MailTemplatesSettings from "@/components/MailTemplatesSettings";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
@@ -167,6 +168,7 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
+  { sub: "cron", anchor: "mail-templates", label: "邮件模板", groupLabel: "系统", keywords: "邮件 模板 预览 验证码 密码 找回 邮箱", adminOnly: true },
   { sub: "cron", anchor: "mail", label: "邮件服务", groupLabel: "系统", keywords: "SMTP 邮件 密码 找回 重置 邮箱" },
   { sub: "cron", anchor: "backups", label: "自动备份", groupLabel: "系统", keywords: "数据库 定时 备份 保留 立即备份" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
@@ -182,7 +184,7 @@ const SETTINGS_CATEGORIES = [
   { key: "website", label: "外观与网站", icon: "website", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav", "mobile-nav"] },
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
-  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "mail", "backups", "danger", "delete-account"] },
+  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "mail", "mail-templates", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
@@ -222,7 +224,8 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   "passkey-config": "passkey-config",
   database: "database",
   cron: "cron",
-  mail: "api",
+  mail: "mail",
+  "mail-templates": "mail-templates",
   backups: "backups",
   api: "api",
   about: "about"
@@ -2349,7 +2352,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
       <div className="sw-content flex min-w-0 flex-1 flex-col">
         {/* 内容头部 */}
-        <div className="sw-page-head flex flex-none items-center justify-between gap-3">
+        <div className="sw-page-head flex flex-none items-center justify-between gap-3" data-detail-open={!categoryPage}>
           <div className="min-w-0">
             {homeIsBackground && <span className="sc-mobile-brand">Alcor</span>}
             {!homeIsBackground && <button type="button" className="sc-back sc-category-back" onClick={() => openCategory(categoryPage ? "home" : detailOrigin || currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
@@ -3864,7 +3867,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {/* ===== 定时任务 ===== */}
             {sub === "cron" && isAdminUser && (
               <div className="flex flex-col gap-6">
-                <SettingsSection id="mail" icon="api" title="邮件服务" desc="用于找回密码。测试邮件收到后再保存。">
+                <SettingsSection id="mail" icon="mail" title="邮件服务" desc="用于找回密码。测试邮件收到后再保存。">
                   <div className="mail-settings">
                     <fieldset className="mail-settings-fields" disabled={mailTesting || blockSaving.mail}>
                     <div className="mail-settings-group">
@@ -3902,6 +3905,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                 </SettingsSection>
+                <SettingsSection id="mail-templates" icon="mail-templates" title="邮件模板"><MailTemplatesSettings /></SettingsSection>
                 <SettingsSection id="cron" icon="cron" title="定时任务" desc="查看刷新与缓存规则。汇率仅手动刷新。">
                 <div className="settings-task-list">
                   {[

@@ -72,7 +72,7 @@ export default function EmailRecoveryForm({ initialLogin = "", fixedLogin = fals
   const field = "field w-full min-h-[48px] rounded-[12px]";
   return <form onSubmit={event => { event.preventDefault(); void perform(Boolean(challenge)); }} className="flex flex-col gap-4">
     {!hideTitle && <h1 className="text-2xl font-bold text-ink">{challenge ? "输入验证码" : "找回密码"}</h1>}
-    <p className="text-[13px] leading-5 text-muted">{method==="totp" ? "使用已配置的 TOTP 验证器或备用码，无需邮箱。" : challenge ? "输入已验证邮箱收到的 6 位验证码，5 分钟内有效。" : "验证码发送至账号的已验证邮箱。"}</p>
+    <p className="text-[13px] leading-5 text-muted">{method==="totp" ? "使用已配置的 TOTP 验证器或备用码，无需邮箱。" : challenge ? "输入已验证邮箱收到的 6 位验证码，30 分钟内有效。" : "验证码发送至账号的已验证邮箱。"}</p>
     {!challenge && !fixedLogin && <label className="flex flex-col gap-2 text-sm font-semibold text-ink-2">用户名或邮箱<input autoComplete="username" autoFocus value={login} disabled={busy} onChange={event => setLogin(event.target.value)} maxLength={160} required className={field} /></label>}
     {challenge && <label className="flex flex-col gap-2 text-sm font-semibold text-ink-2">{backup?"备用码":method==="totp"?"验证器验证码":"邮箱验证码"}<input autoFocus type="text" inputMode={backup?"text":"numeric"} autoComplete="one-time-code" pattern={backup?undefined:"[0-9]{6}"} maxLength={backup?19:6} value={code} disabled={busy} onChange={event => setCode(backup?normalizeBackupInput(event.target.value):event.target.value.replace(/\D/g, "").slice(0, 6))} required placeholder={backup?"xxxx-xxxx-xxxx-xxxx":"6 位数字"} className={`${field} text-center text-xl font-mono ${backup?"tracking-normal":"tracking-[.3em]"}`} /></label>}
     {message && <p role="status" className="text-[13px] leading-5 text-muted">{message}</p>}

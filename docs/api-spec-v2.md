@@ -961,3 +961,17 @@ Web 示例：`/global?section=calendar&market=HK&month=2026-12&status=half_day`�
 ## 个人资源库
 
 冻结合约 1 与字段、分页/排序、类型、限额、结果查询、私有下载、永久删除回执见 [App 个人资源库](app-resource-library.md)。`resource_library` discovery 出现后才启用；resources.write 必须包含 resources.read，基础登录范围保持原样。
+
+
+## 分步账户验证与邮件模板
+
+邮件六位验证码30分钟有效，验证后修改凭证5分钟一次性有效，成功撤销全部登录与App授权。完整请求与发现字段见 `docs/native-account-change-contract.md`。
+
+| 方法 | 路径 | 授权 |
+| --- | --- | --- |
+| GET | `/api/v2/auth/mail-templates` | public |
+| POST | `/api/v2/auth/password-change/verify` | security.write |
+| POST | `/api/v2/auth/password-change/confirm` | security.write |
+| POST | `/api/v2/auth/email-change/request` | security.write |
+| POST | `/api/v2/auth/email-change/verify` | security.write |
+| POST | `/api/v2/auth/email-change/confirm` | security.write |

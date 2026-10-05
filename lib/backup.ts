@@ -38,10 +38,18 @@ const DEFAULT_CONFIG: BackupConfig = {
   lastSize: 0
 };
 
-let lastCheckAt = 0;
-let runningBackup: Promise<{ name: string; size: number }> | null = null;
-let activeBackupName: string | null = null;
-const deletingBackupNames = new Set<string>();
+type BackupState = {
+  lastCheckAt: number;
+  runningBackup: Promise<{ name: string; size: number }> | null;
+  activeBackupName: string | null;
+  deletingBackupNames: Set<string>;
+};
+// Next development bundles and HMR may load this module more than once. Keep one
+// backup per data directory across those copies, without sharing unrelated sites.
+const runtime = globalThis as typeof globalThis & { __alcorBackupStates?: Map<string, BackupState> };
+const states = runtime.__alcorBackupStates ??= new Map();
+const state = states.get(BACKUP_DIR) ?? { lastCheckAt: 0, runningBackup: null, activeBackupName: null, deletingBackupNames: new Set<string>() };
+states.set(BACKUP_DIR, state);
 const SIZE_META_FILE = ".backup-meta.json";
 
 function positiveInteger(value: unknown, fallback: number, max: number): number {
@@ -99,8 +107,10 @@ async function copyDir(src: string, dest: string): Promise<number> {
   await collect(src, dest);
   let next = 0, size = 0, failed = false;
   let failure: unknown;
-  // Drain every in-flight copy before removing a failed snapshot.
-  await Promise.all(Array.from({ length: Math.min(4, files.length) }, async () => {
+  // A large external-volume copy can occupy a libuv worker for seconds. Leave
+  // the other workers available for page compilation, assets and API reads.
+  // Drain the copy before removing a failed snapshot.
+  await Promise.all(Array.from({ length: Math.min(1, files.length) }, async () => {
     while (!failed && next < files.length) {
       const file = files[next++];
       try {
@@ -113,6 +123,24 @@ async function copyDir(src: string, dest: string): Promise<number> {
   return size;
 }
 
+/** Node's recursive rm fans out across the file thread pool. Retention on a
+ * mounted volume must also remain serial, just like the snapshot copy. */
+async function removeBackupDirectory(directory: string): Promise<void> {
+  let entries: fs.Dirent[];
+  try { entries = await fs.promises.readdir(directory, { withFileTypes: true }); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  for (const entry of entries) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) await removeBackupDirectory(file);
+    else {
+      try { await fs.promises.unlink(file); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    }
+  }
+  try { await fs.promises.rmdir(directory); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+}
+
 async function pruneBackups(keep: number): Promise<void> {
   if (!fs.existsSync(BACKUP_DIR)) return;
   const entries = await fs.promises.readdir(BACKUP_DIR, { withFileTypes: true });
@@ -123,74 +151,72 @@ async function pruneBackups(keep: number): Promise<void> {
   dirs.sort((a, b) => b.mtime - a.mtime);
   for (const { dir } of dirs.slice(keep)) {
     const name = path.basename(dir);
-    deletingBackupNames.add(name);
-    try { await fs.promises.rm(dir, { recursive: true, force: true }); }
-    finally { deletingBackupNames.delete(name); }
+    state.deletingBackupNames.add(name);
+    try { await removeBackupDirectory(dir); }
+    finally { state.deletingBackupNames.delete(name); }
   }
 }
 
-function indexedSize(dir: string, name: string): number | null {
-  let fd: number | undefined;
+async function indexedSize(dir: string, name: string): Promise<number | null> {
+  let fd: fs.promises.FileHandle | undefined;
   try {
-    fd = fs.openSync(path.join(dir, SIZE_META_FILE), "r");
-    const st = fs.fstatSync(fd);
+    fd = await fs.promises.open(path.join(dir, SIZE_META_FILE), "r");
+    const st = await fd.stat();
     if (!st.isFile() || st.size > 1024) return null;
     const buffer = Buffer.alloc(1025);
-    const length = fs.readSync(fd, buffer, 0, buffer.length, 0);
-    if (length > 1024 || length !== st.size) return null;
-    const meta = JSON.parse(buffer.subarray(0, length).toString("utf8"));
+    const { bytesRead } = await fd.read(buffer, 0, buffer.length, 0);
+    if (bytesRead > 1024 || bytesRead !== st.size) return null;
+    const meta = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
     if (meta.version !== 1 || meta.name !== name || !Number.isSafeInteger(meta.payloadSize) || meta.payloadSize < 0) return null;
-    const total = meta.payloadSize + length;
+    const total = meta.payloadSize + bytesRead;
     return Number.isSafeInteger(total) ? total : null;
   } catch { return null; }
-  finally { if (fd !== undefined) fs.closeSync(fd); }
+  finally { if (fd) await fd.close(); }
 }
 
-export function listBackups(): { name: string; size: number; mtime: number }[] {
-  if (!fs.existsSync(BACKUP_DIR)) return [];
-  return fs
-    .readdirSync(BACKUP_DIR, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && e.name !== activeBackupName && !deletingBackupNames.has(e.name))
-    .map((e) => {
-      try {
-        const p = path.join(BACKUP_DIR, e.name);
-        const st = fs.statSync(p);
-        const indexed = indexedSize(p, e.name);
-        let size = indexed ?? 0;
-        const walk = (dir: string) => {
-          for (const en of fs.readdirSync(dir, { withFileTypes: true })) {
-            const fp = path.join(dir, en.name);
-            if (en.isDirectory()) walk(fp);
-            else size += fs.statSync(fp).size;
-          }
-        };
-        if (indexed === null) walk(p);
-        return { name: e.name, size, mtime: st.mtimeMs };
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-        throw error;
-      }
-    })
-    .filter((backup): backup is { name: string; size: number; mtime: number } => backup !== null)
-    .sort((a, b) => b.mtime - a.mtime);
+/** Legacy snapshots have no size index. Scan asynchronously so a slow mounted
+ * backup drive cannot block the development server's JavaScript event loop. */
+export async function listBackups(): Promise<{ name: string; size: number; mtime: number }[]> {
+  let entries: fs.Dirent[];
+  try { entries = await fs.promises.readdir(BACKUP_DIR, { withFileTypes: true }); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
+  const result: { name: string; size: number; mtime: number }[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === state.activeBackupName || state.deletingBackupNames.has(entry.name)) continue;
+    try {
+      const dir = path.join(BACKUP_DIR, entry.name), stat = await fs.promises.stat(dir);
+      const indexed = await indexedSize(dir, entry.name);
+      let size = indexed ?? 0;
+      const walk = async (folder: string): Promise<void> => {
+        for (const item of await fs.promises.readdir(folder, { withFileTypes: true })) {
+          const file = path.join(folder, item.name);
+          if (item.isDirectory()) await walk(file);
+          else if (item.isFile()) size += (await fs.promises.stat(file)).size;
+        }
+      };
+      if (indexed === null) await walk(dir);
+      if (entry.name !== state.activeBackupName && !state.deletingBackupNames.has(entry.name)) result.push({ name: entry.name, size, mtime: stat.mtimeMs });
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  }
+  return result.sort((a, b) => b.mtime - a.mtime);
 }
 
 /** 立即执行一次备份，返回备份目录名 */
 async function performBackup(): Promise<{ name: string; size: number }> {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  try { fs.chmodSync(BACKUP_DIR, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
+  await fs.promises.mkdir(BACKUP_DIR, { recursive: true });
+  try { await fs.promises.chmod(BACKUP_DIR, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
   const stamp = `fire-${fmtStamp(new Date())}`;
   let name = stamp, dir = path.join(BACKUP_DIR, name);
   // A completed backup in the same second must never be reused or overwritten.
   for (;;) {
-    try { fs.mkdirSync(dir, { mode: 0o700 }); break; }
+    try { await fs.promises.mkdir(dir, { mode: 0o700 }); break; }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       name = `${stamp}-${randomBytes(6).toString("hex")}`; dir = path.join(BACKUP_DIR, name);
     }
   }
-  try { fs.chmodSync(dir, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
-  activeBackupName = name;
+  try { await fs.promises.chmod(dir, 0o700); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
+  state.activeBackupName = name;
 
   let complete = false;
   try {
@@ -199,7 +225,7 @@ async function performBackup(): Promise<{ name: string; size: number }> {
     try {
       // 在线备份：生成一致快照（WAL 安全，better-sqlite3 的 backup 为异步）
       await src.backup(path.join(dir, "fire.db"));
-      try { fs.chmodSync(path.join(dir, "fire.db"), 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
+      try { await fs.promises.chmod(path.join(dir, "fire.db"), 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
     } finally {
       src.close();
     }
@@ -211,33 +237,33 @@ async function performBackup(): Promise<{ name: string; size: number }> {
     const meta = JSON.stringify({ version: 1, name, payloadSize: size });
     await fs.promises.writeFile(path.join(dir, SIZE_META_FILE), meta, { flag: "wx", mode: 0o600 });
     size += Buffer.byteLength(meta);
-    activeBackupName = null;
+    state.activeBackupName = null;
 
     const cfg = { ...getBackupConfig(), lastAt: Date.now(), lastFile: name, lastSize: size };
     saveBackupConfig(cfg);
     await pruneBackups(cfg.keep);
     return { name, size };
   } catch (error) {
-    if (!complete) await fs.promises.rm(dir, { recursive: true, force: true });
+    if (!complete) await removeBackupDirectory(dir);
     throw error;
   }
 }
 
 /** Concurrent manual/import/scheduled requests share one consistent snapshot. */
 export function runBackup(): Promise<{ name: string; size: number }> {
-  if (!runningBackup) {
-    runningBackup = performBackup();
-    const release = () => { runningBackup = null; activeBackupName = null; };
-    runningBackup.then(release, release);
+  if (!state.runningBackup) {
+    state.runningBackup = performBackup();
+    const release = () => { state.runningBackup = null; state.activeBackupName = null; };
+    state.runningBackup.then(release, release);
   }
-  return runningBackup;
+  return state.runningBackup;
 }
 
 /** 按计划惰性备份（60 秒节流），由 getDb() 每次访问时触发 */
 export function maybeRunBackup(): void {
   const now = Date.now();
-  if (now - lastCheckAt < 60_000) return;
-  lastCheckAt = now;
+  if (now - state.lastCheckAt < 60_000) return;
+  state.lastCheckAt = now;
   const cfg = getBackupConfig();
   if (!cfg.enabled) return;
   if (cfg.lastAt && now - cfg.lastAt < cfg.intervalHours * 3_600_000) return;

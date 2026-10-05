@@ -10,7 +10,8 @@ Module._resolveFilename = function(id, parent, ...rest) { return resolve.call(th
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 require.extensions['.tsx'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX } }).outputText, filename);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'fire-regression-'));
-process.chdir(temp); // Real route/store integration tests, isolated from the user's database and uploads.
+process.chdir(temp);
+// Real route/store integration tests, isolated from the user database and uploads.
 process.env.STOCKLOG_FUTU = 'off';
 global.fetch = async () => { throw new Error('Network disabled in isolated regression'); };
 let passed = 0;
@@ -1385,7 +1386,7 @@ function fontHeaderFixture(ext) {
     const first = issue();
     assert(/^\d{6}$/.test(first.code));
     const row = db.prepare('SELECT * FROM password_reset_codes WHERE user_id = ?').get(account.id);
-    assert.equal(row.expires_at - row.created_at, 300000);
+    assert.equal(row.expires_at - row.created_at, 1800000);
     assert(!JSON.stringify(row).includes(first.challenge));
     assert.notEqual(row.code_hash, first.code);
     assert.equal(reset.issuePasswordResetCode(account.id), null, 'cooldown persists per account');
@@ -1717,7 +1718,7 @@ function fontHeaderFixture(ext) {
       const mail = require(path.join(root, 'lib/mail.ts'));
       await mail.sendPasswordResetEmail({to:'code@example.test',name:'<script>alert(1)</script>',code:'123456',minutes:5});
       assert(sent[0].text.includes('123456') && sent[0].html.includes('123456'));
-      assert(!sent[0].html.includes('<script>') && !sent[0].html.includes('href='));
+      assert(!sent[0].html.includes('<script>') && !sent[0].html.includes('/password-reset'));
       const account = createUser('review_code_mail', 'Recovery-old-123', false, 'mail@example.test');
       db.prepare('INSERT OR REPLACE INTO verified_emails (user_id,email,verified_at) VALUES (?,?,?)').run(account.id,'mail@example.test',Date.now());
       const session = createSession(account.id);
