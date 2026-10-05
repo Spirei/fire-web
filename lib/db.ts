@@ -7,6 +7,7 @@ import type { RecordInput } from "./types";
 import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
+import { installAppAssets } from "./appAssetsSchema";
 import { installRecordsContract } from "./recordsSchema";
 import { installAccountChanges } from "./accountChangeSchema";
 import { installQuoteSubscriptions } from "./quoteSubscriptionsSchema";
@@ -1206,6 +1207,7 @@ export function getDb(): Database.Database {
       db.pragma("journal_mode = WAL");
       migrate(db);
       installRecordsContract(db);
+      installAppAssets(db);
       installQuoteSubscriptions(db);
       installAccountChanges(db);
       seed(db);

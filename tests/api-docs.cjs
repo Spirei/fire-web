@@ -53,7 +53,7 @@ const data=async promise=>{const r=await promise;return {status:r.status,body:aw
  await test('v2 published catalog matches every allowed method and scope with no extra endpoint',async()=>{
   const md=fs.readFileSync(path.join(root,'docs/api-spec-v2.md'),'utf8');
   const rows=[...md.matchAll(/^\| (GET|POST|PUT|DELETE) \| `([^`]+)` \| ([^|]+) \|$/gm)].map(m=>[m[1],m[2],m[3].trim()]);
-  const expected=policy.APP_V2_ROUTES.flatMap(r=>r.methods.map(method=>[method,'/api/v2/'+r.path.replace('[id]','{id}').replace('[jobId]','{jobId}').replace('[postId]','{postId}').replace('[groupId]','{groupId}').replace('[folderId]','{folderId}').replace('[fileId]','{fileId}').replace('[requestId]','{requestId}'),method==='GET'?r.access:r.writeAccess||r.access]));
+  const expected=policy.APP_V2_ROUTES.flatMap(r=>r.methods.map(method=>[method,'/api/v2/'+r.path.replace('[recordId]','{recordId}').replace('[id]','{id}').replace('[jobId]','{jobId}').replace('[postId]','{postId}').replace('[groupId]','{groupId}').replace('[folderId]','{folderId}').replace('[fileId]','{fileId}').replace('[requestId]','{requestId}'),method==='GET'?r.access:r.writeAccess||r.access]));
   const sorted=items=>items.map(JSON.stringify).sort();assert.deepEqual(sorted(rows),sorted(expected));
   assert(!/\| (POST|PUT|DELETE) \| `\/api\/v2\/(assets|brokers)`/.test(md));
   const rendered=load('lib/markdown.ts').renderMarkdown(md);assert(rendered.includes('data-copy-code'));assert(rendered.includes('/api/v2/auth/token'));

@@ -1,5 +1,16 @@
 # Alcor · API 规范（v2）
 
+## App 资产快照与证券资料声明
+
+匿名 auth/config 的 account_assets 声明能力；精确字段、类型和缺失语义见 [冻结合约](native-account-assets-contract.md)。新接口只接受 App Bearer，后台读取不结算挂单。
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/account-assets` | portfolio.read |
+| GET | `/api/v2/account-assets/instruments/{recordId}` | portfolio.read |
+| PUT | `/api/v2/account-assets/instruments/{recordId}` | portfolio.write |
+| GET | `/api/v2/account-assets/operations/{requestId}` | portfolio.read |
+
 App 专用接口，固定前缀 `/api/v2`。与 Web / v1 共用账号、授权、持仓及账本，版本切换不搬迁数据。私有接口只接受 App access token；公开行情和图标支持本地模式匿名读取。
 
 ## 1. 版本发现与迁移

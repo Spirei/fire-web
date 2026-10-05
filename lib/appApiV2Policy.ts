@@ -31,6 +31,9 @@ export const APP_V2_ROUTES = [
   {path:"auth/passkeys/register-options",methods:["POST"],access:"security.write"},
   {path:"auth/passkeys/register-verify",methods:["POST"],access:"security.write"},
   {path:"auth/security-devices",methods:["GET","DELETE"],access:"security.read",writeAccess:"security.write"},
+  {path:"account-assets",methods:["GET"],access:"portfolio.read"},
+  {path:"account-assets/instruments/[recordId]",methods:["GET","PUT"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"account-assets/operations/[requestId]",methods:["GET"],access:"portfolio.read"},
   {path:"overview",methods:["GET"],access:"portfolio.read"},
   {path:"records",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
   {path:"records/[id]",methods:["GET","PUT","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
@@ -91,7 +94,7 @@ export const APP_V2_ROUTES = [
   {path:"feed/posts/[postId]/discussion",methods:["GET","POST"],access:"feed.read",writeAccess:"feed.write"}
 ] as const;
 type Entry = {path:string;methods:readonly string[];access:string;writeAccess?:string};
-const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[folderId]"?"rld_[a-f0-9]{32}":segment==="[fileId]"?"rlf_[a-f0-9]{32}":segment==="[requestId]"?"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}":segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":segment==="[id]"?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
+const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[folderId]"?"rld_[a-f0-9]{32}":segment==="[fileId]"?"rlf_[a-f0-9]{32}":segment==="[requestId]"?"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}":segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":(segment==="[id]" || segment==="[recordId]")?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
 export function appV2KnownPath(path:string) { return routes.some(item=>item.pattern.test(path)); }
 export function appV2Access(path:string,method:string): string|null {
   // Literal routes must win over dynamic IDs (e.g. watch-groups/reorder).

@@ -1,5 +1,16 @@
 # Alcor · API 规范（v1）
 
+## App 资产快照与证券资料声明
+
+匿名 auth/config 的 account_assets 声明能力；精确字段、类型和缺失语义见 [冻结合约](native-account-assets-contract.md)。新接口只接受 App Bearer，后台读取不结算挂单。
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v1/account-assets` | portfolio.read |
+| GET | `/api/v1/account-assets/instruments/{recordId}` | portfolio.read |
+| PUT | `/api/v1/account-assets/instruments/{recordId}` | portfolio.write |
+| GET | `/api/v1/account-assets/operations/{requestId}` | portfolio.read |
+
 本文件描述保留的 `/api/v1` 业务字段与语义，旧版 `/api/**` 继续兼容。App 新连接使用独立 [API v2 文档](/api-docs?version=v2)，v1 与 v2 共用业务服务和数据库；部署支持情况以固定发现接口为准。
 
 ## 动态（feed）
