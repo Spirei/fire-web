@@ -1,5 +1,3 @@
-import { installFeedNotifications } from "./feedNotificationsSchema";
-import { enqueueFeedNotification } from "./feedNotifications";
 import { createHash, randomBytes } from "node:crypto";
 import { getDb } from "./db";
 import { FEED_PAGE_SIZE, FEED_ICONS, type FeedJob, type FeedMessage, type FeedPost, type FeedPreferences, type FeedSegment, type FeedSource, type FeedGroup, type FeedMode, type FeedPersonId } from "./feedTypes";
@@ -41,7 +39,6 @@ export function feedTables() {
     ])if(!(db.prepare(`PRAGMA table_info(${table})`).all() as {name:string}[]).some(c=>c.name===column))db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     db.exec("UPDATE feed_posts SET sort_at=created_at WHERE sort_at=''; CREATE INDEX IF NOT EXISTS feed_posts_timeline ON feed_posts(user_id,group_id,kind,sort_at DESC,id DESC)");
   }).immediate();
-  installFeedNotifications(db);
   initialized.add(db);
   return db;
 }
@@ -156,9 +153,7 @@ export function appendFeedPosts(userId:string,posts:ReturnType<typeof normalizeG
     for (const post of posts) {
       const fingerprint=createHash("sha256").update((groupId==="default"?"":groupId+"\n")+post.sources.map(s=>s.url).sort().join("\n")).digest("hex");
       const now=new Date().toISOString();
-      const id=feedId();
-      const inserted=db.prepare("INSERT OR IGNORE INTO feed_posts(id,user_id,fingerprint,payload,created_at,group_id,sort_at) VALUES(?,?,?,?,?,?,?)").run(id,userId,fingerprint,JSON.stringify(post),now,groupId,now).changes;
-      added+=inserted;if(inserted)enqueueFeedNotification(db,userId,id);
+      added+=db.prepare("INSERT OR IGNORE INTO feed_posts(id,user_id,fingerprint,payload,created_at,group_id,sort_at) VALUES(?,?,?,?,?,?,?)").run(feedId(),userId,fingerprint,JSON.stringify(post),now,groupId,now).changes;
     }
     return added;
   }).immediate();

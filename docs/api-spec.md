@@ -1168,18 +1168,3 @@ App 使用 `client_id=fire-ios`，`redirect_uri=com.fire.app:/oauth/callback`，
 | POST | `/api/v1/auth/email-change/request` | security.write |
 | POST | `/api/v1/auth/email-change/verify` | security.write |
 | POST | `/api/v1/auth/email-change/confirm` | security.write |
-
-## App动态通知（合约v1，未部署）
-
-完整来源、APNs、设备、未读及免打扰合同见 `docs/native-feed-notifications-contract.md`。仅App Bearer；正式新闻才通知，默认APNs关闭，未发现能力不可猜路径。
-
-| 方法 | 路径 | 权限 |
-| --- | --- | --- |
-| GET | `/api/v1/feed-notifications` | feed.read |
-| GET | `/api/v1/feed-notifications/preferences` | feed.read |
-| PUT | `/api/v1/feed-notifications/preferences` | feed.write |
-| PUT | `/api/v1/feed-notifications/read` | feed.write |
-| PUT | `/api/v1/feed-notifications/devices` | feed.write |
-| DELETE | `/api/v1/feed-notifications/devices` | feed.write |
-| POST | `/api/v1/feed-notifications/publications` | feed.write |
-| GET | `/api/v1/feed-notifications/publications/{requestId}` | feed.read |

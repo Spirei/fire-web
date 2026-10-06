@@ -1,4 +1,3 @@
-import { notificationsDiscovery } from "./feedNotifications";
 import { assetsDiscovery } from "./appAssetsConfig";
 import { mailTemplatesDiscovery } from "./mailTemplates";
 import { resourceLibraryDiscovery } from "./resourceLibraryConfig";
@@ -15,7 +14,6 @@ export function appConfiguration(request:Request,version:1|2=1) {
   const base=`/api/v${version}`;
   return ok({version,api_versions_supported:[1,2],app_api_version:2,app_api_base_path:"/api/v2",
     quote_subscriptions_contract:quoteSubscriptionsDiscovery(),
-    feed_notifications:notificationsDiscovery(version),
     account_assets:assetsDiscovery(version),mail_templates:mailTemplatesDiscovery(version),records_contract:recordsDiscovery(version),resource_library:resourceLibraryDiscovery(version),security:securityDiscovery(version),market_calendar:marketCalendarDiscovery(),native_login:nativeLoginDiscovery(),client_id:APP_CLIENT_ID,redirect_uri:APP_REDIRECT_URI,scope:APP_SCOPE,
     scopes_supported:APP_SUPPORTED_SCOPES,profile_path:`${base}/auth/profile`,upload_path:`${base}/upload`,
     email_path:`${base}/auth/email`,password_path:`${base}/auth/password`,feed_path:`${base}/feed`,feed_scopes:["feed.read","feed.write"],

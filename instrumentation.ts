@@ -4,7 +4,5 @@ export async function register() {
     installRequestInstrumentation();
     const { startFeedScheduler } = await import("./lib/feedGeneration");
     startFeedScheduler();
-    const { startFeedNotificationWorker } = await import("./lib/feedNotifications");
-    startFeedNotificationWorker();
   }
 }

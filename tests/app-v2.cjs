@@ -43,7 +43,7 @@ const policy=load('lib/appApiV2Policy.ts'), v2Gate=load('lib/appApiV2.ts');
 const full='portfolio.read portfolio.write profile.write feed.read feed.write security.read security.write';
 const pathFor=path=>path.replace('[recordId]','test-id').replace('[id]','test-id').replace('[jobId]','fj-'+ 'a'.repeat(24)).replace('[postId]','fp-'+ 'a'.repeat(24)).replace('[groupId]','default').replace('[folderId]','rld_'+'a'.repeat(32)).replace('[fileId]','rlf_'+'a'.repeat(32)).replace('[requestId]','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 function r2(path,body,token,method='GET',headers={}){return new Request(origin+'/api/v2/'+path,{method,headers:{...(token?{authorization:'Bearer '+token}:{}),'content-type':'application/json',...headers},...(body!==undefined?{body:JSON.stringify(body)}:{})});}
-const route2=path=>load('app/api/v2/'+(path.startsWith('resource-library')?'resource-library/[[...action]]':path.startsWith('feed-notifications')?'feed-notifications/[[...action]]':path.startsWith('feed')?'feed/[[...action]]':path)+'/route.ts');
+const route2=path=>load('app/api/v2/'+(path.startsWith('resource-library')?'resource-library/[[...action]]':path.startsWith('feed')?'feed/[[...action]]':path)+'/route.ts');
 const execute=(path,method,request)=>route2(path)[method](request,{params:Promise.resolve((path.startsWith('feed')||path.startsWith('resource-library'))?{action:pathFor(path).split('/').slice(1)}:{id:'test-id'})});
 const data=async promise=>{const res=await promise;return {status:res.status,headers:res.headers,body:await res.json()};};
 (async()=>{

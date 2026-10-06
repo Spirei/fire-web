@@ -189,6 +189,3 @@ export function listAppDevices(userId: string) {
   const rows = getDb().prepare("SELECT id FROM app_grants WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at DESC").all(userId) as { id: string }[];
   return rows.map(row => activeGrant(row.id)).filter((g): g is Grant => !!g).map(g => ({ id: g.id, name: normalizeAppDeviceName(g.device_name), scope: g.scope, createdAt: g.created_at, lastUsedAt: g.last_used_at, expiresAt: g.expires_at }));
 }
-
-/** Push eligibility uses live grant security/expiry and explicitly authorized feed reads. */
-export function notificationGrant(id:string) { const g=activeGrant(id); return g?.scope.split(" ").includes("feed.read")?g:null; }
