@@ -4840,7 +4840,7 @@ const V0_1_50_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_51_ENTRY: VersionEntry = {
   ...V0_1_50_ENTRY,
   version: "v0.1.51",
   date: "2026-10-05",
@@ -4849,10 +4849,17 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   changes: [{kind:"fix",title:"App旧持仓资产兼容",desc:"未声明证券类型的旧持仓沿用原台账单位价格与数量恢复市值、成本、现金及资产汇总，证券类型仍保持未知，不猜期权或合约乘数；本人声明未知与已失效声明不被覆盖，缺行情、汇率及真实交易链仍保留缺失，读取不迁移真实账户。"}, {kind:"fix",title:"App资产缺失表达与历史计算",desc:"缺汇率时保留已核对的原币现金，区分来源完整和换算完整，估值缺失返回具体原因。平均成本可从独立可核对的新开仓周期恢复，不再被已结束旧周期的快照缺失阻断；持仓与订单按编号建立索引，复用市场日期格式器，减少重复扫描与时区计算。"}, {kind:"feature",title:"App真实资产快照",desc:"新增v1/v2本人资产能力发现与统一账户快照，含真实持仓、现金及当日订单。后台读取不结算挂单，异步返回前核对同一授权和记录版本。证券资料采用本人显式声明、UUID回执和双版本冲突检查；未知证券不套用股票公式。金额区分原币与显示币种，平均成本仅回放可核对的真实从零交易周期；缺少当日盈亏、市场现金及衍生品来源时保持缺失。"}, {kind:"fix",title:"本地开发服务与备份磁盘争用",desc:"素材备份与保留清理改为单路文件操作，为页面编译及接口读取保留文件线程。开发模块与热更新共享同一数据目录的备份状态，避免重复任务占满线程池；旧备份目录大小读取改为异步，慢盘不会阻塞整个服务。"}, {kind:"feature",title:"邮件模板与实时预览",desc:"设置新增修改邮箱验证码、找回密码、邮箱验证与测试邮件模板，使用浅黄青绿品牌横幅，重新设计操作卡片及落款，横幅随网站最新上传的Logo与名称自适应，支持编辑文案、手机和桌面预览及恢复默认；模板详情根据手机/桌面模式与屏幕空间调整弹窗，编辑/预览按容器宽度排列，桌面邮件维持640px布局并按可用空间缩放，手机预览随容器收窄，不遮挡尺寸切换，尺寸选择在左、模板选择在右，设置背景标题收敛。Web与App邮件共用服务端模板，App发现接口提供同一份展示配置；预览不发邮件、不创建真实验证凭证。邮箱验证码统一三十分钟有效，修改凭证仍为五分钟，保留重发和一次性使用限制。"}, { kind: "feature", title: "App分步修改密码与邮箱", desc: "原密码验证后设置新密码，当前邮箱六位验证码验证后设置新邮箱，无需重复TOTP。v1/v2提供能力发现与固定路径，验证凭证五分钟有效、一次性绑定用户、用途、发起授权及身份版本；持久重发冷却、验证码尝试次数与邮件额度共用。成功修改撤销全部登录和App授权，新邮箱保持未验证，旧接口合同兼容；补充临时数据库安全回归。" }]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+ ...V0_1_51_ENTRY,version:"v0.1.52",date:"2026-10-06",summary:"App动态通知与远程推送配套。",
+ software:V0_1_51_ENTRY.software.map(item=>item.name==="Alcor"?{...item,version:"v0.1.52"}:item),
+ changes:[{kind:"feature",title:"App动态通知与免打扰",desc:"正式新闻发布生成持久通知与共享未读状态，支持App本机正式动态显式同步、稳定发布编号回执与来源去重。设备Token绑定本人授权、环境及topic，服务器发送前过滤免打扰、失效连接及隐藏动态；APNs配套默认关闭，密钥只读安全配置，模拟回归不代表已完成真机远程验收。"}]
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_51_ENTRY,
   V0_1_50_ENTRY,
   V0_1_49_ENTRY,
   V0_1_48_ENTRY,

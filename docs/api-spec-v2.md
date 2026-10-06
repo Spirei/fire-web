@@ -986,3 +986,18 @@ Web 示例：`/global?section=calendar&market=HK&month=2026-12&status=half_day`�
 | POST | `/api/v2/auth/email-change/request` | security.write |
 | POST | `/api/v2/auth/email-change/verify` | security.write |
 | POST | `/api/v2/auth/email-change/confirm` | security.write |
+
+## App动态通知（合约v1，未部署）
+
+完整来源、APNs、设备、未读及免打扰合同见 `docs/native-feed-notifications-contract.md`。仅App Bearer；正式新闻才通知，默认APNs关闭，未发现能力不可猜路径。
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/feed-notifications` | feed.read |
+| GET | `/api/v2/feed-notifications/preferences` | feed.read |
+| PUT | `/api/v2/feed-notifications/preferences` | feed.write |
+| PUT | `/api/v2/feed-notifications/read` | feed.write |
+| PUT | `/api/v2/feed-notifications/devices` | feed.write |
+| DELETE | `/api/v2/feed-notifications/devices` | feed.write |
+| POST | `/api/v2/feed-notifications/publications` | feed.write |
+| GET | `/api/v2/feed-notifications/publications/{requestId}` | feed.read |
