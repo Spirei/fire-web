@@ -10,7 +10,7 @@ Web 与 iOS 独立。共享合约路径：`fire-web/docs/native-account-assets-c
 
 ## 旧记录兼容与发布核对（本轮）
 
-2026-10-05 17:23 北京时间只读核对生产 `/api/health`：buildSha=`4d6151c61ff6403ae922b25407d9dce5b18dd97d`，版本v0.1.51。该提交镜像于16:32北京完成手动发布任务（GitHub Actions 运行编号37282168697，event=workflow_dispatch），生产能力已存在；此前“尚未发布”只描述当时状态。本轮兼容修复尚未部署，推送不等于生产运行此修复。
+2026-10-05 17:23 北京时间只读核对生产 `/api/health`：buildSha=`4d6151c61ff6403ae922b25407d9dce5b18dd97d`，版本v0.1.51。该提交镜像于16:32北京完成手动发布任务（GitHub Actions 运行编号37282168697，event=workflow_dispatch），生产能力已存在；此前“尚未发布”只描述当时状态。当时本轮兼容修复尚未部署；当前线上状态见下方「订单扩展 v1」核验记录，推送本身不等于部署。
 
 旧 `buildOverview` 用 price×qty 和 cost×qty；`orders.executeOrder/fillPendingRow` 把 amount 写为 qty×price，费用另列；`tradeAccounting.applyOrder` 也沿此单位合约计算成本和股息。这足以证明**应用原台账的记账单位**，不足以证明证券是正股、ETF或期权。无需数据库迁移或逐项确认即可恢复原台账估值，绝不补证券类型、乘100、造历史或宣称是券商期权合约市值。
 
@@ -81,7 +81,7 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
 
 现有来源：records + revisions；trade_orders 成交/费用/快照；fund_transactions + card balances + simple-ledger 主市场权益现金对账；真实行情及汇率。没有新建成交台账，也没有历史回填。
 
-尚缺来源：经核对的历史日初 NAV/持仓现金流、每市场券商现金子账户、供应商证券分类/退市状态、期权乘数/标的/合约身份/成交记账、常规与扩展报价独立快照、完整交易周期日初基准。这些能力发现均为 false/限定能力；iOS 应显示缺失或隐藏不支持操作。生产尚未发布；完成测试并推送后更新本文件状态。
+尚缺来源：经核对的历史日初 NAV/持仓现金流、每市场券商现金子账户、供应商证券分类/退市状态、期权乘数/标的/合约身份/成交记账、常规与扩展报价独立快照、完整交易周期日初基准。这些能力发现均为 false/限定能力；iOS 应显示缺失或隐藏不支持操作。当前已发布状态见下方「订单扩展 v1」核验记录；以上缺失能力不因订单扩展上线而变为可用。
 
 ## 完整能力 JSON（v2；v1 路径按所选版本）
 
@@ -180,9 +180,13 @@ count 为当天所有以上状态的 items 总数，dividend 也计入真实记�
 
 其他数值：qty/price/cost/dilutedCost/averageOpenCost 和金额为number|null，revision/recordRevision/collectionRevision/positionCount/count 为整数；asOf/updatedAt/cycleStartedAt/clearedAt/priceAt 为string|null（asOf必有ISO UTC，priceAt保持行情源原文，可能是交易所本地时间）；timeZone为IANAstring|null、date为YYYY-MM-DD|null，完整性为boolean。
 
-## 订单扩展 v1（2026-10-07，冻结；尚未发布生产）
+## 订单扩展 v1（2026-10-07，冻结；已只读核验生产上线）
 
-本节新增能力不属于80b6800的已发布批准，不自动构建发布或更新生产容器。App只有在所选同源发现 `account_assets.orders_version === 1` 且存在固定 `orders_path` / `cancel_orders_path` 后使用；旧服务器不猜路径，不调用会结算挂单的 legacy orders GET。v1/v2业务结构一致，不跨版本兜底。新增发现：
+用户已告知线上更新至最新。2026-10-07 Web只读核验生产 `/api/health`：buildSha=`2c4f97fd17cedaf53a85209000069f7aad5b1fa0`，版本v0.1.52；同源v1/v2发现均有orders_version=1、固定同版路径、六种筛选，order_reads_settle=false、all_orders/batch_cancel_pending=true，rejected_orders/partial_fills=false。已发布镜像 `ghcr.io/spirei/fire-web:sha-2c4f97f` 的发布日志digest为 `sha256:d1e9b723ef12a6fafd5f3f4c86b74926af43080b58ee8a7086a5e69da3d18f32`；运行容器digest未独立读取，健康接口确认的是实际运行buildSha。
+
+iOS对话补充只读验收：正式签名Alcor 0.2.127使用既有真实连接，两色批量撤单页成功GET scope=all，并通过accountId/source/executionModel/revision/无结算校验；真实pending数量为0，空态与禁用撤单按钮符合实际数据。iOS报告用户ledger SHA-256读取前后一致，未POST任何金融操作；运行回执 `/tmp/alcor-entry-ui.DDVsWg/results.xcresult`。这些真实账户验收结果由iOS提供，Web没有索取或复制App Bearer，也未独立读取私有账户金额和订单；pending=0不代表已经实测生产撤单成功。
+
+本节当前上线状态不构成未来生产变更的批准；后续构建发布或更新生产容器仍须单独确认，不复用80b6800或本次已上线版本的批准。本次文档状态同步不触发服务器变更。App只有在所选同源发现 `account_assets.orders_version === 1` 且存在固定 `orders_path` / `cancel_orders_path` 后使用；旧服务器不猜路径，不调用会结算挂单的 legacy orders GET。v1/v2业务结构一致，不跨版本兜底。新增发现：
 
 ```json
 {"orders_version":1,"orders_path":"/api/v2/account-assets/orders","cancel_orders_path":"/api/v2/account-assets/orders/cancellations","order_revision_field":"revision","order_filters":["all","pending","filled","cancelled","rejected","expired"]}
