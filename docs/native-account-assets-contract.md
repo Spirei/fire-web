@@ -182,7 +182,7 @@ count 为当天所有以上状态的 items 总数，dividend 也计入真实记�
 
 ## 订单扩展 v1（2026-10-07，冻结；已只读核验生产上线）
 
-用户已告知线上更新至最新。2026-10-07 Web只读核验生产 `/api/health`：buildSha=`2c4f97fd17cedaf53a85209000069f7aad5b1fa0`，版本v0.1.52；同源v1/v2发现均有orders_version=1、固定同版路径、六种筛选，order_reads_settle=false、all_orders/batch_cancel_pending=true，rejected_orders/partial_fills=false。已发布镜像 `ghcr.io/spirei/fire-web:sha-2c4f97f` 的发布日志digest为 `sha256:d1e9b723ef12a6fafd5f3f4c86b74926af43080b58ee8a7086a5e69da3d18f32`；运行容器digest未独立读取，健康接口确认的是实际运行buildSha。
+用户已告知线上更新至最新。2026-10-07 Web只读核验生产 `/api/health`：buildSha=`2c4f97fd17cedaf53a85209000069f7aad5b1fa0`，版本v0.1.52；同源v1/v2发现均有orders_version=1、固定同版路径、六种筛选，order_reads_settle=false、all_orders/batch_cancel_pending=true，rejected_orders/partial_fills=false。已发布镜像 `ghcr.io/<owner>/fire-web:sha-2c4f97f`（owner使用部署仓库所有者）的发布日志digest为 `sha256:d1e9b723ef12a6fafd5f3f4c86b74926af43080b58ee8a7086a5e69da3d18f32`；运行容器digest未独立读取，健康接口确认的是实际运行buildSha。
 
 iOS对话补充只读验收：正式签名Alcor 0.2.127使用既有真实连接，两色批量撤单页成功GET scope=all，并通过accountId/source/executionModel/revision/无结算校验；真实pending数量为0，空态与禁用撤单按钮符合实际数据。iOS报告用户ledger SHA-256读取前后一致，未POST任何金融操作；运行回执 `/tmp/alcor-entry-ui.DDVsWg/results.xcresult`。这些真实账户验收结果由iOS提供，Web没有索取或复制App Bearer，也未独立读取私有账户金额和订单；pending=0不代表已经实测生产撤单成功。
 
