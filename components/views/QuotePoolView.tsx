@@ -113,7 +113,7 @@ export default function QuotePoolView({ initial, admin, onNavigate }: { initial?
   }, [active, detail, locationGuard]);
   return <div className="quote-pool-page">
     <header className="pool-page-header">
-      <div><button className="pool-back" type="button" onClick={() => onNavigate("/global")}><IconArrowLeft size={15} />全球经济</button><h1>股票池<span className="pool-title-dot" /></h1></div>
+      <div><button className="pool-back" type="button" onClick={() => onNavigate("/global")}><IconArrowLeft size={15} />全球预览</button><h1>股票池<span className="pool-title-dot" /></h1></div>
       {admin && <div className="pool-scope" aria-label="查看范围">{(["shared", "mine"] as const).map(scope => <button key={scope} type="button" aria-pressed={view.scope === scope} className={`fire-cap ${view.scope === scope ? "is-active" : ""}`} onClick={() => { update({ stock: undefined, scope: scope === "shared" ? undefined : scope }); }}>{scope === "shared" ? "共享池" : "我的订阅"}</button>)}</div>}
     </header>
     <nav className="pool-markets" aria-label="股票池市场">

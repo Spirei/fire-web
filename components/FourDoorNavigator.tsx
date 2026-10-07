@@ -12,7 +12,7 @@ const DOORS: Array<{ key: FourDoorKey; label: string; color: string }> = [
   { key: "holdings", label: "账户资产", color: "blue" },
   { key: "assets", label: "资产分析", color: "charcoal" },
   { key: "fire", label: "FIRE", color: "ember" },
-  { key: "global", label: "全球经济", color: "moss" }
+  { key: "global", label: "全球预览", color: "moss" }
 ];
 
 function shortestStep(from: number, to: number) {

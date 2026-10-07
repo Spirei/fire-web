@@ -988,3 +988,29 @@ Web 示例：`/global?section=calendar&market=HK&month=2026-12&status=half_day`�
 | POST | `/api/v2/auth/email-change/request` | security.write |
 | POST | `/api/v2/auth/email-change/verify` | security.write |
 | POST | `/api/v2/auth/email-change/confirm` | security.write |
+
+
+## 全球预览资产配置
+
+Web入口 `/global?section=allocation`，Web接口 `/api/asset-allocation`；App由 `auth/config.asset_allocation` 发现选定版本路径。
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/asset-allocation` | portfolio.read |
+| POST | `/api/v2/asset-allocation` | portfolio.write |
+| PUT | `/api/v2/asset-allocation` | portfolio.write |
+| DELETE | `/api/v2/asset-allocation` | portfolio.write |
+| POST | `/api/v2/asset-allocation/assign` | portfolio.write |
+
+GET可选 `?currency=USD`（服务端汇率支持的三字币种），返回标准信封。`data`含 `version:1`、`accountId`、`currency`、`observedAt`、`summary`、`accounts`、`categories`、`issues`、`quoteStatus`。所有估值与汇总统一使用显示币种；账户 `amount` / `holdings` / `cash` 使用该账户原币 `currency`。
+
+- `summary`: totalAsset、totalDebt、netAsset、knownAsset、complete、accountCount、portfolioTotalAsset、difference。未转换或现金重复候选时总额为null，不以已知部分冒充完整总额；knownAsset仅作已知部分诊断。
+- `accounts`: id、name、kind（broker/bank/fund/ledger/manual）、category、currency、amount、value、holdings、cash、recordIds、source、updatedAt、excluded、reconciled、revision、components。components按证券/现金等分类使用显示币种；包含现金的券商总权益不重复叠加证券。原持仓记录价回退由quoteStatus.missing声明。
+- `categories`: id、name、value、weightPct；负债与总额不完整时不提供资产占比。
+- `issues`: code、accountIds、message。cash_overlap需要核对待归属资金与券商总权益是否重复；source_removed仅保留核对记录、不再计入。
+
+POST新增账户：`{requestId:"11111111-1111-4111-8111-111111111111",revision:0,name:"储蓄账户",currency:"CNY",amount:10000,category:"cash",excluded:false}`。类别为securities/cash/investment/fixed/receivable/debt；负债填正数，现金允许融资负余额。新增requestId须为固定的小写UUID，同一请求重复提交返回409且不会新增第二个账户；超时后读取`manual:{requestId}`核对结果。PUT核对已有来源或手动账户：去除requestId，同字段加本人 `id` 与读取的 `revision`；关联来源币种/类别不可更改，券商amount为含现金总权益。返回 `{id,revision}`。DELETE：`{id,revision}`，删除手动账户或恢复关联来源，返回 `{id,restored}`。40902表示版本变化，40401表示非本人/不存在的来源。
+
+配置存服务器，Web与两版App共用。可传 `X-Allocation-User: accountId` 防止切换账号后旧表单保存；写入不自动重试。核对值是人工账单快照，恢复自动关联后再跟随原来源。v2只接受App Bearer。完整来源、范围、MIT路由参考及核算语义见 [资产配置说明](asset-allocation.md)。
+
+`data.brokers`为已有券商的{id,name,icon}；`data.positions`包含持仓的{id,name,code,currency,brokerId,revision,accountId}。POST asset-allocation/assign：`{brokerId,records:[{id,revision}]}`，每批最多200项，整批验证本人持仓/版本后同步真实记录的券商归属；不改变数量、成本、报价或成交。相关券商存在人工权益核对值时先恢复自动关联，避免分配后保留过时账单总额。

@@ -91,7 +91,7 @@ const ICON_NAMES: Record<string, string> = {
   holdings: "持仓",
   assets: "资产",
   watchlist: "自选",
-  global: "全球经济",
+  global: "全球预览",
   earnings: "盈利",
   celebs: "名人",
   activities: "动态",

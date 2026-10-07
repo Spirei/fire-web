@@ -4853,9 +4853,9 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_51_ENTRY,
   version: "v0.1.52",
   date: "2026-10-07",
-  summary: "Muse配色修复与App订单读取、批量撤单。",
+  summary: "全球预览资产配置、账户核对与App接口，Muse配色及订单完善。",
   software: V0_1_51_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.52" } : item),
-  changes: [{ kind: "feature", title: "App订单筛选与批量撤单", desc: "新增独立的本人全部/当日订单只读接口，读取不结算挂单。六种筛选沿用真实台账，拒绝和部分成交缺少来源时明确不可用；当前报价不以委托价替代。批量撤单只执行明确选择且版本与证券身份一致的pending订单，整批核对、UUID持久回执和超时只读查询，不自动重放或发布生产。" }, { kind: "fix", title: "Muse配色选中胶囊文字可读性", desc: "Muse配色下素材库市场胶囊鼠标划过时，文字不再与深蓝底色同色，改用配套前景色，恢复清晰可读；默认选中态的浅灰底与链接蓝字保持原样，其他配色与首页不受影响。" }]
+  changes: [{ kind: "feature", title: "全球预览资产配置与账户核对", desc: "全球经济统一改为全球预览，新增Magpie式账户—净资产—资产类别路由图。自动关联本人券商持仓、借记及预付卡余额、资金账本与简化账本，支持账户补录、核对、排除重复来源和恢复自动关联。核对含现金总权益时不重复叠加持仓，缺汇率或待归属现金重叠保留不完整。Web、v1/v2与App发现共用服务端配置及版本校验；刷新时并行双向飞行只表达读取与返回，适配手机、深浅色、隐藏金额和减少动态效果。" }, { kind: "feature", title: "App订单筛选与批量撤单", desc: "新增独立的本人全部/当日订单只读接口，读取不结算挂单。六种筛选沿用真实台账，拒绝和部分成交缺少来源时明确不可用；当前报价不以委托价替代。批量撤单只执行明确选择且版本与证券身份一致的pending订单，整批核对、UUID持久回执和超时只读查询，不自动重放或发布生产。" }, { kind: "fix", title: "Muse配色选中胶囊文字可读性", desc: "Muse配色下素材库市场胶囊鼠标划过时，文字不再与深蓝底色同色，改用配套前景色，恢复清晰可读；默认选中态的浅灰底与链接蓝字保持原样，其他配色与首页不受影响。" }]
 };
 
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
