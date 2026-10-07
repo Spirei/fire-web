@@ -14,6 +14,11 @@ import type { Quote } from "./types";
 const finite = (n: number): number | null => Number.isFinite(n) ? n : null;
 const round = (n: number | null) => n === null ? null : +n.toFixed(2);
 const stable = (name: string) => createHash("sha256").update(name).digest("hex").slice(0, 20);
+/** Semantic read version; observation time is not a change to the recorded assets. */
+export function allocationSnapshotRevision(snapshot: Omit<AllocationSnapshot, "snapshotRevision"> & { snapshotRevision?: string }) {
+  const { observedAt: _observedAt, snapshotRevision: _revision, ...representation } = snapshot;
+  return createHash("sha256").update(JSON.stringify(representation)).digest("hex");
+}
 
 /** Read-through sources and statement overrides, with each source contributing exactly once. */
 export function buildAssetAllocation(userId: string, rates: Record<string, number>, quotes: Record<string, Quote>, currency: string, includeEmptyBanks = false): AllocationSnapshot {
@@ -108,11 +113,12 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
   const net = asset - debt;
   const banks = accounts.filter(a => a.kind === "bank"), includedBanks = banks.filter(a => !a.excluded);
   const bankValue = includedBanks.some(a => a.value === null) ? null : finite(includedBanks.reduce((sum, a) => sum + a.value!, 0));
-  return { version: 1, accountId: userId, currency, observedAt: new Date().toISOString(),
+  const snapshot: Omit<AllocationSnapshot, "snapshotRevision"> = { version: 1, accountId: userId, currency, observedAt: new Date().toISOString(),
     summary: { totalAsset: complete ? round(asset) : null, totalDebt: complete ? round(debt) : null, netAsset: complete ? round(net) : null, knownAsset: round(asset)!, complete, accountCount: accounts.filter(a => !a.excluded).length,
       portfolioTotalAsset: overview.totalAsset ?? null, difference: complete && overview.totalAsset !== null && overview.totalAsset !== undefined ? round(net - overview.totalAsset) : null },
     brokers, positions, accounts: accounts.map(a => ({ ...a, value: round(a.value), components: Object.fromEntries(Object.entries(a.components).map(([k, v]) => [k, round(v ?? null)])) })),
     bankSummary: { count: banks.length, includedCount: includedBanks.length, value: round(bankValue) },
     categories: ALLOCATION_CATEGORIES.map(id => ({ id, name: ALLOCATION_LABELS[id], value: round(totals[id]), weightPct: complete && asset > 0 && id !== "debt" && totals[id] !== null ? round(totals[id]! / asset * 100) : null })),
     issues, quoteStatus: { pending: false, cached: [], missing: [] } };
+  return { ...snapshot, snapshotRevision: allocationSnapshotRevision(snapshot) };
 }

@@ -1002,7 +1002,11 @@ Web入口 `/global?section=allocation`，Web接口 `/api/asset-allocation`；App
 | DELETE | `/api/v2/asset-allocation` | portfolio.write |
 | POST | `/api/v2/asset-allocation/assign` | portfolio.write |
 
-GET可选 `?currency=USD`（服务端汇率支持的三字币种），返回标准信封。`data`含 `version:1`、`accountId`、`currency`、`observedAt`、`summary`、`accounts`、`bankSummary`、`categories`、`issues`、`quoteStatus`。所有估值与汇总统一使用显示币种；账户 `amount` / `holdings` / `cash` 使用该账户原币 `currency`。
+GET可选 `?currency=USD`（服务端汇率支持的三字币种），200返回标准信封。`data`含 `version:1`、`accountId`、`currency`、`observedAt`、`snapshotRevision`、`summary`、`accounts`、`bankSummary`、`categories`、`issues`、`quoteStatus`。所有估值与汇总统一使用显示币种；账户 `amount` / `holdings` / `cash` 使用该账户原币 `currency`。
+
+GET返回弱 `ETag: W/"{snapshotRevision}"`；同账号同币种携带 `If-None-Match`，未变化返回304空正文，必须复用匹配的内存快照，不调用JSON解析。200/304均重新检查认证与当前来源，返回 `X-Allocation-Observed-At`（本次核算时间，非行情时间）、`Cache-Control: no-store, private` 与 `Vary: Authorization, Cookie, X-Allocation-User`。snapshotRevision排除observedAt，其余快照内容参与指纹；不能代替写入revision。401/403/账号冲突应清空旧快照。切换币种后新换算到达前保持旧快照币种与金额一致。
+
+能力发现声明 `conditional_read=weak-etag`、`snapshot_revision_field=snapshotRevision`、`checked_at_header=X-Allocation-Observed-At`，建议读取8秒、写入12秒总超时（含正文），前台每30秒补读、隐藏停止；失败退避、不自动重放写入，超时或409先读取核对。`source_connection=local-ledgers`、`external_institution_connections=false` 表示关联本站来源，未直连外部银行/券商。
 
 - `summary`: totalAsset、totalDebt、netAsset、knownAsset、complete、accountCount、portfolioTotalAsset、difference。未转换或现金重复候选时总额为null，不以已知部分冒充完整总额；knownAsset仅作已知部分诊断。
 - `accounts`: id、name、kind（broker/bank/fund/ledger/manual）、category、currency、amount、value、holdings、cash、recordIds、source、updatedAt、excluded、reconciled、revision、components。components按证券/现金等分类使用显示币种；包含现金的券商总权益不重复叠加证券。原持仓记录价回退由quoteStatus.missing声明。

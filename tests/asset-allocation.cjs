@@ -17,12 +17,33 @@ const rec=(f,over={})=>store.createRecord(f.user.id,{name:'Synthetic',code:'TEST
 const input=(over={})=>({...(over.id?{}:{requestId:crypto.randomUUID()}),revision:0,name:'Savings',currency:'USD',amount:100,category:'cash',excluded:false,...over});
 async function call(f,method='GET',body,version=1,extra={},tail=''){
  const url=process.env.FIRE_APP_ORIGIN+`/api/v${version}/asset-allocation`+tail,request=new Request(url,{method,headers:{authorization:'Bearer '+f.grant.access_token,'content-type':'application/json',...extra},...(body===undefined?{}:{body:JSON.stringify(body)})});
- const response=await load(`app/api/v${version}/asset-allocation${tail}/route.ts`)[method](request);return{status:response.status,body:await response.json(),headers:response.headers};
+ const response=await load(`app/api/v${version}/asset-allocation${tail}/route.ts`)[method](request),parsed=response.status===304?null:await response.json();
+ if(method==='GET'&&response.status===200)assert(load('lib/assetAllocationClient.ts').validAllocationSnapshot(parsed.data,'USD',f.user.id),'every real server fixture conforms to the Web/App snapshot contract');
+ return{status:response.status,body:parsed,headers:response.headers};
 }
 const snap=f=>allocation.buildAssetAllocation(f.user.id,rates,quotes,'USD');
 const business=()=>Object.fromEntries(['records','fund_transactions','trade_orders','card_amounts','card_holdings','card_details','custom_cards','user_settings'].map(t=>[t,db.prepare('SELECT * FROM '+t+' ORDER BY rowid').all()]));
 async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuotes=null;await fn();count++;console.log('PASS '+name);}
 (async()=>{
+ await test('weak conditional snapshots are stable, currency/owner bound and reauthorize before 304',async()=>{
+  const f=fixture(),g=fixture(),first=await call(f),tag=first.headers.get('etag');
+  assert.match(tag,/^W\/"[a-f0-9]{64}"$/);assert.equal(first.body.data.snapshotRevision,tag.slice(3,-1));
+  assert.equal(first.headers.get('cache-control'),'no-store, private');assert.match(first.headers.get('vary'),/Authorization.*Cookie.*X-Allocation-User/);
+  assert.equal(allocation.allocationSnapshotRevision(first.body.data),allocation.allocationSnapshotRevision({...first.body.data,observedAt:'2030-01-01T00:00:00.000Z'}));
+  assert.notEqual(first.body.data.snapshotRevision,allocation.allocationSnapshotRevision({...first.body.data,currency:'CNY'}));
+  for(const v of[1,2])for(const condition of[tag,tag.slice(2),'"irrelevant", '+tag,'*']){
+   const cached=await call(f,'GET',undefined,v,{'if-none-match':condition,'x-allocation-user':f.user.id});assert.equal(cached.status,304);assert.equal(cached.body,null);assert.equal(cached.headers.get('etag'),tag);assert(Number.isFinite(Date.parse(cached.headers.get('x-allocation-observed-at'))));
+  }
+  assert.equal((await call(g,'GET',undefined,2,{'if-none-match':tag})).status,200);
+  assert.equal((await call(g,'GET',undefined,2,{'if-none-match':tag,'x-allocation-user':f.user.id})).status,409);
+  await call(f,'POST',input());assert.equal((await call(f,'GET',undefined,1,{'if-none-match':tag})).status,200);
+  onQuotes=()=>app.revokeAppGrant(f.grant.grant_id);assert.equal((await call(f,'GET',undefined,2,{'if-none-match':'*'})).status,401);
+ });
+ await test('cancelled reads stop at asynchronous boundaries and never return a conditional success',async()=>{
+  const f=fixture(),controller=new AbortController();onQuotes=()=>controller.abort();
+  const request=new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/asset-allocation',{signal:controller.signal,headers:{authorization:'Bearer '+f.grant.access_token,'if-none-match':'*'}});
+  const response=await load('app/api/v2/asset-allocation/route.ts').GET(request);assert.equal(response.status,499);assert.equal((await response.json()).code,49901);
+ });
  await test('multiple brokers/cards are separate sources and canonical portfolio cash is counted once',async()=>{
   const f=fixture();rec(f);rec(f,{code:'SECOND',group:'Broker Two',price:15});funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});
   for(const [key,amount,cur]of[['debit.png',7,'USD'],['prepaid.png',14,'HKD'],['credit.png',10000,'USD']]){cards.setCardHeld(f.user.id,key,true);cards.upsertCardAmount(f.user.id,{cardKey:key,amount,currency:cur});}
@@ -53,7 +74,7 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
   const c=await call(f,'POST',input());assert.equal((await call(other,'DELETE',{id:c.body.data.id,revision:1})).status,409);assert.equal(snap(other).summary.totalAsset,0);
  });
  await test('unknown card data, missing FX and corrupt source data preserve incomplete nulls',async()=>{
-  const f=fixture();cards.setCardHeld(f.user.id,'unknown.png',true);cards.upsertCardAmount(f.user.id,{cardKey:'unknown.png',amount:5,currency:'USD'});assert.equal(snap(f).summary.totalAsset,null);
+  const f=fixture();cards.setCardHeld(f.user.id,'unknown.png',true);cards.upsertCardAmount(f.user.id,{cardKey:'unknown.png',amount:5,currency:'USD'});assert.equal(snap(f).summary.totalAsset,null);assert.equal((await call(f)).body.data.summary.complete,false,'unknown sources remain readable rather than failing client validation');
   const g=fixture();await call(g,'POST',input({currency:'RUB'}));assert.equal(snap(g).summary.totalAsset,null);assert(snap(g).issues.some(i=>i.code==='value_unavailable'));
   db.prepare("INSERT INTO user_settings(user_id,fire,simple) VALUES(?,'{}','{broken')").run(g.user.id);assert.equal(snap(g).summary.totalAsset,null);
   const emptyCard=fixture();cards.setCardHeld(emptyCard.user.id,'debit.png',true);const e=snap(emptyCard);assert.equal(e.accounts.length,0);assert.equal(e.summary.totalAsset,0);assert.equal(e.summary.complete,true);assert.deepEqual(e.bankSummary,{count:0,includedCount:0,value:0});
@@ -87,7 +108,7 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
  await test('both App versions enforce read/write grants; v2 rejects Cookie fallback and foreign origins',async()=>{
   const f=fixture('portfolio.read');for(const v of[1,2]){assert.equal((await call(f,'GET',undefined,v)).status,200);assert.equal((await call(f,'POST',input(),v)).status,403);assert.equal((await call(f,'GET',undefined,v,{origin:'https://foreign.example'})).status,403);}
   const r=await load('app/api/v2/asset-allocation/route.ts').GET(new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/asset-allocation',{headers:{cookie:'fire_session='+f.cookie}}));assert.equal(r.status,401);
-  for(const v of[1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const c=(await r.json()).data.asset_allocation;assert.equal(c.snapshot_path,`/api/v${v}/asset-allocation`);assert.equal(c.read_scope,'portfolio.read');}
+  for(const v of[1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const c=(await r.json()).data.asset_allocation;assert.equal(c.snapshot_path,`/api/v${v}/asset-allocation`);assert.equal(c.read_scope,'portfolio.read');assert.equal(c.conditional_read,'weak-etag');assert.equal(c.snapshot_revision_field,'snapshotRevision');assert.equal(c.recommended_read_timeout_ms,8000);assert.equal(c.recommended_write_timeout_ms,12000);assert.equal(c.external_institution_connections,false);assert.equal(c.automatic_mutation_replay,false);}
  });
  await test('removed linked source does not resurrect statement money, and restores are owner/revision bound',async()=>{
   const f=fixture(),r=rec(f),a=snap(f).accounts[0];await call(f,'PUT',input({id:a.id,category:'securities',amount:90}));db.prepare('DELETE FROM records WHERE id=?').run(r.id);const s=snap(f);assert.equal(s.summary.totalAsset,0);assert.equal(s.accounts[0].excluded,true);assert(s.issues.some(i=>i.code==='source_removed'));

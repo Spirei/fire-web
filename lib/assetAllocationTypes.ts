@@ -9,7 +9,7 @@ export interface AllocationAccount {
   components: Partial<Record<AllocationCategory, number | null>>;
 }
 export interface AllocationSnapshot {
-  version: 1; accountId: string; currency: string; observedAt: string;
+  version: 1; accountId: string; currency: string; observedAt: string; snapshotRevision: string;
   summary: { totalAsset: number | null; totalDebt: number | null; netAsset: number | null; knownAsset: number; complete: boolean; accountCount: number; portfolioTotalAsset: number | null; difference: number | null };
   accounts: AllocationAccount[];
   bankSummary: { count: number; includedCount: number; value: number | null };
