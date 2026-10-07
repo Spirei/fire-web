@@ -4049,8 +4049,8 @@ html.dark .watch-import-target {
 .global-section-panel { min-width:0; animation:global-section-panel-in .2s cubic-bezier(.22,1,.36,1); }
 
 /* Account routing: Magpie's three-column stage, adapted for financial sources. */
-.asset-allocation-view { --allocation-paper:#fff; --allocation-line:#e4e6eb; --allocation-muted:#858b96; --allocation-fg:#292d36; color:var(--allocation-fg); min-width:0; }
-.dark .asset-allocation-view { --allocation-paper:#181b22; --allocation-line:#343840; --allocation-muted:#959ca9; --allocation-fg:#e8ebf0; }
+.asset-allocation-view,.allocation-bank-panel { --allocation-paper:#fff; --allocation-line:#e4e6eb; --allocation-muted:#858b96; --allocation-fg:#292d36; color:var(--allocation-fg); min-width:0; }
+.dark .asset-allocation-view,.dark .allocation-bank-panel { --allocation-paper:#181b22; --allocation-line:#343840; --allocation-muted:#959ca9; --allocation-fg:#e8ebf0; }
 .allocation-toolbar,.allocation-actions { display:flex; align-items:center; gap:10px; }
 .allocation-toolbar { justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:22px; }
 .allocation-toolbar h2 { display:flex; align-items:center; gap:8px; font-size:19px; font-weight:650; letter-spacing:-.03em; }
@@ -4071,11 +4071,11 @@ html.dark .watch-import-target {
 .allocation-summary strong { font-size:18px; font-weight:550; letter-spacing:-.035em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .allocation-graph-card { background:var(--allocation-paper); border:1px solid var(--allocation-line); border-radius:18px; padding:26px clamp(16px,3vw,36px); container-type:inline-size; }
 .allocation-stage { position:relative; display:grid; grid-template-columns:minmax(140px,1fr) minmax(160px,.95fr) minmax(140px,1fr); gap:clamp(24px,5cqw,72px); align-items:center; min-height:380px; }
-.allocation-wires,.allocation-sky { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.allocation-wires,.allocation-flow { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
 .allocation-wires { z-index:0; }
-.allocation-wires path { fill:none; stroke-width:1.35; stroke-dasharray:2 6; opacity:.42; }
+.allocation-wires path { fill:none; stroke-width:1.35; stroke-dasharray:2 6; opacity:.42; transition:opacity .25s; }
 .allocation-wires path.is-excluded { opacity:.14; }
-.allocation-stage.is-reading .allocation-wires path:not(.is-excluded) { stroke-dasharray:3 5; animation:allocation-route-flow .8s linear infinite; opacity:.7; }
+.allocation-stage:is(.is-reading,.is-flowing) .allocation-wires path:not(.is-excluded) { opacity:.65; }
 .allocation-sources,.allocation-destinations { position:relative; z-index:1; display:grid; gap:10px; min-width:0; }
 .allocation-sources { max-height:520px; overflow-y:auto; padding-right:5px; scrollbar-width:thin; align-self:center; }
 .allocation-sources>.allocation-column-label { position:sticky; top:0; z-index:2; padding-bottom:5px; background:var(--allocation-paper); }
@@ -4093,6 +4093,16 @@ html.dark .watch-import-target {
 .allocation-node-dot { width:6px; height:6px; flex:none; border-radius:50%; opacity:.9; }
 .allocation-account>.allocation-node-dot { position:absolute; right:-4px; top:calc(50% - 3px); }
 .allocation-account.is-excluded { opacity:.45; }
+.allocation-bank-expand { flex:none; color:var(--allocation-muted); }
+.allocation-bank-summary { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:16px; color:var(--allocation-muted); font-size:12px; }
+.allocation-bank-summary strong { color:var(--allocation-fg); font-size:22px; font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.allocation-bank-list { display:grid; gap:10px; max-height:60vh; overflow-y:auto; }
+.allocation-bank-detail { display:flex; align-items:center; gap:12px; width:100%; padding:14px; border:1px solid var(--allocation-line); border-radius:12px; background:var(--allocation-paper); color:var(--allocation-fg); text-align:left; }
+.allocation-bank-detail:hover { border-color:#98909e; background:#fafafd; }
+.dark .allocation-bank-detail:hover { border-color:#8b8397; background:#20232b; }
+.allocation-bank-detail .allocation-node-body b { white-space:normal; overflow-wrap:anywhere; line-height:1.5; }
+.allocation-bank-detail.is-excluded { opacity:.5; }
+.allocation-bank-edit { display:flex; align-items:center; gap:3px; flex:none; color:var(--allocation-muted); font-size:11px; }
 .allocation-hub { align-self:center; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; padding:28px 8px 20px; border-color:#b8b1c9; box-shadow:0 0 0 5px rgba(139,128,197,.045); }
 .allocation-hub-icon { color:#7c748e; padding-bottom:3px; }
 .allocation-hub strong { font-size:clamp(18px,2.4cqw,28px); font-weight:550; letter-spacing:-.055em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; max-width:100%; }
@@ -4107,10 +4117,10 @@ html.dark .watch-import-target {
 .allocation-category { display:flex; align-items:center; gap:10px; padding:15px 14px; }
 .allocation-category>.allocation-node-dot { position:absolute; left:-4px; top:calc(50% - 3px); }
 .allocation-category>small { color:var(--allocation-muted); font-size:10px; font-variant-numeric:tabular-nums; }
-.allocation-sky { z-index:2; }
-.allocation-flier { opacity:0; animation:allocation-flight-presence 1s .05s forwards; }
-.allocation-stage.is-reading .allocation-flier { opacity:1; animation:none; }
-.allocation-wing { transform-origin:0 0; animation:allocation-wingbeat .28s ease-in-out infinite; }
+.allocation-flow { z-index:2; }
+.allocation-pulse { opacity:0; animation-name:allocation-pulse-presence; animation-timing-function:linear; animation-fill-mode:forwards; }
+.allocation-pulse-halo { opacity:.1; }
+.dark .allocation-pulse-halo { opacity:.2; }
 .allocation-issues { margin:16px 0; border:1px solid var(--allocation-line); border-radius:11px; padding:10px 14px; display:grid; gap:9px; }
 .allocation-issues>div { display:flex; align-items:center; gap:8px; color:var(--allocation-muted); font-size:12px; }
 .allocation-issues>div>svg { flex:none; }
@@ -4146,9 +4156,7 @@ html.dark .watch-import-target {
 .dark .allocation-form input:not([type=checkbox]) { border-color:#343840; background:#181b22; color:#e8ebf0; }
 .dark .allocation-form-note { color:#959ca9; }
 .dark .allocation-error { color:#e09ba2; }
-@keyframes allocation-route-flow { to { stroke-dashoffset:-8; } }
-@keyframes allocation-wingbeat { 50% { transform:scaleY(-.6); } }
-@keyframes allocation-flight-presence { 5%,90% { opacity:1; } 100% { opacity:0; } }
+@keyframes allocation-pulse-presence { 5%,90% { opacity:1; } 100% { opacity:0; } }
 @container (max-width:570px) {
   .allocation-stage { grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:35px; row-gap:40px; }
   .allocation-destinations { grid-column:1/-1; margin-left:25px; }
@@ -4165,8 +4173,9 @@ html.dark .watch-import-target {
   .allocation-toolbar { align-items:flex-start; }
 }
 @media (prefers-reduced-motion:reduce) {
-  .allocation-sky { display:none; }
-  .allocation-stage.is-reading .allocation-wires path,.allocation-wing,.allocation-actions .animate-spin { animation:none; }
+  .allocation-flow { display:none; }
+  .allocation-wires path { transition:none; }
+  .allocation-actions .animate-spin { animation:none; }
 }
 /* 只做透明度过渡，避免切换栏目时造成布局偏移。 */
 @keyframes global-section-panel-in { from { opacity:0; } to { opacity:1; } }

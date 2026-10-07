@@ -26,7 +26,7 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
  await test('multiple brokers/cards are separate sources and canonical portfolio cash is counted once',async()=>{
   const f=fixture();rec(f);rec(f,{code:'SECOND',group:'Broker Two',price:15});funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});
   for(const [key,amount,cur]of[['debit.png',7,'USD'],['prepaid.png',14,'HKD'],['credit.png',10000,'USD']]){cards.setCardHeld(f.user.id,key,true);cards.upsertCardAmount(f.user.id,{cardKey:key,amount,currency:cur});}
-  const before=business(),s=snap(f);assert.equal(s.accounts.filter(a=>a.kind==='broker').length,2);assert.equal(s.accounts.filter(a=>a.kind==='bank').length,2);assert.equal(s.summary.totalAsset,159);assert.equal(s.summary.portfolioTotalAsset,159);assert.equal(s.summary.difference,0);assert.equal(s.categories.find(c=>c.id==='cash').value,109);assert.deepEqual(business(),before);
+  const before=business(),s=snap(f);assert.equal(s.accounts.filter(a=>a.kind==='broker').length,2);assert.equal(s.accounts.filter(a=>a.kind==='bank').length,2);assert.deepEqual(s.bankSummary,{count:2,includedCount:2,value:9});assert.equal(s.summary.totalAsset,159);assert.equal(s.summary.portfolioTotalAsset,159);assert.equal(s.summary.difference,0);assert.equal(s.categories.find(c=>c.id==='cash').value,109);assert.deepEqual(business(),before);
  });
  await test('linked legacy equity is not added twice and the residual cash keeps native currency',async()=>{
   const f=fixture();rec(f);simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{id:'legacy',name:'Broker',market:'US',cur:'USD',amount:100}]});
@@ -56,8 +56,23 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
   const f=fixture();cards.setCardHeld(f.user.id,'unknown.png',true);cards.upsertCardAmount(f.user.id,{cardKey:'unknown.png',amount:5,currency:'USD'});assert.equal(snap(f).summary.totalAsset,null);
   const g=fixture();await call(g,'POST',input({currency:'RUB'}));assert.equal(snap(g).summary.totalAsset,null);assert(snap(g).issues.some(i=>i.code==='value_unavailable'));
   db.prepare("INSERT INTO user_settings(user_id,fire,simple) VALUES(?,'{}','{broken')").run(g.user.id);assert.equal(snap(g).summary.totalAsset,null);
-  const emptyCard=fixture();cards.setCardHeld(emptyCard.user.id,'debit.png',true);const e=snap(emptyCard);assert.equal(e.accounts[0].amount,null);assert.equal(e.summary.totalAsset,null);assert(e.issues.some(i=>i.code==='value_unavailable'));
+  const emptyCard=fixture();cards.setCardHeld(emptyCard.user.id,'debit.png',true);const e=snap(emptyCard);assert.equal(e.accounts.length,0);assert.equal(e.summary.totalAsset,0);assert.equal(e.summary.complete,true);assert.deepEqual(e.bankSummary,{count:0,includedCount:0,value:0});
   const corrupt=fixture();simple.setSimpleLedger(corrupt.user.id,simple.EMPTY_SIMPLE);db.prepare('UPDATE user_settings SET simple=? WHERE user_id=?').run('{"cash":{}}',corrupt.user.id);assert.equal(snap(corrupt).summary.totalAsset,null);
+ });
+ await test('only recorded nonzero bank balances enter Web/App snapshots; cleared statements remain editable and restorable',async()=>{
+  const f=fixture();for(const [key,amount,currency]of[['debit.png',0,'USD'],['prepaid.png',14,'HKD'],['credit.png',10000,'USD']]){cards.setCardHeld(f.user.id,key,true);cards.upsertCardAmount(f.user.id,{cardKey:key,amount,currency});}
+  const before=business(),s=snap(f),bank=s.accounts.find(a=>a.kind==='bank');assert.equal(s.accounts.length,1);assert.deepEqual(s.bankSummary,{count:1,includedCount:1,value:2});
+  for(const v of[1,2])assert.deepEqual((await call(f,'GET',undefined,v)).body.data.bankSummary,s.bankSummary);
+  const body=input({id:bank.id,name:bank.name,currency:'HKD',amount:0});assert.equal((await call(f,'PUT',body,2)).status,200);assert.equal(snap(f).accounts.length,0);assert.deepEqual(snap(f).bankSummary,{count:0,includedCount:0,value:0});
+  assert.equal((await call(f,'PUT',{...body,revision:1,currency:'USD',amount:21})).status,400);assert.equal((await call(f,'PUT',{...body,revision:0,amount:21})).status,409);
+  assert.equal((await call(f,'PUT',{...body,revision:1,amount:21})).status,200);assert.equal(snap(f).bankSummary.value,3);
+  assert.equal((await call(f,'DELETE',{id:bank.id,revision:2},2)).status,200);assert.equal(snap(f).bankSummary.value,2);assert.deepEqual(business(),before);
+ });
+ await test('bank grouping rounds once, respects exclusions and keeps missing FX incomplete',async()=>{
+  const f=fixture();for(const key of['debit.png','prepaid.png']){cards.setCardHeld(f.user.id,key,true);cards.upsertCardAmount(f.user.id,{cardKey:key,amount:.004,currency:'USD'});}
+  let s=snap(f);assert.equal(s.bankSummary.value,.01);assert.equal(s.summary.totalAsset,.01);
+  const a=s.accounts[0];assert.equal((await call(f,'PUT',input({id:a.id,name:a.name,amount:.004,excluded:true}))).status,200);s=snap(f);assert.deepEqual(s.bankSummary,{count:2,includedCount:1,value:0});
+  const g=fixture();cards.setCardHeld(g.user.id,'debit.png',true);cards.upsertCardAmount(g.user.id,{cardKey:'debit.png',amount:7,currency:'HKD'});rates.HKD=0;const missing=snap(g);assert.equal(missing.bankSummary.value,null);assert.equal(missing.bankSummary.count,1);assert.equal(missing.summary.complete,false);
  });
  await test('all ledger categories and debt reconcile without using the ledger personal FX table',async()=>{
   const f=fixture();simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,fx:{USD:999},cash:[{id:'cash',name:'Cash',cur:'USD',amount:10}],fixed:[{id:'house',name:'House',cur:'CNY',amount:700}],debt:[{id:'loan',name:'Loan',cur:'USD',amount:20}],invest:[{id:'other',name:'Other',cur:'USD',amount:30}],receivable:[{id:'rec',name:'Receivable',cur:'USD',amount:5}]});

@@ -32,7 +32,7 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
       return getDb().transaction(() => {
         authorize();
         if (new URL(request.url).pathname.endsWith("/assign")) {
-          const snapshot = buildAssetAllocation(initial.id, { USD: 1 }, {}, "USD");
+          const snapshot = buildAssetAllocation(initial.id, { USD: 1 }, {}, "USD", true);
           const recordIds = Array.isArray(raw?.records) ? new Set(raw.records.map((r: { id?: unknown } | null) => r?.id)) : new Set();
           const affected = new Set(snapshot.positions.filter(p => recordIds.has(p.id)).flatMap(p => [p.accountId, `broker:${raw?.brokerId}:${p.currency}`]));
           if (snapshot.accounts.some(a => affected.has(a.id) && a.reconciled)) throw new RecordsError("请先恢复相关券商的自动关联，再分配持仓", 409, 40902);
@@ -46,7 +46,7 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
         const input = parseAllocationInput(raw);
         if (request.method === "PUT" && !input.id || request.method === "POST" && input.id) throw new RecordsError("账户标识无效");
         if (request.method === "POST" && !input.requestId || request.method === "PUT" && input.requestId) throw new RecordsError("新增账户须提供固定的requestId");
-        const snapshot = buildAssetAllocation(initial.id, { USD: 1 }, {}, "USD");
+        const snapshot = buildAssetAllocation(initial.id, { USD: 1 }, {}, "USD", true);
         const source = snapshot.accounts.find(a => a.id === input.id && a.kind !== "manual");
         if (source && (source.currency !== input.currency || source.category !== input.category)) throw new RecordsError("关联账户的币种和类别不可更改");
         return ok(saveAllocationAccount(initial.id, input, new Set(snapshot.accounts.filter(a => a.kind !== "manual").map(a => a.id))));

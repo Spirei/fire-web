@@ -16,7 +16,7 @@ const round = (n: number | null) => n === null ? null : +n.toFixed(2);
 const stable = (name: string) => createHash("sha256").update(name).digest("hex").slice(0, 20);
 
 /** Read-through sources and statement overrides, with each source contributing exactly once. */
-export function buildAssetAllocation(userId: string, rates: Record<string, number>, quotes: Record<string, Quote>, currency: string): AllocationSnapshot {
+export function buildAssetAllocation(userId: string, rates: Record<string, number>, quotes: Record<string, Quote>, currency: string, includeEmptyBanks = false): AllocationSnapshot {
   const records = listRecords(userId), cash = readAccountCash(userId), overview = buildOverview(records, rates, quotes, currency, cash);
   const accounts: AllocationAccount[] = [], issues: AllocationSnapshot["issues"] = [];
   const revisions = allocationRevisions(userId);
@@ -79,6 +79,11 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
     }
     Object.assign(a, { name: row.name, amount: row.amount, currency: row.currency, category: row.category, excluded: a.excluded || !!row.excluded, updatedAt: row.updated_at, reconciled: true, revision: row.revision });
   }
+  // Resolve statements first: a recorded nonzero card balance counts, an empty/unrecorded card does not.
+  // Mutation validation can still inspect every held source, including a just-cleared balance.
+  if (!includeEmptyBanks) for (let i = accounts.length - 1; i >= 0; i--) {
+    const a = accounts[i]; if (a.kind === "bank" && (a.amount === 0 || a.amount === null && a.updatedAt === null)) accounts.splice(i, 1);
+  }
   for (const a of accounts) {
     a.value = a.amount === null ? null : finite(convertAccountAmount(a.amount, a.currency, rates, currency));
     if (a.kind === "broker") {
@@ -86,7 +91,7 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
       const holdings = a.holdings === null ? null : finite(convertAccountAmount(a.holdings, a.currency, rates, currency));
       a.components = { securities: holdings, ...(a.cash !== null ? { cash: finite(convertAccountAmount(a.cash, a.currency, rates, currency)) } : {}) };
     } else a.components = { [a.category]: a.value };
-    if (!a.excluded && a.value === null) issues.push({ code: "value_unavailable", accountIds: [a.id], message: a.amount === null ? `${a.name}待补余额` : `${a.name}缺少${a.currency}汇率` });
+    if (!a.excluded && a.value === null) issues.push({ code: "value_unavailable", accountIds: [a.id], message: a.amount === null ? `${a.name}${a.kind === "bank" && a.updatedAt ? "余额无法核算" : "待补余额"}` : `${a.name}缺少${a.currency}汇率` });
   }
   // A broker statement includes cash. Never declare the sum complete while a legacy cash source can overlap it.
   for (const fund of accounts.filter(a => a.kind === "fund" && !a.excluded && a.amount !== 0)) {
@@ -101,10 +106,13 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
   }
   const complete = !issues.some(i => ["source_unavailable", "ledger_unavailable", "ledger_item_invalid", "value_unavailable", "cash_overlap"].includes(i.code));
   const net = asset - debt;
+  const banks = accounts.filter(a => a.kind === "bank"), includedBanks = banks.filter(a => !a.excluded);
+  const bankValue = includedBanks.some(a => a.value === null) ? null : finite(includedBanks.reduce((sum, a) => sum + a.value!, 0));
   return { version: 1, accountId: userId, currency, observedAt: new Date().toISOString(),
     summary: { totalAsset: complete ? round(asset) : null, totalDebt: complete ? round(debt) : null, netAsset: complete ? round(net) : null, knownAsset: round(asset)!, complete, accountCount: accounts.filter(a => !a.excluded).length,
       portfolioTotalAsset: overview.totalAsset ?? null, difference: complete && overview.totalAsset !== null && overview.totalAsset !== undefined ? round(net - overview.totalAsset) : null },
     brokers, positions, accounts: accounts.map(a => ({ ...a, value: round(a.value), components: Object.fromEntries(Object.entries(a.components).map(([k, v]) => [k, round(v ?? null)])) })),
+    bankSummary: { count: banks.length, includedCount: includedBanks.length, value: round(bankValue) },
     categories: ALLOCATION_CATEGORIES.map(id => ({ id, name: ALLOCATION_LABELS[id], value: round(totals[id]), weightPct: complete && asset > 0 && id !== "debt" && totals[id] !== null ? round(totals[id]! / asset * 100) : null })),
     issues, quoteStatus: { pending: false, cached: [], missing: [] } };
 }

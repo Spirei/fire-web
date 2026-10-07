@@ -1002,11 +1002,12 @@ Web入口 `/global?section=allocation`，Web接口 `/api/asset-allocation`；App
 | DELETE | `/api/v2/asset-allocation` | portfolio.write |
 | POST | `/api/v2/asset-allocation/assign` | portfolio.write |
 
-GET可选 `?currency=USD`（服务端汇率支持的三字币种），返回标准信封。`data`含 `version:1`、`accountId`、`currency`、`observedAt`、`summary`、`accounts`、`categories`、`issues`、`quoteStatus`。所有估值与汇总统一使用显示币种；账户 `amount` / `holdings` / `cash` 使用该账户原币 `currency`。
+GET可选 `?currency=USD`（服务端汇率支持的三字币种），返回标准信封。`data`含 `version:1`、`accountId`、`currency`、`observedAt`、`summary`、`accounts`、`bankSummary`、`categories`、`issues`、`quoteStatus`。所有估值与汇总统一使用显示币种；账户 `amount` / `holdings` / `cash` 使用该账户原币 `currency`。
 
 - `summary`: totalAsset、totalDebt、netAsset、knownAsset、complete、accountCount、portfolioTotalAsset、difference。未转换或现金重复候选时总额为null，不以已知部分冒充完整总额；knownAsset仅作已知部分诊断。
 - `accounts`: id、name、kind（broker/bank/fund/ledger/manual）、category、currency、amount、value、holdings、cash、recordIds、source、updatedAt、excluded、reconciled、revision、components。components按证券/现金等分类使用显示币种；包含现金的券商总权益不重复叠加证券。原持仓记录价回退由quoteStatus.missing声明。
 - `categories`: id、name、value、weightPct；负债与总额不完整时不提供资产占比。
+- `bankSummary`: count、includedCount、value，分别为非零余额银行卡总数、计入数量及显示币种合计。银行卡未录或零余额时不出现在accounts及汇总；非零金额的缺汇率/损坏来源仍报异常。value先汇总后取两位小数，缺估值为null；银行卡明细由accounts.kind=bank读取。与Web收拢节点同源。
 - `issues`: code、accountIds、message。cash_overlap需要核对待归属资金与券商总权益是否重复；source_removed仅保留核对记录、不再计入。
 
 POST新增账户：`{requestId:"11111111-1111-4111-8111-111111111111",revision:0,name:"储蓄账户",currency:"CNY",amount:10000,category:"cash",excluded:false}`。类别为securities/cash/investment/fixed/receivable/debt；负债填正数，现金允许融资负余额。新增requestId须为固定的小写UUID，同一请求重复提交返回409且不会新增第二个账户；超时后读取`manual:{requestId}`核对结果。PUT核对已有来源或手动账户：去除requestId，同字段加本人 `id` 与读取的 `revision`；关联来源币种/类别不可更改，券商amount为含现金总权益。返回 `{id,revision}`。DELETE：`{id,revision}`，删除手动账户或恢复关联来源，返回 `{id,restored}`。40902表示版本变化，40401表示非本人/不存在的来源。
