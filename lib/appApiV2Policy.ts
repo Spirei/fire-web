@@ -31,6 +31,8 @@ export const APP_V2_ROUTES = [
   {path:"auth/passkeys/register-options",methods:["POST"],access:"security.write"},
   {path:"auth/passkeys/register-verify",methods:["POST"],access:"security.write"},
   {path:"auth/security-devices",methods:["GET","DELETE"],access:"security.read",writeAccess:"security.write"},
+  {path:"account-assets/orders",methods:["GET"],access:"portfolio.read"},
+  {path:"account-assets/orders/cancellations",methods:["POST"],access:"portfolio.write"},
   {path:"account-assets",methods:["GET"],access:"portfolio.read"},
   {path:"account-assets/instruments/[recordId]",methods:["GET","PUT"],access:"portfolio.read",writeAccess:"portfolio.write"},
   {path:"account-assets/operations/[requestId]",methods:["GET"],access:"portfolio.read"},

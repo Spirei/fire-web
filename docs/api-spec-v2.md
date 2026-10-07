@@ -6,6 +6,8 @@
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
+| GET | `/api/v2/account-assets/orders` | portfolio.read |
+| POST | `/api/v2/account-assets/orders/cancellations` | portfolio.write |
 | GET | `/api/v2/account-assets` | portfolio.read |
 | GET | `/api/v2/account-assets/instruments/{recordId}` | portfolio.read |
 | PUT | `/api/v2/account-assets/instruments/{recordId}` | portfolio.write |
