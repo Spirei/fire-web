@@ -67,6 +67,9 @@ html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .assist
 @media(hover:hover){
   html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item):hover{background:var(--muse-fill)!important;color:var(--muse-ink)!important}
 }
-/* Selected capsules sit on --cap-selected (muse 的 --site-action 深蓝)，而上面的 .text-brand-deep 会被重映射成链接蓝，
-   两者同色系导致蓝底蓝字读不清。选中态一律改用 action 文字色（浅色 #fff / 深色 #000）。 */
-html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(button,a).text-brand-deep:is([aria-pressed="true"],[aria-checked="true"],[aria-current="page"],.is-active,.is-selected,.selected){color:var(--site-action-text,#fff)!important}
+/* 选中胶囊的底色分两种情况：
+   默认态是浅灰（上面的 .bg-brand-light 覆盖为 --muse-field），此时文字保持链接蓝即可读；
+   鼠标划过时 capsules.css 会把底色换成 --cap-primary-hover（muse 的深蓝），
+   而 .text-brand-deep 已被重映射成链接蓝 → 蓝底蓝字读不清。
+   所以只在 hover 时改用 action 文字色（浅色 #fff / 深色 #000），默认态保持原样。 */
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(button,a).text-brand-deep:is([aria-pressed="true"],[aria-checked="true"],[aria-current="page"],.is-active,.is-selected,.selected):hover{color:var(--site-action-text,#fff)!important}

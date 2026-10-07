@@ -4855,7 +4855,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   date: "2026-10-07",
   summary: "Muse 配色选中胶囊文字可读性修复。",
   software: V0_1_51_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.52" } : item),
-  changes: [{ kind: "fix", title: "Muse配色选中胶囊文字可读性", desc: "Muse配色下素材库市场等选中态胶囊的文字不再被链接蓝覆盖，改用与选中底色配套的前景色，深蓝底恢复清晰可读；未选中态、其他配色与首页不受影响。" }]
+  changes: [{ kind: "fix", title: "Muse配色选中胶囊文字可读性", desc: "Muse配色下素材库市场胶囊鼠标划过时，文字不再与深蓝底色同色，改用配套前景色，恢复清晰可读；默认选中态的浅灰底与链接蓝字保持原样，其他配色与首页不受影响。" }]
 };
 
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
