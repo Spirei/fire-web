@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the working source tree, verify the NAS copy, then retain two backups."""
+"""Package the working source tree, verify the NAS copy and preserve all backups."""
 
 import argparse
 import fcntl
@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
-import re
 import shutil
 import stat
 import subprocess
@@ -21,8 +20,6 @@ from zoneinfo import ZoneInfo
 SOURCE = Path(__file__).resolve().parents[1]
 CONFIG = SOURCE / 'data' / 'source-backup-config.json'
 FORMAT = 'alcor-web-source-backup-v1'
-KEEP = 2
-NAME = re.compile(r'backup-\d{8}-\d{6}-[0-9a-f]{8}')
 EXCLUDED = {'.git', 'node_modules', '.cache', 'out', 'dist', '__pycache__', '.DS_Store'}
 
 
@@ -35,6 +32,14 @@ def digest(stream):
     for chunk in iter(lambda: stream.read(1024 * 1024), b''):
         result.update(chunk)
     return result.hexdigest()
+
+
+def format_size(size):
+    value = float(size)
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if value < 1000 or unit == 'TB':
+            return f'{size} B' if unit == 'B' else f'{value:.2f} {unit}'
+        value /= 1000
 
 
 def safe_name(name):
@@ -102,6 +107,10 @@ def verify(folder):
     metadata = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
     if metadata.get('format') != FORMAT:
         raise RuntimeError('备份格式不匹配')
+    archive_size = (folder / 'source.tar.gz').stat().st_size
+    # Older verified backups have no size field; continue to verify their contents.
+    if metadata.get('archiveSize', archive_size) != archive_size:
+        raise RuntimeError('备份压缩包大小与清单不一致')
     with (folder / 'source.tar.gz').open('rb') as stream:
         if digest(stream) != metadata['archiveSHA256']:
             raise RuntimeError('备份压缩包 SHA-256 校验失败')
@@ -155,33 +164,10 @@ def pack(source, folder):
         archive_hash = digest(stream)
     metadata = {'format': FORMAT, 'source': str(source), 'gitHead': head,
                 'createdAt': datetime.now(ZoneInfo('Asia/Shanghai')).isoformat(),
-                'archiveSHA256': archive_hash, 'entries': records}
+                'archiveSHA256': archive_hash, 'archiveSize': archive.stat().st_size,
+                'entries': records}
     (folder / 'manifest.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     return metadata
-
-
-def prune(source, destination, final):
-    previous = []
-    for folder in destination.iterdir():
-        if folder == final or not NAME.fullmatch(folder.name) or folder.is_symlink() or not folder.is_dir():
-            continue
-        try:
-            if {entry.name for entry in folder.iterdir()} != {'source.tar.gz', 'manifest.json'}:
-                continue
-            if any(not stat.S_ISREG((folder / name).lstat().st_mode) for name in ('source.tar.gz', 'manifest.json')):
-                continue
-            if (folder / 'manifest.json').stat().st_size > 16 * 1024 * 1024:
-                continue
-            record = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
-            if record.get('format') == FORMAT and record.get('source') == str(source):
-                created = datetime.fromisoformat(record['createdAt'])
-                if created.tzinfo is not None:
-                    previous.append((folder, created.timestamp()))
-        except (OSError, ValueError, KeyError, TypeError):
-            continue
-    # NAS mtimes can change on rename. The new verified backup always stays.
-    for folder, _ in sorted(previous, key=lambda item: (item[1], item[0].name), reverse=True)[KEEP - 1:]:
-        shutil.rmtree(folder)
 
 
 def backup(source, destination, required_mount=None):
@@ -222,9 +208,10 @@ def backup(source, destination, required_mount=None):
             if stage is not None and stage.exists():
                 shutil.rmtree(stage)
             raise
-        prune(source, destination, final)
         print(f'已创建并校验：{final}')
-        print(f'源码文件：{len(metadata["entries"])}；滚动保留 {KEEP} 份 source.tar.gz 压缩备份')
+        print(f'源码文件：{len(metadata["entries"])}；保留全部历史源码备份')
+        size = metadata['archiveSize']
+        print(f'压缩包大小：{format_size(size)}（{size:,} 字节）')
         return final
 
 
@@ -238,6 +225,8 @@ def main():
     if args.verify:
         metadata = verify(args.verify)
         print(f'校验通过：{args.verify}；{len(metadata["entries"])} 个源码文件')
+        size = (args.verify / 'source.tar.gz').stat().st_size
+        print(f'压缩包大小：{format_size(size)}（{size:,} 字节）')
         return
     if args.destination is None:
         config = json.loads(CONFIG.read_text(encoding='utf-8'))
