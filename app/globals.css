@@ -4053,7 +4053,7 @@ html.dark .watch-import-target {
 .dark .asset-allocation-view,.dark .allocation-bank-panel { --allocation-paper:#181b22; --allocation-line:#343840; --allocation-muted:#959ca9; --allocation-fg:#e8ebf0; }
 .allocation-toolbar,.allocation-actions { display:flex; align-items:center; gap:10px; }
 .allocation-toolbar { justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:22px; }
-.allocation-toolbar h2 { display:flex; align-items:center; gap:8px; font-size:19px; font-weight:650; letter-spacing:-.03em; }
+.allocation-toolbar h2 { display:flex; align-items:center; gap:8px; font-size:20px; font-weight:700; letter-spacing:-.035em; }
 .allocation-title-dot { width:5px; height:5px; border-radius:50%; background:var(--allocation-securities); }
 .allocation-toolbar p { font-size:11px; color:var(--allocation-muted); margin-top:5px; }
 .allocation-actions { flex-wrap:wrap; gap:7px; }
@@ -4068,7 +4068,7 @@ html.dark .watch-import-target {
 .allocation-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; border-bottom:1px solid var(--allocation-line); padding:0 0 22px; margin-bottom:20px; }
 .allocation-summary div { display:flex; flex-direction:column; gap:7px; min-width:0; }
 .allocation-summary span { font-size:11px; color:var(--allocation-muted); }
-.allocation-summary strong { font-size:18px; font-weight:550; letter-spacing:-.035em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.allocation-summary strong { font-size:19px; font-weight:600; letter-spacing:-.035em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .allocation-graph-card { background:var(--allocation-paper); border:1px solid var(--allocation-line); border-radius:18px; padding:26px clamp(16px,3vw,36px); container-type:inline-size; }
 .allocation-stage { position:relative; display:grid; grid-template-columns:minmax(140px,1fr) minmax(160px,.95fr) minmax(140px,1fr); gap:clamp(24px,5cqw,72px); align-items:center; min-height:380px; }
 .allocation-wires,.allocation-flow { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
@@ -4079,7 +4079,7 @@ html.dark .watch-import-target {
 .allocation-sources,.allocation-destinations { position:relative; z-index:1; display:grid; gap:10px; min-width:0; }
 .allocation-sources { max-height:520px; overflow-y:auto; padding-right:5px; scrollbar-width:thin; align-self:center; }
 .allocation-sources>.allocation-column-label { position:sticky; top:0; z-index:2; padding-bottom:5px; background:var(--allocation-paper); }
-.allocation-column-label { font-size:10px; font-weight:500; color:var(--allocation-muted); letter-spacing:.045em; display:flex; gap:8px; align-items:center; }
+.allocation-column-label { font-size:10px; font-weight:600; color:var(--allocation-muted); letter-spacing:.07em; display:flex; gap:8px; align-items:center; }
 .allocation-column-label>span { font-size:9px; border:1px solid var(--allocation-line); border-radius:4px; padding:0 5px; }
 .allocation-node { position:relative; z-index:1; border:1px solid var(--allocation-line); border-radius:13px; background:var(--allocation-paper); color:var(--allocation-fg); }
 .allocation-account { display:flex; align-items:center; gap:10px; padding:13px 12px; text-align:left; min-width:0; transition:border-color .15s,background .15s; }
@@ -4087,9 +4087,10 @@ html.dark .watch-import-target {
 .dark .allocation-account:hover { border-color:#8b8397; background:#20232b; }
 .allocation-node-icon { display:flex; align-items:center; justify-content:center; flex:none; width:31px; height:31px; border:1px solid var(--allocation-line); border-radius:9px; color:var(--allocation-muted); }
 .allocation-node-body { display:flex; min-width:0; flex:1; flex-direction:column; gap:4px; }
-.allocation-node-body b { font-size:12px; font-weight:550; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.allocation-node-body small { color:var(--allocation-muted); font-size:9px; }
-.allocation-node-body strong { font-size:12px; font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.015em; overflow-wrap:anywhere; }
+/* 金额为主体、文字为辅：名称退为次要标签，金额放大加粗。 */
+.allocation-node-body b { font-size:11px; font-weight:500; color:var(--allocation-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.allocation-node-body small { color:var(--allocation-muted); font-size:9.5px; }
+.allocation-node-body strong { font-size:15px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.03em; overflow-wrap:anywhere; }
 .allocation-node-dot { width:6px; height:6px; flex:none; border-radius:50%; opacity:.9; }
 .allocation-account>.allocation-node-dot { position:absolute; right:-4px; top:calc(50% - 3px); }
 .allocation-account.is-excluded { opacity:.45; }
@@ -4103,16 +4104,13 @@ html.dark .watch-import-target {
 .allocation-bank-detail .allocation-node-body b { white-space:normal; overflow-wrap:anywhere; line-height:1.5; }
 .allocation-bank-detail.is-excluded { opacity:.5; }
 .allocation-bank-edit { display:flex; align-items:center; gap:3px; flex:none; color:var(--allocation-muted); font-size:11px; }
-.allocation-hub { align-self:center; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; padding:28px 8px 20px; border-color:#b8b1c9; box-shadow:0 0 0 5px rgba(139,128,197,.045); }
-.allocation-hub-icon { color:#7c748e; padding-bottom:3px; }
-.allocation-hub strong { font-size:clamp(18px,2.4cqw,28px); font-weight:550; letter-spacing:-.055em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; max-width:100%; }
-.allocation-hub-currency { color:var(--allocation-muted); font-size:10px; margin-top:-7px; }
+/* 中间净资产用单层虚线边框标出：只保留虚线，不再叠外圈描边，避免出现框套框。 */
+.allocation-hub { align-self:center; text-align:center; display:flex; flex-direction:column; align-items:center; gap:9px; padding:22px 18px; border:1px dashed var(--allocation-muted); border-radius:13px; background:none; box-shadow:none; }
+.allocation-hub strong { font-size:clamp(22px,3.1cqw,34px); font-weight:600; letter-spacing:-.05em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; max-width:100%; }
 .allocation-status { display:flex; align-items:center; gap:5px; font-size:10px; background:#f1f1f5; border-radius:20px; padding:4px 9px; margin-top:3px; }
 .allocation-status i { width:5px; height:5px; border-radius:50%; background:var(--allocation-cash); }
 .allocation-status.has-error i { background:var(--allocation-debt); }
 .allocation-status.needs-review i { background:var(--allocation-fixed); }
-.dark .allocation-hub { border-color:#81798e; box-shadow:0 0 0 5px rgba(139,128,197,.07); }
-.dark .allocation-hub-icon { color:#b5abc8; }
 .dark .allocation-status { background:#2a2d35; }
 .allocation-category { display:flex; align-items:center; gap:10px; padding:15px 14px; }
 .allocation-category>.allocation-node-dot { position:absolute; left:-4px; top:calc(50% - 3px); }
@@ -4134,7 +4132,7 @@ html.dark .watch-import-target {
 .allocation-table-scroll table { width:100%; border-collapse:collapse; font-size:12px; white-space:nowrap; }
 .allocation-table-scroll th { text-align:left; color:var(--allocation-muted); font-size:10px; font-weight:500; background:var(--allocation-paper); padding:12px 16px; }
 .allocation-table-scroll td { border-top:1px solid var(--allocation-line); padding:13px 16px; font-variant-numeric:tabular-nums; }
-.allocation-table-scroll td:nth-child(3),.allocation-table-scroll td:nth-child(4) { text-align:right; }
+.allocation-table-scroll td:nth-child(3),.allocation-table-scroll td:nth-child(4) { text-align:right; font-size:13px; font-weight:600; }
 .allocation-table-scroll td:nth-child(2),.allocation-table-scroll td:nth-child(5) { font-size:11px; color:var(--allocation-muted); }
 .allocation-table-scroll td button { display:flex; align-items:center; gap:8px; }
 .allocation-table-scroll tr.is-excluded td { opacity:.45; }
@@ -4161,8 +4159,8 @@ html.dark .watch-import-target {
 @container (max-width:570px) {
   .allocation-stage { grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:35px; row-gap:40px; }
   .allocation-destinations { grid-column:1/-1; margin-left:25px; }
-  .allocation-hub { padding:24px 7px 18px; }
-  .allocation-hub strong { font-size:19px; }
+  .allocation-hub { padding:18px 14px; }
+  .allocation-hub strong { font-size:23px; }
   .allocation-node-icon { display:none; }
   .allocation-sources { max-height:440px; }
   .allocation-account { padding:12px 10px; }

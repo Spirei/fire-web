@@ -45,7 +45,7 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
   const accountNodes = useRef(new Map<string, HTMLElement>()), categoryNodes = useRef(new Map<string, HTMLElement>());
   const [wires, setWires] = useState<Wire[]>([]), [size, setSize] = useState({ width: 1, height: 1 });
   const structure = useMemo(() => JSON.stringify([nodes.map(n => [n.id, n.category, n.excluded]), data.categories.map(c => c.id)]), [nodes, data.categories]);
-  const money = (value: number | null) => hidden ? "••••" : value === null ? "—" : `${CURRENCY_SYMBOLS[data.currency as keyof typeof CURRENCY_SYMBOLS] || data.currency}${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = (value: number | null) => hidden ? "******" : value === null ? "—" : `${CURRENCY_SYMBOLS[data.currency as keyof typeof CURRENCY_SYMBOLS] || data.currency}${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   useLayoutEffect(() => {
     const root = stage.current, center = hub.current; if (!root || !center) return;
     let frame = 0;
@@ -86,9 +86,13 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
     </svg>
     <div ref={sources} className="allocation-sources">
       <div className="allocation-column-label">账户来源<span>{nodes.length}</span></div>
-      {nodes.map(n => { const a = n.account; return a ? <button key={n.id} ref={el => { if (el) accountNodes.current.set(n.id, el); else accountNodes.current.delete(n.id); }} type="button" className={`allocation-node allocation-account ${n.excluded ? "is-excluded" : ""}`} onClick={() => onEdit(a)}>
+      {nodes.map(n => {
+        const a = n.account;
+        // 正常账户不再显示说明行（原币、持仓数、已核对/自动关联），只在需要留意时给一条提示，降低文字密度。
+        const note = !a ? "" : a.excluded ? "未计入" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : a.recordIds.some(id => data.quoteStatus.missing.includes(id)) ? "部分记录价" : "";
+        return a ? <button key={n.id} ref={el => { if (el) accountNodes.current.set(n.id, el); else accountNodes.current.delete(n.id); }} type="button" className={`allocation-node allocation-account ${n.excluded ? "is-excluded" : ""}`} onClick={() => onEdit(a)}>
         <span className="allocation-node-icon"><SafeAssetImage src={a.icon} style={{ width: 19, height: 19 }} className="rounded object-contain" fallback={a.kind === "broker" ? <IconChartPie size={19} stroke={1.5} /> : a.kind === "bank" ? <IconBuildingBank size={19} stroke={1.5} /> : <IconCoins size={19} stroke={1.5} />} /></span>
-        <span className="allocation-node-body"><b title={a.name}>{a.name}</b><small>{a.currency} · {a.excluded ? "未计入" : a.reconciled ? "已核对" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : a.kind === "broker" ? `${a.recordIds.length} 项持仓${a.recordIds.some(id => data.quoteStatus.missing.includes(id)) ? " · 记录价" : ""}` : "自动关联"}</small><strong>{money(a.value)}</strong></span>
+        <span className="allocation-node-body"><b title={a.name}>{a.name}</b>{note ? <small>{note}</small> : null}<strong>{money(a.value)}</strong></span>
         <span className="allocation-node-dot" style={{ background: COLORS[a.category] }} />
       </button> : <button key={n.id} ref={el => { if (el) accountNodes.current.set(n.id, el); else accountNodes.current.delete(n.id); }} type="button" className={`allocation-node allocation-account ${n.excluded ? "is-excluded" : ""}`} onClick={onBanks} aria-label="展开银行卡">
         <span className="allocation-node-icon"><IconBuildingBank size={19} stroke={1.5} /></span>
@@ -98,9 +102,7 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
       {!nodes.length && <div className="allocation-empty">暂无已记录账户</div>}
     </div>
     <div ref={hub} className="allocation-hub allocation-node">
-      <span className="allocation-hub-icon"><IconChartPie size={32} stroke={1.3} /></span>
-      <span className="allocation-column-label">已记录净资产</span>
-      <strong>{money(data.summary.netAsset)}</strong><span className="allocation-hub-currency">{data.currency}</span>
+      <strong>{money(data.summary.netAsset)}</strong>
       <span className={`allocation-status ${phase === "error" ? "has-error" : !data.summary.complete ? "needs-review" : ""}`}><i />{phase === "request" ? "读取账户…" : phase === "error" ? "读取失败" : !data.summary.complete ? "待核对" : data.quoteStatus.pending ? "行情补齐中" : "已关联"}</span>
     </div>
     <div ref={destinations} className="allocation-destinations">
@@ -126,7 +128,7 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
 
 function BankCards({ data, hidden, onClose, onEdit }: { data: AllocationSnapshot; hidden: boolean; onClose: () => void; onEdit: (account: AllocationAccount) => void }) {
   const banks = data.accounts.filter(a => a.kind === "bank");
-  const money = (amount: number | null, currency = data.currency) => hidden ? "••••" : amount === null ? "—" : `${CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] || currency}${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = (amount: number | null, currency = data.currency) => hidden ? "******" : amount === null ? "—" : `${CURRENCY_SYMBOLS[currency as keyof typeof CURRENCY_SYMBOLS] || currency}${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return <AppModal title="银行卡" onClose={onClose}>
     <div className="allocation-bank-panel">
     <div className="allocation-bank-summary"><span>{data.bankSummary.includedCount} 张计入资产</span><strong>{money(data.bankSummary.value)}</strong></div>
@@ -236,7 +238,7 @@ export default function AssetAllocationView() {
   }, [currency, data?.accountId]);
   const nodes = useMemo(() => data ? allocationSources(data) : [], [data]);
   const displayCurrency = data?.currency ?? currency;
-  const money = (n: number | null | undefined) => hidden ? "••••" : n == null ? "—" : `${CURRENCY_SYMBOLS[displayCurrency as keyof typeof CURRENCY_SYMBOLS] || displayCurrency}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = (n: number | null | undefined) => hidden ? "******" : n == null ? "—" : `${CURRENCY_SYMBOLS[displayCurrency as keyof typeof CURRENCY_SYMBOLS] || displayCurrency}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return <section className="asset-allocation-view">
     <div className="allocation-toolbar"><div><h2>资产配置<span className="allocation-title-dot" /></h2><p aria-live="polite">{data ? `${data.summary.accountCount} 个账户 · ${changingCurrency ? error ? `${data.currency} · 换算失败` : `${data.currency} → ${currency}…` : `${checkedAt ? new Date(checkedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : ""} 更新`}` : "关联现有账户"}</p></div>
       <div className="allocation-actions"><CurrencySelect /><button type="button" className="allocation-icon-button" aria-label={hidden ? "显示金额" : "隐藏金额"} onClick={() => setHidden(!hidden)}>{hidden ? <IconEyeOff size={18} /> : <IconEye size={18} />}</button><button type="button" className="allocation-icon-button" aria-label="刷新账户" disabled={loading} onClick={() => void refresh()}><IconRefresh size={18} className={loading ? "animate-spin" : ""} /></button><button className="allocation-button" type="button" disabled={!data?.positions.length || changingCurrency} onClick={() => setAssigning(data)}><IconLink size={15} />关联持仓</button><button className="allocation-button" type="button" disabled={!data || changingCurrency} onClick={() => setEditing(null)}><IconPlus size={15} />添加账户</button></div>
@@ -255,7 +257,7 @@ export default function AssetAllocationView() {
       <div className="allocation-account-list"><div className="allocation-list-heading"><h3>账户明细</h3><span>点击账户核对余额</span></div><div className="allocation-table-scroll"><table>
         <thead><tr><th>账户</th><th>来源</th><th>原币余额</th><th>{displayCurrency} 估值</th><th>状态</th></tr></thead>
         <tbody>{nodes.map(n => { const a = n.account; return a ? <tr key={n.id} className={a.excluded ? "is-excluded" : ""}>
-          <td><button type="button" onClick={() => setEditing(a)}>{a.name}<IconArrowUpRight size={13} /></button></td><td>{a.kind === "broker" ? "持仓" : a.kind === "fund" ? "资金系统" : a.kind === "ledger" ? "简化账本" : "手动录入"}</td><td>{hidden ? "••••" : `${a.currency} ${a.amount === null ? "—" : a.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })}`}</td><td>{money(a.value)}</td><td>{a.excluded ? "未计入" : a.reconciled ? "已核对" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : "自动关联"}</td>
+          <td><button type="button" onClick={() => setEditing(a)}>{a.name}<IconArrowUpRight size={13} /></button></td><td>{a.kind === "broker" ? "持仓" : a.kind === "fund" ? "资金系统" : a.kind === "ledger" ? "简化账本" : "手动录入"}</td><td>{hidden ? "******" : `${a.currency} ${a.amount === null ? "—" : a.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })}`}</td><td>{money(a.value)}</td><td>{a.excluded ? "未计入" : a.reconciled ? "已核对" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : "自动关联"}</td>
         </tr> : <tr key={n.id} className={n.excluded ? "is-excluded" : ""}>
           <td><button type="button" onClick={() => setBanksOpen(true)}>银行卡<IconArrowUpRight size={13} /></button></td><td>{data.bankSummary.count} 张有余额</td><td><button type="button" onClick={() => setBanksOpen(true)}>查看明细</button></td><td>{money(data.bankSummary.value)}</td><td>{n.excluded ? "未计入" : data.bankSummary.value === null ? "待核对" : "已关联"}</td>
         </tr>; })}</tbody>
