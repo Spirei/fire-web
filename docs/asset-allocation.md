@@ -25,7 +25,7 @@
 
 `snapshotRevision` 是包含账号、显示币种、全部来源、持仓版本、核算结果及行情状态的 SHA-256 语义指纹，排除每次变化的 `observedAt`。GET 返回弱 `ETag: W/"{snapshotRevision}"`，同一账号、同一显示币种下可携带 `If-None-Match`；相同返回304空正文，不解析JSON。每次200/304均重新鉴权、核对账号及最新来源；`X-Allocation-Observed-At` 给出本次核算时间，不能当行情成交时间。弱比较遵循 [RFC 9110 · If-None-Match](https://www.rfc-editor.org/rfc/rfc9110.html#name-if-none-match)。账户写入仍使用来源 `revision`，快照指纹不可用作写入版本。
 
-200/304均 `Cache-Control: no-store, private`，`Vary: Authorization, Cookie, X-Allocation-User`。客户端只保留当前内存快照；切换账号或授权失效清空，不持久化到账户共用的浏览器缓存。304必须有同账号、同币种、同ETag的已知快照；200校验合同、币种、账号、有限金额、分类及版本，避免代理错误页面或迟到响应覆盖数据。
+200/304均 `Cache-Control: no-store, private`，`Vary: Authorization, Cookie, X-Allocation-User`。客户端只保留当前内存快照；切换账号或授权失效清空，不持久化到账户共用的浏览器缓存。304必须有同账号、同币种、同ETag的已知快照；200校验合同、币种、账号、有限金额、分类及版本，避免代理错误页面或迟到响应覆盖数据。读取与写入都按账号限流（读 120 次/分钟、写 60 次/分钟），超出返回 429；30 秒刷新远低于该上限。
 
 App发现新增 `snapshot_revision_field`、`conditional_read`、`checked_at_header`、读8秒/写12秒超时建议、30秒刷新建议及禁止自动重放写入。`source_connection=local-ledgers`、`external_institution_connections=false` 明确当前关联本站账本，未连接真实银行或券商账户。
 

@@ -53,6 +53,8 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
         return ok(saveAllocationAccount(initial.id, input, new Set(snapshot.accounts.filter(a => a.kind !== "manual").map(a => a.id))));
       })();
     }
+    // 读取会触发上游行情拉取，与写操作一样按账号限流。
+    if (!rateLimit(`allocation-read:${initial.id}`, 120, 60_000)) throw new RecordsError("读取过于频繁", 429);
     const query = new URL(request.url).searchParams;
     if ([...query.keys()].some(k => k !== "currency") || query.getAll("currency").length > 1) throw new RecordsError("查询参数无效");
     assertReadActive();

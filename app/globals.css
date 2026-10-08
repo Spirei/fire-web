@@ -4049,12 +4049,12 @@ html.dark .watch-import-target {
 .global-section-panel { min-width:0; animation:global-section-panel-in .2s cubic-bezier(.22,1,.36,1); }
 
 /* Account routing: Magpie's three-column stage, adapted for financial sources. */
-.asset-allocation-view,.allocation-bank-panel { --allocation-paper:#fff; --allocation-line:#e4e6eb; --allocation-muted:#858b96; --allocation-fg:#292d36; color:var(--allocation-fg); min-width:0; }
+.asset-allocation-view,.allocation-bank-panel { --allocation-paper:#fff; --allocation-line:#e4e6eb; --allocation-muted:#858b96; --allocation-fg:#292d36; --allocation-securities:#8b80c5; --allocation-cash:#62a998; --allocation-investment:#749ec7; --allocation-fixed:#c59b67; --allocation-receivable:#a69ac5; --allocation-debt:#c78087; color:var(--allocation-fg); min-width:0; }
 .dark .asset-allocation-view,.dark .allocation-bank-panel { --allocation-paper:#181b22; --allocation-line:#343840; --allocation-muted:#959ca9; --allocation-fg:#e8ebf0; }
 .allocation-toolbar,.allocation-actions { display:flex; align-items:center; gap:10px; }
 .allocation-toolbar { justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:22px; }
 .allocation-toolbar h2 { display:flex; align-items:center; gap:8px; font-size:19px; font-weight:650; letter-spacing:-.03em; }
-.allocation-title-dot { width:5px; height:5px; border-radius:50%; background:#8b80c5; }
+.allocation-title-dot { width:5px; height:5px; border-radius:50%; background:var(--allocation-securities); }
 .allocation-toolbar p { font-size:11px; color:var(--allocation-muted); margin-top:5px; }
 .allocation-actions { flex-wrap:wrap; gap:7px; }
 .allocation-button,.allocation-icon-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--allocation-line,#e4e6eb); border-radius:9px; min-height:34px; padding:7px 12px; font-size:12px; color:inherit; background:var(--allocation-paper,#fff); transition:background .15s; }
@@ -4108,9 +4108,9 @@ html.dark .watch-import-target {
 .allocation-hub strong { font-size:clamp(18px,2.4cqw,28px); font-weight:550; letter-spacing:-.055em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; max-width:100%; }
 .allocation-hub-currency { color:var(--allocation-muted); font-size:10px; margin-top:-7px; }
 .allocation-status { display:flex; align-items:center; gap:5px; font-size:10px; background:#f1f1f5; border-radius:20px; padding:4px 9px; margin-top:3px; }
-.allocation-status i { width:5px; height:5px; border-radius:50%; background:#62a998; }
-.allocation-status.has-error i { background:#c78087; }
-.allocation-status.needs-review i { background:#c59b67; }
+.allocation-status i { width:5px; height:5px; border-radius:50%; background:var(--allocation-cash); }
+.allocation-status.has-error i { background:var(--allocation-debt); }
+.allocation-status.needs-review i { background:var(--allocation-fixed); }
 .dark .allocation-hub { border-color:#81798e; box-shadow:0 0 0 5px rgba(139,128,197,.07); }
 .dark .allocation-hub-icon { color:#b5abc8; }
 .dark .allocation-status { background:#2a2d35; }
@@ -4124,7 +4124,8 @@ html.dark .watch-import-target {
 .allocation-issues { margin:16px 0; border:1px solid var(--allocation-line); border-radius:11px; padding:10px 14px; display:grid; gap:9px; }
 .allocation-issues>div { display:flex; align-items:center; gap:8px; color:var(--allocation-muted); font-size:12px; }
 .allocation-issues>div>svg { flex:none; }
-.allocation-issues button { display:flex; align-items:center; gap:3px; margin-left:auto; color:var(--allocation-fg); white-space:nowrap; }
+.allocation-issue-actions { display:flex; align-items:center; gap:8px; margin-left:auto; flex:none; }
+.allocation-issues button { display:flex; align-items:center; gap:3px; color:var(--allocation-fg); white-space:nowrap; }
 .allocation-account-list { margin-top:26px; }
 .allocation-list-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
 .allocation-list-heading h3 { font-size:13px; font-weight:600; }

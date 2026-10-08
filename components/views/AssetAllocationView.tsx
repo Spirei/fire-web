@@ -15,7 +15,8 @@ import { useAssetAllocationSnapshot, type AllocationReadEvent } from "@/lib/useA
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { ALLOCATION_CATEGORIES, ALLOCATION_LABELS, type AllocationAccount, type AllocationCategory, type AllocationInput, type AllocationSnapshot } from "@/lib/assetAllocationTypes";
 
-const COLORS: Record<AllocationCategory, string> = { securities: "#8b80c5", cash: "#62a998", investment: "#749ec7", fixed: "#c59b67", receivable: "#a69ac5", debt: "#c78087" };
+// 类别配色唯一来源在 app/globals.css 的 --allocation-* 变量；这里只引用，避免两处定义漂移。
+const COLORS: Record<AllocationCategory, string> = { securities: "var(--allocation-securities)", cash: "var(--allocation-cash)", investment: "var(--allocation-investment)", fixed: "var(--allocation-fixed)", receivable: "var(--allocation-receivable)", debt: "var(--allocation-debt)" };
 type Wire = { id: string; path: string; forward: string; returning: string; color: string; excluded: boolean };
 type ReadPhase = "idle" | "request" | "response" | "error";
 type FlowCycle = { id: number; phase: "idle" | "request" | "response" };
@@ -32,12 +33,18 @@ function allocationSources(data: AllocationSnapshot): SourceNode[] {
   });
 }
 
+// 逐条比较，避免每次布局都对整组线做两遍 JSON 序列化。
+const sameWires = (a: Wire[], b: Wire[]) => a.length === b.length && a.every((wire, index) => {
+  const next = b[index];
+  return wire.id === next.id && wire.path === next.path && wire.forward === next.forward && wire.returning === next.returning && wire.color === next.color && wire.excluded === next.excluded;
+});
+
 // Routing geometry adapted from Magpie's MIT routing stage. See docs/asset-allocation.md.
 function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { data: AllocationSnapshot; nodes: SourceNode[]; hidden: boolean; phase: ReadPhase; flow: FlowCycle; onEdit: (account: AllocationAccount) => void; onBanks: () => void }) {
   const stage = useRef<HTMLDivElement>(null), hub = useRef<HTMLDivElement>(null), sources = useRef<HTMLDivElement>(null), destinations = useRef<HTMLDivElement>(null);
   const accountNodes = useRef(new Map<string, HTMLElement>()), categoryNodes = useRef(new Map<string, HTMLElement>());
   const [wires, setWires] = useState<Wire[]>([]), [size, setSize] = useState({ width: 1, height: 1 });
-  const structure = JSON.stringify([nodes.map(n => [n.id, n.category, n.excluded]), data.categories.map(c => c.id)]);
+  const structure = useMemo(() => JSON.stringify([nodes.map(n => [n.id, n.category, n.excluded]), data.categories.map(c => c.id)]), [nodes, data.categories]);
   const money = (value: number | null) => hidden ? "••••" : value === null ? "—" : `${CURRENCY_SYMBOLS[data.currency as keyof typeof CURRENCY_SYMBOLS] || data.currency}${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   useLayoutEffect(() => {
     const root = stage.current, center = hub.current; if (!root || !center) return;
@@ -61,7 +68,7 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
         next.push({ id: `category:${cat.id}`, path: route.forward, forward: "", returning: "", color: COLORS[cat.id], excluded: false });
       }
       setSize(previous => previous.width === r.width && previous.height === r.height ? previous : { width: r.width, height: r.height });
-      setWires(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+      setWires(previous => sameWires(previous, next) ? previous : next);
     };
     const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(layout); };
     const observer = new ResizeObserver(schedule); observer.observe(root); observer.observe(center);
@@ -75,7 +82,7 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
   }, [structure]);
   return <div ref={stage} className={`allocation-stage ${phase === "request" ? "is-reading" : ""} ${flow.phase !== "idle" ? "is-flowing" : ""}`}>
     <svg className="allocation-wires" viewBox={`0 0 ${size.width} ${size.height}`} aria-hidden="true">
-      {wires.map(w => <path key={w.id} d={w.path} stroke={w.color} className={w.excluded ? "is-excluded" : ""} />)}
+      {wires.map(w => <path key={w.id} d={w.path} style={{ stroke: w.color }} className={w.excluded ? "is-excluded" : ""} />)}
     </svg>
     <div ref={sources} className="allocation-sources">
       <div className="allocation-column-label">账户来源<span>{nodes.length}</span></div>
@@ -238,7 +245,13 @@ export default function AssetAllocationView() {
     {data ? <>
       <div className="allocation-summary"><div><span>已记录总资产</span><strong>{money(data.summary.totalAsset)}</strong></div><div><span>负债</span><strong>{money(data.summary.totalDebt)}</strong></div><div><span>原持仓总资产</span><strong>{money(data.summary.portfolioTotalAsset)}</strong></div><div><span>净资产差额</span><strong>{money(data.summary.difference)}</strong></div></div>
       <div className="allocation-graph-card"><RoutingGraph data={data} nodes={nodes} hidden={hidden} phase={phase} flow={flow} onEdit={setEditing} onBanks={() => setBanksOpen(true)} /></div>
-      {!!data.issues.length && <div className="allocation-issues">{data.issues.map((i, n) => <div key={`${i.code}:${n}`}><IconLink size={15} /><span>{i.message}</span>{i.accountIds[0] && <button type="button" onClick={() => { const a = data.accounts.find(a => a.id === i.accountIds[0]); if (a) setEditing(a); }}>核对<IconArrowUpRight size={13} /></button>}</div>)}</div>}
+      {!!data.issues.length && <div className="allocation-issues">{data.issues.map((issue, index) => {
+        // 一条提示可能牵涉多个账户（例如现金重叠含待归属现金与若干券商），逐个给出核对入口。
+        const targets = issue.accountIds.map(id => data.accounts.find(a => a.id === id)).filter((a): a is AllocationAccount => !!a);
+        return <div key={`${issue.code}:${index}`}><IconLink size={15} /><span>{issue.message}</span>
+          {!!targets.length && <span className="allocation-issue-actions">{targets.map(a => <button key={a.id} type="button" onClick={() => setEditing(a)}>{targets.length > 1 ? a.name : "核对"}<IconArrowUpRight size={13} /></button>)}</span>}
+        </div>;
+      })}</div>}
       <div className="allocation-account-list"><div className="allocation-list-heading"><h3>账户明细</h3><span>点击账户核对余额</span></div><div className="allocation-table-scroll"><table>
         <thead><tr><th>账户</th><th>来源</th><th>原币余额</th><th>{displayCurrency} 估值</th><th>状态</th></tr></thead>
         <tbody>{nodes.map(n => { const a = n.account; return a ? <tr key={n.id} className={a.excluded ? "is-excluded" : ""}>
