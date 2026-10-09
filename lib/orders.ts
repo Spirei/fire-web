@@ -4,6 +4,7 @@ import { applyOrder } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
 import { replayEconomicOrders } from "./portfolioLedger";
 import { syncOrderCashTransaction } from "./funds";
+import { isStockConnect } from "./stockAccount";
 import { fetchQuotes } from "./quotes";
 import { parseMarket } from "./store";
 import type { OrderSide, OrderType, OrderValidity, TradeOrder } from "./types";
@@ -16,6 +17,8 @@ function rowToOrder(row: OrderRow): TradeOrder {
   return {
     id: String(row.id),
     orderNo: String(row.order_no || ""),
+    ...(row.account_market ? { accountMarket: String(row.account_market) } : {}),
+    ...(row.settlement_currency ? { settlementCurrency: String(row.settlement_currency), settlementAmount: Number(row.settlement_amount) } : {}),
     recordId: String(row.record_id),
     market: String(row.market),
     code: String(row.code),
@@ -87,14 +90,14 @@ export function listOrders(
     params.push(recordId);
   }
   if (market && market !== "ALL") {
-    conditions.push("UPPER(market) = ?");
+    conditions.push("UPPER(COALESCE((SELECT CASE WHEN r.market='HK' AND r.account_market='CN' THEN 'CN' ELSE r.market END FROM records r WHERE r.id=trade_orders.record_id AND r.user_id=trade_orders.user_id),market)) = ?");
     params.push(market.toUpperCase());
   }
   if (status && status !== "all") {
     conditions.push("status = ?");
     params.push(status);
   }
-  const rows = db.prepare(`SELECT * FROM trade_orders WHERE ${conditions.join(" AND ")} ORDER BY traded_at DESC, created_at DESC`).all(...params) as OrderRow[];
+  const rows = db.prepare(`SELECT trade_orders.*, (SELECT r.account_market FROM records r WHERE r.id=trade_orders.record_id AND r.user_id=trade_orders.user_id) AS account_market FROM trade_orders WHERE ${conditions.join(" AND ")} ORDER BY traded_at DESC, created_at DESC`).all(...params) as OrderRow[];
   const now = Date.now();
   return rows.map(rowToOrder).filter((order) => {
     if (scope === "all") return true;
@@ -111,6 +114,7 @@ export function executeOrder(input: {
   qty: number;
   price: number;
   fees: number;
+  settlementAmount?: number;
   tradedAt?: string;
   note?: string;
   orderType?: OrderType;
@@ -130,6 +134,9 @@ export function executeOrder(input: {
   const run = db.transaction(() => {
     const record = db.prepare("SELECT * FROM records WHERE id = ? AND user_id = ?").get(input.recordId, input.userId) as OrderRow | undefined;
     if (!record) throw new Error("持仓记录不存在");
+    const connect = isStockConnect({ market: String(record.market), accountMarket: String(record.account_market || "") });
+    if (connect && (!Number.isFinite(input.settlementAmount) || Number(input.settlementAmount) <= 0)) throw new Error("请填写港股通实际人民币付款或回款金额（含费用）");
+    if (!connect && input.settlementAmount !== undefined) throw new Error("仅港股通使用人民币结算金额");
     const oldQty = Number(record.qty || 0);
     const oldCost = Number(record.cost || 0);
     if (input.side === "sell" && input.qty > oldQty + 1e-10) throw new Error(`可卖数量不足，当前最多 ${oldQty}`);
@@ -157,12 +164,13 @@ export function executeOrder(input: {
       orderType, triggerPrice, tif, expiresAt, session, triggerStatus,
       tradedAt, now
     );
+    if (connect) db.prepare("UPDATE trade_orders SET settlement_currency='CNY', settlement_amount=? WHERE id=?").run(input.settlementAmount!, id);
     db.prepare("UPDATE records SET qty = ?, cost = ?, updated_at = ? WHERE id = ? AND user_id = ?")
       .run(nextQty || null, nextCost, now, input.recordId, input.userId);
     refreshEconomicRealizedPnl(input.userId, input.recordId);
     syncOrderCashTransaction(input.userId, id);
     const order = db.prepare("SELECT * FROM trade_orders WHERE id = ?").get(id) as OrderRow;
-    return { order: rowToOrder(order), position: { qty: nextQty, cost: nextCost } };
+    return { order: rowToOrder({ ...order, account_market: record.account_market }), position: { qty: nextQty, cost: nextCost } };
   });
   return run();
 }
@@ -198,6 +206,7 @@ function fillPendingRow(row: OrderRow, fillPrice: number): boolean {
       db.prepare("UPDATE trade_orders SET status='expired', trigger_status='标的不存在' WHERE id=? AND status='pending'").run(String(row.id));
       return false;
     }
+    if (isStockConnect({ market: String(record.market), accountMarket: String(record.account_market || "") })) return false;
     const side = row.side as OrderSide;
     const qty = Number(row.qty);
     const oldQty = Number(record.qty || 0);
@@ -285,6 +294,7 @@ export function placeOrder(input: {
   qty: number;
   price: number;
   fees: number;
+  settlementAmount?: number;
   tradedAt?: string;
   orderType?: OrderType;
   tif?: OrderValidity;
@@ -312,6 +322,8 @@ export function placeOrder(input: {
     const res = executeOrder({ ...input, tradedAt: new Date(tradedAt).toISOString(), orderType, tif, session, expiresAt, triggerStatus: legacyRecord ? "兼容成交" : "手工记录" });
     return { ...res, pending: false };
   }
+  const accountRecord = getDb().prepare("SELECT market,account_market FROM records WHERE id=? AND user_id=?").get(input.recordId, input.userId) as OrderRow | undefined;
+  if (accountRecord && isStockConnect({ market: String(accountRecord.market), accountMarket: String(accountRecord.account_market) })) throw new Error("港股通请记录券商已成交订单，并填写实际人民币结算金额");
   if (tif === "custom") {
     if (!expiresAt) throw new Error("请选择有效期");
     const recordMarket = String((getDb().prepare("SELECT market FROM records WHERE id = ? AND user_id = ?").get(input.recordId, input.userId) as OrderRow | undefined)?.market || "CN");
@@ -387,6 +399,7 @@ export function updateOrder(input: {
   qty: number;
   price: number;
   fees: number;
+  settlementAmount?: number;
   tradedAt?: string;
   note?: string;
 }): { order: TradeOrder; position: { qty: number; cost: number | null } } {
@@ -395,6 +408,12 @@ export function updateOrder(input: {
     const targetRow = db.prepare("SELECT * FROM trade_orders WHERE id = ? AND user_id = ?").get(input.orderId, input.userId) as OrderRow | undefined;
     if (!targetRow) throw new Error("订单不存在");
     const target = rowToOrder(targetRow);
+    const record = db.prepare("SELECT market,account_market FROM records WHERE id=? AND user_id=?").get(target.recordId, input.userId) as OrderRow | undefined;
+    const connect = record && isStockConnect({ market: String(record.market), accountMarket: String(record.account_market) });
+    const financialChange = target.side !== input.side || target.qty !== input.qty || target.price !== input.price || target.fees !== input.fees;
+    if ((connect || target.settlementCurrency === "CNY") && (financialChange || input.settlementAmount !== undefined)
+      && (!Number.isFinite(input.settlementAmount) || Number(input.settlementAmount) <= 0)) throw new Error("更正港股通金额时请填写实际人民币付款或回款金额（含费用）");
+    if (!connect && !target.settlementCurrency && input.settlementAmount !== undefined) throw new Error("仅港股通使用人民币结算金额");
     const rows = db.prepare("SELECT * FROM trade_orders WHERE user_id = ? AND record_id = ? AND status = 'filled' ORDER BY traded_at ASC, created_at ASC")
       .all(input.userId, target.recordId) as OrderRow[];
     if (rows.length === 0) throw new Error("订单不存在");
@@ -405,6 +424,7 @@ export function updateOrder(input: {
     db.prepare("UPDATE trade_orders SET side = ?, qty = ?, price = ?, fees = ?, amount = ?, note = ?, traded_at = ? WHERE id = ? AND user_id = ?")
       .run(input.side, input.qty, input.price, input.fees, input.qty * input.price, String(input.note || "").slice(0, 500), nextTradedAt, input.orderId, input.userId);
 
+    if (input.settlementAmount !== undefined) db.prepare("UPDATE trade_orders SET settlement_currency='CNY', settlement_amount=? WHERE id=? AND user_id=?").run(input.settlementAmount, input.orderId, input.userId);
     const replayRows = db.prepare("SELECT * FROM trade_orders WHERE user_id = ? AND record_id = ? AND status = 'filled' ORDER BY traded_at ASC, created_at ASC")
       .all(input.userId, target.recordId) as OrderRow[];
     let qty = base.qty;
@@ -429,7 +449,7 @@ export function updateOrder(input: {
     refreshEconomicRealizedPnl(input.userId, target.recordId);
     syncOrderCashTransaction(input.userId, input.orderId);
     const updated = db.prepare("SELECT * FROM trade_orders WHERE id = ?").get(input.orderId) as OrderRow;
-    return { order: rowToOrder(updated), position: { qty, cost: qty > 0 ? cost : null } };
+    return { order: rowToOrder({ ...updated, account_market: record?.account_market }), position: { qty, cost: qty > 0 ? cost : null } };
   })();
 }
 

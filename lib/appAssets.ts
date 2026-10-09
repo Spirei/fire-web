@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { holdingAccountMarket, holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "./stockAccount";
 import { getDb } from "./db";
 import { listRecords, readRecord } from "./store";
 import { listOrders } from "./orders";
@@ -137,7 +138,7 @@ export function buildAssets(userId: string, profile: { username: string; nicknam
       else if (!currency || !Number.isFinite(rates[currency]) || rates[currency] <= 0) valuationUnavailableReason = "missing_exchange_rate";
       else valuationUnavailableReason = "invalid_valuation_amount";
     }
-    return { recordId: record.id, recordRevision: record.revision, name: record.name, code: record.code, market: record.market, broker: record.group,
+    return { recordId: record.id, recordRevision: record.revision, name: record.name, code: record.code, market: record.market, accountMarket: holdingAccountMarket(record), accountCurrency: holdingAccountCurrency(record), channel: isStockConnect(record) ? "stock_connect" : "direct", broker: record.group,
       currency, instrument, valuationBasis, valuationUnitMultiplier: known ? 1 : null, qty, price, priceSource, priceAt: price === null ? null : priceSource === "quote" ? quote.time : record.updatedAt,
       quoteSession: priceSource === "quote" ? quote.session ?? null : null, quoteSource: priceSource === "quote" ? quote.source ?? null : null,
       quoteCached: priceSource === "quote" ? quote.cached ?? false : false,
@@ -166,10 +167,10 @@ export function buildAssets(userId: string, profile: { username: string; nicknam
     const raw = sourceByOrder.get(o.id)!;
     return { ...o, positionQtyBefore: raw.position_qty_before, positionQtyAfter: raw.position_qty_after };
   });
-  const markets = [...new Set([...active.map(p => p.market), ...todayOrders.map(o => o.market)])].sort().map(market => {
-    const rows = active.filter(p => p.market === market), valid = rows.every(p => p.marketValue !== null), pnlValid = rows.every(p => p.holdingPnl !== null);
-    const nativeValid = rows.every(p => p.nativeMarketValue !== null), nativePnlValid = rows.every(p => p.nativeHoldingPnl !== null);
-    return { market, currency: ACCOUNT_MARKET_CURRENCY[market] ?? null, valuationCurrency: options.currency, nativeMarketValue: nativeValid ? round(rows.reduce((n, p) => n + monetary.get(p.recordId)!.nativeMarket!, 0)) : null, nativeHoldingPnl: nativePnlValid ? round(rows.reduce((n, p) => n + monetary.get(p.recordId)!.nativePnl!, 0)) : null, date: localToday.get(market) ?? null, timeZone: assetTimeZones[market] ?? null,
+  const markets = [...new Set([...active.map(p => p.accountMarket), ...todayOrders.map(o => holdingAccountMarket(o))])].sort().map(market => {
+    const rows = active.filter(p => p.accountMarket === market), valid = rows.every(p => p.marketValue !== null), pnlValid = rows.every(p => p.holdingPnl !== null);
+    const nativeValid = rows.every(p => p.nativeMarketValue !== null && Number.isFinite(holdingMoneyFactor(p, rates, p.accountCurrency))), nativePnlValid = rows.every(p => p.nativeHoldingPnl !== null && Number.isFinite(holdingMoneyFactor(p, rates, p.accountCurrency)));
+    return { market, currency: ACCOUNT_MARKET_CURRENCY[market] ?? null, valuationCurrency: options.currency, nativeMarketValue: nativeValid ? round(rows.reduce((n, p) => n + monetary.get(p.recordId)!.nativeMarket! * holdingMoneyFactor(p, rates, p.accountCurrency), 0)) : null, nativeHoldingPnl: nativePnlValid ? round(rows.reduce((n, p) => n + monetary.get(p.recordId)!.nativePnl! * holdingMoneyFactor(p, rates, p.accountCurrency), 0)) : null, date: assetLocalDate(now, market), timeZone: assetTimeZones[market] ?? null,
       positionCount: rows.length, marketValue: valid ? round(rows.reduce((n, p) => n + monetary.get(p.recordId)!.market!, 0)) : null,
       holdingPnl: pnlValid ? round(rows.reduce((n, p) => n + monetary.get(p.recordId)!.pnl!, 0)) : null,
       cash: null, cashUnavailableReason: "currency_balances_not_allocated_to_markets", dayPnl: null, sessionStatus: "unknown" };

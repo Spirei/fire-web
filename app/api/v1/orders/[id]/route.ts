@@ -36,6 +36,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       qty,
       price,
       fees,
+      settlementAmount: body.settlementAmount == null || body.settlementAmount === "" ? undefined : Number(body.settlementAmount),
       tradedAt: body.tradedAt ? String(body.tradedAt) : undefined,
       note: String(body.note || "")
     }));

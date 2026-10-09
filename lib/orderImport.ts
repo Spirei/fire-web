@@ -143,8 +143,8 @@ export function importBrokerOrders(userId: string, rawRows: ImportOrderInput[], 
 
   // 现有记录（market, code）索引
   const records = db
-    .prepare("SELECT id, name, code, market, qty, cost, watch_group_id FROM records WHERE user_id = ?")
-    .all(userId) as Array<{ id: string; name: string; code: string; market: string; qty: number | null; cost: number | null; watch_group_id: string }>;
+    .prepare("SELECT id, name, code, market, account_market, qty, cost, watch_group_id FROM records WHERE user_id = ?")
+    .all(userId) as Array<{ id: string; name: string; code: string; market: string; account_market?: string; qty: number | null; cost: number | null; watch_group_id: string }>;
   const byCode = new Map<string, (typeof records)[number]>();
   for (const rec of records) {
     byCode.set(`${rec.market.toUpperCase()}:${normalizeImportCode(rec.code)}`, rec);
@@ -197,6 +197,11 @@ export function importBrokerOrders(userId: string, rawRows: ImportOrderInput[], 
       }, 0);
       let rec = byCode.get(`${market}:${code}`);
       const curQty = rec ? Number(rec.qty ?? 0) : 0;
+      if (rec?.market === "HK" && rec.account_market === "CN") {
+        skipped += rows.length;
+        groups.push({ market, code, name, recordName: rec.name, createdRecord: false, orderCount: rows.length, finalQty: curQty, action: "skipped", reason: "港股通须补录实际人民币结算金额，请在持仓交易中逐笔记录" });
+        continue;
+      }
       const baseQty = curQty - net;
       if (baseQty < -1e-6) {
         skipped += rows.length;

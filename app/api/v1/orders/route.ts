@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       qty,
       price,
       fees,
+      settlementAmount: body.settlementAmount == null || body.settlementAmount === "" ? undefined : Number(body.settlementAmount),
       orderType: body.orderType,
       tif: body.tif,
       expiresAt: body.expiresAt ? String(body.expiresAt) : null,

@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { getDb } from "./db";
+import { stockAccountError } from "./stockAccount";
 import { importIdentity } from "./importIdentity";
 import type { Activity, Market, RecordInput, StockRecord } from "./types";
 
@@ -13,6 +14,7 @@ function rowToRecord(row: Record<string, unknown>): StockRecord {
     name: String(row.name),
     code: String(row.code),
     market: row.market as Market,
+    ...(row.account_market ? { accountMarket: String(row.account_market) } : {}),
     price: row.price as number,
     cost: row.cost === null ? "" : (row.cost as number),
     qty: row.qty === null ? "" : (row.qty as number),
@@ -40,17 +42,20 @@ export function readRecord(userId: string, id: string): StockRecord | null {
 
 export function createRecord(userId: string, input: RecordInput): StockRecord {
   const db = getDb();
+  const routeError = stockAccountError(input.market, input.accountMarket);
+  if (routeError) throw new Error(routeError);
   const id = uid();
   const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
   db.prepare(`
-    INSERT INTO records (id, user_id, name, code, market, price, cost, qty, group_name, watch_group_id, note, source, updated_at)
-    VALUES (@id, @userId, @name, @code, @market, @price, @cost, @qty, @group, @watchGroupId, @note, @source, @updatedAt)
+    INSERT INTO records (id, user_id, name, code, market, account_market, price, cost, qty, group_name, watch_group_id, note, source, updated_at)
+    VALUES (@id, @userId, @name, @code, @market, @accountMarket, @price, @cost, @qty, @group, @watchGroupId, @note, @source, @updatedAt)
   `).run({
     id,
     userId,
     name: input.name,
     code,
     market: input.market,
+    accountMarket: input.accountMarket ?? "",
     price: input.price,
     cost: input.cost === "" ? null : input.cost,
     qty: input.qty === "" ? null : input.qty,
@@ -65,12 +70,14 @@ export function createRecord(userId: string, input: RecordInput): StockRecord {
 
 export function updateRecord(id: string, userId: string, input: RecordInput): StockRecord | null {
   const db = getDb();
+  const routeError = stockAccountError(input.market, input.accountMarket);
+  if (routeError) throw new Error(routeError);
   const exists = db.prepare("SELECT id FROM records WHERE id = ? AND user_id = ?").get(id, userId);
   if (!exists) return null;
   const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
   db.prepare(`
     UPDATE records
-    SET name = @name, code = @code, market = @market, price = @price,
+    SET name = @name, code = @code, market = @market, account_market = CASE WHEN @market='HK' THEN COALESCE(@accountMarket,account_market) ELSE '' END, price = @price,
         cost = @cost, qty = @qty, group_name = @group, watch_group_id = COALESCE(@watchGroupId, watch_group_id), note = @note, source = @source, updated_at = @updatedAt
     WHERE id = @id AND user_id = @userId
   `).run({
@@ -79,6 +86,7 @@ export function updateRecord(id: string, userId: string, input: RecordInput): St
     name: input.name,
     code,
     market: input.market,
+    accountMarket: input.accountMarket === undefined ? null : input.accountMarket,
     price: input.price,
     cost: input.cost === "" ? null : input.cost,
     qty: input.qty === "" ? null : input.qty,

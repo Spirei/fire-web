@@ -38,6 +38,15 @@ function render(file, props={}, params='', prefs={}, name='default') {
 }
 let passed=0, failures=0;
 function test(label,run){try{run();passed++;console.log('PASS '+label);}catch(error){failures++;console.error('FAIL '+label+'\n'+error.stack);}}
+test('Stock Connect first frame keeps all-market total separate from CN net assets and converts negative-cost gains coherently',()=>{
+  const rows=[{id:'us',name:'US Test',code:'TEST',market:'US',price:10,cost:5,qty:1},{id:'hk',name:'HK Test',code:'00001',market:'HK',accountMarket:'CN',price:8,cost:-4,qty:2},{id:'cn',name:'CN Test',code:'600001',market:'CN',price:7.2,cost:3.6,qty:2}].map(r=>({...r,group:'',note:'',updatedAt:'2026-10-09T00:00:00Z'}));
+  const props={records:rows,quotes:{},livePrice:r=>Number(r.price),onAddMatch:async()=>true,onUpdate:async()=>true,onRemove:()=>{},groups:[],markets:['US','CN','HK'],marketLabels:[],marketOptions:[],initialFundBalances:{USD:20,CNY:72},valuationReady:true};
+  const html=render('components/views/HoldingsView.tsx',props,'market=CN');
+  assert(html.includes('港股通'));assert(html.includes('$44.04'),'global pill includes US holdings and both currencies of cash');
+  assert(html.includes('¥101.08'),'CN net assets include converted HK holdings, CN holdings and CNY cash');
+  assert(html.includes('300.00%')&&!html.includes('-300.00%'),'positive gains on negative diluted cost keep a positive ratio');
+  assert(html.includes('HK$8.00'),'native HK price is never relabeled as CNY');
+});
 test('feed SSR bootstraps only shared navigation and never reads the default timeline',()=>{
   const layout=fs.readFileSync(path.join(root,'app/[...slug]/layout.tsx'),'utf8');
   assert(layout.includes('feedBootstrap(user.id)'));assert(!layout.includes('feedSnapshot(user.id)'));

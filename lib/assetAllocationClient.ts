@@ -40,6 +40,8 @@ export function validAllocationSnapshot(value: unknown, currency: string, owner?
     && category(c.id) && typeof c.name === "string" && nullable(c.value) && nullable(c.weightPct)) || !unique(categories)) return false;
   if (!Array.isArray(positions) || !positions.every(p => object(p) && typeof p.id === "string" && typeof p.name === "string"
     && typeof p.code === "string" && (p.market === undefined || typeof p.market === "string" && !!p.market) && typeof p.currency === "string" && (p.brokerId === null || typeof p.brokerId === "string")
+    && (p.channel === undefined || p.channel === "stock_connect" && p.market === "HK" && p.accountMarket === "CN" && p.currency === "CNY")
+    && (p.accountMarket === undefined || p.market === "HK" && p.accountMarket === "CN")
     && count(p.revision) && typeof p.accountId === "string") || !unique(positions)) return false;
   // A badge must describe the same positions that contribute to this account.
   const accountById = new Map(accounts.map(a => [a.id, a]));

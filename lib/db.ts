@@ -1207,6 +1207,9 @@ export function getDb(): Database.Database {
       try { fs.chmodSync(DB_FILE, 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
       db.pragma("journal_mode = WAL");
       migrate(db);
+      const settlementColumns = (db.prepare("PRAGMA table_info(trade_orders)").all() as { name: string }[]).map(c => c.name);
+      if (!settlementColumns.includes("settlement_currency")) db.exec("ALTER TABLE trade_orders ADD COLUMN settlement_currency TEXT");
+      if (!settlementColumns.includes("settlement_amount")) db.exec("ALTER TABLE trade_orders ADD COLUMN settlement_amount REAL");
       installRecordsContract(db);
       installAppAssets(db);
       installQuoteSubscriptions(db);

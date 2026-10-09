@@ -33,6 +33,8 @@ import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, reconcileAccountCash } from "@/lib/accountCash";
 import FundsPanel from "@/components/FundsPanel";
 import CashBalanceEditor from "@/components/CashBalanceEditor";
+import { holdingAccountMarket, holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "@/lib/stockAccount";
+import StockConnectBadge from "@/components/StockConnectBadge";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
@@ -580,13 +582,14 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
         name: record.name,
         code: record.code,
         market: record.market,
+        accountMarket: holdingAccountMarket(record),
         qty: Number(record.qty) || 0
       })),
     [positions]
   );
   const calendarMarketCode = calMarket === "美股" ? "US" : calMarket === "港股" ? "HK" : calMarket === "A股" ? "CN" : "";
   const calendarRows = useMemo(
-    () => (calendarMarketCode ? calendarPositions.filter((row) => row.market.toUpperCase() === calendarMarketCode) : calendarPositions),
+    () => (calendarMarketCode ? calendarPositions.filter((row) => row.accountMarket.toUpperCase() === calendarMarketCode) : calendarPositions),
     [calendarPositions, calendarMarketCode]
   );
   const calendarSeries = useMemo(
@@ -617,7 +620,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     acc.cost += toDisplay(record, cost * qty);
     acc.pnl += toDisplay(record, (price - cost) * qty);
     acc.day += toDisplay(record, (quotes[record.id]?.change || 0) * qty);
-    const key = record.market.toUpperCase();
+    const key = holdingAccountMarket(record).toUpperCase();
     const marketSummary = acc.markets[key] || { asset: 0, cost: 0, pnl: 0, day: 0 };
     marketSummary.asset += toDisplay(record, price * qty);
     marketSummary.cost += toDisplay(record, cost * qty);
@@ -630,15 +633,16 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     const qty = Number(record.qty) || 0;
     const price = livePrice(record);
     const cost = Number(record.cost) || 0;
-    const key = record.market.toUpperCase();
+    const key = holdingAccountMarket(record).toUpperCase();
     const marketSummary = acc[key] || { asset: 0, cost: 0, pnl: 0, day: 0 };
-    marketSummary.asset += price * qty;
-    marketSummary.cost += cost * qty;
-    marketSummary.pnl += (price - cost) * qty;
-    marketSummary.day += (quotes[record.id]?.change || 0) * qty;
+    const factor = holdingMoneyFactor(record, rates, holdingAccountCurrency(record));
+    marketSummary.asset += price * qty * factor;
+    marketSummary.cost += cost * qty * factor;
+    marketSummary.pnl += (price - cost) * qty * factor;
+    marketSummary.day += (quotes[record.id]?.change || 0) * qty * factor;
     acc[key] = marketSummary;
     return acc;
-  }, {} as Record<string, { asset: number; cost: number; pnl: number; day: number }>), [positions, quotes, livePrice]);
+  }, {} as Record<string, { asset: number; cost: number; pnl: number; day: number }>), [positions, quotes, livePrice, rates]);
   const portfolioLedger = useMemo(() => buildPortfolioLedger(positions, orders, livePrice), [positions, orders, livePrice]);
   const reconciledFundBalances = useMemo(() => reconcileAccountCash(fundBalances, cardCash, [], {}), [fundBalances, cardCash]);
   const effectiveFundBalances = !fundBalancesReady && cachedEffectiveBalances ? cachedEffectiveBalances : reconciledFundBalances;
@@ -937,7 +941,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
           : period === "1y" ? "近 1 年盈亏"
             : period === "custom" ? "区间盈亏"
               : "累计盈亏";
-  const marketPositions = holdingsMarket === "ALL" ? positions : positions.filter((item) => item.market === holdingsMarket);
+  const marketPositions = holdingsMarket === "ALL" ? positions : positions.filter((item) => holdingAccountMarket(item) === holdingsMarket);
   const holdingAssetTotal = marketPositions.reduce((sum, record) => sum + toDisplay(record, livePrice(record) * (Number(record.qty) || 0)), 0);
   const searchedPositions = marketPositions.filter((record) => {
     const query = holdingSearch.trim().toLocaleLowerCase("zh-CN");
@@ -959,7 +963,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
         case "dayPnl": return toDisplay(record, (quote?.change || 0) * qty);
         case "dayPnlRate": return quote?.changePct || 0;
         case "pnl": return toDisplay(record, (price - cost) * qty);
-        case "pnlRate": return cost ? (price - cost) / cost : 0;
+        case "pnlRate": return cost ? (price - cost) / Math.abs(cost) : 0;
         case "weight": return holdingAssetTotal ? marketValue / holdingAssetTotal : 0;
       }
     };
@@ -980,7 +984,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const accountCash = assetMarket === "ALL" ? cashTotal : accountSummaryTotals.cashComplete && marketCurrency ? convertAccountAmount(effectiveFundBalances[marketCurrency], marketCurrency, rates, displayCurrency) : Number.NaN;
   const accountFrozenCash = assetMarket === "ALL" ? frozenCashTotal : orders.reduce((total, order) => {
     const record = positions.find((item) => item.id === order.recordId);
-    return record?.market.toUpperCase() === assetMarket && record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;
+    return record && holdingAccountMarket(record).toUpperCase() === assetMarket && record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;
   }, 0);
   const accountAvailableCash = Math.max(0, accountCash - accountFrozenCash);
   const frozenByCurrency = orders.reduce<Partial<Record<FundCurrency, number>>>((totals, order) => {
@@ -1018,7 +1022,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const marketKeys = ["US", "HK", "CN", ...summaryMarketKeys.filter((key) => !["US", "HK", "CN"].includes(key))]
     .filter((key, index, keys) => summary.markets[key] && keys.indexOf(key) === index);
   const pnlPositions = useMemo(() => {
-    const rows = (pnlMarket === "ALL" ? positions : positions.filter((record) => record.market.toUpperCase() === pnlMarket)).map((record) => {
+    const rows = (pnlMarket === "ALL" ? positions : positions.filter((record) => holdingAccountMarket(record).toUpperCase() === pnlMarket)).map((record) => {
       const items = recordCloses[record.id] || [];
       const inRange = items.filter((item) => item.d >= activeRange.start && item.d <= activeRange.end);
       const qty = Number(record.qty) || 0;
@@ -1059,7 +1063,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     const qty = Number(record.qty) || 0;
     const cost = Number(record.cost) || 0;
     const pnl = (price - cost) * qty;
-    const pnlRate = cost ? (price - cost) / cost : 0;
+    const pnlRate = cost ? (price - cost) / Math.abs(cost) : 0;
     const quote = quotes[record.id];
     const dayPnl = (quote?.change || 0) * qty;
     const dayPnlRate = (quote?.changePct || 0) / 100;
@@ -1069,11 +1073,11 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     const displayPnl = toDisplay(record, pnl);
     if (key === "identity") {
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
-      return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
+      return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><StockConnectBadge market={record.market} accountMarket={record.accountMarket} /><span className="truncate">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
     }
     if (key === "marketValue") return compactMoney(displayMarketValue);
-    if (key === "cost") return fmtNumMarket(cost, record.market);
-    if (key === "price") return fmtNumMarket(price, record.market);
+    if (key === "cost") return <>{fmtNumMarket(cost, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
+    if (key === "price") return <>{fmtNumMarket(price, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
     if (key === "qty") return fmtQty(qty);
     if (key === "dayPnl") return <span className={displayDayPnl >= 0 ? "text-up" : "text-down"}>{displayDayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(displayDayPnl))}</span>;
     if (key === "dayPnlRate") return <span className={dayPnlRate >= 0 ? "text-up" : "text-down"}>{dayPnlRate >= 0 ? "+" : ""}{fmtPct(dayPnlRate)}</span>;

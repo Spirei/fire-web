@@ -1,4 +1,5 @@
 import { ACCOUNT_MARKET_CURRENCY, accountHoldingPrice, accountTotals, convertAccountAmount, reconcileAccountCash, type AccountCashSnapshot } from "./accountCash";
+import { holdingAccountMarket } from "./stockAccount";
 import type { Quote, StockRecord } from "./types";
 
 export function buildOverview(records: StockRecord[], rates: Record<string, number>, quotes: Record<string, Quote> = {}, currency = "USD", cash?: AccountCashSnapshot) {
@@ -19,7 +20,7 @@ export function buildOverview(records: StockRecord[], rates: Record<string, numb
     if (!Number.isFinite(rate) || rate <= 0) { unconverted.push(r.id); missingCurrencies.add(sourceCurrency || `UNKNOWN:${r.market}`); continue; }
     const cost = Number(r.cost) || 0;
     const costValue = convertAccountAmount(cost * qty, sourceCurrency, rates, currency), marketValue = convertAccountAmount(price * qty, sourceCurrency, rates, currency);
-    const m = byMarket[r.market] ??= { count: 0, cost: 0, market: 0, pnl: 0, currency };
+    const m = byMarket[holdingAccountMarket(r)] ??= { count: 0, cost: 0, market: 0, pnl: 0, currency };
     m.count++; m.cost += costValue; m.market += marketValue; m.pnl += marketValue - costValue;
     totalCost += costValue; totalMarket += marketValue; count++;
   }

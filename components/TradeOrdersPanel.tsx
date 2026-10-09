@@ -1,4 +1,7 @@
 "use client";
+
+import { holdingAccountMarket } from "@/lib/stockAccount";
+import StockConnectBadge from "@/components/StockConnectBadge";
 import MobileExplanation from "@/components/MobileExplanation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -487,13 +490,13 @@ export default function TradeOrdersPanel({
   }
 
   const markets = useMemo(() => {
-    const orderMarkets = [...new Set(orders.map((order) => order.market.toUpperCase()))];
+    const orderMarkets = [...new Set(orders.map((order) => holdingAccountMarket(order).toUpperCase()))];
     return ["US", "HK", "CN", "JP", "KR", ...orderMarkets].filter((key, index, keys) => orderMarkets.includes(key) && keys.indexOf(key) === index);
   }, [orders]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
     if (tab === "today" ? !isToday(order.tradedAt) : isToday(order.tradedAt)) return false;
-    if (marketFilter !== "ALL" && order.market.toUpperCase() !== marketFilter) return false;
+    if (marketFilter !== "ALL" && holdingAccountMarket(order).toUpperCase() !== marketFilter) return false;
     if (typeFilter !== "all" && orderTypeOf(order) !== typeFilter) return false;
     if (statusFilter !== "all" && order.status !== statusFilter) return false;
     if (timeFilter.mode !== "all" && timeFilter.start && timeFilter.end) {
@@ -959,7 +962,7 @@ export default function TradeOrdersPanel({
               {icon ? <img src={icon} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-muted">{order.name.slice(0, 1)}</span>}
               <EtfDoubleBadge market={order.market} code={order.code} name={order.name} />
             </span>
-            <span className="truncate font-medium text-ink" title={order.name}>{order.name}</span>
+            <span className="truncate font-medium text-ink" title={order.name}>{order.name}</span><StockConnectBadge market={order.market} accountMarket={order.accountMarket} />
           </span>
         );
       }
@@ -975,7 +978,7 @@ export default function TradeOrdersPanel({
       case "qty": return <span className="tabular-nums text-ink">{fmtQty(order.qty)}</span>;
       case "price": return <span className="tabular-nums text-ink">{fmtPrice(order.price, currency, order.market)}</span>;
       case "triggerPrice": return <span className="tabular-nums text-faint">{order.triggerPrice != null ? fmtPrice(order.triggerPrice, currency, order.market) : "—"}</span>;
-      case "currency": return <span className="font-mono text-muted">{currencyCode(order.market)}</span>;
+      case "currency": return <span className="font-mono text-muted">{currencyCode(order.market)}{order.settlementCurrency && <small className="block">结算 {order.settlementCurrency} {order.settlementAmount?.toFixed(2)}</small>}</span>;
       case "tradedAt": return <span className="block truncate tabular-nums text-muted" title={formatOrderTime(order.tradedAt, order.market)}>{formatOrderTime(order.tradedAt, order.market)}</span>;
       case "avgPrice": return <span className="tabular-nums text-ink">{fmtPrice(order.price, currency, order.market)}</span>;
       case "filledQty": return (

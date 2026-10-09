@@ -5,6 +5,7 @@ export function installRecordsContract(db: Database.Database) {
   db.transaction(() => {
     const columns = db.prepare("PRAGMA table_info(records)").all() as { name: string }[];
     if (!columns.some(c => c.name === "revision")) db.exec("ALTER TABLE records ADD COLUMN revision INTEGER NOT NULL DEFAULT 1");
+    if (!columns.some(c => c.name === "account_market")) db.exec("ALTER TABLE records ADD COLUMN account_market TEXT NOT NULL DEFAULT ''");
     db.exec(`
       CREATE TABLE IF NOT EXISTS record_revisions (
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -37,7 +38,7 @@ export function installRecordsContract(db: Database.Database) {
           ON CONFLICT(user_id) DO UPDATE SET revision=record_collections.revision+1;
       END;
       CREATE TRIGGER records_contract_update AFTER UPDATE OF
-        name,code,market,price,cost,qty,group_name,watch_group_id,watch_group_sort,note,source,updated_at ON records
+        name,code,market,account_market,price,cost,qty,group_name,watch_group_id,watch_group_sort,note,source,updated_at ON records
         WHEN EXISTS(SELECT 1 FROM users WHERE id=NEW.user_id) BEGIN
         INSERT INTO record_revisions(user_id,record_id,revision) VALUES(NEW.user_id,NEW.id,OLD.revision+1)
           ON CONFLICT(user_id,record_id) DO UPDATE SET revision=record_revisions.revision+1;

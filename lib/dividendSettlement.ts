@@ -124,7 +124,8 @@ function purgeIneligibleAutoDividends(userId: string, recordId: string) {
   }
 }
 
-async function settleForRecord(userId: string, record: { id: string; market: string; code: string }): Promise<number> {
+async function settleForRecord(userId: string, record: { id: string; market: string; code: string; account_market?: string }): Promise<number> {
+  if (record.market === "HK" && record.account_market === "CN") return 0;
   purgeIneligibleAutoDividends(userId, record.id);
   const { ok, dividends } = await getDividends(record.market, record.code);
   if (!ok || dividends.length === 0) return 0;
@@ -173,8 +174,9 @@ async function settleForRecord(userId: string, record: { id: string; market: str
 
 /** 为单只持仓立即补齐已到派息日、尚未入账的股息。 */
 export async function settleRecordDividends(userId: string, recordId: string): Promise<number> {
-  const row = getDb().prepare("SELECT id, market, code FROM records WHERE id=? AND user_id=?").get(recordId, userId) as { id: string; market: string; code: string } | undefined;
+  const row = getDb().prepare("SELECT id, market, code, account_market FROM records WHERE id=? AND user_id=?").get(recordId, userId) as { id: string; market: string; code: string; account_market?: string } | undefined;
   if (!row) throw new Error("持仓记录不存在");
+  if (row.market === "HK" && row.account_market === "CN") throw new Error("港股通股息请在持仓交易中选择股息，填写实际人民币回款");
   return settleForRecord(userId, row);
 }
 
@@ -189,7 +191,7 @@ export async function maybeRunDividendSettlement(): Promise<number> {
     const records = db
       .prepare(
         `SELECT DISTINCT user_id, id, market, code FROM records
-         WHERE qty IS NOT NULL AND qty > 0
+         WHERE qty IS NOT NULL AND qty > 0 AND NOT (market='HK' AND account_market='CN')
          LIMIT ?`
       )
       .all(MAX_RECORDS_PER_RUN) as Array<{ user_id: string; id: string; market: string; code: string }>;

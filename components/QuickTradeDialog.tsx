@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { StockRecord } from "@/lib/types";
 import { showToast } from "@/lib/toast";
+import { applyOrder } from "@/lib/tradeAccounting";
+import { isStockConnect } from "@/lib/stockAccount";
+import StockConnectBadge from "@/components/StockConnectBadge";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 
 type Side = "buy" | "sell";
@@ -40,7 +43,7 @@ function zonedInputValue(date: Date, timeZone: string) {
 
 /** 将交易所当地时间输入转换为 ISO；迭代一次可同时覆盖美股夏令时。 */
 function zonedInputToIso(value: string, timeZone: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})$/.exec(value);
   if (!match) return "";
   const wanted = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
   let guess = wanted;
@@ -98,7 +101,10 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const isClose = intent === "close";
+  const connect = !!record && isStockConnect(record);
+  const isClose = intent === "close" && !connect;
+  const [settlementAmount, setSettlementAmount] = useState("");
+  const [connectFees, setConnectFees] = useState("0");
   const [winPos, setWinPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const winPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const winRef = useRef<HTMLDivElement | null>(null);
@@ -193,8 +199,10 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
   // 打开时初始化
   useEffect(() => {
     if (!open || !record) return;
-    setSide(isClose ? "sell" : initialSide);
-    setTradeMode("order");
+    setSide(intent === "close" ? "sell" : initialSide);
+    setTradeMode(connect ? "record" : "order");
+    setSettlementAmount("");
+    setConnectFees("0");
     setOrderType(isClose ? "市价单" : "限价单");
     setValidity("当日有效");
     setExpiryDate("");
@@ -205,7 +213,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
     const p = livePriceRef.current(record) || 0;
     setPrice(p);
     setPriceStr(p ? fmtP(p) : "0");
-    const q = isClose ? Number(record.qty) || initialQty || 0 : initialQty ?? 0;
+    const q = intent === "close" ? Number(record.qty) || initialQty || 0 : initialQty ?? 0;
     setQty(q);
     setQtyStr(q ? String(round(q, 4)) : "0");
     setShowFractions(false);
@@ -213,7 +221,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
     setMaximized(false);
     setSubmitting(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, record?.id, initialSide, initialQty, intent]);
+  }, [open, record?.id, record?.accountMarket, initialSide, initialQty, intent]);
 
   const holdQty = Number(record?.qty) || 0;      // 持仓可卖
   const priceN = Number(priceStr) || 0;
@@ -227,13 +235,13 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
   const limitReached = orderType === "限价单" && currentQuote > 0
     ? (isBuy ? currentQuote <= priceN : currentQuote >= priceN)
     : false;
-  const maxBuyN = priceN > 0 ? maxBuyPower / priceN : 0;
+  const maxBuyN = !connect && priceN > 0 ? maxBuyPower / priceN : 0;
   const estAmount = qtyN * (isClose ? (currentQuote || priceN) : priceN);
   const estCost = (() => {
     const cost = Number(record?.cost) || 0;
-    const totalQty = isBuy ? holdQty + qtyN : Math.max(0, holdQty - qtyN);
-    if (!isBuy) return cost;
-    return totalQty > 0 ? (cost * holdQty + estAmount) / totalQty : 0;
+    if (qtyN <= 0 || priceN <= 0) return cost;
+    try { return applyOrder({ qty: holdQty, cost }, { side: isBuy ? "buy" : "sell", qty: qtyN, price: isClose ? currentQuote || priceN : priceN, fees: connect ? Number(connectFees) || 0 : 0 }).cost; }
+    catch { return 0; }
   })();
 
   // 数量快捷菜单
@@ -276,11 +284,13 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
     const submitPrice = isClose ? marketPx : priceN;
     if (submitPrice <= 0) { showToast(isClose ? "暂无行情，无法市价平仓" : "请输入有效的价格", "err"); return; }
     if (!isClose && tradeMode === "order" && validity === "自定义有效期" && !expiryDate) { showToast("请选择有效期", "err"); return; }
-    const tradedAtIso = tradeMode === "record" ? zonedInputToIso(tradedAt, marketTime.zone) || new Date().toISOString() : "";
+    const tradedAtIso = tradeMode === "record" ? zonedInputToIso(tradedAt, marketTime.zone) : "";
     if (!isClose && tradeMode === "record" && (!tradedAtIso || Date.parse(tradedAtIso) > Date.now() + 60_000)) {
       showToast("请选择不晚于当前时间的有效成交时间", "err");
       return;
     }
+    if (connect && (!Number.isFinite(Number(settlementAmount)) || Number(settlementAmount) <= 0)) { showToast("请填写实际人民币付款或回款金额（含费用）", "err"); return; }
+    if (connect && (!Number.isFinite(Number(connectFees)) || Number(connectFees) < 0)) { showToast("请输入有效的港币费用", "err"); return; }
     setSubmitting(true);
     try {
       const res = await fetch("/api/v1/orders", {
@@ -302,8 +312,9 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
           side,
           qty: qtyN,
           price: submitPrice,
-          fees: 0,
+          fees: connect ? Number(connectFees) : 0,
           mode: tradeMode,
+          settlementAmount: connect ? Number(settlementAmount) : undefined,
           orderType: ORDER_TYPE_CODE[orderType],
           tif: VALIDITY_CODE[validity],
           expiresAt: validity === "自定义有效期" ? expiryDate : null,
@@ -401,7 +412,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
               : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>;
           })()}
           <span className="text-lg font-bold text-[#1d1d1f] dark:text-white">{record.name}</span>
-          <MarketCodeBadge market={record.market} code={record.code} />
+          <MarketCodeBadge market={record.market} code={record.code} /><StockConnectBadge market={record.market} accountMarket={record.accountMarket} />
           <span className="text-sm text-[#6b6b70] dark:text-white/60">{record.code}.{record.market}</span>
           <span className="flex-1" />
         </div>
@@ -412,12 +423,12 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
             {!isClose && <div className="sm:col-span-2">
               <span className="mb-1 block text-xs text-[#8a8a8a] dark:text-white/60">操作方式</span>
               <div className={`grid grid-cols-2 overflow-hidden rounded-lg border ${fieldBorder} ${fieldBg}`}>
-                <button type="button" onClick={() => setTradeMode("order")} className={className("h-9 text-sm font-semibold transition-colors", tradeMode === "order" ? (isBuy ? "bg-[#ff6a3d] text-white" : "bg-[#00a985] text-white") : "text-[#6b6b70] hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/5")}>提交委托</button>
+                <button type="button" disabled={connect} title={connect ? "港股通需按券商成交单记录实际人民币结算" : undefined} onClick={() => setTradeMode("order")} className={className("h-9 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40", tradeMode === "order" ? (isBuy ? "bg-[#ff6a3d] text-white" : "bg-[#00a985] text-white") : "text-[#6b6b70] hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/5")}>提交委托</button>
                 <button type="button" onClick={() => setTradeMode("record")} className={className("h-9 text-sm font-semibold transition-colors", tradeMode === "record" ? (isBuy ? "bg-[#ff6a3d] text-white" : "bg-[#00a985] text-white") : "text-[#6b6b70] hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/5")}>记录已成交</button>
               </div>
               <p className="mt-1.5 text-[11px] leading-relaxed text-[#6b6b70] dark:text-white/55">
                 {tradeMode === "record"
-                  ? "仅用于补录券商已经成交的记录，成交价格以券商单据为准。"
+                  ? connect ? "价格填港币，人民币付款或回款按券商成交单填写。" : "仅用于补录券商已经成交的记录，成交价格以券商单据为准。"
                   : orderType === "限价单" && currentQuote > 0
                     ? `当前 ${fmtP(currentQuote)}，${isBuy ? "买入" : "卖出"}限价 ${fmtP(priceN)} ${limitReached ? "已满足触发条件" : "尚未达到，提交后保持待成交"}。`
                     : "委托将按实时行情与所选触发条件处理。"}
@@ -439,7 +450,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
               </div>
             </Field>}
             {isClose && <Field label="方向"><input value="卖出" readOnly className={inputCls} /></Field>}
-            <Field label="价格">
+            <Field label={connect ? "价格（HKD）" : "价格"}>
               <div className="relative">
                 <div className={`flex h-9 overflow-hidden rounded-lg border ${fieldBorder} ${fieldBg}`}>
                   {isClose ? <input value={currentQuote ? `市价 ${fmtP(currentQuote)}` : "暂无行情"} readOnly className="min-w-0 flex-1 bg-transparent text-center text-sm text-[#1d1d1f] dark:text-white outline-none" /> : <>
@@ -505,7 +516,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
             <div className="col-span-1 flex h-9 items-center gap-3 text-xs text-[#6b6b70] dark:text-white/55">
               {isBuy ? (
                 <>
-                  <span>最大可买 <b className="text-[#1d1d1f] dark:text-white/85">{round(maxBuyN, 3)}</b> 股</span>
+                  {!connect && <span>最大可买 <b className="text-[#1d1d1f] dark:text-white/85">{round(maxBuyN, 3)}</b> 股</span>}
                 </>
               ) : (
                 <>
@@ -514,6 +525,8 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
               )}
               <span title="最小单位" className="ml-auto text-[10px] text-[#b5b5ba] dark:text-white/40">最小单位 {minUnit}</span>
             </div>
+            {connect && <Field label="交易费用（HKD）"><input aria-label="交易费用（HKD）" inputMode="decimal" value={connectFees} onChange={e => setConnectFees(e.target.value)} className={inputCls} /></Field>}
+            {connect && <div className="sm:col-span-2"><Field label={`实际人民币${isBuy ? "付款" : "回款"}（含费用）`}><input aria-label={`实际人民币${isBuy ? "付款" : "回款"}（含费用）`} inputMode="decimal" value={settlementAmount} onChange={e => setSettlementAmount(e.target.value)} placeholder="CNY 净额" className={inputCls} /></Field></div>}
             {/* 委托模式才需要时效 / 时段 */}
             {tradeMode === "order" && !isClose && <><Field label="时效">
               <div className="relative">
@@ -545,7 +558,7 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
         {/* 底部 */}
         <div className={className("flex items-center gap-4 border-t border-[#00000010] px-5 py-4 dark:border-white/10", minimized && "hidden")}>
           <div className="min-w-0">
-            <div className="text-lg font-extrabold tabular-nums text-[#1d1d1f] dark:text-white">{estAmount ? `${estAmount.toFixed(2)} ${cur}` : `0.00 ${cur}`}</div>
+            <div className="text-lg font-extrabold tabular-nums text-[#1d1d1f] dark:text-white">{connect ? Number(settlementAmount) > 0 ? `${Number(settlementAmount).toFixed(2)} CNY` : "待填人民币结算" : estAmount ? `${estAmount.toFixed(2)} ${cur}` : `0.00 ${cur}`}</div>
             <div className="truncate text-xs text-[#6b6b70] dark:text-white/55">预估成交后持仓成本 {estCost ? `${estCost.toFixed(2)} ${cur}` : `0.00 ${cur}`}</div>
           </div>
           <button

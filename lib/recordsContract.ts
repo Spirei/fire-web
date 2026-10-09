@@ -1,3 +1,4 @@
+import { stockAccountError } from "./stockAccount";
 import { createHash } from "node:crypto";
 import { getDb } from "./db";
 import { createRecord, deleteRecord, listRecords, logActivity, parseMarket, readRecord, toNumberOrEmpty, updateRecord } from "./store";
@@ -68,6 +69,11 @@ function recordInput(body: Record<string, unknown>, strict: boolean): RecordInpu
     price: toNumberOrEmpty(body.price), cost: toNumberOrEmpty(body.cost), qty: toNumberOrEmpty(body.qty),
     group: String(body.group ?? "").trim().slice(0, 100), note: String(body.note ?? "").trim().slice(0, 500), source: String(body.source ?? "").trim().slice(0, 50)
   };
+  if (body.accountMarket !== undefined) {
+    const routeError = stockAccountError(input.market, body.accountMarket);
+    if (routeError) throw new RecordsError(routeError);
+    input.accountMarket = String(body.accountMarket);
+  }
   // The new contract accepts owned group IDs; legacy versioned input keeps its old behavior.
   if (strict && body.watchGroupId !== undefined) input.watchGroupId = String(body.watchGroupId);
   const error = validateRecordFields(input.name, input.code, input.price, input.qty);
@@ -82,7 +88,7 @@ export function mutateRecords(userId: string, kind: Kind, id: string, body: unkn
   const requestId = "requestId" in values ? validRecordRequestId(values.requestId) : undefined;
   const strict = requestId !== undefined;
   if (strict) {
-    const allowed = kind === "delete" ? ["requestId", "revision"] : ["requestId", "revision", "name", "code", "market", "price", "cost", "qty", "group", "note", "source", "watchGroupId"];
+    const allowed = kind === "delete" ? ["requestId", "revision"] : ["requestId", "revision", "name", "code", "market", "price", "cost", "qty", "group", "note", "source", "watchGroupId", "accountMarket"];
     if (Object.keys(values).some(key => !allowed.includes(key))) throw new RecordsError("请求含未知字段");
     if (kind === "create" && "revision" in values) throw new RecordsError("新建请求不接受 revision");
   }

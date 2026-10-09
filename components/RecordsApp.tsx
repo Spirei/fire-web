@@ -900,6 +900,7 @@ export default function RecordsApp({
       name: match.name,
       code: match.code,
       market: match.market,
+      accountMarket: match.accountMarket,
       price: match.price ?? "",
       cost: "",
       qty: "",

@@ -2,6 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { fail } from "@/lib/api";
 import { listOrders } from "@/lib/orders";
 import { buildXlsx, type XlsxValue } from "@/lib/xlsx";
+import { holdingAccountMarket } from "@/lib/stockAccount";
 import { marketMeta } from "@/lib/types";
 
 const CURRENCY_BY_MARKET: Record<string, string> = {
@@ -23,12 +24,12 @@ const MARKET_ZONE: Record<string, string> = {
 /** 当前系统按限价单记一笔完整成交：触发单 / 剩余挂单 / 撤单 / 驳回不适用 */
 const EXPORT_HEADERS = [
   "订单状态", "市场", "股票代码", "股票名称", "方向", "委托类型", "委托数量", "委托价格", "触发价格", "币种",
-  "委托时间", "成交均价", "成交数量", "成交金额", "剩余挂单数量", "撤/废单数量", "有效期", "时段", "触发状态", "订单号", "驳回原因"
+  "委托时间", "成交均价", "成交数量", "成交金额", "剩余挂单数量", "撤/废单数量", "有效期", "时段", "触发状态", "订单号", "驳回原因", "账户归属", "结算币种", "实际结算净额"
 ];
 const DETAIL_HEADERS = [
   "订单号", "订单状态", "市场", "股票代码", "股票名称", "方向", "委托类型", "委托数量", "委托价格", "币种",
   "委托时间", "成交均价", "成交数量", "成交金额", "费用", "已实现盈亏", "成交后持仓数量", "成交后持仓成本",
-  "有效期", "时段", "触发状态", "驳回原因", "备注"
+  "有效期", "时段", "触发状态", "驳回原因", "备注", "账户归属", "结算币种", "实际结算净额"
 ];
 
 function formatOrderTime(iso: string, market: string): string {
@@ -103,7 +104,10 @@ export async function GET(request: Request) {
       "盘中+盘前盘后",
       "未触发",
       order.orderNo,
-      "—"
+      "—",
+      marketMeta(holdingAccountMarket(order)).label,
+      order.settlementCurrency || "—",
+      order.settlementAmount ?? "—"
     ];
   });
 
@@ -142,7 +146,10 @@ export async function GET(request: Request) {
           "盘中+盘前盘后",
           "未触发",
           "—",
-          order.note || "—"
+          order.note || "—",
+          marketMeta(holdingAccountMarket(order)).label,
+          order.settlementCurrency || "—",
+          order.settlementAmount ?? "—"
         ];
       }),
       colWidths: [14, 10, 8, 14, 26, 6, 10, 10, 10, 8, 26, 10, 10, 14, 10, 12, 14, 14, 12, 16, 10, 10, 20]

@@ -1,3 +1,4 @@
+import { holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "./stockAccount";
 import { createHash } from "node:crypto";
 import { getSiteSettings } from "./settings";
 import { getDb } from "./db";
@@ -5,7 +6,7 @@ import { listRecords } from "./store";
 import { readAccountCash } from "./accountCashStore";
 import { cardCashAccounts } from "./cardLibrary";
 import { getSimpleLedger } from "./simpleStore";
-import { ACCOUNT_MARKET_CURRENCY, accountHoldingPrice, convertAccountAmount, reconcileAccountCash } from "./accountCash";
+import { accountHoldingPrice, convertAccountAmount, reconcileAccountCash } from "./accountCash";
 import { buildOverview } from "./overview";
 import { allocationRevisions, allocationRows } from "./assetAllocationStore";
 import { ALLOCATION_CATEGORIES, ALLOCATION_LABELS, type AllocationAccount, type AllocationSnapshot } from "./assetAllocationTypes";
@@ -37,14 +38,14 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
   };
   for (const r of records) {
     const qty = Number(r.qty); if (!Number.isFinite(qty) || qty <= 0) continue;
-    const amount = qty * accountHoldingPrice(r, quotes), cur = ACCOUNT_MARKET_CURRENCY[r.market] || "UNKNOWN";
-    nativeHoldings[r.market] = (nativeHoldings[r.market] ?? 0) + amount;
+    const price = accountHoldingPrice(r, quotes), cur = holdingAccountCurrency(r), amount = finite(qty * price * holdingMoneyFactor(r, rates, cur));
+    nativeHoldings[r.market] = (nativeHoldings[r.market] ?? 0) + qty * price;
     const group = groups.find(g => g.name === r.group || g.alias && g.alias === r.group);
     const id = `broker:${group?.id || stable(r.group || "ungrouped")}:${cur}`;
     let account = accounts.find(a => a.id === id);
     if (!account) account = add({ id, name: group?.name || r.group || "未归属持仓", kind: "broker", category: "securities", currency: cur, amount: 0, source: "/records", icon: group ? icons.get(group.id.toLowerCase()) || "" : "" });
-    positions.push({ id: r.id, name: r.name, code: r.code, market: r.market, currency: cur, brokerId: group?.id ?? null, revision: r.revision ?? 0, accountId: id });
-    account.amount = (account.amount ?? 0) + amount; account.recordIds.push(r.id);
+    positions.push({ id: r.id, name: r.name, code: r.code, market: r.market, ...(isStockConnect(r) ? { accountMarket: "CN", channel: "stock_connect" as const } : {}), currency: cur, brokerId: group?.id ?? null, revision: r.revision ?? 0, accountId: id });
+    account.amount = account.amount === null || amount === null ? null : account.amount + amount; account.recordIds.push(r.id);
     account.updatedAt = !account.updatedAt || r.updatedAt > account.updatedAt ? r.updatedAt : account.updatedAt;
     account.holdings = account.amount;
   }

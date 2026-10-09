@@ -42,6 +42,8 @@ import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
 import DeleteIcon from "@/components/DeleteIcon";
 import ImportSnapshotModal from "@/components/ImportSnapshotModal";
+import { holdingAccountMarket, holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "@/lib/stockAccount";
+import StockConnectBadge from "@/components/StockConnectBadge";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 
@@ -159,7 +161,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   // 空市场标签自动隐藏：设置里的 markets 只负责市场顺序，标签只为「有持仓 / 本页
   // 添加记录」的市场显示（与自选股「空分组自动隐藏」一致）；某市场有记录后标签自动出现。
   const hasMarketRecords = useCallback(
-    (market: string) => holdingsPool.some((p) => p.market === market),
+    (market: string) => holdingsPool.some((p) => holdingAccountMarket(p) === market),
     [holdingsPool]
   );
 
@@ -170,7 +172,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     });
     // 有持仓或本页添加记录的市场显示
     holdingsPool.forEach((p) => {
-      if (p.market && !list.includes(p.market)) list.push(p.market);
+      const account = holdingAccountMarket(p);
+      if (account && !list.includes(account)) list.push(account);
     });
     return list;
   }, [markets, holdingsPool, hasMarketRecords]);
@@ -204,6 +207,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       if (!canUseWorkspaceUrl()) return;
       const m = new URLSearchParams(window.location.search).get("market");
       if (m) setActive(m);
+      setAddChannel(new URLSearchParams(window.location.search).get("channel") === "stock_connect" ? "stock_connect" : "direct");
     }
     window.addEventListener("popstate", syncFromUrl);
     return () => window.removeEventListener("popstate", syncFromUrl);
@@ -222,6 +226,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     if (active !== "TOTAL" && !displayedTabs.includes(active)) setActive(displayedTabs[0] ?? "TOTAL");
   }, [displayedTabs, active]);
 
+  const [addChannel, setAddChannel] = useState(() => searchParams.get("channel") === "stock_connect" ? "stock_connect" : "direct");
+  function changeAddChannel(channel: string) {
+    setAddChannel(channel);
+    if (canUseWorkspaceUrl()) { const params = new URLSearchParams(window.location.search); if (channel === "stock_connect") params.set("channel", channel); else params.delete("channel"); window.history.replaceState(null, "", `?${params.toString()}`); }
+  }
   const [page, setPage] = useState(1);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorRows, setEditorRows] = useState<EditorRow[]>([]);
@@ -242,7 +251,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [editingOrder, setEditingOrder] = useState<TradeOrder | null>(null);
   const [tradeSide, setTradeSide] = useState<OrderSide>("buy");
   const [tradeSaving, setTradeSaving] = useState(false);
-  const [tradeForm, setTradeForm] = useState({ qty: "", price: "", fees: "0", tradedAt: "", note: "" });
+  const [tradeForm, setTradeForm] = useState({ qty: "", price: "", fees: "0", settlementAmount: "", tradedAt: "", note: "" });
   // 汇率：初始用兜底值（避免刷新瞬间非美元市场被按 1:1 误算）。
   // ⚠️ 缓存必须在挂载后才读：首帧读 localStorage 会让服务端与客户端渲染出不同金额（hydration 报错）。
   const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
@@ -324,11 +333,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
   // 列表显示该市场全部记录（含未填数量的待持仓股票）；总资产视图显示全部持仓
   const filtered = useMemo(
-    () => (active === "TOTAL" ? positions : holdingsPool.filter((p) => p.market === active)),
+    () => (active === "TOTAL" ? positions : holdingsPool.filter((p) => holdingAccountMarket(p) === active)),
     [holdingsPool, positions, active]
   );
   const filteredMarketValue = useMemo(() => filtered.reduce((sum, record) => {
-    const factor = active === "TOTAL" ? toUsd(record.market, 1) : 1;
+    const factor = active === "TOTAL" ? toUsd(record.market, 1) : holdingMoneyFactor(record, rates, holdingAccountCurrency(record));
     return sum + livePrice(record) * (Number(record.qty) || 0) * factor;
   }, 0), [filtered, active, livePrice, rates]);
   const [savedSort, setSort] = usePersistedState<SortState | null>(SORT_STORAGE_KEY, null);
@@ -339,7 +348,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const price = livePrice(r);
     const cost = Number(r.cost);
     const quote = quotes[r.id];
-    const f = active === "TOTAL" ? toUsd(r.market, 1) : 1;
+    const f = active === "TOTAL" ? toUsd(r.market, 1) : holdingMoneyFactor(r, rates, holdingAccountCurrency(r));
     switch (key) {
       case "name": return r.name;
       case "price": return price;
@@ -349,7 +358,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       case "qty": return qty;
       case "mv": return price * qty * f;
       case "pnl": return Number.isFinite(cost) ? (price - cost) * qty * f : null;
-      case "rate": return cost !== 0 && Number.isFinite(cost) ? (price - cost) / cost : null;
+      case "rate": return cost !== 0 && Number.isFinite(cost) ? (price - cost) / Math.abs(cost) : null;
       case "weight": return filteredMarketValue ? price * qty * f / filteredMarketValue : 0;
     }
   }
@@ -380,7 +389,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     filtered.forEach((r) => {
       const qty = Number(r.qty);
       const price = livePrice(r);
-      const factor = active === "TOTAL" ? toUsd(r.market, 1) : 1;
+      const factor = active === "TOTAL" ? toUsd(r.market, 1) : holdingMoneyFactor(r, rates, holdingAccountCurrency(r));
       mv += price * qty * factor;
       const c = Number(r.cost);
       if (c) {
@@ -390,7 +399,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       const q = quotes[r.id];
       if (q) day += q.change * qty * factor;
     });
-    return { mv, cost, pnl, day, rate: cost ? pnl / cost : null };
+    return { mv, cost, pnl, day, rate: cost ? pnl / Math.abs(cost) : null };
   }, [filtered, livePrice, quotes, active, rates]);
   // 只有完整持仓行情快照恢复后才展示估值，禁止首屏把“仅现金”或数据库旧价当成总资产。
   const metricsReady = valuationReady;
@@ -400,20 +409,22 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     positions.forEach((r) => {
       const qty = Number(r.qty);
       const price = livePrice(r);
-      const e = map.get(r.market) ?? { mv: 0, cost: 0, pnl: 0, day: 0 };
+      const account = holdingAccountMarket(r);
+      const factor = holdingMoneyFactor(r, rates, holdingAccountCurrency(r));
+      const e = map.get(account) ?? { mv: 0, cost: 0, pnl: 0, day: 0 };
       // 各市场按本币统计（汇总换算在总资产指标卡中统一处理）
-      e.mv += price * qty;
+      e.mv += price * qty * factor;
       const c = Number(r.cost);
       if (c) {
-        e.cost += c * qty;
-        e.pnl += (price - c) * qty;
+        e.cost += c * qty * factor;
+        e.pnl += (price - c) * qty * factor;
       }
       const q = quotes[r.id];
-      if (q) e.day += q.change * qty;
-      map.set(r.market, e);
+      if (q) e.day += q.change * qty * factor;
+      map.set(account, e);
     });
     return [...map.entries()];
-  }, [positions, livePrice, quotes]);
+  }, [positions, livePrice, quotes, rates]);
 
   const pnlSankey = useMemo(() => {
     const rows: PnlSankeyItem[] = positions.flatMap((record) => {
@@ -473,6 +484,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   // 总资产货币符号（ISO 码 → 符号；市场盈亏卡片仍用 USD$/HKD$/CNY¥ 规范标识）
   const totalCurLabel = CURRENCY_SYMBOLS[totalCur as keyof typeof CURRENCY_SYMBOLS] || totalCur;
   const cashInUsd = useMemo(() => (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => sum + value / (rates[iso] || 1), 0), [fundBalances, rates]);
+  const allMarketsNetAsset = useMemo(() => (positions.reduce((sum, r) => sum + toUsd(r.market, livePrice(r) * (Number(r.qty) || 0)), 0) + cashInUsd) * (rates[displayCur] ?? 1), [positions, livePrice, rates, cashInUsd, displayCur]);
   const displayedNetAsset = active === "TOTAL"
     ? (metrics.mv + cashInUsd) * totalFactor
     : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD")] || 0);
@@ -539,13 +551,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const hasCost = Number.isFinite(cost);
     const costValue = hasCost ? cost * qty : null;
     const pnl = marketValue !== null && costValue !== null ? marketValue - costValue : null;
-    const pnlRate = pnl !== null && cost !== 0 ? pnl / costValue! : null;
+    const pnlRate = pnl !== null && cost !== 0 ? pnl / Math.abs(costValue!) : null;
     const quote = quotes[record.id];
     const dayPnl = qty > 0 && quote ? quote.change * qty : null;
     const dayPnlRate = quote ? quote.changePct / 100 : null;
-    const factor = active === "TOTAL" ? toUsd(record.market, 1) : 1;
-    const displayMoneyFactor = active === "TOTAL" ? factor * (rates[displayCur] ?? 1) : 1;
-    const displayMoneyCurrency = active === "TOTAL" ? totalCurLabel : meta.currency;
+    const factor = active === "TOTAL" ? toUsd(record.market, 1) : holdingMoneyFactor(record, rates, holdingAccountCurrency(record));
+    const displayMoneyFactor = active === "TOTAL" ? factor * (rates[displayCur] ?? 1) : factor;
+    const displayMoneyCurrency = active === "TOTAL" ? totalCurLabel : marketMeta(holdingAccountMarket(record)).currency;
     const weight = marketValue !== null && filteredMarketValue ? marketValue * factor / filteredMarketValue : null;
 
     if (key === "identity") {
@@ -555,7 +567,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           {icon ? <img src={icon} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{(record.name || "?").slice(0, 1)}</span>}
           <EtfDoubleBadge market={record.market} code={record.code} name={record.name} />
         </span>
-        <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate text-[11px] text-faint">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></span></span>
+        <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={record.market} code={record.code} /><StockConnectBadge market={record.market} accountMarket={record.accountMarket} /><span className="truncate text-[11px] text-faint">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></span></span>
       </button>;
     }
     if (key === "marketValue") return marketValue !== null ? <span className="font-semibold">{compactMoney(marketValue * displayMoneyFactor, displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
@@ -609,7 +621,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       rows.push({ key, label: labelFor(key), flag: flagFor(key), active: displayedTabs.includes(key) });
     };
     displayedTabs.forEach(push);
-    positions.forEach((p) => push(p.market));
+    positions.forEach((p) => push(holdingAccountMarket(p)));
     MARKET_LIST.forEach(push);
     marketOptions.forEach((o) => push(o.key));
     Object.keys(labels).forEach(push);
@@ -677,9 +689,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const ok = await onAddMatch(m);
     if (ok) {
       // 自动切换到该股票所属的市场标签，方便直接填写数量
-      setActive(m.market);
+      setActive(holdingAccountMarket(m));
       setPage(1);
-      setAdded(`${m.name} 已加入，自动归入 ${labelFor(m.market)} 市场`);
+      setAdded(`${m.name} 已加入 ${labelFor(holdingAccountMarket(m))}${isStockConnect(m) ? " · 港股通" : ""}`);
       setTimeout(() => setAdded(""), 3500);
     }
   }
@@ -807,6 +819,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       qty: side === "dividend" && Number(record.qty) > 0 ? String(record.qty) : "",
       price: side === "dividend" ? "" : String(livePrice(record) || record.price || ""),
       fees: "0",
+      settlementAmount: "",
       tradedAt: now.toISOString().slice(0, 16),
       note: ""
     });
@@ -822,6 +835,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       qty: String(order.qty),
       price: String(order.price),
       fees: String(order.fees),
+      settlementAmount: order.settlementAmount == null ? "" : String(order.settlementAmount),
       tradedAt: traded.toISOString().slice(0, 16),
       note: order.note
     });
@@ -847,6 +861,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           qty,
           price,
           fees,
+          settlementAmount: tradeForm.settlementAmount.trim() ? Number(tradeForm.settlementAmount) : undefined,
           tradedAt: tradeForm.tradedAt ? new Date(tradeForm.tradedAt).toISOString() : undefined,
           note: tradeForm.note
         })
@@ -886,8 +901,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const detailDayPnl = detailQuote ? detailQuote.change * detailQty : null;
     const detailDisplayFactor = active === "TOTAL"
       ? toUsd(selectedHolding.market, 1) * (rates[displayCur] ?? 1)
-      : 1;
-    const detailDisplayCurrency = active === "TOTAL" ? totalCurLabel : detailMeta.currency;
+      : holdingMoneyFactor(selectedHolding, rates, holdingAccountCurrency(selectedHolding));
+    const detailDisplayCurrency = active === "TOTAL" ? totalCurLabel : marketMeta(holdingAccountMarket(selectedHolding)).currency;
     const detailSession = marketSessionState(selectedHolding.market, sessionNow);
     const detailIcon = selectedHolding.market.toUpperCase() === "ASSET" ? assetIcons[selectedHolding.code.toUpperCase()] : stockIcons[`${selectedHolding.market.toUpperCase()}:${selectedHolding.code.toUpperCase()}`];
     const quoteTime = (() => {
@@ -914,11 +929,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
               <div className="min-w-0">
                 <div className="flex min-w-0 items-baseline gap-2">
                   <h2 className="truncate text-lg font-bold text-ink">{selectedHolding.name}</h2>
-                  <MarketCodeBadge market={selectedHolding.market} code={selectedHolding.code} />
+                  <MarketCodeBadge market={selectedHolding.market} code={selectedHolding.code} /><StockConnectBadge market={selectedHolding.market} accountMarket={selectedHolding.accountMarket} />
                   <span className="flex-none text-xs font-semibold text-faint">{selectedHolding.code}</span>
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                  <span className="inline-flex items-center gap-1.5"><MarketIcon market={selectedHolding.market} flag={flagFor(selectedHolding.market)} size={16} />{detailMeta.label}</span>
+                  <span className="inline-flex items-center gap-1.5"><MarketIcon market={selectedHolding.market} flag={flagFor(selectedHolding.market)} size={16} />{isStockConnect(selectedHolding) ? "港股上市 · A 股账户" : detailMeta.label}</span>
                   {selectedHolding.group && <><span className="text-faint">·</span><span>{selectedHolding.group}</span></>}
                 </div>
               </div>
@@ -971,7 +986,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         </section>
 
         {tradeRecord && (
-          <AppModal title={`${editingOrder ? "更正订单" : "交易"} ${tradeRecord.name}`} desc={`${tradeRecord.code} · ${marketMeta(tradeRecord.market).label} · 当前持仓 ${fmtQty(tradeRecord.qty)}`} onClose={() => { setTradeRecord(null); setEditingOrder(null); }} size="md">
+          <AppModal title={`${editingOrder ? "更正订单" : "交易"} ${tradeRecord.name}`} desc={`${tradeRecord.code} · ${isStockConnect(tradeRecord) ? "A 股 · 港股通" : marketMeta(tradeRecord.market).label} · 当前持仓 ${fmtQty(tradeRecord.qty)}`} onClose={() => { setTradeRecord(null); setEditingOrder(null); }} size="md">
             <div className="mb-4 grid grid-cols-3 gap-1 rounded-[12px] bg-bg-gray p-1">
               {(["buy", "sell", "dividend"] as OrderSide[]).map((side) => (
                 <button
@@ -990,12 +1005,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
             </div>
             <div className="grid grid-cols-2 gap-3.5">
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">{tradeSide === "dividend" ? "持仓股数" : "成交数量"}<input type="number" min="0" step="any" value={tradeForm.qty} onChange={(e) => setTradeForm({ ...tradeForm, qty: e.target.value })} className="field" placeholder={tradeSide === "sell" ? `最多 ${fmtQty(tradeRecord.qty)}` : tradeSide === "dividend" ? `当前 ${fmtQty(tradeRecord.qty)}` : "0"} /></label>
-              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">{tradeSide === "dividend" ? "每股股息" : "成交价格"}<input type="number" min="0" step="0.001" value={tradeForm.price} onChange={(e) => setTradeForm({ ...tradeForm, price: e.target.value })} className="field" /></label>
-              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">交易费用<input type="number" min="0" step="0.01" value={tradeForm.fees} onChange={(e) => setTradeForm({ ...tradeForm, fees: e.target.value })} className="field" /></label>
+              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">{tradeSide === "dividend" ? "每股股息" : `成交价格${isStockConnect(tradeRecord) ? "（HKD）" : ""}`}<input type="number" min="0" step="0.001" value={tradeForm.price} onChange={(e) => setTradeForm({ ...tradeForm, price: e.target.value })} className="field" /></label>
+              <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">交易费用{isStockConnect(tradeRecord) ? "（HKD）" : ""}<input type="number" min="0" step="0.01" value={tradeForm.fees} onChange={(e) => setTradeForm({ ...tradeForm, fees: e.target.value })} className="field" /></label>
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">成交时间<input type="text" inputMode="numeric" value={tradeForm.tradedAt} onChange={(e) => setTradeForm({ ...tradeForm, tradedAt: e.target.value })} className="field" placeholder="YYYY-MM-DD HH:mm" /></label>
+              {isStockConnect(tradeRecord) && <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">实际人民币{tradeSide === "buy" ? "付款" : "回款"}（含费用）<input inputMode="decimal" value={tradeForm.settlementAmount} onChange={e => setTradeForm({ ...tradeForm, settlementAmount: e.target.value })} className="field" placeholder="按券商成交单填写 CNY 净额" /></label>}
               <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">订单备注<input value={tradeForm.note} onChange={(e) => setTradeForm({ ...tradeForm, note: e.target.value })} className="field" placeholder="如：分批建仓、止盈、调仓" /></label>
             </div>
-            <div className="mt-4 rounded-[12px] border border-edge bg-bg-gray/60 px-4 py-3 text-xs text-muted">股息总额：<strong className="text-ink">{fmtMoney((Number(tradeForm.qty) || 0) * (Number(tradeForm.price) || 0), marketMeta(tradeRecord.market).currency)}</strong>{tradeSide === "dividend" ? " · 按持仓股数 × 每股股息记为现金收入，计入已实现收益，不改变持仓数量与成本" : tradeSide === "buy" ? " · 买入后按含费用的加权成本更新" : " · 卖出回款冲减投入并摊薄剩余成本，费用计入已实现盈亏"}</div>
+            <div className="mt-4 rounded-[12px] border border-edge bg-bg-gray/60 px-4 py-3 text-xs text-muted">{tradeSide === "dividend" ? "股息总额" : "成交金额"}：<strong className="text-ink">{fmtMoney((Number(tradeForm.qty) || 0) * (Number(tradeForm.price) || 0), marketMeta(tradeRecord.market).currency)}</strong>{tradeSide === "dividend" ? " · 按持仓股数 × 每股股息记为现金收入，计入已实现收益，不改变持仓数量与成本" : tradeSide === "buy" ? " · 买入后按含费用的加权成本更新" : " · 卖出回款冲减投入并摊薄剩余成本，费用计入已实现盈亏"}</div>
             {editingOrder && <p className="mt-3 text-xs leading-relaxed text-muted">更正会按成交时间重算全部订单；超卖时无法保存。</p>}
             <div className="mt-5 flex justify-end gap-2.5"><button type="button" onClick={() => { setTradeRecord(null); setEditingOrder(null); }} className="btn btn-ghost btn-sm">取消</button><button type="button" disabled={tradeSaving} onClick={() => void submitTrade()} className="btn btn-line btn-sm disabled:opacity-60">{tradeSaving ? (editingOrder ? "保存中…" : "成交中…") : (editingOrder ? "保存更正" : "确认交易")}</button></div>
           </AppModal>
@@ -1020,8 +1036,12 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           {added && <span className="text-xs font-semibold text-brand-deep">{added} ✓</span>}
         </div>
         <div className="mx-auto max-w-[520px]">
-          <StockSearch rainbow large onSelect={handleSelect} onCameraClick={() => setImportOpen(true)} placeholder="如：腾讯 / 00700 / AAPL / 茅台" />
-          <p className="mt-2 text-xs text-muted">搜索全部市场，添加后按选中股票的市场自动归类。</p>
+          <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="添加渠道">
+            <button type="button" aria-pressed={addChannel === "direct"} className={`pill-spring rounded-full border px-3 py-2 text-xs font-semibold ${addChannel === "direct" ? "border-edge-strong bg-white text-ink" : "border-edge bg-bg-gray text-muted hover:bg-brand-hover"}`} onClick={() => changeAddChannel("direct")}>{active === "CN" ? "普通 A 股" : "直接持有"}</button>
+            <button type="button" aria-pressed={addChannel === "stock_connect"} className={`pill-spring rounded-full border px-3 py-2 text-xs font-semibold ${addChannel === "stock_connect" ? "border-edge-strong bg-white text-ink" : "border-edge bg-bg-gray text-muted hover:bg-brand-hover"}`} onClick={() => changeAddChannel("stock_connect")}>A 股 · 港股通</button>
+          </div>
+          <StockSearch key={`${active}:${addChannel}`} rainbow large securitiesOnly={addChannel === "stock_connect"} marketFilter={addChannel === "stock_connect" ? "HK" : active === "TOTAL" ? undefined : active} onSelect={match => void handleSelect(addChannel === "stock_connect" ? { ...match, accountMarket: "CN" } : match)} onCameraClick={addChannel === "stock_connect" ? undefined : () => setImportOpen(true)} placeholder={addChannel === "stock_connect" ? "港股通：腾讯 / 00700" : "输入股票名称或代码"} />
+          <p className="mt-2 text-xs text-muted">{addChannel === "stock_connect" ? "港股通加入 A 股账户，人民币汇总、港币报价。" : active === "TOTAL" ? "按选中股票的市场自动归类。" : `从${labelFor(active)}市场添加。`}</p>
         </div>
       </div>
 
@@ -1045,11 +1065,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           </svg>
           总资产
           <span className={`text-xs tabular-nums ${active === "TOTAL" ? "opacity-80" : "text-faint"}`}>
-            {metricsReady ? compactMoney(displayedNetAsset, totalCurLabel) : "…"}
+            {metricsReady ? compactMoney(allMarketsNetAsset, CURRENCY_SYMBOLS[displayCur] || displayCur) : "…"}
           </span>
         </button>
         {displayedTabs.map((m, i) => {
-          const count = holdingsPool.filter((p) => p.market === m).length;
+          const count = holdingsPool.filter((p) => holdingAccountMarket(p) === m).length;
           const activeTab = active === m;
           return (
             <button aria-pressed={activeTab}
@@ -1379,11 +1399,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                 <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="field" />
               </label>
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                现价
+                现价{isStockConnect(editRecord) ? "（HKD）" : ""}
                 <input type="number" step="0.001" value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} className="field" />
               </label>
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                成本价
+                成本价{isStockConnect(editRecord) ? "（HKD）" : ""}
                 <input type="number" step="0.001" value={editForm.cost} onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })} className="field" />
               </label>
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
@@ -1391,12 +1411,12 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                 <input type="number" step="any" value={editForm.qty} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} className="field" />
               </label>
               <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                市场
-                <MarketSelect
+                上市市场
+                {isStockConnect(editRecord) ? <input readOnly value="港股（HK） · A 股账户" className="field" /> : <MarketSelect
                   value={editForm.market}
                   onChange={(v) => setEditForm({ ...editForm, market: v })}
                   options={recordMarketOptions}
-                />
+                />}
               </label>
               <label className="col-span-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
                 券商

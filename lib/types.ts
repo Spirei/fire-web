@@ -5,6 +5,8 @@ export interface StockRecord {
   name: string;
   code: string;
   market: Market;
+  /** Account classification; HK securities in CN are Stock Connect, with HK quotes retained. */
+  accountMarket?: string;
   price: number | "";
   cost: number | "";
   qty: number | "";
@@ -24,6 +26,8 @@ export interface RecordInput {
   name: string;
   code: string;
   market: Market;
+  /** Account classification; HK securities in CN are Stock Connect, with HK quotes retained. */
+  accountMarket?: string;
   price: number | "";
   cost: number | "";
   qty: number | "";
@@ -45,6 +49,9 @@ export interface TradeOrder {
   id: string;
   /** 唯一订单号（10 位数字），每笔成交生成一次且不可变更 */
   orderNo: string;
+  accountMarket?: string;
+  settlementCurrency?: string;
+  settlementAmount?: number;
   recordId: string;
   market: Market;
   code: string;
@@ -180,6 +187,7 @@ export interface Quote {
 }
 
 export interface SearchMatch {
+  accountMarket?: string;
   symbol: string;
   code: string;
   name: string;
