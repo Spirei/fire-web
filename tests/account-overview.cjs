@@ -161,6 +161,16 @@ async function test(name,run) { rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.
     } finally { cashStore.readAccountCash=read; }
   });
   const fundsRoute=load('app/api/v1/funds/route.ts');
+  await test('cash editor lightweight read is private, matches canonical cash and never backfills order rows',async()=>{
+    const f=fixture(); load('lib/orders.ts').executeOrder({userId:f.user.id,recordId:f.record.id,side:'sell',qty:1,price:12,fees:1});
+    db.prepare("DELETE FROM fund_transactions WHERE user_id=? AND id LIKE 'fund-order-%'").run(f.user.id);
+    const before=businessSnapshot();
+    const response=await fundsRoute.GET(new Request('http://localhost/api/v1/funds?balancesOnly=1',{headers:{cookie:'fire_session='+f.token}}));
+    assert.equal(response.status,200); const data=(await response.json()).data;
+    assert.equal(data.balances.USD,118); assert.equal(data.cardCash.USD,7); assert.equal(data.summaries,undefined); assert.equal(data.transactions,undefined);
+    assert.deepEqual(businessSnapshot(),before);
+    assert.equal((await fundsRoute.GET(new Request('http://localhost/api/v1/funds?balancesOnly=1'))).status,401);
+  });
   const saveCash=(f,body)=>fundsRoute.POST(new Request('http://localhost/api/v1/funds',{method:'POST',headers:{cookie:'fire_session='+f.token,'content-type':'application/json'},body:JSON.stringify({action:'set_balance',...body})}));
   await test('manual cash reconciliation includes bank once and synchronizes overview and allocation',async()=>{
     const f=fixture(), other=fixture(), before=businessSnapshot();

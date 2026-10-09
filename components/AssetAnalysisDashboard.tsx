@@ -184,18 +184,19 @@ interface TrendCache {
   at: number;
 }
 
-function AccountOverviewValue({ value, hidden, pending = false, forceCompact = false }: { value: number; hidden: boolean; pending?: boolean; forceCompact?: boolean }) {
+function AccountOverviewValue({ value, hidden, pending = false, forceCompact = false, symbol = "", signed = false }: { value: number; hidden: boolean; pending?: boolean; forceCompact?: boolean; symbol?: string; signed?: boolean }) {
   const hostRef = useRef<HTMLSpanElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const [overflowing, setOverflowing] = useState(false);
-  const full = fmtMoney(value, "");
-  const compact = fmtMoneyCompact(value, "");
+  const sign = signed ? value >= 0 ? "+" : "−" : "";
+  const full = `${sign}${fmtMoney(signed ? Math.abs(value) : value, symbol)}`;
+  const compact = `${sign}${fmtMoneyCompact(signed ? Math.abs(value) : value, symbol)}`;
 
   useLayoutEffect(() => {
     const host = hostRef.current;
     const measure = measureRef.current;
     if (!host || !measure) return;
-    const update = () => setOverflowing(measure.getBoundingClientRect().width > host.clientWidth + 0.5);
+    const update = () => setOverflowing(measure.getBoundingClientRect().width + 4 > host.clientWidth);
     update();
     const observer = new ResizeObserver(update);
     observer.observe(host);
@@ -1034,7 +1035,6 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   }, [positions, pnlMarket, recordCloses, activeRange, period, rates, displayCurrency, livePrice]);
   const shownPnlPositions = pnlExpanded ? pnlPositions : pnlPositions.slice(0, 10);
   const maskMoney = (value: number, signed = false, withSymbol = false) => assetsVisible ? `${signed ? (value >= 0 ? "+" : "−") : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
-  const maskCashMoney = (value: number, withSymbol = false) => !effectiveBalancesReady ? "—" : assetsVisible ? Number.isFinite(value) ? `${value < 0 ? "−" : ""}${compactMoney(Math.abs(value), withSymbol)}` : "—" : "******";
   const MarketPills = ({ value, onChange, includeAll = true }: { value: string; onChange: (key: string) => void; includeAll?: boolean }) => <div className="flex gap-2 overflow-x-auto px-0.5 pb-1 pt-1.5">
     {(includeAll ? ["ALL", ...marketKeys] : marketKeys).map((key) => <button aria-pressed={value === key} key={key} type="button" onClick={() => onChange(key)} className={`flex-none rounded-full border px-4 py-1.5 text-xs font-bold transition-colors ${value === key ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge-strong bg-bg-gray text-muted hover:bg-brand-hover hover:text-ink"}`}>{key === "ALL" ? "全部" : marketMeta(key).label}</button>)}
   </div>;
@@ -1100,12 +1100,12 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
             <div className="asset-account-highlight">
               <div className="asset-account-primary">
                 <div className="asset-account-primary-label"><CurrencyPicker context="asset" prefix="总资产" /></div>
-                <div className="asset-account-total"><strong className="asset-account-amount tabular-nums">{maskCashMoney(totalAsset, true)}</strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="asset-privacy-button text-muted" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><VisibilityIcon hidden={!assetsVisible} className="h-4 w-4" /></button></div>
+                <div className="asset-account-total"><strong className="asset-account-amount tabular-nums"><AccountOverviewValue value={totalAsset} symbol={symbol} hidden={!assetsVisible} pending={!effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong><button type="button" onClick={() => setAssetsVisible((visible) => !visible)} className="asset-privacy-button text-muted" title={assetsVisible ? "隐藏资产金额" : "显示资产金额"} aria-label={assetsVisible ? "隐藏资产金额" : "显示资产金额"}><VisibilityIcon hidden={!assetsVisible} className="h-4 w-4" /></button></div>
               </div>
-              <div className="asset-account-day"><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.day, true)}</strong></div>
+              <div className="asset-account-day"><span className="block text-xs text-muted">当日盈亏</span><strong className={`mt-1 block text-sm tabular-nums ${summary.day >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={summary.day} hidden={!assetsVisible} signed forceCompact={currencyDisplayUnit === "compact"} /></strong></div>
             </div>
             <div className="asset-account-metrics">
-              <div><span className="text-xs text-muted">持仓总市值</span><strong className="mt-1 block text-sm tabular-nums">{maskMoney(summary.asset)}</strong></div>
+              <div><span className="text-xs text-muted">持仓总市值</span><strong className="mt-1 block text-sm tabular-nums"><AccountOverviewValue value={summary.asset} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>
               <button
                 type="button"
                 disabled={!onOpenPnlAnalysis}
@@ -1122,9 +1122,9 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
                     <path d="m9 18 6-6-6-6" />
                   </svg>}
                 </span>
-                <strong className={`mt-1 block text-sm tabular-nums ${summary.pnl >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.pnl, true)}</strong>
+                <strong className={`mt-1 block text-sm tabular-nums ${summary.pnl >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={summary.pnl} hidden={!assetsVisible} signed forceCompact={currencyDisplayUnit === "compact"} /></strong>
               </button>
-              <div><div className="flex items-center gap-1"><span className="text-xs text-muted"><span className="md:hidden">可用现金</span><span className="hidden md:inline">现金</span></span><span className="md:hidden"><CashBalanceEditor preferredCurrency={displayCurrency} frozenByCurrency={frozenByCurrency} onSaved={handleFundBalances} /></span></div><strong className="mt-1 block text-sm tabular-nums"><span className="md:hidden">{maskCashMoney(Math.max(0, cashTotal - frozenCashTotal))}</span><span className="hidden md:inline">{maskCashMoney(cashTotal)}</span></strong></div>
+              <div><div className="flex items-center gap-1"><span className="text-xs text-muted"><span className="md:hidden">可用现金</span><span className="hidden md:inline">现金</span></span><span className="md:hidden"><CashBalanceEditor preferredCurrency={displayCurrency} frozenByCurrency={frozenByCurrency} onSaved={handleFundBalances} /></span></div><strong className="mt-1 block text-sm tabular-nums"><span className="md:hidden"><AccountOverviewValue value={Math.max(0, cashTotal - frozenCashTotal)} hidden={!assetsVisible} pending={!effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></span><span className="hidden md:inline"><AccountOverviewValue value={cashTotal} hidden={!assetsVisible} pending={!effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></span></strong></div>
             </div>
             <div className="mt-6"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资产分布</span><span className="text-[11px] text-muted">按市场</span></div><div className="flex h-2 overflow-hidden rounded-full bg-bg-gray">{marketEntries.map(([key, value], index) => <span key={key} style={{ width: `${summary.asset ? value.asset / summary.asset * 100 : 0}%`, background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />)}</div><div className="mt-3 grid grid-cols-2 gap-2">{marketEntries.map(([key, value], index) => <div key={key} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-muted"><i className="h-2 w-2 rounded-full" style={{ background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />{marketMeta(key).label}</span><b>{summary.asset ? (value.asset / summary.asset * 100).toFixed(1) : "0.0"}%</b></div>)}</div></div>
           </section>

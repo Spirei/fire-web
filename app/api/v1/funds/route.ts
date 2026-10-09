@@ -4,6 +4,7 @@ import { fail, ok } from "@/lib/api";
 import { FUND_CURRENCIES, isFundCurrency, type FundCurrency } from "@/lib/fundCurrencies";
 import { fundState } from "@/lib/fundState";
 import { setCashBalance } from "@/lib/cashBalance";
+import { readAccountCash } from "@/lib/accountCashStore";
 import { countFundTransactions, createFundTransaction, ensureOrderCashTransactions, listFundTransactions, type FundType } from "@/lib/funds";
 
 const currencies = new Set<string>(FUND_CURRENCIES);
@@ -12,6 +13,10 @@ const types = new Set(["opening", "deposit", "withdrawal", "adjustment"]);
 export async function GET(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
   const params = new URL(request.url).searchParams;
+  if (params.get("balancesOnly") === "1") {
+    const cash = readAccountCash(user.id);
+    return ok({ balances: cash.balances, cardCash: cash.cardCash });
+  }
   const recordsOnly = params.get("recordsOnly") === "1";
   if (!recordsOnly) ensureOrderCashTransactions(user.id);
   const rawLimit = Number(params.get("limit"));
