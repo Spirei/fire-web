@@ -72,7 +72,7 @@ export function useAssetAllocationSnapshot(currency: string, foreground: boolean
       nextDue.current = 0; clearTimeout(changeTimer);
       if (foreground) changeTimer = setTimeout(() => void refresh("mutation"), 0);
     };
-    const events = ["fire:allocation-updated", "fire:records-updated", "fire:orders-updated", "fire:rates-updated", "fire:settings-updated"];
+    const events = ["fire:allocation-updated", "fire:records-updated", "fire:orders-updated", "fire:funds-updated", "fire:cards-updated", "fire:rates-updated", "fire:settings-updated"];
     for (const name of events) window.addEventListener(name, changed);
     return () => { clearTimeout(changeTimer); for (const name of events) window.removeEventListener(name, changed); };
   }, [refresh, foreground]);

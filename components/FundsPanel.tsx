@@ -135,11 +135,13 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
     const res = await fetch("/api/v1/funds", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currency, type: normalizedType, amount: value, direction, note, occurredAt }) });
     const json = await res.json().catch(() => null); setSaving(false);
     if (!res.ok) return showToast(json?.message || "保存失败", "err");
+    window.dispatchEvent(new Event("fire:funds-updated"));
     setOpen(false); setAmount(""); setNote(""); setOccurredAt(localDateKey()); await load(); showToast("资金记录已保存");
   };
   const remove = async (id: string) => {
     const res = await fetch(`/api/v1/funds/${encodeURIComponent(id)}`, { method: "DELETE" });
     if (!res.ok) return showToast("删除失败", "err");
+    window.dispatchEvent(new Event("fire:funds-updated"));
     recordsCache.current.clear();
     await load(); await loadRecords(currency, recordsPage, debouncedQuery);
   };

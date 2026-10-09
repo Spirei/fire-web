@@ -59,6 +59,11 @@ await test('legacy statements retain their exact numbers until explicitly checke
  assert.equal(broker(u,a.id,{[r.id]:{price:10}}).amount,1000);assert.equal(broker(u,a.id).reconciledAt,null);
  reconcile(u,broker(u,a.id),1000);assert.equal(broker(u,a.id,{[r.id]:{price:10}}).amount,1020);
  db.prepare("UPDATE asset_allocation_accounts SET statement_basis=? WHERE user_id=? AND source_id=?").run('{"version":9}',u.id,a.id);assert.equal(broker(u,a.id).amount,null);assert.equal(snap(u).summary.complete,false);
+ const broken=broker(u,a.id),old=overlay.allocationRows(u.id)[0],financial=ledgers(u);
+ assert(snap(u).issues.some(i=>i.code==='value_unavailable'&&i.message.includes('核对金额暂时无法更新')));
+ reconcile(u,broken,0,{name:'Renamed while unavailable',excluded:true,amountChanged:false});
+ const unchanged=overlay.allocationRows(u.id)[0];assert.equal(unchanged.amount,old.amount);assert.equal(unchanged.statement_basis,old.statement_basis);assert.deepEqual(ledgers(u),financial);
+ assert.equal(broker(u,a.id).amount,null);assert.equal(broker(u,a.id).excluded,true);assert.equal(snap(u).summary.complete,true,'excluding an unavailable account is possible without inventing a value');
 });
 await test('Web writes capture a server-owned valuation checkpoint and metadata-only requests cannot overwrite it',async()=>{
  const u=user(),r=rec(u),a=snap(u).accounts[0],token=auth.createSession(u.id),origin='https://basis.example.test';process.env.FIRE_APP_ORIGIN=origin;
@@ -71,6 +76,21 @@ await test('a missing holding price cannot become a fictitious zero reconciliati
  const u=user();rec(u,{price:''});const a=snap(u).accounts[0],token=auth.createSession(u.id),origin='https://basis.example.test';
  const response=await load('app/api/v1/asset-allocation/route.ts').PUT(new Request(origin+'/api/v1/asset-allocation',{method:'PUT',headers:{cookie:'fire_session='+token,origin,'content-type':'application/json'},body:JSON.stringify({id:a.id,revision:a.revision,name:a.name,currency:a.currency,category:a.category,excluded:false,amountMode:'statement',amountChanged:true,amount:1000})}));
  assert.equal(response.status,400);assert.equal(overlay.allocationRows(u.id).length,0);assert.equal(ledgers(u)[0].length,0);
+});
+await test('a pending quote cannot make a stale record price the checkpoint, while metadata edits and complete broker quotes remain usable',async()=>{
+ const u=user(),r=rec(u),other=rec(u,{market:'US',code:'TEST'}),a=snap(u).accounts.find(a=>a.recordIds.includes(r.id)),token=auth.createSession(u.id),origin='https://basis.example.test';
+ const quoteModule=load('lib/quotes.ts'),original=quoteModule.fetchOverviewQuotes;let calls=0,quoteResult={quotes:{},pending:true,cached:[],missing:[r.id,other.id]};
+ quoteModule.fetchOverviewQuotes=async()=>{calls++;return quoteResult;};
+ const send=body=>load('app/api/v1/asset-allocation/route.ts').PUT(new Request(origin+'/api/v1/asset-allocation',{method:'PUT',headers:{cookie:'fire_session='+token,origin,'content-type':'application/json'},body:JSON.stringify(body)}));
+ const body={id:a.id,revision:a.revision,name:a.name,currency:a.currency,category:a.category,excluded:false,amountMode:'statement',amountChanged:true,amount:1000},financial=ledgers(u);
+ try {
+  const pending=await send(body);assert.equal(pending.status,400);assert((await pending.json()).message.includes('行情仍在补齐'));assert.equal(overlay.allocationRows(u.id).length,0);assert.deepEqual(ledgers(u),financial);
+  assert.equal((await send({...body,name:'Renamed',amountMode:'automatic',amountChanged:false})).status,200);assert.equal(calls,1,'metadata-only requests never wait for quotes');
+  quoteResult={...quoteResult,quotes:{[r.id]:{price:10}},missing:[other.id]};
+  assert.equal((await send({...body,revision:overlay.allocationRows(u.id)[0].revision})).status,200,'another broker pending does not block the complete broker');
+  assert.equal(broker(u,a.id,{[r.id]:{price:10}}).amount,1000,'the first completed quote is part of the starting point, rather than a fictitious gain');
+  assert.equal(broker(u,a.id,{[r.id]:{price:11}}).amount,1010);assert.deepEqual(ledgers(u),financial);
+ } finally {quoteModule.fetchOverviewQuotes=original;}
 });
 console.log(`Allocation reconciliation: ${passed} passed`);db.close();fs.rmSync(temp,{recursive:true,force:true});process.exit(0);
 })().catch(e=>{console.error(e);process.exit(1);});

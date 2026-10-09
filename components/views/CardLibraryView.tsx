@@ -1330,6 +1330,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       const data = res.ok ? await res.json() : null;
       if (!res.ok || !data?.amount) throw new Error("save failed");
       setAmounts((prev) => ({ ...prev, [active.card.file]: data.amount as CardAmount }));
+      window.dispatchEvent(new Event("fire:cards-updated"));
       showToast("金额已保存");
     } catch {
       showToast("保存失败，稍后再试", "err");
@@ -1350,6 +1351,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         return next;
       });
       setDraft((prev) => ({ ...prev, amount: "", note: "" }));
+      window.dispatchEvent(new Event("fire:cards-updated"));
       showToast("已清除这张卡的金额");
     } catch {
       showToast("清除失败，稍后再试", "err");
@@ -1389,6 +1391,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
         return next;
       });
       showToast(held ? "已加入我的卡" : "已移出我的卡");
+      window.dispatchEvent(new Event("fire:cards-updated"));
     } catch {
       showToast("操作失败，稍后再试", "err");
     }
@@ -1555,6 +1558,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       const res = await fetch(`/api/cards/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok) throw new Error("delete failed");
       setCustomCards((prev) => prev.filter((card) => card.id !== id));
+      window.dispatchEvent(new Event("fire:cards-updated"));
       showToast("已删除这张卡片");
       setActive(null);
     } catch {

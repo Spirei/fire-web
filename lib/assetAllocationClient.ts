@@ -7,7 +7,16 @@ export class AllocationClientError extends Error {
 
 /** Editing a label or inclusion must not turn a live source into a fixed statement. */
 export function allocationAmountMode(account: AllocationAccount | null, amount: number, explicitlyChecked = false): "automatic" | "statement" {
-  return !explicitlyChecked && account && account.kind !== "manual" && !account.reconciled && amount === account.amount ? "automatic" : "statement";
+  return !explicitlyChecked && account && account.kind !== "manual" && !account.reconciled && (account.amount === null || amount === account.amount) ? "automatic" : "statement";
+}
+
+/** Missing values take precedence over a saved reconciliation label. */
+export function allocationAccountStatus(account: AllocationAccount): string {
+  if (account.excluded) return "未计入";
+  if (account.amount === null) return account.reconciled ? "核对待检查" : "待补余额";
+  if (account.value === null) return "缺汇率";
+  if (account.kind === "manual") return "手动录入";
+  return account.reconciled ? account.reconciledAt ? "核对后更新" : "固定核对额" : "自动关联";
 }
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value);

@@ -115,7 +115,7 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
       const holdings = a.holdings === null ? null : finite(convertAccountAmount(a.holdings, a.currency, rates, currency));
       a.components = { securities: holdings, ...(a.cash !== null ? { cash: finite(convertAccountAmount(a.cash, a.currency, rates, currency)) } : {}) };
     } else a.components = { [a.category]: a.value };
-    if (!a.excluded && a.value === null) issues.push({ code: "value_unavailable", accountIds: [a.id], message: a.amount === null ? `${a.name}${a.kind === "bank" && a.updatedAt ? "余额无法核算" : "待补余额"}` : `${a.name}缺少${a.currency}汇率` });
+    if (!a.excluded && a.value === null) issues.push({ code: "value_unavailable", accountIds: [a.id], message: a.amount === null ? a.reconciled ? `${a.name}核对金额暂时无法更新，请检查关联来源` : `${a.name}${a.kind === "bank" && a.updatedAt ? "余额无法核算" : "待补余额"}` : `${a.name}缺少${a.currency}汇率` });
   }
   // A broker statement includes cash. Never declare the sum complete while a legacy cash source can overlap it.
   for (const fund of accounts.filter(a => a.kind === "fund" && !a.excluded && a.amount !== 0)) {

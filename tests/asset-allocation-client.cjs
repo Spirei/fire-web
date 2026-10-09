@@ -48,6 +48,8 @@ async function test(name, fn) { await fn(); checks++; console.log('PASS ' + name
  await test('account form distinguishes a rename from explicit same-amount reconciliation', async () => {
   const h=harness(),a=snapshot().accounts[0];assert.equal(h.client.allocationAmountMode(a,100),'automatic');assert.equal(h.client.allocationAmountMode(a,101),'statement');assert.equal(h.client.allocationAmountMode({...a,reconciled:true},100),'statement');assert.equal(h.client.allocationAmountMode({...a,kind:'manual'},100),'statement');assert.equal(h.client.allocationAmountMode(null,100),'statement');
   assert.equal(h.client.allocationAmountMode(a,100,true),'statement','retyping the same amount is an explicit checkpoint, not a metadata-only rename');
+  assert.equal(h.client.allocationAmountMode({...a,amount:null,value:null},0),'automatic','a missing valuation must not turn a label edit into a new statement');
+  assert.equal(h.client.allocationAmountMode({...a,amount:null,value:null},0,true),'statement','entering zero remains an explicit reconciliation');
  });
  await test('snapshot contract rejects wrong currency, owner, malformed amounts and missing categories', async () => {
   const h = harness(), s = snapshot(); assert(h.client.validAllocationSnapshot(s, 'USD', 'owner'));
@@ -113,6 +115,13 @@ async function test(name, fn) { await fn(); checks++; console.log('PASS ' + name
   const h = harness(); h.render(); h.reply(0); await h.drain(); h.dispatch('fire:records-updated'); h.dispatch('fire:orders-updated'); assert.equal(h.requests.length, 1);
   h.tick(0); h.render(); assert.equal(h.requests.length, 2); h.close(); assert(h.requests[1].init.signal.aborted);
   h.reply(1, snapshot('USD', 'b')); await h.drain(); assert.equal(h.value.data.snapshotRevision, 'a'.repeat(64)); assert.equal(h.timers.size, 0);
+ });
+ await test('cash and card changes invalidate old reads, coalesce together and refresh hidden workspaces on return', async () => {
+  const h=harness();h.render();h.reply(0);await h.drain();h.value.refresh();h.render();
+  h.dispatch('fire:funds-updated');h.dispatch('fire:cards-updated');h.tick(0);h.render();assert(h.requests[1].init.signal.aborted);assert.equal(h.requests.length,3);
+  h.reply(2,snapshot('USD','b'));await h.drain();h.reply(1,snapshot('USD','c'));await h.drain();assert.equal(h.value.data.snapshotRevision,'b'.repeat(64));
+  h.foreground(false);h.dispatch('fire:cards-updated');h.dispatch('fire:funds-updated');h.tick(0);assert.equal(h.requests.length,3);
+  h.foreground(true);assert.equal(h.requests.length,4);h.reply(3);await h.drain();h.close();
  });
  await test('transient failures retain balances and back off; authorization failure clears private data', async () => {
   const h = harness(); h.render(); h.reply(0); await h.drain(); const s = h.value.data; h.value.refresh(); h.reply(1, null, 500); await h.drain(); assert.equal(h.value.data, s); assert(h.value.error); assert(!h.value.loading);

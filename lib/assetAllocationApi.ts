@@ -33,9 +33,10 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
       const writeRates = await getRates(); authorize();
       // Reconciliation checkpoints use the same current quotes as reads. Metadata edits keep their checkpoint.
       const writeRecords = listRecords(initial.id);
-      const writeQuotes = (request.method === "POST" || request.method === "PUT") && !new URL(request.url).pathname.endsWith("/assign")
+      const writeQuoteSnapshot = (request.method === "POST" || request.method === "PUT") && !new URL(request.url).pathname.endsWith("/assign")
         && raw?.amountMode !== "automatic" && raw?.amountChanged !== false
-        ? (await fetchOverviewQuotes(writeRecords.filter(r => Number(r.qty) > 0), token ? 1_500 : 150)).quotes : {};
+        ? await fetchOverviewQuotes(writeRecords.filter(r => Number(r.qty) > 0), token ? 1_500 : 150) : null;
+      const writeQuotes = writeQuoteSnapshot?.quotes ?? {};
       authorize();
       return getDb().transaction(() => {
         authorize();
@@ -61,6 +62,8 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
         const snapshot = buildAssetAllocation(initial.id, writeRates, quotes, "USD", true);
         const source = snapshot.accounts.find(a => a.id === input.id && a.kind !== "manual");
         if (source && ((source.sourceCurrency ?? source.currency) !== input.currency || source.category !== input.category)) throw new RecordsError("关联账户的币种和类别不可更改");
+        if (source?.kind === "broker" && input.amountMode !== "automatic" && input.amountChanged !== false && writeQuoteSnapshot?.pending
+          && source.recordIds.some(id => !Number.isFinite(quotes[id]?.price))) throw new RecordsError("行情仍在补齐，请刷新账户后重试核对；修改名称或计入状态可直接保存");
         if (source?.kind === "broker" && input.amountMode !== "automatic" && input.amountChanged !== false
           && source.recordIds.some(id => {
             const record = currentRecords.get(id), quotePrice = quotes[id]?.price;

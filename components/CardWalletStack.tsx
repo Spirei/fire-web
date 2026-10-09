@@ -848,6 +848,7 @@ function CardDetailPanel({
         return;
       }
       onEntryAdded(data.entry as BalanceEntry, Number(data.balance) || 0);
+      window.dispatchEvent(new Event("fire:cards-updated"));
       showToast(
         kind === "deposit"
           ? linkBroker ? "已记一笔存钱，并在资金记录里记了转出" : "已记一笔存钱"
@@ -884,6 +885,7 @@ function CardDetailPanel({
       if (!res.ok || !data?.details) throw new Error("save failed");
       onDetailsSaved(data.details as WalletCardDetails);
       if (card.hasAmount) onAmountChange(card.key, card.amount, draft.currency);
+      window.dispatchEvent(new Event("fire:cards-updated"));
       showToast("卡片信息已保存");
       setForm(null);
     } catch {
@@ -900,6 +902,7 @@ function CardDetailPanel({
       if (!res.ok) throw new Error("delete failed");
       const data = await res.json();
       onAmountChange(card.key, Number(data.balance) || 0, card.currency);
+      window.dispatchEvent(new Event("fire:cards-updated"));
       showToast("已删除这笔记录");
       onEntryDeleted();
     } catch {

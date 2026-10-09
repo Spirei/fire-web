@@ -13,7 +13,8 @@ import { useDisplayCurrency, CURRENCY_SYMBOLS } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { clientRequestId } from "@/lib/randomId";
 import { allocationCategoryRoute, allocationRoute } from "@/lib/assetAllocationRouting";
-import { AllocationClientError, allocationAmountMode, writeAllocation } from "@/lib/assetAllocationClient";
+import { AllocationClientError, allocationAccountStatus, allocationAmountMode, writeAllocation } from "@/lib/assetAllocationClient";
+import { cashAmountText } from "@/lib/cashBalanceClient";
 import { useAssetAllocationSnapshot, type AllocationReadEvent } from "@/lib/useAssetAllocationSnapshot";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { ALLOCATION_CATEGORIES, ALLOCATION_LABELS, type AllocationAccount, type AllocationCategory, type AllocationInput, type AllocationSnapshot } from "@/lib/assetAllocationTypes";
@@ -98,7 +99,7 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
       {nodes.map(n => {
         const a = n.account;
         // 正常账户不再显示说明行（原币、持仓数、已核对/自动关联），只在需要留意时给一条提示，降低文字密度。
-        const note = !a ? "" : a.excluded ? "未计入" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : a.recordIds.some(id => data.quoteStatus.missing.includes(id)) ? "部分记录价" : "";
+        const note = !a ? "" : a.excluded || a.amount === null || a.value === null ? allocationAccountStatus(a) : a.recordIds.some(id => data.quoteStatus.missing.includes(id)) ? "部分记录价" : "";
         return a ? <button key={n.id} ref={el => { if (el) accountNodes.current.set(n.id, el); else accountNodes.current.delete(n.id); }} type="button" className={`allocation-node allocation-account ${n.excluded ? "is-excluded" : ""}`} onClick={() => onEdit(a)}>
         <span className="allocation-node-icon"><SafeAssetImage src={a.icon} style={{ width: 19, height: 19 }} className="rounded object-contain" fallback={a.kind === "broker" ? <IconChartPie size={19} stroke={1.5} /> : a.kind === "bank" ? <IconBuildingBank size={19} stroke={1.5} /> : <IconCoins size={19} stroke={1.5} />} /></span>
         <span className="allocation-node-body"><span className="flex min-w-0 items-center gap-1.5"><b title={a.name}>{a.name}</b><AccountMarketBadges account={a} data={data} /></span>{note ? <small>{note}</small> : null}<strong>{money(a.value)}</strong></span>
@@ -143,7 +144,7 @@ function BankCards({ data, hidden, onClose, onEdit }: { data: AllocationSnapshot
     <div className="allocation-bank-summary"><span>{data.bankSummary.includedCount} 张计入资产</span><strong>{money(data.bankSummary.value)}</strong></div>
     <div className="allocation-bank-list">{banks.map(a => <button key={a.id} type="button" className={`allocation-bank-detail ${a.excluded ? "is-excluded" : ""}`} onClick={() => onEdit(a)}>
       <span className="allocation-node-icon"><IconBuildingBank size={19} stroke={1.5} /></span>
-      <span className="allocation-node-body"><b>{a.name}</b><small>{a.currency} · {a.excluded ? "未计入" : a.reconciled ? "已核对" : a.amount === null ? "余额异常" : a.value === null ? "缺汇率" : "自动关联"}</small><strong>{money(a.amount, a.currency)}{a.currency !== data.currency && <small> ≈ {money(a.value)}</small>}</strong></span>
+      <span className="allocation-node-body"><b>{a.name}</b><small>{a.currency} · {allocationAccountStatus(a)}</small><strong>{money(a.amount, a.currency)}{a.currency !== data.currency && <small> ≈ {money(a.value)}</small>}</strong></span>
       <span className="allocation-bank-edit">核对<IconArrowUpRight size={13} /></span>
     </button>)}</div>
     {!banks.length && <p className="allocation-empty">暂无有余额的银行卡</p>}
@@ -152,7 +153,7 @@ function BankCards({ data, hidden, onClose, onEdit }: { data: AllocationSnapshot
 }
 
 function AccountEditor({ account, positions, accountId, currency, onClose, onSaved, onReload }: { positions: AllocationSnapshot["positions"]; account: AllocationAccount | null; accountId: string; currency: string; onClose: () => void; onSaved: () => void; onReload: () => Promise<AllocationSnapshot | null> }) {
-  const [name, setName] = useState(account?.name ?? ""), [amount, setAmount] = useState(account?.amount?.toString() ?? ""), [cur, setCur] = useState(account?.currency ?? currency);
+  const [name, setName] = useState(account?.name ?? ""), [amount, setAmount] = useState(account?.amount == null ? "" : cashAmountText(account.amount)), [cur, setCur] = useState(account?.currency ?? currency);
   const [category, setCategory] = useState<AllocationCategory>(account?.category ?? "cash"), [excluded, setExcluded] = useState(account?.excluded ?? false);
   const [amountEdited, setAmountEdited] = useState(false);
   const [saving, setSaving] = useState(false), [error, setError] = useState(""); const busy = useRef(false);
@@ -160,16 +161,21 @@ function AccountEditor({ account, positions, accountId, currency, onClose, onSav
   const requestId = useRef<string | null>(null);
   const linked = account !== null && account.kind !== "manual";
   const broker = account?.kind === "broker";
-  const mode = allocationAmountMode(account, Number(amount), amountEdited);
+  // Presentation rounding is not an instruction to reconcile again.
+  const mode = allocationAmountMode(account, amountEdited ? Number(amount) : account?.amount ?? Number(amount), amountEdited);
+  const amountChanged = !account || amountEdited || cur !== account.currency || category !== account.category;
+  const amountRequired = !linked || amountChanged;
+  const nativeMoney = (n: number, signed = false) => `${CURRENCY_SYMBOLS[cur as keyof typeof CURRENCY_SYMBOLS] || cur}${signed && n > 0 ? "+" : ""}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const checkpointDelta = account?.amount != null && account.statementAmount !== undefined ? account.amount - account.statementAmount : null;
   const linkedPositions = positions.filter(p => p.accountId === account?.id);
   async function save(reset = false) {
     if (busy.current || uncertain) return;
-    if (!reset && (!name.trim() || !amount.trim() || !Number.isFinite(Number(amount)))) { setError("请填写名称和有效金额"); return; }
+    if (!reset && (!name.trim() || amountRequired && (!amount.trim() || !Number.isFinite(Number(amount))))) { setError("请填写名称和有效金额"); return; }
     busy.current = true; setSaving(true); setError("");
     try {
       if (!account && !requestId.current) requestId.current = clientRequestId();
       const input: AllocationInput = { ...(account ? { id: account.id } : { requestId: requestId.current! }), revision: account?.revision ?? 0, name, currency: cur, category, amount: Number(amount), excluded, amountMode: mode,
-        amountChanged: !account || amountEdited || cur !== account.currency || category !== account.category };
+        amountChanged };
       await writeAllocation(reset ? "DELETE" : account ? "PUT" : "POST", "/api/asset-allocation", accountId, reset ? { id: account?.id, revision: account?.revision } : { ...input });
       onSaved(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "保存失败"); setUncertain(e instanceof AllocationClientError && (e.uncertain || e.status === 409)); }
@@ -181,7 +187,13 @@ function AccountEditor({ account, positions, accountId, currency, onClose, onSav
       <label>账户名称<input data-autofocus value={name} maxLength={80} onChange={e => setName(e.target.value)} required /></label>
       <div className="allocation-form-row"><label>资产类别<AppSelect value={category} options={ALLOCATION_CATEGORIES.map(value => ({ value, label: ALLOCATION_LABELS[value] }))} onChange={v => setCategory(v as AllocationCategory)} ariaLabel="资产类别" disabled={linked} /></label>
         <label>币种<AppSelect value={cur} options={[...new Set([cur, "USD", "CNY", "HKD", "SGD", "JPY", "KRW", "EUR", "GBP", "CAD", "AUD"])].map(value => ({ value, label: value }))} onChange={setCur} ariaLabel="账户币种" disabled={linked} /></label></div>
-      <label>{broker ? mode === "automatic" ? `自动关联持仓市值（${cur}）` : `账户总权益（含现金，${cur}）` : category === "debt" ? "负债金额" : "当前余额"}<input inputMode="decimal" value={amount} onChange={e => { setAmount(e.target.value); setAmountEdited(true); }} required /></label>
+      <label>{broker ? mode === "automatic" ? `自动关联持仓市值（${cur}）` : `账户总权益（含现金，${cur}）` : category === "debt" ? "负债金额" : "当前余额"}<input inputMode="decimal" value={amount} placeholder={account?.amount === null ? "暂缺估值" : undefined} onChange={e => { setAmount(e.target.value); setAmountEdited(true); }} required={amountRequired} /></label>
+      {linked && account.reconciledAt && account.statementAmount !== undefined && <dl className="rounded-lg border border-edge bg-bg-gray p-3 text-[11px]" aria-label="核对基准">
+        <div className="flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted">核对时间</dt><dd>{new Date(account.reconciledAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</dd></div>
+        <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted">手动核对起点</dt><dd className="tabular-nums">{nativeMoney(account.statementAmount)}</dd></div>
+        <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1"><dt className="text-muted">核对后变动</dt><dd className="tabular-nums">{checkpointDelta === null ? "待检查" : nativeMoney(Math.abs(checkpointDelta) < 0.005 ? 0 : checkpointDelta, true)}</dd></div>
+      </dl>}
+      {linked && account.amount === null && <p className="allocation-form-note">估值暂缺时可以修改名称或计入状态；原核对金额和基准保留。</p>}
       {linked && <p className="allocation-form-note">账户名称仅用于显示，不改变股票市场或原币。核对金额仅用于资产配置，不修改资金账本或资产页可用现金。</p>}
       {broker && <p className="allocation-form-note">{mode === "automatic" ? "当前金额只包含关联持仓，现金由资金账本与银行卡单独计入。修改金额会切换为账户总权益核对。" : `核对金额作为起点，之后随持仓行情、实际成交和股息更新。已关联持仓 ${account.currency} ${account.holdings?.toLocaleString("en-US") ?? "—"}；总权益包含的现金需核对是否与其他现金重复。`}</p>}
       {linked && !broker && mode === "statement" && <p className="allocation-form-note">核对金额作为起点，之后跟随原账户余额变动，不修改真实资金流水。</p>}
@@ -274,7 +286,7 @@ export default function AssetAllocationView({ initial }: { initial?: AllocationS
       <div className="allocation-account-list"><div className="allocation-list-heading"><h3>账户明细</h3><span>点击账户核对余额</span></div><div className="allocation-table-scroll"><table>
         <thead><tr><th>账户</th><th>来源</th><th>原币余额</th><th>{displayCurrency} 估值</th><th>状态</th></tr></thead>
         <tbody>{nodes.map(n => { const a = n.account; return a ? <tr key={n.id} className={a.excluded ? "is-excluded" : ""}>
-          <td><button type="button" onClick={() => setEditing(a)}>{a.name}<AccountMarketBadges account={a} data={data} /><IconArrowUpRight size={13} /></button></td><td>{a.kind === "broker" ? "持仓" : a.kind === "fund" ? "资金系统" : a.kind === "ledger" ? "简化账本" : "手动录入"}</td><td>{hidden ? "******" : `${a.currency} ${a.amount === null ? "—" : a.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })}`}</td><td>{money(a.value)}</td><td>{a.excluded ? "未计入" : a.reconciled ? "已核对" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : "自动关联"}</td>
+          <td><button type="button" onClick={() => setEditing(a)}>{a.name}<AccountMarketBadges account={a} data={data} /><IconArrowUpRight size={13} /></button></td><td>{a.kind === "broker" ? "持仓" : a.kind === "fund" ? "资金系统" : a.kind === "ledger" ? "简化账本" : "手动录入"}</td><td>{hidden ? "******" : `${a.currency} ${a.amount === null ? "—" : a.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })}`}</td><td>{money(a.value)}</td><td>{allocationAccountStatus(a)}</td>
         </tr> : <tr key={n.id} className={n.excluded ? "is-excluded" : ""}>
           <td><button type="button" onClick={() => setBanksOpen(true)}>银行卡<IconArrowUpRight size={13} /></button></td><td>{data.bankSummary.count} 张有余额</td><td><button type="button" onClick={() => setBanksOpen(true)}>查看明细</button></td><td>{money(data.bankSummary.value)}</td><td>{n.excluded ? "未计入" : data.bankSummary.value === null ? "待核对" : "已关联"}</td>
         </tr>; })}</tbody>
