@@ -33,6 +33,10 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
   assert.equal(position.market,'CN');assert.equal(position.currency,'CNY');assert.equal(account.currency,'CNY');assert.equal(account.amount,600);assert.equal(account.value,+(600/7).toFixed(2));
   assert.equal(after.positions.find(p=>p.id===hk.id).market,'HK');assert.equal(after.summary.netAsset,before.summary.netAsset);
  });
+ await test('account-level badge identities match per-stock rendering and shared custom styles',async()=>{
+  const badges=load('lib/marketBadge.ts');
+  for(const [market,code,key] of [['CN','600019','SH'],['CN','sz000001','SZ'],['hk','00700','HK'],['US','AAPL','US'],['ASSET','BTC','CRYPTO']]){assert.equal(badges.marketBadgeKey(market,code),key);assert.equal(badges.getMarketBadge(market,code).label,badges.DEFAULT_MARKET_BADGES[key].label);}
+ });
  await test('weak conditional snapshots are stable, currency/owner bound and reauthorize before 304',async()=>{
   const f=fixture(),g=fixture(),first=await call(f),tag=first.headers.get('etag');
   assert.match(tag,/^W\/"[a-f0-9]{64}"$/);assert.equal(first.body.data.snapshotRevision,tag.slice(3,-1));

@@ -5,6 +5,7 @@ import { IconBuildingBank, IconChartPie, IconCoins, IconPlus, IconRefresh, IconE
 import AppModal from "@/components/AppModal";
 import AppSelect from "@/components/AppSelect";
 import CurrencySelect from "@/components/CurrencySelect";
+import { marketBadgeKey } from "@/lib/marketBadge";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { useDisplayCurrency, CURRENCY_SYMBOLS } from "@/lib/currencyPrefs";
@@ -18,8 +19,8 @@ import { ALLOCATION_CATEGORIES, ALLOCATION_LABELS, type AllocationAccount, type 
 
 function AccountMarketBadges({ account, data }: { account: AllocationAccount; data: AllocationSnapshot }) {
   const positions = data.positions.filter(p => p.accountId === account.id && p.market);
-  const badges = new Map(positions.map(p => [p.market === "CN" ? /^[69]/.test(p.code.replace(/^\D+/, "")) ? "SH" : "SZ" : p.market!, p]));
-  return <>{[...badges].map(([key, p]) => <MarketCodeBadge key={key} market={p.market!} code={p.code} />)}</>;
+  const badges = new Map(positions.map(p => [marketBadgeKey(p.market!, p.code), p]));
+  return <>{[...badges].map(([key, p]) => <MarketCodeBadge alwaysVisible key={key} market={p.market!} code={p.code} />)}</>;
 }
 
 // 类别配色唯一来源在 app/globals.css 的 --allocation-* 变量；这里只引用，避免两处定义漂移。
@@ -149,20 +150,23 @@ function BankCards({ data, hidden, onClose, onEdit }: { data: AllocationSnapshot
   </AppModal>;
 }
 
-function AccountEditor({ account, accountId, currency, onClose, onSaved, onReload }: { account: AllocationAccount | null; accountId: string; currency: string; onClose: () => void; onSaved: () => void; onReload: () => Promise<AllocationSnapshot | null> }) {
+function AccountEditor({ account, positions, accountId, currency, onClose, onSaved, onReload }: { positions: AllocationSnapshot["positions"]; account: AllocationAccount | null; accountId: string; currency: string; onClose: () => void; onSaved: () => void; onReload: () => Promise<AllocationSnapshot | null> }) {
   const [name, setName] = useState(account?.name ?? ""), [amount, setAmount] = useState(account?.amount?.toString() ?? ""), [cur, setCur] = useState(account?.currency ?? currency);
   const [category, setCategory] = useState<AllocationCategory>(account?.category ?? "cash"), [excluded, setExcluded] = useState(account?.excluded ?? false);
   const [saving, setSaving] = useState(false), [error, setError] = useState(""); const busy = useRef(false);
   const [uncertain, setUncertain] = useState(false);
   const requestId = useRef<string | null>(null);
   const linked = account !== null && account.kind !== "manual";
+  const broker = account?.kind === "broker";
+  const mode = allocationAmountMode(account, Number(amount));
+  const linkedPositions = positions.filter(p => p.accountId === account?.id);
   async function save(reset = false) {
     if (busy.current || uncertain) return;
     if (!reset && (!name.trim() || !amount.trim() || !Number.isFinite(Number(amount)))) { setError("请填写名称和有效金额"); return; }
     busy.current = true; setSaving(true); setError("");
     try {
       if (!account && !requestId.current) requestId.current = clientRequestId();
-      const input: AllocationInput = { ...(account ? { id: account.id } : { requestId: requestId.current! }), revision: account?.revision ?? 0, name, currency: cur, category, amount: Number(amount), excluded, amountMode: allocationAmountMode(account, Number(amount)) };
+      const input: AllocationInput = { ...(account ? { id: account.id } : { requestId: requestId.current! }), revision: account?.revision ?? 0, name, currency: cur, category, amount: Number(amount), excluded, amountMode: mode };
       await writeAllocation(reset ? "DELETE" : account ? "PUT" : "POST", "/api/asset-allocation", accountId, reset ? { id: account?.id, revision: account?.revision } : { ...input });
       onSaved(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "保存失败"); setUncertain(e instanceof AllocationClientError && (e.uncertain || e.status === 409)); }
@@ -174,9 +178,10 @@ function AccountEditor({ account, accountId, currency, onClose, onSaved, onReloa
       <label>账户名称<input data-autofocus value={name} maxLength={80} onChange={e => setName(e.target.value)} required /></label>
       <div className="allocation-form-row"><label>资产类别<AppSelect value={category} options={ALLOCATION_CATEGORIES.map(value => ({ value, label: ALLOCATION_LABELS[value] }))} onChange={v => setCategory(v as AllocationCategory)} ariaLabel="资产类别" disabled={linked} /></label>
         <label>币种<AppSelect value={cur} options={[...new Set([cur, "USD", "CNY", "HKD", "SGD", "JPY", "KRW", "EUR", "GBP", "CAD", "AUD"])].map(value => ({ value, label: value }))} onChange={setCur} ariaLabel="账户币种" disabled={linked} /></label></div>
-      <label>{account?.kind === "broker" ? "账户总权益（含现金）" : category === "debt" ? "负债金额" : "当前余额"}<input inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required /></label>
-      {linked && <p className="allocation-form-note">核对金额仅用于资产配置；恢复自动关联后继续使用原账本余额。</p>}
-      {account?.kind === "broker" && <p className="allocation-form-note">已关联持仓市值 {account.currency} {account.holdings?.toLocaleString("en-US") ?? "—"}。现金由总权益减去持仓得出。</p>}
+      <label>{broker ? mode === "automatic" ? `自动关联持仓市值（${cur}）` : `账户总权益（含现金，${cur}）` : category === "debt" ? "负债金额" : "当前余额"}<input inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} required /></label>
+      {linked && <p className="allocation-form-note">账户名称仅用于显示，不改变股票市场或原币。核对金额仅用于资产配置，不修改资金账本或资产页可用现金。</p>}
+      {broker && <p className="allocation-form-note">{mode === "automatic" ? "当前金额只包含关联持仓，现金由资金账本与银行卡单独计入。修改金额会切换为账户总权益核对。" : `已关联持仓市值 ${account.currency} ${account.holdings?.toLocaleString("en-US") ?? "—"}；与总权益的差额仅作为资产配置中的账户现金，需核对是否与其他现金重复。`}</p>}
+      {linkedPositions.length > 0 && <div className="allocation-position-list" aria-label="当前关联持仓"><p className="allocation-form-note">当前关联持仓 · {linkedPositions.length} 项</p>{linkedPositions.map(p => <div key={p.id} className="flex min-w-0 items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-1.5"><b className="truncate text-sm">{p.name}</b>{p.market && <MarketCodeBadge alwaysVisible market={p.market} code={p.code} />}</span><small className="shrink-0 text-muted">{p.code} · {p.currency}</small></div>)}</div>}
       <label className="allocation-checkbox"><input type="checkbox" checked={!excluded} onChange={e => setExcluded(!e.target.checked)} />计入资产配置</label>
       </fieldset>
       {error && <p role="alert" className="allocation-error">{error}</p>}
@@ -200,7 +205,7 @@ function BrokerAssignment({ data, onClose, onSaved, onReload }: { data: Allocati
   return <AppModal title="关联券商持仓" onClose={onClose} closeDisabled={saving}>
     <div className="allocation-form"><fieldset className="contents" disabled={saving || uncertain}><label>券商<AppSelect ariaLabel="目标券商" value={broker} options={data.brokers.map(b => ({ value: b.id, label: b.name }))} onChange={setBroker} /></label>
       {!data.brokers.length && <p className="allocation-form-note">请先在股票设置中添加券商。</p>}
-      <div className="allocation-position-list">{data.positions.map(p => <label key={p.id} className="allocation-checkbox"><input type="checkbox" checked={selected.has(p.id)} onChange={e => setSelected(prev => { const next = new Set(prev); if (e.target.checked) next.add(p.id); else next.delete(p.id); return next; })} /><span><span className="flex items-center gap-1.5"><b>{p.name}</b>{p.market && <MarketCodeBadge market={p.market} code={p.code} />}</span><small>{p.code} · {p.currency} · {data.brokers.find(b => b.id === p.brokerId)?.name || "未归属"}</small></span></label>)}</div>
+      <div className="allocation-position-list">{data.positions.map(p => <label key={p.id} className="allocation-checkbox"><input type="checkbox" checked={selected.has(p.id)} onChange={e => setSelected(prev => { const next = new Set(prev); if (e.target.checked) next.add(p.id); else next.delete(p.id); return next; })} /><span><span className="flex items-center gap-1.5"><b>{p.name}</b>{p.market && <MarketCodeBadge alwaysVisible market={p.market} code={p.code} />}</span><small>{p.code} · {p.currency} · {data.brokers.find(b => b.id === p.brokerId)?.name || "未归属"}</small></span></label>)}</div>
       </fieldset>
       {error && <p className="allocation-error" role="alert">{error}</p>}
       <div className="mt-5 flex justify-end gap-2.5"><button type="button" className="allocation-button" disabled={saving} onClick={onClose}>取消</button>{uncertain ? <button type="button" className="allocation-button is-primary" disabled={saving} onClick={async () => { setSaving(true); if (await onReload()) onClose(); setSaving(false); }}>{saving ? "读取中…" : "重新读取"}</button> : <button type="button" className="allocation-button is-primary" disabled={saving || !selected.size || !broker || selected.size > 200} onClick={() => void save()}>{saving ? "关联中…" : `关联${selected.size ? ` ${selected.size} 项` : ""}`}</button>}</div>
@@ -271,7 +276,7 @@ export default function AssetAllocationView({ initial }: { initial?: AllocationS
       </table></div></div>
     </> : !error && <div className="allocation-loading" role="status">正在关联账户…</div>}
     {banksOpen && data && <BankCards data={data} hidden={hidden} onClose={() => setBanksOpen(false)} onEdit={account => { setBanksOpen(false); setEditing(account); }} />}
-    {editing !== undefined && data && <AccountEditor account={editing} accountId={data.accountId} currency={data.currency} onClose={() => setEditing(undefined)} onReload={() => refresh("mutation")} onSaved={() => { window.dispatchEvent(new Event("fire:allocation-updated")); }} />}
+    {editing !== undefined && data && <AccountEditor account={editing} positions={data.positions} accountId={data.accountId} currency={data.currency} onClose={() => setEditing(undefined)} onReload={() => refresh("mutation")} onSaved={() => { window.dispatchEvent(new Event("fire:allocation-updated")); }} />}
     {assigning && <BrokerAssignment data={assigning} onClose={() => setAssigning(null)} onReload={() => refresh("mutation")} onSaved={() => { window.dispatchEvent(new Event("fire:records-updated")); }} />}
   </section>;
 }

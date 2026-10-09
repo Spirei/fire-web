@@ -1021,6 +1021,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         </div>
         <div className="mx-auto max-w-[520px]">
           <StockSearch rainbow large onSelect={handleSelect} onCameraClick={() => setImportOpen(true)} placeholder="如：腾讯 / 00700 / AAPL / 茅台" />
+          <p className="mt-2 text-xs text-muted">搜索全部市场，添加后按选中股票的市场自动归类。</p>
         </div>
       </div>
 

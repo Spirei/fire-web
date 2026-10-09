@@ -54,6 +54,13 @@ async function test(name, fn) { await fn(); checks++; console.log('PASS ' + name
   assert(h.client.validAllocationSnapshot({ ...s, accounts: [{ ...s.accounts[0], currency: 'UNKNOWN', value: null }], summary: { ...s.summary, complete: false, netAsset: null } }, 'USD', 'owner'), 'unknown source currency remains visible with missing valuation');
   for (const bad of [{ ...s, currency: 'CNY' }, { ...s, accountId: 'foreign' }, { ...s, summary: { ...s.summary, netAsset: NaN } }, { ...s, bankSummary: { ...s.bankSummary, value: undefined } }, { ...s, categories: s.categories.slice(1) }, { ...s, accounts: [s.accounts[0], s.accounts[0]] }, { ...s, snapshotRevision: 'not-a-revision' }]) assert(!h.client.validAllocationSnapshot(bad, 'USD', 'owner'));
  });
+ await test('account-position links reject misplaced, missing and duplicate holdings while retaining old market-less snapshots', async () => {
+  const h=harness(),s=snapshot(),a={...s.accounts[0],recordIds:['record-cn']},p={id:'record-cn',name:'Baosteel',code:'600019',market:'CN',currency:'CNY',brokerId:null,revision:0,accountId:a.id};
+  const linked={...s,accounts:[a],positions:[p]};assert(h.client.validAllocationSnapshot(linked,'USD','owner'));
+  const {market,...legacy}=p;assert(h.client.validAllocationSnapshot({...linked,positions:[legacy]},'USD','owner'));
+  for(const bad of [{...linked,positions:[{...p,accountId:'another'}]},{...linked,positions:[]},{...linked,accounts:[{...a,recordIds:[]}]},{...linked,accounts:[{...a,recordIds:[p.id,p.id]}]},{...linked,positions:[{...p,market:123}]}]) assert(!h.client.validAllocationSnapshot(bad,'USD','owner'));
+  h.close();
+ });
  await test('conditional read binds owner/currency, preserves snapshot identity and validates 304 headers', async () => {
   const h = harness(), s = snapshot(), p = h.client.readAllocation('USD', s); h.reply(0, s, 304); const result = await p;
   assert.equal(result.snapshot, s); assert.equal(result.checkedAt, '2026-10-07T12:01:00.000Z'); assert.equal(h.requests[0].init.headers['X-Allocation-User'], 'owner'); assert.equal(h.requests[0].init.headers['If-None-Match'], `W/"${s.snapshotRevision}"`);

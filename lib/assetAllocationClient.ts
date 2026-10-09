@@ -41,6 +41,12 @@ export function validAllocationSnapshot(value: unknown, currency: string, owner?
   if (!Array.isArray(positions) || !positions.every(p => object(p) && typeof p.id === "string" && typeof p.name === "string"
     && typeof p.code === "string" && (p.market === undefined || typeof p.market === "string" && !!p.market) && typeof p.currency === "string" && (p.brokerId === null || typeof p.brokerId === "string")
     && count(p.revision) && typeof p.accountId === "string") || !unique(positions)) return false;
+  // A badge must describe the same positions that contribute to this account.
+  const accountById = new Map(accounts.map(a => [a.id, a]));
+  const positionById = new Map(positions.map(p => [p.id, p]));
+  if (positions.some(p => !accountById.get(p.accountId)?.recordIds.includes(p.id))
+    || accounts.some(a => new Set(a.recordIds).size !== a.recordIds.length
+      || a.recordIds.some((id: string) => positionById.get(id)?.accountId !== a.id))) return false;
   return Array.isArray(brokers) && brokers.every(b => object(b) && typeof b.id === "string" && typeof b.name === "string" && typeof b.icon === "string") && unique(brokers)
     && Array.isArray(issues) && issues.every(i => object(i) && typeof i.code === "string" && strings(i.accountIds) && typeof i.message === "string");
 }

@@ -583,6 +583,15 @@ try {
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM celebs').get().n,before);
     db.close();
   });
+  test('reconciliation market badges remain visible while ordinary badges respect global hiding',()=>{
+    const badges=require(path.join(root,'lib/marketBadge.ts'));
+    try {
+      badges.applyMarketBadges(undefined,false);
+      assert.equal(render('components/MarketCodeBadge.tsx',{market:'CN',code:'600019'}),'');
+      const html=render('components/MarketCodeBadge.tsx',{market:'CN',code:'600019',alwaysVisible:true});
+      assert(html.includes('SH 市场'));assert(html.includes('>SH<'));
+    } finally { badges.applyMarketBadges(undefined,true); }
+  });
   console.log(`${passed} first-frame suites passed (no browser effects or real data writes)`);
   if(failures) process.exitCode=1;
 } finally { fs.rmSync(temp,{recursive:true,force:true}); }

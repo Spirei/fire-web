@@ -124,16 +124,20 @@ function styleOf(key: string): MarketBadgeStyle {
   return applied[key] || DEFAULT_MARKET_BADGES[key] || DEFAULT_MARKET_BADGES.OTHER;
 }
 
-/** 市场色块（资产分析-分享页-持仓列表 同款，全局统一） */
-export function getMarketBadge(market: string, code: string): MarketBadgeStyle {
+/** Stable identity shared by badge rendering and account-level deduplication. */
+export function marketBadgeKey(market: string, code: string): string {
   const m = market.toUpperCase();
-  if (m === "US") return styleOf("US");
-  if (m === "HK") return styleOf("HK");
   if (m === "CN") {
     const first = code.replace(/^\D+/, "").charAt(0);
-    return styleOf(first === "6" || first === "9" ? "SH" : "SZ");
+    return first === "6" || first === "9" ? "SH" : "SZ";
   }
-  if (m === "ASSET" || m === "CRYPTO") return styleOf("CRYPTO");
+  return m === "ASSET" || m === "CRYPTO" ? "CRYPTO" : m;
+}
+
+/** 市场色块（资产分析-分享页-持仓列表 同款，全局统一） */
+export function getMarketBadge(market: string, code: string): MarketBadgeStyle {
+  const m = marketBadgeKey(market, code);
+  if (["US", "HK", "SH", "SZ", "CRYPTO"].includes(m)) return styleOf(m);
   if (applied[m] || DEFAULT_MARKET_BADGES[m]) {
     const style = styleOf(m);
     return { ...style, label: style.label || m };
