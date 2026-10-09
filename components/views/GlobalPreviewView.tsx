@@ -14,6 +14,9 @@ import { IconArrowsExchange, IconChartHistogram, IconCalendarPause, IconBox } fr
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { sharedRead } from "@/lib/sharedRead";
 import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
+import dynamic from "next/dynamic";
+import { IconHierarchy2 } from "@tabler/icons-react";
+const AssetAllocationView = dynamic(() => import("./AssetAllocationView"));
 
 interface TopAsset {
   market: string;
@@ -419,22 +422,24 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   );
 }
 
-type GlobalSection = "assets" | "convert" | "calendar";
+type GlobalSection = "allocation" | "assets" | "convert" | "calendar";
 
 const GLOBAL_SECTIONS: [GlobalSection, string, string][] = [
+  ["allocation", "资产配置", "账户关联与资产分布"],
   ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
   ["convert", "汇率换算", "输入金额，按当前汇率换算其他货币"],
   ["calendar", "休市日历", "A 股、港股及美股全年交易与休市安排"]
 ];
 
 const SECTION_ICONS = {
+  allocation: IconHierarchy2,
   assets: IconChartHistogram,
   convert: IconArrowsExchange,
   calendar: IconCalendarPause
 } as const;
 
 function parseGlobalSection(value: string | null): GlobalSection {
-  if (value === "convert" || value === "calendar") return value;
+  if (value === "allocation" || value === "convert" || value === "calendar") return value;
   return "assets";
 }
 
@@ -482,7 +487,7 @@ export default function GlobalPreviewView({ pageSize, initialNow, onOpenPool }: 
         <button type="button" className="global-section-button" onClick={onOpenPool} onPointerEnter={() => { void import("@/components/views/QuotePoolView"); }} aria-label="股票池"><IconBox className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" /><span>股票池</span></button>
       </nav>
       <div key={section} className="global-section-panel">
-        {section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
+        {section === "allocation" ? <AssetAllocationView /> : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
       </div>
     </div>
   );

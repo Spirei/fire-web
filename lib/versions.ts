@@ -4853,9 +4853,9 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_51_ENTRY,
   version: "v0.1.54",
   date: "2026-10-09",
-  summary: "功能代码恢复至80b6800，暂停APNs开发并撤回此基线之后的功能变更。",
+  summary: "恢复指定功能基线，单独补回资产配置并修复改名后的汇总金额。",
   software: V0_1_51_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.54" } : item),
-  changes: [{ kind: "fix", title: "恢复指定代码基线", desc: "按要求恢复80b6800的功能代码，撤回后续资产配置、App订单扩展及尚未提交的现金计算修改；APNs暂不接入。保留数据库、上传文件、持久化目录及Git历史，回退不删除用户数据。版本标记保留当前日期以记录本次恢复，不代表保留回退后的新功能。" }]
+  changes: [{ kind: "fix", title: "恢复资产配置并修复改名后总额消失", desc: "在已恢复的80b6800功能基线上单独补回资产配置入口、页面及Web/v1/v2接口，保留其余回退结果。只改名称或计入状态时保留自动金额，避免行情变化后误触发现金重复检查并清空汇总；已受影响账户恢复自动关联时保留新名称。真实金额核对、重复现金保护、权限与版本校验继续生效，旧核对记录不自动改写，补充隔离数据库和客户端回归。" }, { kind: "fix", title: "恢复指定代码基线", desc: "按要求恢复80b6800的功能代码，撤回后续资产配置、App订单扩展及尚未提交的现金计算修改；APNs暂不接入。保留数据库、上传文件、持久化目录及Git历史，回退不删除用户数据。版本标记保留当前日期以记录本次恢复，不代表保留回退后的新功能。" }]
 };
 
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;

@@ -161,28 +161,54 @@ function cardMetaMap(): Map<string, { type: string; region: string }> {
  * 卡币种取值顺序与卡包 / 卡面库一致（金额上记的币种 → 卡背信息里的币种 → 地区默认币种），
  * 保证「卡包上显示的这个余额」和「算进现金的这个余额」是同一笔、同一币种。
  */
-export function cardCashByCurrency(userId: string, strict = false): Record<string, number> {
+/** Account-level balance projection; card numbers and security fields never leave this service. */
+export function cardCashAccounts(userId: string, strict = false, includeUnrecorded = false) {
   const meta = cardMetaMap();
-  const customMeta = new Map(listCustomCards(userId).map(card => [card.image, { type: card.type, region: card.region }]));
+  const customMeta = new Map(listCustomCards(userId).map(card => [card.image, { type: card.type, region: card.region, name: card.name }]));
   const held = new Set(listCardHoldings(userId));
   const details = listCardDetails(userId);
-  const out: Record<string, number> = {};
-  listCardAmounts(userId).forEach((amount) => {
+  const names = new Map<string, string>();
+  for (const region of readCardManifest()?.regions ?? []) {
+    for (const bank of (region as { banks?: { name?: string; cards?: { file: string; name?: string }[] }[] }).banks ?? []) {
+      for (const card of bank.cards ?? []) names.set(card.file, [bank.name, card.name].filter(Boolean).join(" · "));
+    }
+  }
+  const out: { id: string; name: string; currency: string; amount: number; updatedAt: string }[] = [];
+  const amounts = listCardAmounts(userId);
+  amounts.forEach((amount) => {
     if (!held.has(amount.cardKey)) return;
     const info = meta.get(amount.cardKey) || customMeta.get(amount.cardKey);
-    if (strict && !info && Number(amount.amount) !== 0) { out.UNKNOWN = Number.NaN; return; }
+    const add = (currency: string, value: number) => out.push({ id: amount.cardKey, name: customMeta.get(amount.cardKey)?.name || names.get(amount.cardKey) || "银行卡", currency, amount: value, updatedAt: amount.updatedAt });
+    if (strict && !info && Number(amount.amount) !== 0) { add("UNKNOWN", Number.NaN); return; }
     if (!CASH_CARD_TYPES.has(info?.type ?? "")) return;
     const currency = String(
       amount.currency || details[amount.cardKey]?.currency || REGION_CURRENCY[info?.region ?? ""] || ""
     ).toUpperCase();
     if (!RATE_CURRENCIES.has(currency)) {
-      if (strict && Number(amount.amount) !== 0) out[currency || "UNKNOWN"] = Number.NaN;
+      if (strict && Number(amount.amount) !== 0) add(currency || "UNKNOWN", Number.NaN);
       return;
     }
     const value = Number(amount.amount) || 0;
-    if (!value) return;
-    out[currency] = (out[currency] || 0) + value;
+    add(currency, value);
   });
+  if (includeUnrecorded) {
+    const recorded = new Set(amounts.map(a => a.cardKey));
+    for (const id of held) {
+      const info = meta.get(id) || customMeta.get(id);
+      if (recorded.has(id) || !CASH_CARD_TYPES.has(info?.type ?? "")) continue;
+      const currency = String(details[id]?.currency || REGION_CURRENCY[info?.region ?? ""] || "UNKNOWN").toUpperCase();
+      out.push({ id, name: customMeta.get(id)?.name || names.get(id) || "银行卡", currency, amount: Number.NaN, updatedAt: "" });
+    }
+  }
+  return out;
+}
+
+export function cardCashByCurrency(userId: string, strict = false): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const account of cardCashAccounts(userId, strict)) {
+    if (account.amount === 0) continue;
+    out[account.currency] = (out[account.currency] || 0) + account.amount;
+  }
   return out;
 }
 
