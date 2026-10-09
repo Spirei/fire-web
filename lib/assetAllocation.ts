@@ -68,7 +68,7 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
         if (!valid) { issues.push({ code: "ledger_item_invalid", accountIds: [], message: "简化账本有无法核算的条目" }); continue; }
         const id = `ledger:${key}:${stable(item.id)}`;
         if (accounts.some(a => a.id === id)) { issues.push({ code: "ledger_item_invalid", accountIds: [id], message: "简化账本存在重复账户标识" }); continue; }
-        if (key === "invest" && "market" in item && item.market) continue; // Linked equities are already in reconciled cash.
+        if (key === "invest" && "market" in item && item.market) continue; // Imported total equities are not cash and cannot be added to the same positions.
         add({ id, name: item.name || ALLOCATION_LABELS[category], kind: "ledger", category, currency: item.cur.toUpperCase(), amount: item.amount, source: "/simple-app" });
       }
     }

@@ -52,7 +52,7 @@ v1 的所有路径替换为 `/api/v1`。新私有接口仅 App Bearer，Cookie �
 
 - `schemaVersion:1, accountId, profile:{accountId,username,nickname,uid,avatar}, collectionRevision, snapshotRevision, asOf, currency, options:{currency,costMethod,usPrice}`。
 - `summary:{totalMarket,totalCost,holdingPnl,totalCash,totalAsset,holdingsComplete,costComplete,cashComplete,totalAssetComplete,dayPnl,dayPnlPct,dayPnlUnavailableReason,unconvertedCurrencies}`。金额为 currency，百分比为百分数。未知项 null；有不完整持仓时总市值和总资产 null，不能显示部分和当完整总额。无持仓的真实零与未知分开。
-- `cash:{balancesByCurrency:object|null,complete,source:"account_cash_reconciliation",marketAllocationAvailable:false}`。含 Web 同口径真实资金流水、成交现金和借记/预付卡现金；有来源不足、未知证券单位的成交或缺汇率则不完整。未声明旧记录的成交沿用原台账单位；现金只有币种归集；USD 不等于美股市场现金，不分摊至市场。
+- `cash:{balancesByCurrency:object|null,complete,source:"recorded_cash_ledger",marketAllocationAvailable:false}`。含 Web 同口径真实资金流水、成交现金和借记/预付卡现金；有来源不足、未知证券单位的成交或缺汇率则不完整。未声明旧记录的成交沿用原台账单位；现金只有币种归集；USD 不等于美股市场现金，不分摊至市场。
 - `positions:[]` 全量本人记录，含 active 标记，便于客户端固定持仓分组、多市场/退市/清仓筛选。每行 `recordId,recordRevision,name,code,market,broker,currency,instrument,valuationBasis,valuationUnitMultiplier,qty,price,priceSource,priceAt,quoteSession,quoteSource,quoteCached,cost,dilutedCost,averageOpenCost,costMethod,averageCostComplete,costUnavailableReason,cycleStartedAt,nativeMarketValue,nativeCostValue,nativeHoldingPnl,valuationCurrency,marketValue,costValue,holdingPnl,holdingPnlPct,dayPnl,dayPnlPct,dayPnlUnavailableReason,weightPct,clearedAt,clearedToday,active,valuationComplete,rawRecord`。nativeMarketValue 原币，marketValue/costValue/holdingPnl 为显示币种；qty/price/cost 为原记录单位及原币单价。`rawRecord` 与原 records 模型相同。
 - `instrument:{kind:"cash_equity"|"etf"|"unknown",listingStatus:"listed"|"delisted"|"unknown",multiplier:1|null,underlyingRecordId:null,source:"owner_declared"|"unavailable",revision,identityMatches,updatedAt}`。旧记录不自动猜类型；没有声明行时沿用原 records/overview 的记录单位记账，类型仍 unknown。本人显式声明 unknown 或已作废的声明行仍阻断估值，不覆盖其意图。代码/市场被改后旧声明失效，需新 recordRevision 再确认。名称不推断 ETF、期权或退市状态。
 - `markets:[]` 含有活跃持仓或今日订单的市场：`market,currency,valuationCurrency,nativeMarketValue,nativeHoldingPnl,date,timeZone,positionCount,marketValue,holdingPnl,cash:null,cashUnavailableReason,dayPnl:null,sessionStatus:"unknown"`。currency 标原市场结算币种；valuationCurrency 等于顶层 currency，marketValue/holdingPnl 均为该显示币种；nativeMarketValue/nativeHoldingPnl 为currency原币。空市场与未知市场不伪造现金。
@@ -79,7 +79,7 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
 
 ## 实際来源及待补
 
-现有来源：records + revisions；trade_orders 成交/费用/快照；fund_transactions + card balances + simple-ledger 主市场权益现金对账；真实行情及汇率。没有新建成交台账，也没有历史回填。
+现有来源：records + revisions；trade_orders 成交/费用/快照；fund_transactions + card balances + simple-ledger 导入权益完整性检查（不从权益反推现金）；真实行情及汇率。没有新建成交台账，也没有历史回填。
 
 尚缺来源：经核对的历史日初 NAV/持仓现金流、每市场券商现金子账户、供应商证券分类/退市状态、期权乘数/标的/合约身份/成交记账、常规与扩展报价独立快照、完整交易周期日初基准。这些能力发现均为 false/限定能力；iOS 应显示缺失或隐藏不支持操作。生产尚未发布；完成测试并推送后更新本文件状态。
 
@@ -100,6 +100,9 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
   "automatic_mutation_replay": false,
   "features": {
     "cash_by_currency": true,
+    "cash_price_independent": true,
+    "cash_valuation": "recorded_cash_ledger_price_independent",
+    "imported_equity_requires_opening_cash": true,
     "cash_by_market": false,
     "today_orders": true,
     "order_reads_settle": false,
@@ -152,3 +155,19 @@ positions.weightPct 分母为**全账户所有 active 持仓的完整显示币�
 count 为当天所有以上状态的 items 总数，dividend 也计入真实记账条目。如 App 只展示 status=filled，自行过滤并标为“成交条数”；空态仅证明没有记录的当日订单。策略字段保留真实台账值，App 不需要策略入口。
 
 其他数值：qty/price/cost/dilutedCost/averageOpenCost 和金额为number|null，revision/recordRevision/collectionRevision/positionCount/count 为整数；asOf/updatedAt/cycleStartedAt/clearedAt/priceAt 为string|null（asOf必有ISO UTC，priceAt保持行情源原文，可能是交易所本地时间）；timeZone为IANAstring|null、date为YYYY-MM-DD|null，完整性为boolean。
+
+## 报价独立现金修正（2026-10-09，冻结；待发布）
+
+本节已从c8f607e隔离修复合入c48ad2b主线，待发布和部署。保留主线已恢复的资产配置，订单扩展与APNs仍保持撤回状态。旧80b6800/c8f607e及旧cash.sourceComplete=true可能仍是“导入权益减当前市值”的残差，不能作为独立现金。新同源发现明确新增可选 `account_assets.features.cash_price_independent=true`，以及cash_valuation=recorded_cash_ledger_price_independent、imported_equity_requires_opening_cash=true。缺省/false不得启用本机NAV投影；schemaVersion、API版本、权限和账号身份不变，overview/account-assets同源口径。
+
+现金只取已记录资金台账（期初、收支、调整及内部卡转账）+真实filled订单的有符号成交现金流+已记录借记/预付卡余额。自动订单流水不重复计入，pending/cancelled/expired不扣现金；买入扣成交金额及费用，卖出/股息加净回款，允许负现金。现金不是券商直连认证余额，不把独立于报价等同外部机构核验；只证明本站已有台账可核算。当前价格、持仓市值、当日盈亏、投资权益、证券名称不参与现金推算。
+
+旧简化账本正数且有market关联的invest.amount是总权益，不是期初现金。若其结算币种没有本人明确记录的资金type=opening，缺少现金基线；有入金/银行卡余额也不能从权益补造剩余现金。受影响币种为缺失（内部NaN、JSON null），现金整体sourceComplete=false/nativeBalancesByCurrency=null/summary.totalCash=null/totalAsset=null，仍保留真实持仓市值。对应unavailableReasons含missing_explicit_opening_cash_for_imported_equity及missingOpeningCurrencies。读取不自动补期初、改流水、迁移权益或冻结上一轮反推余额。用户需核对其账户完整现金台账后明确记录期初现金；不能把导入总权益直接录成期初现金。其他损坏来源、未知卡币种或订单单位无法核对仍返回缺失。不存在导入权益时沿用本站资金台账的记录净额与真实空账零，不声称证明外部未记录账户不存在。
+
+account-assets.cash保留原字段，source改为recorded_cash_ledger，新增valuationIndependent=true、unavailableReasons:string[]、missingOpeningCurrencies:string[]。sourceComplete=true只允许独立现金来源、已成交单位及有限余额均有效；缺汇率不隐藏已确认原币现金。overview新增cashSource=recorded_cash_ledger、cashValuationIndependent=true、cashSourceComplete、cashUnavailableReasons、missingOpeningCashCurrencies，现金/总资产仍按完整性返回null。cash_price_independent是服务器算法能力，不代表任意账号当前现金完整。
+
+App本机投影只能在同源所选API/grant/account、安全凭据代次一致、新发现cash_price_independent=true、cash.sourceComplete=true、valuationIndependent=true、source=recorded_cash_ledger且原币现金全部有效时使用；新报价还需持仓身份/recordRevision/数量、估值单位、市场币种与原币汇率校验，缺任一输入保持缺失。不得从盈亏差额拼NAV，不把报价更新当作现金观察更新。现金asOf沿用服务端快照观察时间，不伪造最新时间；仅报价变化现金保持同一个已确认值，NAV随真实市值变化。
+
+来源/授权/API版本/账号/安全凭据或缓存代次变化立即使旧现金失效；已知收支、成交、现金记录修改后必须重新读取确认，不能复用变更前现金。新响应sourceComplete=false或null、缺失/不符来源或能力撤销时立即撤掉旧完整总额，禁止以缓存113580.83兜底。异步返回保持请求代次顺序，不能旧响应覆盖新现金。报价/记录/现金/汇率任务可分别更新；客户端需明确现金观察时间与有效性，独立任务本身不延长现金有效期。后续来源规则变化须新发现或合同约束，不让旧能力true绕过新缺失状态。
+
+本轮不修改iOS源码/版本、不自动发布生产。待批准并部署后以health真实buildSha与同源能力核验，再由iOS既有授权只读核对现金不反变与资产响应；此前在线113580.83现象不作为修正已上线的证据。

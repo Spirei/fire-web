@@ -56,17 +56,18 @@ async function test(name,run) { rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.
     const f=fixture(); funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'withdrawal',amount:150,direction:-1});
     const result=await overview(f); assert.equal(result.totalCash,-41); assert.equal(result.totalAsset,-21); assert.equal(result.totalPnl,10);
   });
-  await test('simple primary equity and card cash match Web without summing other brokers',async()=>{
-    const f=fixture(); simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{market:'US',cur:'USD',amount:90},{market:'US',cur:'USD',amount:10},{market:'HK',cur:'HKD',amount:5000},{market:'',cur:'USD',amount:99999}]});
-    const result=await overview(f); assert.equal(result.totalMarket,20); assert.equal(result.totalCash,79); assert.equal(result.totalAsset,99);
-    const snapshot=cashStore.readAccountCash(f.user.id), balances=cash.reconcileAccountCash(snapshot.balances,snapshot.cardCash,snapshot.investmentEquities,{US:20});
-    assert.equal(cash.accountTotals(20,balances,rates,'USD').totalAsset,result.totalAsset);
-    quotes={[f.record.id]:{price:30,time:'2026-10-01T00:00:00Z'}};
-    const next=await overview(f); assert.equal(next.totalMarket,60); assert.equal(next.totalCash,39); assert.equal(next.totalAsset,99,'equity-derived cash is not blindly added to a new holdings price');
+  await test('linked imported equity never reverse-infers cash; missing opening is unavailable',async()=>{
+    const f=fixture(); simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{market:'US',cur:'USD',amount:90},{market:'US',cur:'USD',amount:10},{market:'',cur:'USD',amount:99999}]});
+    const before=businessSnapshot(), result=await overview(f);assert.equal(result.totalMarket,20);assert.equal(result.totalCash,null);assert.equal(result.totalAsset,null);assert.equal(result.cashSourceComplete,false);assert.deepEqual(result.missingOpeningCashCurrencies,['USD']);
+    quotes={[f.record.id]:{price:30,time:'2026-10-09T00:00:00Z'}};const next=await overview(f);assert.equal(next.totalMarket,60);assert.equal(next.totalCash,null);assert.equal(next.totalAsset,null);assert.deepEqual(businessSnapshot(),before);
+    funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'opening',amount:50,direction:1});
+    const funded=await overview(f);assert.equal(funded.totalCash,159);assert.equal(funded.totalAsset,219);quotes={[f.record.id]:{price:40,time:'2026-10-09T00:01:00Z'}};const moved=await overview(f);assert.equal(moved.totalCash,159);assert.equal(moved.totalAsset,239);assert.equal(moved.cashValuationIndependent,true);
+    funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:5,direction:1});assert.equal((await overview(f)).totalCash,164);
+    const snapshot=cashStore.readAccountCash(f.user.id);assert.equal(cash.accountTotals(80,snapshot.balances,rates,'USD').totalAsset,244);
   });
   await test('wrong-currency equity cannot override another settlement balance',async()=>{
     const f=fixture(); simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{market:'US',cur:'HKD',amount:9000}]});
-    const result=await overview(f); assert.equal(result.totalCash,109); assert.equal(result.totalAsset,129);
+    const result=await overview(f); assert.equal(result.totalCash,null); assert.equal(result.totalAsset,null);
   });
   await test('filled order cash is derived read-only; pending, cancelled and stale auto rows do not inflate cash',async()=>{
     const f=fixture(), orders=load('lib/orders.ts');

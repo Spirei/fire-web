@@ -91,7 +91,18 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
  });
  await test('complete discovery fixture exactly matches the frozen JSON contract',async()=>{
   const blocks=[...fs.readFileSync(path.join(root,'docs/native-account-assets-contract.md'),'utf8').matchAll(/```json\n([\s\S]*?)\n```/g)];
-  const frozen=JSON.parse(blocks[blocks.length-1][1]);assert.deepEqual(load('lib/appAssetsConfig.ts').assetsDiscovery(2),frozen);
+  const frozen=blocks.map(b=>JSON.parse(b[1])).find(b=>b.snapshot_path&&b.features);assert.deepEqual(load('lib/appAssetsConfig.ts').assetsDiscovery(2),frozen);
+ });
+ await test('independent cash gate, price-only NAV, actual flows and imported opening omissions agree across v1/v2',async()=>{
+  const f=fixture(),r=record(f),simple=load('lib/simpleStore.ts');simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{id:'import',market:'US',cur:'USD',amount:500}]});
+  funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});
+  const before=snapshot();for(const v of [1,2]){let s=(await call(v,f)).data.data;assert.equal(s.summary.totalMarket,20);assert.equal(s.summary.totalAsset,null);assert.equal(s.cash.sourceComplete,false);assert.equal(s.cash.nativeBalancesByCurrency,null);assert.deepEqual(s.cash.missingOpeningCurrencies,['USD']);assert.equal(s.cash.valuationIndependent,true);}
+  assert.deepEqual(snapshot(),before);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'opening',amount:50,direction:1});
+  for(const v of [1,2]){quotes={[r.id]:{price:10,time:'2026-10-09T00:00:00Z'}};const a=(await call(v,f)).data.data;quotes={[r.id]:{price:30,time:'2026-10-09T00:01:00Z'}};const b=(await call(v,f)).data.data;assert.equal(a.cash.nativeBalancesByCurrency.USD,150);assert.equal(b.cash.nativeBalancesByCurrency.USD,150);assert.equal(b.summary.totalAsset-a.summary.totalAsset,40);assert.equal(b.cash.source,'recorded_cash_ledger');}
+  const bought=orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:1,price:12,fees:2}).order;let s=(await call(1,f)).data.data;assert.equal(s.cash.nativeBalancesByCurrency.USD,136);quotes={[r.id]:{price:40,time:'2026-10-09T00:02:00Z'}};assert.equal((await call(2,f)).data.data.cash.nativeBalancesByCurrency.USD,136);
+  orders.executeOrder({userId:f.user.id,recordId:r.id,side:'sell',qty:1,price:20,fees:1});assert.equal((await call(1,f)).data.data.cash.nativeBalancesByCurrency.USD,155);
+  funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'withdrawal',amount:5,direction:-1});assert.equal((await call(2,f)).data.data.cash.nativeBalancesByCurrency.USD,150);
+  db.prepare("DELETE FROM fund_transactions WHERE user_id=? AND type='opening'").run(f.user.id);s=(await call(2,f)).data.data;assert.equal(s.cash.sourceComplete,false);assert.equal(s.summary.totalAsset,null);assert(s.summary.totalMarket>0);
  });
  await test('original market amounts and account-wide weights never use the display currency label',async()=>{
   const f=fixture(),us=record(f),hk=record(f,{code:'HKFIX',market:'HK',qty:7,price:10,cost:5});await classify(f,us);await classify(f,hk,{kind:'etf'});
@@ -104,9 +115,10 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
   const reply=await load('app/api/v1/account-assets/instruments/[recordId]/route.ts').GET(request(1,f,'/instruments/'+r.id),{params});assert.equal(reply.status,401);
   const g=fixture(),rr=record(g);const replies=await Promise.all([1,2].map(v=>call(v,g,'/instruments/'+rr.id,'PUT',declare(g,rr))));assert.deepEqual(replies.map(r=>r.status).sort(),[200,409]);
  });
- await test('missing FX preserves trustworthy native cash including equity reconciliation',async()=>{
+ await test('missing FX preserves independently recorded native cash, not imported equity residual',async()=>{
   const f=fixture(),r=record(f,{market:'HK',qty:7,price:100});await classify(f,r);
   const simple=load('lib/simpleStore.ts');simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{market:'HK',cur:'HKD',amount:1400}]});
+  funds.createFundTransaction({userId:f.user.id,currency:'HKD',type:'opening',amount:700,direction:1});
   delete rates.HKD;
   for(const v of [1,2]){const s=(await call(v,f)).data.data;assert.equal(s.cash.sourceComplete,true);assert.equal(s.cash.nativeBalancesByCurrency.HKD,700);assert.equal(s.cash.complete,false);assert.equal(s.cash.balancesByCurrency,null);assert.equal(s.summary.totalCash,null);assert.equal(s.positions[0].valuationUnavailableReason,'missing_exchange_rate');}
  });

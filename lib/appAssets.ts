@@ -159,8 +159,7 @@ export function buildAssets(userId: string, profile: { username: string; nicknam
   const positionByRecord = new Map(positions.map(p => [p.recordId, p]));
   const unitsComplete = orders.filter(o => o.status === "filled").every(o => { const p = positionByRecord.get(o.recordId); return p && p.valuationUnitMultiplier === 1 && p.currency !== null && p.market === o.market && p.code === o.code; });
   const balances = reconcileAccountCash(cash.balances, cash.cardCash, cash.investmentEquities, nativeHoldings);
-  const linkedComplete = cash.investmentEquities.every(e => !active.some(p => p.market === e.market && p.nativeMarketValue === null));
-  const cashSourceComplete = cash.sourceComplete && unitsComplete && linkedComplete && Object.values(balances).every(Number.isFinite);
+  const cashSourceComplete = cash.sourceComplete && unitsComplete && Object.values(balances).every(Number.isFinite);
   const totals = accountTotals(totalMarket ?? Number.NaN, balances, rates, options.currency, holdingComplete, cashSourceComplete);
   if (totalMarket !== null && totalMarket !== 0) for (const p of positions) if (p.marketValue !== null) p.weightPct = round(monetary.get(p.recordId)!.market! / totalMarket * 100);
   const todayOrders = orders.filter(o => orderDates.get(o.id) !== null && orderDates.get(o.id) === localToday.get(o.market)).map(o => {
@@ -179,7 +178,7 @@ export function buildAssets(userId: string, profile: { username: string; nicknam
     currency: options.currency, options, summary: { totalMarket: round(totalMarket), totalCost: round(totalCost), holdingPnl: totalMarket !== null && totalCost !== null ? round(totalMarket - totalCost) : null,
       totalCash: round(totals.totalCash), totalAsset: round(totals.totalAsset), holdingsComplete: holdingComplete, costComplete, cashComplete: totals.cashComplete,
       totalAssetComplete: totals.totalAssetComplete, dayPnl: null, dayPnlPct: null, dayPnlUnavailableReason: "missing_verified_account_day_opening_nav", unconvertedCurrencies: [...new Set([...totals.unconvertedCurrencies, ...active.filter(p => !p.currency || !Number.isFinite(rates[p.currency]) || rates[p.currency] <= 0).map(p => p.currency ?? `UNKNOWN:${p.market}`)])].sort() },
-    cash: { nativeBalancesByCurrency: cashSourceComplete ? balances : null, sourceComplete: cashSourceComplete, balancesByCurrency: totals.cashComplete ? balances : null, complete: totals.cashComplete, source: "account_cash_reconciliation", marketAllocationAvailable: false },
+    cash: { nativeBalancesByCurrency: cashSourceComplete ? balances : null, sourceComplete: cashSourceComplete, balancesByCurrency: totals.cashComplete ? balances : null, complete: totals.cashComplete, source: "recorded_cash_ledger", valuationIndependent: true, unavailableReasons: [...(cash.unavailableReasons ?? []), ...(!unitsComplete ? ["unverified_order_cash_units"] : [])], missingOpeningCurrencies: cash.missingOpeningCurrencies ?? [], marketAllocationAvailable: false },
     markets, positions, todayOrders: { items: todayOrders, count: todayOrders.length, available: true, emptyReason: todayOrders.length ? null : "no_recorded_orders_today",
       dateBasis: "exchange_local_calendar_date", timeZones: assetTimeZones, unknownDateOrderIds: orders.filter(o => orderDates.get(o.id) === null).map(o => o.id), settlesPendingOrders: false },
     unavailable: ["account_day_pnl", "position_day_pnl", "market_cash", "derivative_valuation", "underlying_merge", "verified_live_market_status"] };

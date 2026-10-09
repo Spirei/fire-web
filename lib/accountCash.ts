@@ -2,9 +2,6 @@ import { MARKET_CURRENCY } from "./currency";
 import type { Quote, StockRecord } from "./types";
 
 export const ACCOUNT_MARKET_CURRENCY: Record<string, string> = { ...MARKET_CURRENCY, ASSET: "USD" };
-// Preserve the existing linked-account rule: only these imported markets have a
-// one-account position ledger. Unimported brokers must not be silently added.
-const EQUITY_CURRENCY: Record<string, string> = { US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW" };
 export interface InvestmentEquity { market: string; cur: string; amount: number }
 export interface AccountCashSnapshot {
   /** Includes card cash once, just like /funds.balances. */
@@ -12,6 +9,8 @@ export interface AccountCashSnapshot {
   cardCash: Record<string, number>;
   investmentEquities: InvestmentEquity[];
   sourceComplete: boolean;
+  unavailableReasons?: string[];
+  missingOpeningCurrencies?: string[];
 }
 
 export function investmentEquities(raw: unknown): { equities: InvestmentEquity[]; complete: boolean } {
@@ -23,7 +22,7 @@ export function investmentEquities(raw: unknown): { equities: InvestmentEquity[]
     const row = value as Record<string, unknown>;
     const market = String(row.market || "").toUpperCase();
     if (!market) continue; // Unlinked simple-ledger investments are not this account.
-    const amount = Number(row.amount || 0);
+    const amount = typeof row.amount === "number" ? row.amount : Number.NaN;
     if (!Number.isFinite(amount)) { complete = false; continue; }
     if (amount > 0) equities.push({ market, cur: String(row.cur || "USD").toUpperCase(), amount });
   }
@@ -37,18 +36,9 @@ export function accountHoldingPrice(record: StockRecord, quotes: Record<string, 
   return Number.isFinite(stored) ? stored : 0;
 }
 
-/** Native-currency cash; never subtract reserved/pending cash from total assets. */
-export function reconcileAccountCash<T extends Record<string, number>>(balances: T, cardCash: Record<string, number>, equities: InvestmentEquity[], nativeHoldings: Record<string, number>): T {
-  const primary: Record<string, InvestmentEquity> = {};
-  for (const row of equities) if (!primary[row.market] || row.amount > primary[row.market].amount) primary[row.market] = row;
-  const next: Record<string, number> = { ...balances };
-  for (const [market, equity] of Object.entries(primary)) {
-    const holdings = nativeHoldings[market];
-    const bank = cardCash[equity.cur];
-    const bankCash = bank === undefined ? 0 : Number.isFinite(bank) ? bank : Number.NaN;
-    if (holdings !== undefined && equity.cur === EQUITY_CURRENCY[market]) next[equity.cur] = equity.amount - holdings + bankCash;
-  }
-  return next as T;
+/** Cash is independent of valuation. Legacy arguments remain compatible but never infer cash from equity. */
+export function reconcileAccountCash<T extends Record<string, number>>(balances: T, _cardCash: Record<string, number>, _equities: InvestmentEquity[], _nativeHoldings: Record<string, number>): T {
+  return Object.fromEntries(Object.entries(balances).map(([code, value]) => [code, typeof value === "number" && Number.isFinite(value) ? value : Number.NaN])) as T;
 }
 
 /** NaN is an unavailable value for the UI, not a fictitious 1:1 conversion. */

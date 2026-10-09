@@ -49,9 +49,12 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
   for(const [key,amount,cur]of[['debit.png',7,'USD'],['prepaid.png',14,'HKD'],['credit.png',10000,'USD']]){cards.setCardHeld(f.user.id,key,true);cards.upsertCardAmount(f.user.id,{cardKey:key,amount,currency:cur});}
   const before=business(),s=snap(f);assert.equal(s.accounts.filter(a=>a.kind==='broker').length,2);assert.equal(s.accounts.filter(a=>a.kind==='bank').length,2);assert.deepEqual(s.bankSummary,{count:2,includedCount:2,value:9});assert.equal(s.summary.totalAsset,159);assert.equal(s.summary.portfolioTotalAsset,159);assert.equal(s.summary.difference,0);assert.equal(s.categories.find(c=>c.id==='cash').value,109);assert.deepEqual(business(),before);
  });
- await test('linked legacy equity is not added twice and the residual cash keeps native currency',async()=>{
-  const f=fixture();rec(f);simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{id:'legacy',name:'Broker',market:'US',cur:'USD',amount:100}]});
-  const s=snap(f);assert.equal(s.summary.totalAsset,100);assert.equal(s.accounts.find(a=>a.kind==='fund').amount,80);assert.equal(s.accounts.filter(a=>a.kind==='ledger').length,0);
+ await test('linked legacy equity needs explicit opening cash and price changes never reverse cash',async()=>{
+  const f=fixture(),r=rec(f);simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{id:'legacy',name:'Broker',market:'US',cur:'USD',amount:100}]});
+  let s=snap(f);assert.equal(s.summary.totalAsset,null);assert.equal(s.summary.portfolioTotalAsset,null);assert(s.issues.some(i=>i.code==='source_unavailable'));assert.equal(s.accounts.find(a=>a.kind==='fund').amount,null);assert.equal(s.accounts.filter(a=>a.kind==='ledger').length,0);
+  funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'opening',amount:80,direction:1});
+  s=snap(f);assert.equal(s.summary.totalAsset,100);assert.equal(s.summary.portfolioTotalAsset,100);assert.equal(s.accounts.find(a=>a.kind==='fund').amount,80);
+  quotes={[r.id]:{price:15,time:'2026-10-09T00:01:00Z'}};const before=business();s=snap(f);assert.equal(s.summary.totalAsset,110);assert.equal(s.summary.portfolioTotalAsset,110);assert.equal(s.accounts.find(a=>a.kind==='fund').amount,80);assert.deepEqual(business(),before);
  });
  await test('manual accounts persist, CAS rejects stale writes, empty and signed balances stay distinct',async()=>{
   const f=fixture(),body=input();const create=await call(f,'POST',body);assert.equal(create.status,200);const id=create.body.data.id;assert.equal((await call(f,'POST',body)).status,409);assert.equal(snap(f).accounts.length,1);

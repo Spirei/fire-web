@@ -3,9 +3,9 @@
   "message": "ok",
   "data": {
     "schemaVersion": 1,
-    "accountId": "u-d4ff5b0c621af5d5",
+    "accountId": "u-0c22682599a72dae",
     "profile": {
-      "accountId": "u-d4ff5b0c621af5d5",
+      "accountId": "u-0c22682599a72dae",
       "username": "fixture_owner",
       "nickname": "Fixture Account",
       "uid": "1",
@@ -69,7 +69,10 @@
         "BRL": 0
       },
       "complete": true,
-      "source": "account_cash_reconciliation",
+      "source": "recorded_cash_ledger",
+      "valuationIndependent": true,
+      "unavailableReasons": [],
+      "missingOpeningCurrencies": [],
       "marketAllocationAvailable": false
     },
     "markets": [
@@ -108,7 +111,7 @@
     ],
     "positions": [
       {
-        "recordId": "r-8cf5eb454d627dc1",
+        "recordId": "r-9ae2a4cbdd838c63",
         "recordRevision": 3,
         "name": "Fixture Equity",
         "code": "USFIX",
@@ -123,7 +126,7 @@
           "source": "owner_declared",
           "revision": 1,
           "identityMatches": true,
-          "updatedAt": "2026-10-05T09:28:04.745Z"
+          "updatedAt": "2026-10-09T10:36:36.365Z"
         },
         "valuationBasis": "owner_declared_unit",
         "valuationUnitMultiplier": 1,
@@ -159,7 +162,7 @@
         "valuationComplete": true,
         "valuationUnavailableReason": null,
         "rawRecord": {
-          "id": "r-8cf5eb454d627dc1",
+          "id": "r-9ae2a4cbdd838c63",
           "name": "Fixture Equity",
           "code": "USFIX",
           "market": "US",
@@ -170,12 +173,12 @@
           "watchGroupId": "",
           "watchGroupSort": 0,
           "note": "",
-          "updatedAt": "2026-10-05T09:28:04.746Z",
+          "updatedAt": "2026-10-09T10:36:36.368Z",
           "revision": 3
         }
       },
       {
-        "recordId": "r-7cd26f18e73b97ea",
+        "recordId": "r-18c85a6655edca4e",
         "recordRevision": 1,
         "name": "Fixture ETF",
         "code": "HKFIX",
@@ -190,7 +193,7 @@
           "source": "owner_declared",
           "revision": 1,
           "identityMatches": true,
-          "updatedAt": "2026-10-05T09:28:04.746Z"
+          "updatedAt": "2026-10-09T10:36:36.366Z"
         },
         "valuationBasis": "owner_declared_unit",
         "valuationUnitMultiplier": 1,
@@ -226,7 +229,7 @@
         "valuationComplete": true,
         "valuationUnavailableReason": null,
         "rawRecord": {
-          "id": "r-7cd26f18e73b97ea",
+          "id": "r-18c85a6655edca4e",
           "name": "Fixture ETF",
           "code": "HKFIX",
           "market": "HK",
@@ -237,7 +240,7 @@
           "watchGroupId": "",
           "watchGroupSort": 0,
           "note": "",
-          "updatedAt": "2026-10-05T09:28:04.745Z",
+          "updatedAt": "2026-10-09T10:36:36.364Z",
           "revision": 1
         }
       }
@@ -245,9 +248,9 @@
     "todayOrders": {
       "items": [
         {
-          "id": "o-1b6441fcf72c5ea6",
-          "orderNo": "0027462969",
-          "recordId": "r-8cf5eb454d627dc1",
+          "id": "o-71628fca132c6441",
+          "orderNo": "1464330705",
+          "recordId": "r-9ae2a4cbdd838c63",
           "market": "US",
           "code": "USFIX",
           "name": "Fixture Equity",
@@ -271,12 +274,12 @@
           "session": "",
           "triggerStatus": "",
           "tradedAt": "2026-10-05T14:00:00.000Z",
-          "createdAt": "2026-10-05T09:28:04.746Z"
+          "createdAt": "2026-10-09T10:36:36.368Z"
         },
         {
-          "id": "o-83b006fd3ff298a6",
-          "orderNo": "0621543851",
-          "recordId": "r-8cf5eb454d627dc1",
+          "id": "o-8cf5ec3a90778f60",
+          "orderNo": "0142248692",
+          "recordId": "r-9ae2a4cbdd838c63",
           "market": "US",
           "code": "USFIX",
           "name": "Fixture Equity",
@@ -300,7 +303,7 @@
           "session": "",
           "triggerStatus": "",
           "tradedAt": "2026-10-05T13:30:00.000Z",
-          "createdAt": "2026-10-05T09:28:04.746Z"
+          "createdAt": "2026-10-09T10:36:36.366Z"
         }
       ],
       "count": 2,
@@ -334,6 +337,6 @@
       "underlying_merge",
       "verified_live_market_status"
     ],
-    "snapshotRevision": "fc1ecc712f317e6c84988a5ef55c53153bd0ec7a1f8b722f0bfbf13276406627"
+    "snapshotRevision": "9913fde3f35a00204a19f71f1145b841c308ae3f2e08d23a9d0a4258b2846c5c"
   }
 }

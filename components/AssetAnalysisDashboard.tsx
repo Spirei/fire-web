@@ -344,7 +344,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const [holdingSort, setHoldingSort] = usePersistedState<HoldingSort | null>("fire:asset-holdings-sort", null);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [dailyShareOpen, setDailyShareOpen] = useState(false);
-  const effectiveBalanceCacheKey = `fire:effective-fund-balances:${user?.username || "current"}`;
+  const effectiveBalanceCacheKey = `fire:recorded-cash-balances:v2:${user?.username || "current"}`;
   const [fundBalances, setFundBalances] = useState<Record<FundCurrency, number>>(EMPTY_CURRENCY_BALANCES);
   const [fundBalancesReady, setFundBalancesReady] = useState(false);
   /** 银行卡现金（借记卡 / 预付卡余额，按卡币种）：用来解释可用现金里有多少来自银行卡 */
@@ -660,13 +660,18 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   }, {} as Record<string, { asset: number; cost: number; pnl: number; day: number }>), [positions, quotes, livePrice]);
   const portfolioLedger = useMemo(() => buildPortfolioLedger(positions, orders, livePrice), [positions, orders, livePrice]);
   const reconciledFundBalances = useMemo(() => reconcileAccountCash(fundBalances, cardCash, simpleInvestmentEquities, Object.fromEntries(Object.entries(nativeSummary).map(([market, row]) => [market, row.asset]))), [fundBalances, cardCash, simpleInvestmentEquities, nativeSummary]);
-  const effectiveFundBalances = (!fundBalancesReady || !simpleLedgerReady || !simpleLedgerSucceeded) && cachedEffectiveBalances ? cachedEffectiveBalances : reconciledFundBalances;
+  const effectiveFundBalances = !fundBalancesReady && cachedEffectiveBalances ? cachedEffectiveBalances : reconciledFundBalances;
   const effectiveBalancesReady = cachedEffectiveBalances !== null || (fundBalancesReady && simpleLedgerReady);
   useEffect(() => {
-    if (!fundBalancesReady || !simpleLedgerSucceeded || Object.values(reconciledFundBalances).some(amount => !Number.isFinite(amount))) return;
+    if ((fundBalancesReady && Object.values(reconciledFundBalances).some(amount => !Number.isFinite(amount))) || (simpleLedgerReady && !simpleLedgerSucceeded)) {
+      setCachedEffectiveBalances(null);
+      try { localStorage.removeItem(effectiveBalanceCacheKey); } catch { /* 最新缺失状态优先于旧缓存 */ }
+      return;
+    }
+    if (!fundBalancesReady || !simpleLedgerSucceeded) return;
     try { localStorage.setItem(effectiveBalanceCacheKey, JSON.stringify(reconciledFundBalances)); } catch { /* 缓存失败不影响最新数据 */ }
-  }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady, simpleLedgerSucceeded]);
-  const accountSummaryTotals = useMemo(() => accountTotals(summary.asset, effectiveFundBalances, rates, displayCurrency, Number.isFinite(summary.asset), simpleLedgerSucceeded || cachedEffectiveBalances !== null), [summary.asset, effectiveFundBalances, rates, displayCurrency, simpleLedgerSucceeded, cachedEffectiveBalances]);
+  }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady, simpleLedgerReady, simpleLedgerSucceeded]);
+  const accountSummaryTotals = useMemo(() => accountTotals(summary.asset, effectiveFundBalances, rates, displayCurrency, Number.isFinite(summary.asset), simpleLedgerSucceeded || !simpleLedgerReady && cachedEffectiveBalances !== null), [summary.asset, effectiveFundBalances, rates, displayCurrency, simpleLedgerSucceeded, simpleLedgerReady, cachedEffectiveBalances]);
   const cashTotal = accountSummaryTotals.totalCash ?? Number.NaN;
   // 银行卡现金：服务端已把它并进 balances（所以 cashTotal / 可用现金 / 净资产都含它），
   // 这里单独折算出显示货币的金额，用来在「账户资产」里说明这部分来源
@@ -991,7 +996,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const accountSymbol = symbol;
   const accountSummary = assetMarket === "ALL" ? summary : (summary.markets[assetMarket] || { asset: 0, cost: 0, pnl: 0, day: 0 });
   const marketCurrency = ISO_BY_MARKET[assetMarket] as CurrencyCode | undefined;
-  const accountCash = assetMarket === "ALL" ? cashTotal : marketCurrency ? (effectiveFundBalances[marketCurrency] || 0) / (rates[marketCurrency] || 1) * currencyFactor : 0;
+  const accountCash = assetMarket === "ALL" ? cashTotal : accountSummaryTotals.cashComplete && marketCurrency ? convertAccountAmount(effectiveFundBalances[marketCurrency], marketCurrency, rates, displayCurrency) : Number.NaN;
   const accountFrozenCash = assetMarket === "ALL" ? frozenCashTotal : orders.reduce((total, order) => {
     const record = positions.find((item) => item.id === order.recordId);
     return record?.market.toUpperCase() === assetMarket && record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;

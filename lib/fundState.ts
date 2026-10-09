@@ -1,5 +1,6 @@
+import { readAccountCash } from "./accountCashStore";
 import { cardCashByCurrency } from "./cardLibrary";
-import { readFundBalances, fundSummaries } from "./funds";
+import { fundSummaries } from "./funds";
 
 /**
  * 资金系统返回给前端的现金口径（balances / summaries）+ 银行卡现金明细。
@@ -35,20 +36,15 @@ export interface FundState {
 
 /** 后台首屏只需要总现金，不额外计算资金明细；口径与 fundState 相同。 */
 export function totalFundBalances(userId: string): BalanceMap {
-  const balances: BalanceMap = readFundBalances(userId);
-  for (const [currency, amount] of Object.entries(cardCashByCurrency(userId, true))) {
-    balances[currency] = (balances[currency] ?? 0) + amount;
-  }
-  return balances;
+  return readAccountCash(userId).balances;
 }
 
 export function fundState(userId: string): FundState {
-  const balances = readFundBalances(userId) as BalanceMap;
+  const balances = readAccountCash(userId).balances as BalanceMap;
   const summaries = fundSummaries(userId) as SummaryMap;
   const cardCash = cardCashByCurrency(userId, true);
   Object.entries(cardCash).forEach(([currency, amount]) => {
     if (amount === 0) return;
-    balances[currency] = (balances[currency] ?? 0) + amount;
     if (!Number.isFinite(amount)) return;
     const summary = summaries[currency];
     if (summary) summary.otherNetFlow += amount;

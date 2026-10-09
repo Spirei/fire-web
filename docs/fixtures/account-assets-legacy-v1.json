@@ -3,9 +3,9 @@
   "message": "ok",
   "data": {
     "schemaVersion": 1,
-    "accountId": "u-b014eb60ebb87a93",
+    "accountId": "u-8a9f183e6a74a5ef",
     "profile": {
-      "accountId": "u-b014eb60ebb87a93",
+      "accountId": "u-8a9f183e6a74a5ef",
       "username": "legacy_fixture_owner",
       "nickname": "Legacy Fixture",
       "uid": "2",
@@ -69,7 +69,10 @@
         "BRL": 0
       },
       "complete": true,
-      "source": "account_cash_reconciliation",
+      "source": "recorded_cash_ledger",
+      "valuationIndependent": true,
+      "unavailableReasons": [],
+      "missingOpeningCurrencies": [],
       "marketAllocationAvailable": false
     },
     "markets": [
@@ -108,7 +111,7 @@
     ],
     "positions": [
       {
-        "recordId": "r-6b56b3af0244477e",
+        "recordId": "r-b385fbe0c5b840d9",
         "recordRevision": 3,
         "name": "Legacy Unit Position",
         "code": "LEGACYUS",
@@ -159,7 +162,7 @@
         "valuationComplete": true,
         "valuationUnavailableReason": null,
         "rawRecord": {
-          "id": "r-6b56b3af0244477e",
+          "id": "r-b385fbe0c5b840d9",
           "name": "Legacy Unit Position",
           "code": "LEGACYUS",
           "market": "US",
@@ -170,12 +173,12 @@
           "watchGroupId": "",
           "watchGroupSort": 0,
           "note": "",
-          "updatedAt": "2026-10-05T09:28:04.771Z",
+          "updatedAt": "2026-10-09T10:36:36.406Z",
           "revision": 3
         }
       },
       {
-        "recordId": "r-ef5d11d2e747aafe",
+        "recordId": "r-4678c08f288f32f8",
         "recordRevision": 1,
         "name": "Legacy HK Unit Position",
         "code": "LEGACYHK",
@@ -226,7 +229,7 @@
         "valuationComplete": true,
         "valuationUnavailableReason": null,
         "rawRecord": {
-          "id": "r-ef5d11d2e747aafe",
+          "id": "r-4678c08f288f32f8",
           "name": "Legacy HK Unit Position",
           "code": "LEGACYHK",
           "market": "HK",
@@ -237,7 +240,7 @@
           "watchGroupId": "",
           "watchGroupSort": 0,
           "note": "",
-          "updatedAt": "2026-10-05T09:28:04.770Z",
+          "updatedAt": "2026-10-09T10:36:36.406Z",
           "revision": 1
         }
       }
@@ -245,9 +248,9 @@
     "todayOrders": {
       "items": [
         {
-          "id": "o-bb359dbe083c9ebe",
-          "orderNo": "2576138875",
-          "recordId": "r-6b56b3af0244477e",
+          "id": "o-d332784b23627ba1",
+          "orderNo": "3087126562",
+          "recordId": "r-b385fbe0c5b840d9",
           "market": "US",
           "code": "LEGACYUS",
           "name": "Legacy Unit Position",
@@ -271,12 +274,12 @@
           "session": "",
           "triggerStatus": "",
           "tradedAt": "2026-10-05T14:00:00.000Z",
-          "createdAt": "2026-10-05T09:28:04.771Z"
+          "createdAt": "2026-10-09T10:36:36.406Z"
         },
         {
-          "id": "o-1300ab3e2ab38af9",
-          "orderNo": "1082521455",
-          "recordId": "r-6b56b3af0244477e",
+          "id": "o-a80c7b0907f5faaa",
+          "orderNo": "3532324890",
+          "recordId": "r-b385fbe0c5b840d9",
           "market": "US",
           "code": "LEGACYUS",
           "name": "Legacy Unit Position",
@@ -300,7 +303,7 @@
           "session": "",
           "triggerStatus": "",
           "tradedAt": "2026-10-05T13:30:00.000Z",
-          "createdAt": "2026-10-05T09:28:04.770Z"
+          "createdAt": "2026-10-09T10:36:36.406Z"
         }
       ],
       "count": 2,
@@ -334,6 +337,6 @@
       "underlying_merge",
       "verified_live_market_status"
     ],
-    "snapshotRevision": "518fa5879597e113f6861d2a67916b8fb66eee38b2c16abd0a47f01f957b8398"
+    "snapshotRevision": "311b0607f5f9854aa367ee0731ddf91613a91bce27c63911677a3e296c0a61d4"
   }
 }

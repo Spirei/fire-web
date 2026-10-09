@@ -30,7 +30,7 @@ export function buildOverview(records: StockRecord[], rates: Record<string, numb
     count, currency, complete: unconverted.length === 0, unconverted,
     totalCost: round(totalCost), totalMarket: round(totalMarket), totalPnl: round(pnl),
     totalPnlPct: totalCost !== 0 ? round(pnl / Math.abs(totalCost) * 100) : 0,
-    ...(totals ? { ...totals, totalCash: totals.totalCash === null ? null : round(totals.totalCash), totalAsset: totals.totalAsset === null ? null : round(totals.totalAsset), unconvertedCurrencies: [...new Set([...missingCurrencies, ...totals.unconvertedCurrencies])].sort() } : {}),
+    ...(totals ? { cashSource: "recorded_cash_ledger", cashValuationIndependent: true, cashSourceComplete: cash!.sourceComplete, cashUnavailableReasons: cash!.unavailableReasons ?? [], missingOpeningCashCurrencies: cash!.missingOpeningCurrencies ?? [], ...totals, totalCash: totals.totalCash === null ? null : round(totals.totalCash), totalAsset: totals.totalAsset === null ? null : round(totals.totalAsset), unconvertedCurrencies: [...new Set([...missingCurrencies, ...totals.unconvertedCurrencies])].sort() } : {}),
     byMarket: Object.fromEntries(Object.entries(byMarket).map(([key, m]) => [key, { ...m, cost: round(m.cost), market: round(m.market), pnl: round(m.pnl) }])),
     valuation: records.filter(r => Number(r.qty) > 0).map(r => ({ id: r.id, source: Number.isFinite(quotes[r.id]?.price) ? "quote" : "record", at: Number.isFinite(quotes[r.id]?.price) ? quotes[r.id]?.time || r.updatedAt : r.updatedAt }))
   };
