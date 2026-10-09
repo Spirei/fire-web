@@ -111,7 +111,9 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
  });
  await test('restoring a previously frozen renamed account keeps its name and recovers complete live totals',async()=>{
   const f=fixture(),r=rec(f);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});const a=snap(f).accounts.find(a=>a.kind==='broker');
-  assert.equal((await call(f,'PUT',input({id:a.id,name:'Keep My Name',category:a.category,amount:a.amount}))).status,200);quotes={[r.id]:{price:11,time:'actual'}};assert.equal(snap(f).summary.netAsset,null);
+  // Model an existing pre-checkpoint statement, rather than a newly reconciled live account.
+  overlay.saveAllocationAccount(f.user.id,input({id:a.id,name:'Keep My Name',category:a.category,amount:a.amount}),new Set([a.id]));
+  quotes={[r.id]:{price:11,time:'actual'}};assert.equal(snap(f).summary.netAsset,null);
   const statement=snap(f).accounts.find(x=>x.id===a.id);assert.equal(load('lib/assetAllocationClient.ts').allocationAmountMode(statement,statement.amount),'statement');
   assert.equal((await call(f,'PUT',input({id:a.id,revision:1,name:'Keep New Name',category:a.category,amount:statement.amount,amountMode:'statement'}))).status,200);assert.equal(snap(f).summary.netAsset,null,'a real statement is never silently discarded');
   assert.equal((await call(f,'DELETE',{id:a.id,revision:2},2)).status,200);const restored=snap(f).accounts.find(x=>x.id===a.id);assert.equal(restored.name,'Keep New Name');assert.equal(restored.reconciled,false);assert.equal(restored.revision,3);assert.equal(snap(f).summary.netAsset,122);
@@ -125,7 +127,7 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
   try{
    legacy.exec("CREATE TABLE users(id TEXT PRIMARY KEY);INSERT INTO users VALUES('legacy');CREATE TABLE asset_allocation_accounts(user_id TEXT NOT NULL,source_id TEXT NOT NULL,name TEXT NOT NULL,currency TEXT NOT NULL,amount REAL NOT NULL,category TEXT NOT NULL,excluded INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,PRIMARY KEY(user_id,source_id));INSERT INTO asset_allocation_accounts VALUES('legacy','fund:USD','Old Name','USD',150,'cash',0,7,'2026-10-09T00:00:00Z');");
    const before=legacy.prepare('SELECT * FROM asset_allocation_accounts').get(),install=load('lib/assetAllocationSchema.ts').installAssetAllocation;install(legacy);install(legacy);
-   const row=legacy.prepare('SELECT * FROM asset_allocation_accounts').get();assert.deepEqual(row,{...before,amount_mode:'statement'});assert.equal(legacy.prepare('SELECT revision FROM asset_allocation_revisions').get().revision,7);
+   const row=legacy.prepare('SELECT * FROM asset_allocation_accounts').get();assert.deepEqual(row,{...before,amount_mode:'statement',statement_basis:''});assert.equal(legacy.prepare('SELECT revision FROM asset_allocation_revisions').get().revision,7);
    legacy.prepare("UPDATE asset_allocation_accounts SET amount_mode='automatic'").run();assert.equal(legacy.prepare('SELECT revision FROM asset_allocation_accounts').get().revision,8);
   }finally{legacy.close();}
  });
@@ -170,7 +172,7 @@ async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuote
  await test('both App versions enforce read/write grants; v2 rejects Cookie fallback and foreign origins',async()=>{
   const f=fixture('portfolio.read');for(const v of[1,2]){assert.equal((await call(f,'GET',undefined,v)).status,200);assert.equal((await call(f,'POST',input(),v)).status,403);assert.equal((await call(f,'GET',undefined,v,{origin:'https://foreign.example'})).status,403);}
   const r=await load('app/api/v2/asset-allocation/route.ts').GET(new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/asset-allocation',{headers:{cookie:'fire_session='+f.cookie}}));assert.equal(r.status,401);
-  for(const v of[1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const c=(await r.json()).data.asset_allocation;assert.equal(c.snapshot_path,`/api/v${v}/asset-allocation`);assert.equal(c.read_scope,'portfolio.read');assert.equal(c.conditional_read,'weak-etag');assert.equal(c.snapshot_revision_field,'snapshotRevision');assert.equal(c.recommended_read_timeout_ms,8000);assert.equal(c.recommended_write_timeout_ms,12000);assert.equal(c.external_institution_connections,false);assert.equal(c.automatic_mutation_replay,false);}
+  for(const v of[1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const c=(await r.json()).data.asset_allocation;assert.equal(c.snapshot_path,`/api/v${v}/asset-allocation`);assert.equal(c.read_scope,'portfolio.read');assert.equal(c.conditional_read,'weak-etag');assert.equal(c.snapshot_revision_field,'snapshotRevision');assert.equal(c.recommended_read_timeout_ms,8000);assert.equal(c.recommended_write_timeout_ms,12000);assert.equal(c.external_institution_connections,false);assert.equal(c.automatic_mutation_replay,false);assert.equal(c.reconciliation.amount_changed_field,'amountChanged');assert.equal(c.reconciliation.follows_quotes_and_fills,true);}
  });
  await test('removed linked source does not resurrect statement money, and restores are owner/revision bound',async()=>{
   const f=fixture(),r=rec(f),a=snap(f).accounts[0];await call(f,'PUT',input({id:a.id,category:'securities',amount:90}));db.prepare('DELETE FROM records WHERE id=?').run(r.id);const s=snap(f);assert.equal(s.summary.totalAsset,0);assert.equal(s.accounts[0].excluded,true);assert(s.issues.some(i=>i.code==='source_removed'));

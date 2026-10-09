@@ -6,8 +6,8 @@ export class AllocationClientError extends Error {
 }
 
 /** Editing a label or inclusion must not turn a live source into a fixed statement. */
-export function allocationAmountMode(account: AllocationAccount | null, amount: number): "automatic" | "statement" {
-  return account && account.kind !== "manual" && !account.reconciled && amount === account.amount ? "automatic" : "statement";
+export function allocationAmountMode(account: AllocationAccount | null, amount: number, explicitlyChecked = false): "automatic" | "statement" {
+  return !explicitlyChecked && account && account.kind !== "manual" && !account.reconciled && amount === account.amount ? "automatic" : "statement";
 }
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value);
@@ -34,6 +34,9 @@ export function validAllocationSnapshot(value: unknown, currency: string, owner?
     && typeof a.currency === "string" && (a.value === null || /^[A-Z]{3}$/.test(a.currency)) && [a.amount, a.value, a.holdings, a.cash].every(nullable)
     && strings(a.recordIds) && typeof a.icon === "string" && typeof a.source === "string" && (a.updatedAt === null || date(a.updatedAt))
     && typeof a.excluded === "boolean" && typeof a.reconciled === "boolean" && count(a.revision) && object(a.components)
+    && (a.sourceAmount === undefined || nullable(a.sourceAmount)) && (a.statementAmount === undefined || finite(a.statementAmount))
+    && (a.sourceCurrency === undefined || typeof a.sourceCurrency === "string")
+    && (a.reconciledAt === undefined || a.reconciledAt === null || date(a.reconciledAt))
     && Object.entries(a.components).every(([key, amount]) => category(key) && nullable(amount))) || !unique(accounts)
     || accounts.filter(a => !a.excluded).length !== s.accountCount) return false;
   if (!Array.isArray(categories) || categories.length !== ALLOCATION_CATEGORIES.length || !categories.every(c => object(c)

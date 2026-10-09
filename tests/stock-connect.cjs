@@ -59,6 +59,14 @@ await test('new Stock Connect fills require actual net CNY; buy sell and dividen
  orders.executeOrder({userId:u.id,recordId:r.id,side:'sell',qty:1,price:10,fees:2,settlementAmount:4});orders.executeOrder({userId:u.id,recordId:r.id,side:'dividend',qty:11,price:1,fees:0,settlementAmount:5});assert.equal(funds.readFundBalances(u.id).CNY,0);assert.equal(funds.readFundBalances(u.id).HKD,0);
  funds.syncOrderCashTransactions(u.id);assert.deepEqual(funds.fundBalances(u.id),funds.readFundBalances(u.id));assert.equal(cash(u).length,3);assert(cash(u).every(f=>f.currency==='CNY'));
 });
+await test('explicitly restoring affected broker statements preserves names and every cash row, and repeat migration does not overwrite a later reconciliation',()=>{
+ const u=user(),hk=rec(u),cn=rec(u,{market:'CN',code:'600019',price:4});
+ for(const a of snap(u).accounts.filter(a=>a.kind==='broker'))overlay.saveAllocationAccount(u.id,{id:a.id,revision:a.revision,name:a.currency+' label',currency:a.currency,amount:1000,category:a.category,excluded:false,amountMode:'statement'},new Set(snap(u).accounts.map(a=>a.id)));
+ const original=ledger(u),oldCash=cash(u);
+ const result=migration.migrateStockConnect(u.id,[{id:hk.id,revision:hk.revision}],rates,{restoreAutomaticBrokerAmounts:true});assert.equal(result.restoredSources.length,2);assert.equal(snap(u).accounts.find(a=>a.currency==='CNY').name,'CNY label');assert.deepEqual(ledger(u),original);assert.deepEqual(cash(u),oldCash);
+ const a=snap(u).accounts.find(a=>a.kind==='broker');overlay.saveAllocationAccount(u.id,{id:a.id,revision:a.revision,name:a.name,currency:a.currency,amount:222,category:a.category,excluded:false,amountMode:'statement'},new Set([a.id]));
+ migration.migrateStockConnect(u.id,[{id:hk.id,revision:hk.revision}],rates,{restoreAutomaticBrokerAmounts:true});assert.equal(overlay.allocationRows(u.id).find(r=>r.source_id===a.id).amount_mode,'statement');assert.equal(snap(u).accounts.find(b=>b.id===a.id).amount,222);
+});
 await test('CNY order edits preserve net settlement on note edits, require replacement on financial edits, delete reverses correct currency',()=>{
  const u=user(),r=rec(u,{accountMarket:'CN'}),o=orders.executeOrder({userId:u.id,recordId:r.id,side:'buy',qty:1,price:8,fees:1,settlementAmount:4}).order;
  orders.updateOrder({userId:u.id,orderId:o.id,side:o.side,qty:o.qty,price:o.price,fees:o.fees,note:'Note'});assert.equal(funds.readFundBalances(u.id).CNY,-4);

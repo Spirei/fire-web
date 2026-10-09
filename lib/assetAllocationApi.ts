@@ -30,6 +30,13 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
     if (request.method !== "GET") {
       if (!rateLimit(`allocation:${initial.id}`, 60, 60_000)) throw new RecordsError("操作过于频繁", 429);
       const raw = await readJsonBody(request, 16_384).catch(error => { if (error instanceof RequestBodyTooLargeError) throw error; throw new RecordsError("账户参数无效"); });
+      const writeRates = await getRates(); authorize();
+      // Reconciliation checkpoints use the same current quotes as reads. Metadata edits keep their checkpoint.
+      const writeRecords = listRecords(initial.id);
+      const writeQuotes = (request.method === "POST" || request.method === "PUT") && !new URL(request.url).pathname.endsWith("/assign")
+        && raw?.amountMode !== "automatic" && raw?.amountChanged !== false
+        ? (await fetchOverviewQuotes(writeRecords.filter(r => Number(r.qty) > 0), token ? 1_500 : 150)).quotes : {};
+      authorize();
       return getDb().transaction(() => {
         authorize();
         if (new URL(request.url).pathname.endsWith("/assign")) {
@@ -48,10 +55,18 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
         const input = parseAllocationInput(raw);
         if (request.method === "PUT" && !input.id || request.method === "POST" && input.id) throw new RecordsError("账户标识无效");
         if (request.method === "POST" && !input.requestId || request.method === "PUT" && input.requestId) throw new RecordsError("新增账户须提供固定的requestId");
-        const snapshot = buildAssetAllocation(initial.id, { USD: 1 }, {}, "USD", true);
+        const currentRecords = new Map(listRecords(initial.id).map(r => [r.id, r]));
+        const quotes = Object.fromEntries(writeRecords.filter(r => currentRecords.get(r.id)?.revision === r.revision && writeQuotes[r.id]).map(r => [r.id, writeQuotes[r.id]]));
+        if (Object.keys(writeQuotes).length && writeRecords.some(r => currentRecords.get(r.id)?.revision !== r.revision)) throw new RecordsError("持仓已变化，请重新核对", 409, 40902);
+        const snapshot = buildAssetAllocation(initial.id, writeRates, quotes, "USD", true);
         const source = snapshot.accounts.find(a => a.id === input.id && a.kind !== "manual");
-        if (source && (source.currency !== input.currency || source.category !== input.category)) throw new RecordsError("关联账户的币种和类别不可更改");
-        return ok(saveAllocationAccount(initial.id, input, new Set(snapshot.accounts.filter(a => a.kind !== "manual").map(a => a.id))));
+        if (source && ((source.sourceCurrency ?? source.currency) !== input.currency || source.category !== input.category)) throw new RecordsError("关联账户的币种和类别不可更改");
+        if (source?.kind === "broker" && input.amountMode !== "automatic" && input.amountChanged !== false
+          && source.recordIds.some(id => {
+            const record = currentRecords.get(id), quotePrice = quotes[id]?.price;
+            return !Number.isFinite(quotePrice) && (!record || record.price === null || record.price === undefined || String(record.price).trim() === "" || !Number.isFinite(Number(record.price)));
+          })) throw new RecordsError("部分持仓缺少核对基准价格，请先补齐报价");
+        return ok(saveAllocationAccount(initial.id, input, new Set(snapshot.accounts.filter(a => a.kind !== "manual").map(a => a.id)), source));
       })();
     }
     // 读取会触发上游行情拉取，与写操作一样按账号限流。

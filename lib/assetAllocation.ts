@@ -11,6 +11,7 @@ import { buildOverview } from "./overview";
 import { allocationRevisions, allocationRows } from "./assetAllocationStore";
 import { ALLOCATION_CATEGORIES, ALLOCATION_LABELS, type AllocationAccount, type AllocationSnapshot } from "./assetAllocationTypes";
 import type { Quote } from "./types";
+import { allocationBrokerId, parseAllocationBasis, reconciledAllocationAmount } from "./allocationReconciliation";
 
 const finite = (n: number): number | null => Number.isFinite(n) ? n : null;
 const round = (n: number | null) => n === null ? null : +n.toFixed(2);
@@ -41,7 +42,7 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
     const price = accountHoldingPrice(r, quotes), cur = holdingAccountCurrency(r), amount = finite(qty * price * holdingMoneyFactor(r, rates, cur));
     nativeHoldings[r.market] = (nativeHoldings[r.market] ?? 0) + qty * price;
     const group = groups.find(g => g.name === r.group || g.alias && g.alias === r.group);
-    const id = `broker:${group?.id || stable(r.group || "ungrouped")}:${cur}`;
+    const id = allocationBrokerId(r, groups);
     let account = accounts.find(a => a.id === id);
     if (!account) account = add({ id, name: group?.name || r.group || "未归属持仓", kind: "broker", category: "securities", currency: cur, amount: 0, source: "/records", icon: group ? icons.get(group.id.toLowerCase()) || "" : "" });
     positions.push({ id: r.id, name: r.name, code: r.code, market: r.market, ...(isStockConnect(r) ? { accountMarket: "CN", channel: "stock_connect" as const } : {}), currency: cur, brokerId: group?.id ?? null, revision: r.revision ?? 0, accountId: id });
@@ -74,8 +75,16 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
       }
     }
   } catch { issues.push({ code: "ledger_unavailable", accountIds: [], message: "简化账本暂时无法读取" }); }
+  for (const a of accounts) { a.sourceAmount = a.amount; a.sourceCurrency = a.currency; }
   for (const row of allocationRows(userId)) {
     let a = accounts.find(a => a.id === row.source_id);
+    // A fully sold position or cleared fund remains a live source for its reconciliation.
+    if (!a && row.statement_basis && row.source_id.startsWith("broker:") && records.some(r => allocationBrokerId(r, groups) === row.source_id)) {
+      a = add({ id: row.source_id, name: row.name, kind: "broker", category: "securities", currency: row.currency, amount: 0, holdings: 0, sourceAmount: 0, source: "/records" });
+    }
+    if (!a && row.statement_basis && row.source_id.startsWith("fund:") && Number.isFinite(balances[row.currency])) {
+      a = add({ id: row.source_id, name: row.name, kind: "fund", category: "cash", currency: row.currency, amount: 0, sourceAmount: 0, source: "/api/v1/funds" });
+    }
     if (!a) {
       a = add({ id: row.source_id, name: row.name, kind: "manual", category: row.category, currency: row.currency, amount: row.amount, source: "manual" });
       if (!row.source_id.startsWith("manual:")) {
@@ -84,7 +93,15 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
       }
     }
     Object.assign(a, { name: row.name, excluded: a.excluded || !!row.excluded, revision: row.revision });
-    if (row.amount_mode === "statement") Object.assign(a, { amount: row.amount, currency: row.currency, category: row.category, updatedAt: row.updated_at, reconciled: true });
+    if (row.amount_mode === "statement") {
+      let amount: number | null = row.amount, reconciledAt: string | null = null;
+      try {
+        if (a.kind !== "manual") amount = row.statement_basis && a.sourceCurrency && a.sourceCurrency !== row.currency ? null
+          : reconciledAllocationAmount(userId, a.id, row.amount, row.currency, a.sourceAmount ?? null, row.statement_basis, rates);
+        reconciledAt = parseAllocationBasis(row.statement_basis)?.capturedAt ?? null;
+      } catch { amount = null; }
+      Object.assign(a, { amount, currency: row.currency, category: row.category, updatedAt: row.updated_at, reconciled: true, statementAmount: row.amount, reconciledAt });
+    }
   }
   // Resolve statements first: a recorded nonzero card balance counts, an empty/unrecorded card does not.
   // Mutation validation can still inspect every held source, including a just-cleared balance.

@@ -42,7 +42,7 @@ test('Stock Connect first frame keeps all-market total separate from CN net asse
   const rows=[{id:'us',name:'US Test',code:'TEST',market:'US',price:10,cost:5,qty:1},{id:'hk',name:'HK Test',code:'00001',market:'HK',accountMarket:'CN',price:8,cost:-4,qty:2},{id:'cn',name:'CN Test',code:'600001',market:'CN',price:7.2,cost:3.6,qty:2}].map(r=>({...r,group:'',note:'',updatedAt:'2026-10-09T00:00:00Z'}));
   const props={records:rows,quotes:{},livePrice:r=>Number(r.price),onAddMatch:async()=>true,onUpdate:async()=>true,onRemove:()=>{},groups:[],markets:['US','CN','HK'],marketLabels:[],marketOptions:[],initialFundBalances:{USD:20,CNY:72},valuationReady:true};
   const html=render('components/views/HoldingsView.tsx',props,'market=CN');
-  assert(html.includes('港股通'));assert(html.includes('$44.04'),'global pill includes US holdings and both currencies of cash');
+  assert(html.includes('>A/H</span>'));assert(html.includes('aria-label="A/H 港股通：A 股账户，港股上市"'));assert(html.includes('$44.04'),'global pill includes US holdings and both currencies of cash');
   assert(html.includes('¥101.08'),'CN net assets include converted HK holdings, CN holdings and CNY cash');
   assert(html.includes('300.00%')&&!html.includes('-300.00%'),'positive gains on negative diluted cost keep a positive ratio');
   assert(html.includes('HK$8.00'),'native HK price is never relabeled as CNY');
@@ -474,6 +474,15 @@ try {
     const dashboard=render('components/AssetAnalysisDashboard.tsx',{positions:[],quotes:{},rates:{USD:1},livePrice:()=>0,currency:'USD',stockIcons:{},initialModuleOrder:{left:['funds','account'],right:['calendar','overview']}},'',prefs);
     assert(dashboard.includes('2024'));
     assert(dashboard.includes('style="order:0"'));
+  });
+  test('removed HK account preferences cannot hide migrated Stock Connect holdings in the first frame',()=>{
+    const record={id:'migrated',name:'Migrated Connect',code:'00700',market:'HK',accountMarket:'CN',price:8,cost:4,qty:2,group:'',note:'',updatedAt:'2026-10-10T00:00:00Z'};
+    const html=render('components/AssetAnalysisDashboard.tsx',{positions:[record],quotes:{},rates:{USD:1,HKD:8,CNY:4},livePrice:r=>Number(r.price),currency:'USD',stockIcons:{}},'',{
+      'fire:asset-asset-market':'HK','fire:asset-holdings-market':'HK','fire:asset-pnl-market':'HK'
+    });
+    assert(html.includes('Migrated Connect'));assert(html.includes('>A/H</span>'));
+    assert(!html.includes('当前市场暂无持仓'));
+    assert((html.match(/<button[^>]*aria-pressed="true"[^>]*>全部<\/button>/g)||[]).length>=3,'all three current-account filters select a valid first-frame fallback');
   });
   test('shared modal renders a stable first-frame dialog without browser globals',()=>{
     const html=render('components/AppModal.tsx',{title:'首屏弹窗',onClose(){},children:'详情内容'});

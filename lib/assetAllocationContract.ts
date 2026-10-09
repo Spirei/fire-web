@@ -11,5 +11,6 @@ export function allocationDiscovery(version: 1 | 2) {
     owner_header: "X-Allocation-User", conditional_read: "weak-etag", checked_at_header: "X-Allocation-Observed-At",
     recommended_read_timeout_ms: ALLOCATION_READ_TIMEOUT_MS, recommended_write_timeout_ms: ALLOCATION_WRITE_TIMEOUT_MS,
     refresh_after_ms: ALLOCATION_REFRESH_MS, unavailable_values: "null", automatic_mutation_replay: false,
-    linked_amount_mode_field: "amountMode", linked_amount_modes: ["automatic", "statement"], default_amount_mode: "statement", restore_preserves_name: true };
+    linked_amount_mode_field: "amountMode", linked_amount_modes: ["automatic", "statement"], default_amount_mode: "statement", restore_preserves_name: true,
+    reconciliation: { amount_changed_field: "amountChanged", baseline_amount_field: "statementAmount", checkpoint_at_field: "reconciledAt", follows_quotes_and_fills: true, legacy_checkpoint_requires_reconciliation: true } };
 }

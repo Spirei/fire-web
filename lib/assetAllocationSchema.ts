@@ -11,6 +11,7 @@ export function installAssetAllocation(db: Database.Database) {
   // Existing statements keep their original meaning; only new metadata edits opt into automatic values.
   const columns = db.prepare("PRAGMA table_info(asset_allocation_accounts)").all() as { name: string }[];
   if (!columns.some(column => column.name === "amount_mode")) db.exec("ALTER TABLE asset_allocation_accounts ADD COLUMN amount_mode TEXT NOT NULL DEFAULT 'statement' CHECK(amount_mode IN ('automatic','statement'))");
+  if (!columns.some(column => column.name === "statement_basis")) db.exec("ALTER TABLE asset_allocation_accounts ADD COLUMN statement_basis TEXT NOT NULL DEFAULT ''");
   db.exec(`CREATE TABLE IF NOT EXISTS asset_allocation_revisions (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     source_id TEXT NOT NULL, revision INTEGER NOT NULL,
@@ -23,7 +24,7 @@ export function installAssetAllocation(db: Database.Database) {
     UPDATE asset_allocation_accounts SET revision=(SELECT revision FROM asset_allocation_revisions WHERE user_id=NEW.user_id AND source_id=NEW.source_id) WHERE user_id=NEW.user_id AND source_id=NEW.source_id;
   END;
   DROP TRIGGER IF EXISTS allocation_update_revision;
-  CREATE TRIGGER allocation_update_revision AFTER UPDATE OF name,currency,amount,category,excluded,amount_mode,updated_at ON asset_allocation_accounts BEGIN
+  CREATE TRIGGER allocation_update_revision AFTER UPDATE OF name,currency,amount,category,excluded,amount_mode,statement_basis,updated_at ON asset_allocation_accounts BEGIN
     UPDATE asset_allocation_revisions SET revision=revision+1 WHERE user_id=NEW.user_id AND source_id=NEW.source_id;
     UPDATE asset_allocation_accounts SET revision=(SELECT revision FROM asset_allocation_revisions WHERE user_id=NEW.user_id AND source_id=NEW.source_id) WHERE user_id=NEW.user_id AND source_id=NEW.source_id;
   END;

@@ -305,8 +305,12 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const [period, setPeriod] = usePersistedState<Period>("fire:asset-period", "ytd");
   const [chartTab, setChartTab] = usePersistedState<ChartTab>("fire:asset-chart-tab", "return");
   const [weighting, setWeighting] = usePersistedState<"simple" | "time">("fire:asset-weighting", "simple");
-  const [assetMarket, setAssetMarket] = usePersistedState("fire:asset-asset-market", "ALL");
-  const [holdingsMarket, setHoldingsMarket] = usePersistedState("fire:asset-holdings-market", "ALL");
+  const [savedAssetMarket, setAssetMarket] = usePersistedState("fire:asset-asset-market", "ALL");
+  const [savedHoldingsMarket, setHoldingsMarket] = usePersistedState("fire:asset-holdings-market", "ALL");
+  const accountMarkets = useMemo(() => new Set(positions.map(record => holdingAccountMarket(record).toUpperCase())), [positions]);
+  // Migration can remove a market while its cookie/local preference still names it.
+  const assetMarket = accountMarkets.has(savedAssetMarket) ? savedAssetMarket : "ALL";
+  const holdingsMarket = accountMarkets.has(savedHoldingsMarket) ? savedHoldingsMarket : "ALL";
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   const [assetsVisible, setAssetsVisible] = useState(true);
@@ -327,7 +331,14 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const [benchKey, setBenchKey] = usePersistedState<BenchKey>("fire:asset-benchmark", "spy");
   const [benchOpen, setBenchOpen] = useState(false);
   const [weightMenuOpen, setWeightMenuOpen] = useState(false);
-  const [pnlMarket, setPnlMarket] = usePersistedState("fire:asset-pnl-market", "ALL");
+  const [savedPnlMarket, setPnlMarket] = usePersistedState("fire:asset-pnl-market", "ALL");
+  const pnlMarket = accountMarkets.has(savedPnlMarket) ? savedPnlMarket : "ALL";
+  useEffect(() => {
+    if (!positions.length) return;
+    if (savedAssetMarket !== assetMarket) setAssetMarket(assetMarket);
+    if (savedHoldingsMarket !== holdingsMarket) setHoldingsMarket(holdingsMarket);
+    if (savedPnlMarket !== pnlMarket) setPnlMarket(pnlMarket);
+  }, [positions.length, savedAssetMarket, savedHoldingsMarket, savedPnlMarket, assetMarket, holdingsMarket, pnlMarket, setAssetMarket, setHoldingsMarket, setPnlMarket]);
   const [pnlExpanded, setPnlExpanded] = useState(false);
   const [orders, setOrders] = useState<TradeOrder[]>([]);
 

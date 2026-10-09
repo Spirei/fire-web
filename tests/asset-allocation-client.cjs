@@ -45,8 +45,9 @@ async function test(name, fn) { await fn(); checks++; console.log('PASS ' + name
   const wrong=harness(snapshot('CNY'));wrong.render();assert.equal(wrong.value.data,null);assert(wrong.value.loading);wrong.reply(0);await wrong.drain();wrong.close();
   const invalid=harness({...s,summary:{...s.summary,knownAsset:NaN}});invalid.render();assert.equal(invalid.value.data,null);invalid.reply(0);await invalid.drain();invalid.close();
  });
- await test('account form keeps unchanged automatic balances live while explicit edits and statements remain fixed', async () => {
+ await test('account form distinguishes a rename from explicit same-amount reconciliation', async () => {
   const h=harness(),a=snapshot().accounts[0];assert.equal(h.client.allocationAmountMode(a,100),'automatic');assert.equal(h.client.allocationAmountMode(a,101),'statement');assert.equal(h.client.allocationAmountMode({...a,reconciled:true},100),'statement');assert.equal(h.client.allocationAmountMode({...a,kind:'manual'},100),'statement');assert.equal(h.client.allocationAmountMode(null,100),'statement');
+  assert.equal(h.client.allocationAmountMode(a,100,true),'statement','retyping the same amount is an explicit checkpoint, not a metadata-only rename');
  });
  await test('snapshot contract rejects wrong currency, owner, malformed amounts and missing categories', async () => {
   const h = harness(), s = snapshot(); assert(h.client.validAllocationSnapshot(s, 'USD', 'owner'));

@@ -1,5 +1,5 @@
 // Explicit, backed-up account migration. Run from the deployed fire-web directory.
-// node scripts/migrate-stock-connect.cjs --user USER_ID --records ID1,ID2 [--apply]
+// node scripts/migrate-stock-connect.cjs --user USER_ID --records ID1,ID2 [--apply] [--restore-automatic-brokers]
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module'), swc = require('next/dist/build/swc');
 const root = path.resolve(__dirname, '..'), resolve = Module._resolveFilename;
 Module._resolveFilename = function(id, parent, ...rest) { return resolve.call(this, id.startsWith('@/') ? path.join(root, id.slice(2)) : id, parent, ...rest); };
@@ -29,8 +29,8 @@ const userId = value('--user'), ids = value('--records').split(',').filter(Boole
   console.log(JSON.stringify(records.map(r => ({ id: r.id, name: r.name, code: r.code, market: r.market, accountMarket: r.accountMarket || r.market, qty: r.qty, revision: r.revision })), null, 2));
   if (args.includes('--apply')) {
     const { FALLBACK_RATES } = require('../lib/types.ts');
-    const result = require('../lib/stockConnectMigration.ts').migrateStockConnect(userId, records.map(r => ({ id: r.id, revision: r.revision })), FALLBACK_RATES);
-    console.log(JSON.stringify({ migrated: result.records.length, removedSources: result.removedSources, summary: result.summary }, null, 2));
+    const result = require('../lib/stockConnectMigration.ts').migrateStockConnect(userId, records.map(r => ({ id: r.id, revision: r.revision })), FALLBACK_RATES, { restoreAutomaticBrokerAmounts: args.includes('--restore-automatic-brokers') });
+    console.log(JSON.stringify({ migrated: result.records.length, restoredSources: result.restoredSources, removedSources: result.removedSources, summary: result.summary }, null, 2));
   }
   getDb().close();
   process.exit(0);

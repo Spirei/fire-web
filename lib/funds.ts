@@ -132,7 +132,7 @@ interface FilledOrderCashRow {
   settlement_currency: string | null; settlement_amount: number | null;
 }
 
-function settlementCurrency(market: string): FundCurrency {
+export function settlementCurrency(market: string): FundCurrency {
   const key = market.trim().toUpperCase();
   if (["HK", "HKG"].includes(key)) return "HKD";
   if (["CN", "SH", "SZ", "A"].includes(key)) return "CNY";
@@ -143,7 +143,7 @@ function settlementCurrency(market: string): FundCurrency {
   return "USD";
 }
 
-function orderCashAmount(order: Pick<FilledOrderCashRow, "amount" | "qty" | "price" | "fees" | "side" | "settlement_currency" | "settlement_amount">) {
+export function orderCashAmount(order: Pick<FilledOrderCashRow, "amount" | "qty" | "price" | "fees" | "side" | "settlement_currency" | "settlement_amount">) {
   if (order.settlement_currency === "CNY") {
     const net = Number(order.settlement_amount);
     if (!Number.isFinite(net) || net <= 0) throw new Error("人民币实际结算金额无效");

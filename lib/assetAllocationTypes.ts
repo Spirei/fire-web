@@ -6,6 +6,7 @@ export interface AllocationAccount {
   category: AllocationCategory; currency: string; amount: number | null; value: number | null;
   holdings: number | null; cash: number | null; recordIds: string[]; icon: string;
   source: string; updatedAt: string | null; excluded: boolean; reconciled: boolean; revision: number;
+  sourceAmount?: number | null; sourceCurrency?: string; statementAmount?: number; reconciledAt?: string | null;
   components: Partial<Record<AllocationCategory, number | null>>;
 }
 export interface AllocationSnapshot {
@@ -19,4 +20,4 @@ export interface AllocationSnapshot {
   issues: { code: string; accountIds: string[]; message: string }[];
   quoteStatus: { pending: boolean; cached: string[]; missing: string[] };
 }
-export interface AllocationInput { id?: string; requestId?: string; revision: number; name: string; currency: string; amount: number; category: AllocationCategory; excluded: boolean; amountMode?: "automatic" | "statement"; }
+export interface AllocationInput { id?: string; requestId?: string; revision: number; name: string; currency: string; amount: number; category: AllocationCategory; excluded: boolean; amountMode?: "automatic" | "statement"; amountChanged?: boolean; }
