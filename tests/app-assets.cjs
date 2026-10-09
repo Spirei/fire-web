@@ -91,7 +91,7 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
  });
  await test('complete discovery fixture exactly matches the frozen JSON contract',async()=>{
   const blocks=[...fs.readFileSync(path.join(root,'docs/native-account-assets-contract.md'),'utf8').matchAll(/```json\n([\s\S]*?)\n```/g)];
-  const frozen=blocks.map(b=>JSON.parse(b[1])).find(b=>b.snapshot_path&&b.features);assert.deepEqual(load('lib/appAssetsConfig.ts').assetsDiscovery(2),frozen);
+  const frozen=JSON.parse(blocks[blocks.length-1][1]);assert.deepEqual(load('lib/appAssetsConfig.ts').assetsDiscovery(2),frozen);
  });
  await test('original market amounts and account-wide weights never use the display currency label',async()=>{
   const f=fixture(),us=record(f),hk=record(f,{code:'HKFIX',market:'HK',qty:7,price:10,cost:5});await classify(f,us);await classify(f,hk,{kind:'etf'});

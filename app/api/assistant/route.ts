@@ -34,7 +34,7 @@ type AssistantAction =
 
 const PAGE_LABELS: Record<string, string> = {
   holdings: "账户资产", assets: "资产分析", pnl: "资产总盈亏", fire: "FIRE",
-  watchlist: "自选股", global: "全球预览", trading: "交易广场", earnings: "财报日历",
+  watchlist: "自选股", global: "全球经济", trading: "交易广场", earnings: "财报日历",
   assistant: "智能助手", celebs: "名人持仓", cards: "卡面库", library: "素材库", settings: "设置",
   users: "用户管理", attachments: "附件管理", activities: "日志"
 };
@@ -64,7 +64,7 @@ function buildAssistantContextBlock(input: {
   lines.push(
     "引用口径：上面这些是站内刚刚取到的真实数据，可以直接据此回答，「交易广场最近动态」可当作站内新闻源引用，并说明抓取时间与来源；",
     "除此之外仍然不得编造价格、收益、财报数字或新闻，也不要声称自己联网搜索过。",
-    "如果用户问的内容不在上面：直接说明「站内暂无可用的××数据」，并告诉他去哪个页面可以看（交易广场 / 财报日历 / 全球预览 / 名人持仓 / 我的持仓）。"
+    "如果用户问的内容不在上面：直接说明「站内暂无可用的××数据」，并告诉他去哪个页面可以看（交易广场 / 财报日历 / 全球经济 / 名人持仓 / 我的持仓）。"
   );
   return lines.join("\n");
 }
@@ -272,7 +272,7 @@ function fallbackAnswer(question: string, records: StockRecord[], context: PageC
 const NAV_TARGETS: Array<[RegExp, string, string]> = [
   [/资产总盈亏/, "资产总盈亏", "/asset-pnl-analysis"], [/资产分析/, "资产分析", "/asset-analysis"],
   [/我的持仓|账户资产/, "账户资产", "/holdings"], [/自选股|行情板/, "自选股", "/watchlist"],
-  [/FIRE/i, "FIRE", "/fire"], [/财报日历/, "财报日历", "/earnings"], [/全球(?:经济|预览)/, "全球预览", "/global"],
+  [/FIRE/i, "FIRE", "/fire"], [/财报日历/, "财报日历", "/earnings"], [/全球经济/, "全球经济", "/global"],
   [/交易广场/, "交易广场", "/trading"], [/卡面库/, "卡面库", "/cards"], [/素材库/, "素材库", "/library"]
 ];
 const MARKET_FILTERS: Array<[RegExp, string, string]> = [[/美股/, "美股", "us"], [/港股/, "港股", "hk"], [/A股|a股/, "A股", "cn"]];

@@ -17,17 +17,6 @@ export function installAppAssets(db: Database.Database) {
       request_id TEXT NOT NULL, result_json TEXT NOT NULL,
       PRIMARY KEY(user_id,request_id)
     );
-    CREATE TABLE IF NOT EXISTS app_asset_order_versions (
-      order_id TEXT PRIMARY KEY REFERENCES trade_orders(id) ON DELETE CASCADE,
-      revision INTEGER NOT NULL
-    );
-    INSERT OR IGNORE INTO app_asset_order_versions SELECT id,1 FROM trade_orders;
-    CREATE TRIGGER IF NOT EXISTS app_asset_order_insert AFTER INSERT ON trade_orders BEGIN
-      INSERT INTO app_asset_order_versions VALUES(NEW.id,1);
-    END;
-    CREATE TRIGGER IF NOT EXISTS app_asset_order_update AFTER UPDATE ON trade_orders BEGIN
-      UPDATE app_asset_order_versions SET revision=revision+1 WHERE order_id=NEW.id;
-    END;
     CREATE TRIGGER IF NOT EXISTS app_asset_identity_update
       AFTER UPDATE OF market,code ON records
       WHEN OLD.market IS NOT NEW.market OR OLD.code IS NOT NEW.code BEGIN

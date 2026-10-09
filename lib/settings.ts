@@ -56,7 +56,7 @@ const DEFAULTS: SiteSettings = {
     { key: "assets", label: "资产分析", url: "/asset-analysis" },
     { key: "fire", label: "FIRE", url: "/fire" },
     { key: "watchlist", label: "自选股", url: "/watchlist" },
-    { key: "global", label: "全球预览", url: "/global" },
+    { key: "global", label: "全球经济", url: "/global" },
     { key: "trading", label: "动态", url: "/trading" },
     { key: "earnings", label: "财报日历", url: "/earnings" },
     { key: "assistant", label: "智能助手", url: "/assistant" },
@@ -312,10 +312,10 @@ export function getSiteSettings(): SiteSettings {
   if (map.dbType === "postgres") result.dbType = "postgres";
   const parsedTabs = parseTabs(map.tabs);
   if (parsedTabs) {
-    // 旧导航兼容：股票添加（quotes）/ 全球经济 → 全球预览（global）
+    // 旧版本迁移：股票添加（quotes）/ 全球预览 → 全球经济（global）
     result.tabs = parsedTabs.map((t) => {
-      if (t.key === "quotes") return { ...t, key: "global", label: "全球预览", url: t.url === "/quotes" ? "/global" : t.url };
-      if (t.key === "global" && t.label === "全球经济") return { ...t, label: "全球预览" };
+      if (t.key === "quotes") return { ...t, key: "global", label: "全球经济", url: t.url === "/quotes" ? "/global" : t.url };
+      if (t.key === "global" && t.label === "全球预览") return { ...t, label: "全球经济" };
       if (t.key === "trading" && t.label === "交易广场") return { ...t, label: "动态" };
       return t;
     });

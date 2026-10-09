@@ -1,7 +1,7 @@
 "use client";
 import { useEffect,useRef,useState } from "react";
-import { createPortal } from "react-dom";
-import { IconPlayerPlay,IconX } from "@tabler/icons-react";
+import { IconPlayerPlay } from "@tabler/icons-react";
+import AppModal from "./AppModal";
 import { observePanelVisibility,panelIsShown } from "@/lib/panelVisibility";
 import type { FeedMedia as Media } from "@/lib/feedTypes";
 
@@ -17,20 +17,5 @@ function Item({media,onPreview}:{media:Media;onPreview:(media:Media)=>void}) {
 }
 export default function FeedMedia({media,limit=3}:{media:Media[];limit?:number}) {
   const [preview,setPreview]=useState<Media|null>(null);
-  // 照片预览为整屏灯箱：仅展示照片本身，不显示说明文字与卡片背景。
-  useEffect(()=>{
-    if(!preview)return;
-    const onKey=(event:KeyboardEvent)=>{if(event.key==="Escape")setPreview(null);};
-    window.addEventListener("keydown",onKey);
-    const previousOverflow=document.body.style.overflow;
-    document.body.style.overflow="hidden";
-    return()=>{window.removeEventListener("keydown",onKey);document.body.style.overflow=previousOverflow;};
-  },[preview]);
-  return <><div className="feed-media">{media.slice(0,limit).map(m=><Item key={m.url} media={m} onPreview={setPreview}/>)}</div>{preview&&createPortal(
-    <div className="feed-media-lightbox" role="dialog" aria-modal="true" aria-label="照片预览" onMouseDown={event=>{if(event.target===event.currentTarget)setPreview(null);}}>
-      <img className="feed-media-preview" src={preview.url} alt={preview.alt} referrerPolicy="no-referrer"/>
-      <button type="button" className="feed-media-lightbox-close" onClick={()=>setPreview(null)} aria-label="关闭照片预览"><IconX size={20}/></button>
-    </div>,
-    document.body
-  )}</>;
+  return <><div className="feed-media">{media.slice(0,limit).map(m=><Item key={m.url} media={m} onPreview={setPreview}/>)}</div>{preview&&<AppModal title={preview.alt||"报道图片"} size="lg" className="feed-theme feed-themed-modal feed-media-modal" onClose={()=>setPreview(null)}><img className="feed-media-preview" src={preview.url} alt={preview.alt} referrerPolicy="no-referrer"/></AppModal>}</>;
 }

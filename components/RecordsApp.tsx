@@ -90,7 +90,7 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "assets", label: "资产分析", url: "/asset-analysis" },
   { key: "fire", label: "FIRE", url: "/fire" },
   { key: "watchlist", label: "自选股", url: "/watchlist" },
-  { key: "global", label: "全球预览", url: "/global" },
+  { key: "global", label: "全球经济", url: "/global" },
   { key: "trading", label: "动态", url: "/trading" },
   { key: "quotes", label: "股票添加", url: "/quotes" },
   { key: "earnings", label: "财报日历", url: "/earnings" },

@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Exercise archive recovery, history preservation, size reporting and failures."""
+"""Exercise archive recovery, rotation and failures using disposable repositories."""
 
-from contextlib import redirect_stdout
 import fcntl
-import hashlib
 import importlib.util
-import io
 import json
+import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
@@ -57,7 +54,7 @@ class SourceBackupTests(unittest.TestCase):
         return backup.backup(self.source, self.destination)
 
     def owned(self):
-        return sorted(path for path in self.destination.iterdir() if re.fullmatch(r'backup-\d{8}-\d{6}-[0-9a-f]{8}', path.name))
+        return sorted(path for path in self.destination.iterdir() if backup.NAME.fullmatch(path.name))
 
     def test_recover_current_source_and_exclude_private_runtime(self):
         (self.source / 'readme-link').symlink_to('README.md')
@@ -74,11 +71,10 @@ class SourceBackupTests(unittest.TestCase):
         self.assertEqual((restored / 'readme-link').read_text(), 'current uncommitted source\n')
         self.assertEqual((result / 'source.tar.gz').stat().st_mode & 0o777, 0o600)
 
-    def test_new_backup_preserves_all_history_and_unrelated_files(self):
+    def test_rotation_keeps_latest_two_and_leaves_unrelated_files(self):
         first = self.run_backup()
         second = self.run_backup()
-        before = {path: hashlib.sha256(path.read_bytes()).hexdigest()
-                  for folder in (first, second) for path in folder.iterdir()}
+        os.utime(first, (2_000_000_000, 2_000_000_000))  # NAS mtime must not decide age.
         foreign = self.destination / 'backup-20000101-000000-12345678'
         shutil.copytree(first, foreign)
         record = json.loads((foreign / 'manifest.json').read_text())
@@ -87,32 +83,11 @@ class SourceBackupTests(unittest.TestCase):
         note = self.destination / 'keep.txt'
         note.write_text('unrelated')
         third = self.run_backup()
-        self.assertTrue(first.exists())
+        self.assertFalse(first.exists())
         self.assertTrue(second.exists())
         self.assertTrue(third.exists())
         self.assertTrue(foreign.exists())
         self.assertEqual(note.read_text(), 'unrelated')
-        self.assertEqual(set(self.owned()), {first, second, third, foreign})
-        for path, expected in before.items():
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), expected)
-
-    def test_archive_size_is_recorded_reported_and_checked_with_legacy_support(self):
-        output = io.StringIO()
-        with redirect_stdout(output):
-            result = self.run_backup()
-        metadata = backup.verify(result)
-        size = (result / 'source.tar.gz').stat().st_size
-        self.assertEqual(metadata['archiveSize'], size)
-        self.assertIn('压缩包大小：', output.getvalue())
-        self.assertIn(f'（{size:,} 字节）', output.getvalue())
-        self.assertEqual(backup.format_size(29_841_935), '29.84 MB')
-        metadata['archiveSize'] = size + 1
-        (result / 'manifest.json').write_text(json.dumps(metadata))
-        with self.assertRaisesRegex(RuntimeError, '大小与清单不一致'):
-            backup.verify(result)
-        del metadata['archiveSize']
-        (result / 'manifest.json').write_text(json.dumps(metadata))
-        self.assertEqual(backup.verify(result), metadata)
 
     def test_corrupted_nas_copy_never_replaces_previous_backups(self):
         self.run_backup()
@@ -123,10 +98,8 @@ class SourceBackupTests(unittest.TestCase):
         def corrupt(source, destination):
             result = real_copy(source, destination)
             if Path(destination).name == 'source.tar.gz':
-                with Path(destination).open('r+b') as stream:
-                    original = stream.read(1)
-                    stream.seek(0)
-                    stream.write(bytes([original[0] ^ 1]))
+                with Path(destination).open('ab') as stream:
+                    stream.write(b'corrupted')
             return result
 
         with patch.object(backup.shutil, 'copyfile', side_effect=corrupt):

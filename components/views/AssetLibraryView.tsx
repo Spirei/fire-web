@@ -91,7 +91,7 @@ const ICON_NAMES: Record<string, string> = {
   holdings: "持仓",
   assets: "资产",
   watchlist: "自选",
-  global: "全球预览",
+  global: "全球经济",
   earnings: "盈利",
   celebs: "名人",
   activities: "动态",
@@ -2386,7 +2386,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                             className="group relative flex-none"
                             title="点击上传/更换图标"
                           >
-                            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[10px] border border-[#d3d9e4] bg-[#f3f5f9] shadow-[0_1px_3px_rgba(10,14,25,.08)] dark:border-[#2a2f3a] dark:bg-[#1c1c1e]">
+                            <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[10px] border border-[#d3d9e4] bg-[#f3f5f9] shadow-[0_1px_3px_rgba(10,14,25,.08)]">
                               {row.imageUrl || row.url ? (
                                 <img src={row.imageUrl || row.url} alt="" className="h-6 w-6" />
                               ) : (
@@ -2888,7 +2888,7 @@ export default function AssetLibraryView({ initialCdnEnabled, initialAssets = []
                         disabled={saving}
                         onClick={(e) => (e.currentTarget.parentElement?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click()}
                         title="点击上传 / 更换卡面（卡面库与卡包同步）"
-                        className="group relative h-[50px] w-[79px] flex-none overflow-hidden rounded-md border border-[#d3d9e4] bg-[#f3f5f9] dark:border-[#2a2f3a] dark:bg-[#1c1c1e]"
+                        className="group relative h-[50px] w-[79px] flex-none overflow-hidden rounded-md border border-[#d3d9e4] bg-[#f3f5f9]"
                       >
                         <img src={row.imageUrl || row.url} alt="" className="h-full w-full object-cover" />
                         <span className={`absolute inset-0 grid place-items-center bg-black/25 transition-opacity duration-200 ${saving ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>

@@ -515,7 +515,7 @@ function fontHeaderFixture(ext) {
     assert(component.includes('const canReveal = allowReveal && !disabled && !readOnly'));
     assert(component.includes('event.preventDefault()'));
     assert(!component.includes('fetch(') && !component.includes('localStorage'));
-    for (const file of ['components/LoginForm.tsx','components/FirstRunSetup.tsx','components/PasswordResetForm.tsx','components/PasskeySettings.tsx','components/views/SettingsView.tsx','components/views/UsersView.tsx','components/AssistantHarnessSettings.tsx','app/deploy-status/page.tsx']) {
+    for (const file of ['components/FirstRunSetup.tsx','components/PasswordResetForm.tsx','components/PasskeySettings.tsx','components/views/SettingsView.tsx','components/views/UsersView.tsx','components/AssistantHarnessSettings.tsx','app/deploy-status/page.tsx']) {
       const source = fs.readFileSync(path.join(root,file), 'utf8');
       const ast = ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
       function visit(node) {

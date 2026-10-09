@@ -10,8 +10,6 @@ import { RecordsError } from "./recordsContract";
 import { rateLimit } from "./rateLimit";
 import { assetOperation, assetValuationBasis, buildAssets, declareInstrument, instrumentRows, instrumentSnapshot, type AssetOptions } from "./appAssets";
 
-import { ASSET_ORDER_FILTERS, assetOrderRows, selectAssetOrders, assetOrdersResult, cancelAssetOrders } from "./appAssetOrders";
-
 function assetGrant(request: Request) {
   try { assertAppOrigin(request); } catch { throw new RecordsError("请求来源不受信任", 403); }
   const token = request.headers.get("authorization")?.match(/^Bearer (fat_[A-Za-z0-9_-]{43})$/)?.[1];
@@ -20,7 +18,7 @@ function assetGrant(request: Request) {
   if (!grant.scope.split(" ").includes(request.method === "GET" ? "portfolio.read" : "portfolio.write")) throw new RecordsError("连接缺少明确授权的范围", 403);
   return grant;
 }
-export async function assetsResponse(request: Request, action: "snapshot" | "instrument" | "operation" | "orders" | "cancel_orders", params?: Promise<{ recordId?: string; requestId?: string }>) {
+export async function assetsResponse(request: Request, action: "snapshot" | "instrument" | "operation", params?: Promise<{ recordId?: string; requestId?: string }>) {
   try {
     const initial = assetGrant(request), authorize = () => {
       const current = assetGrant(request);
@@ -29,28 +27,6 @@ export async function assetsResponse(request: Request, action: "snapshot" | "ins
     };
     const args = params ? await params : {};
     authorize();
-    if (action === "cancel_orders") {
-      if (!rateLimit(`asset-cancel:${initial.user_id}`, 120, 60_000)) throw new RecordsError("提交过于频繁", 429);
-      if (new URL(request.url).searchParams.size) throw new RecordsError("不支持查询参数");
-      const body = await readJsonBody(request, 65_536);
-      const { result, error } = cancelAssetOrders(initial.user_id, body, authorize);
-      return error ? fail(error.code, error.message, error.status) : ok(result);
-    }
-    if (action === "orders") {
-      const query = new URL(request.url).searchParams;
-      if ([...query.keys()].some(k => !["scope", "status", "recordId"].includes(k) || query.getAll(k).length !== 1)) throw new RecordsError("查询参数无效");
-      const scope = query.get("scope") ?? "today", status = query.get("status") ?? "all", recordId = query.get("recordId");
-      if (!["today", "all"].includes(scope) || !(ASSET_ORDER_FILTERS as readonly string[]).includes(status) || recordId !== null && (!recordId || recordId.length > 200)) throw new RecordsError("订单筛选无效");
-      const original = assetOrderRows(initial.user_id), now = Date.now();
-      const snapshot = await fetchOverviewQuotes(selectAssetOrders(original, scope, status, recordId, now).map(row => ({ id: row.id, market: row.market, code: row.code })), 1_500);
-      return getDb().transaction(() => {
-        authorize();
-        const current = assetOrderRows(initial.user_id), old = new Map(original.map(row => [row.id, row]));
-        const cached = new Set(snapshot.cached);
-        const quotes = Object.fromEntries(current.filter(row => old.get(row.id)?.revision === row.revision && old.get(row.id)?.market === row.market && old.get(row.id)?.code === row.code && snapshot.quotes[row.id]).map(row => [row.id, { ...snapshot.quotes[row.id], cached: cached.has(row.id) || !!snapshot.quotes[row.id].cached }]));
-        return ok(assetOrdersResult(initial.user_id, current, scope, status, recordId, Date.now(), quotes));
-      })();
-    }
     if (action === "operation") return ok(assetOperation(initial.user_id, args.requestId ?? ""));
     if (action === "instrument") {
       if (request.method === "GET") return ok(instrumentSnapshot(initial.user_id, args.recordId ?? ""));

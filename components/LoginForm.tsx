@@ -1,6 +1,6 @@
 "use client";
 
-import PasswordInput from "@/components/PasswordInput";
+import VisibilityIcon from "@/components/VisibilityIcon";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -28,6 +28,8 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   const totpAutoTried = useRef("");
   const totpSubmitting = useRef(false);
   const [allowRegister, setAllowRegister] = useState(true);
+  const [showPwd, setShowPwd] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
@@ -221,35 +223,54 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
 
         <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
           密码
-          <PasswordInput
-            key={mode}
-            type="password"
-            aria-label="密码"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={mode === "register" ? "至少 8 位，含字母和数字" : "请输入密码"}
-            maxLength={128}
-            autoComplete={mode === "register" ? "new-password" : "current-password"}
-            required
-            className={inputCls}
-          />
+          <div className="relative">
+            <input
+              type={showPwd ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={mode === "register" ? "至少 8 位，含字母和数字" : "请输入密码"}
+              maxLength={128}
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
+              required
+              className={`${inputCls} pr-11`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPwd((v) => !v)}
+              title={showPwd ? "隐藏密码" : "查看密码"}
+              aria-label={showPwd ? "隐藏密码" : "查看密码"}
+              className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink"
+            >
+              <VisibilityIcon hidden={showPwd} className="h-[18px] w-[18px]" />
+            </button>
+          </div>
           {mode === "register" && <PasswordStrength password={password} userInputs={[username]} />}
         </label>
 
         {mode === "register" && (
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
             确认密码
-            <PasswordInput
-              type="password"
-              aria-label="确认密码"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="再次输入密码"
-              maxLength={128}
-              autoComplete="new-password"
-              required
-              className={inputCls}
-            />
+            <div className="relative">
+              <input
+                type={showConfirm ? "text" : "password"}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="再次输入密码"
+                maxLength={128}
+                autoComplete="new-password"
+                required
+                className={`${inputCls} pr-11`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm((v) => !v)}
+                title={showConfirm ? "隐藏密码" : "查看密码"}
+                aria-label={showConfirm ? "隐藏密码" : "查看密码"}
+                className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink"
+              >
+                <VisibilityIcon hidden={showConfirm} className="h-[18px] w-[18px]" />
+              </button>
+            </div>
           </label>
         )}
         </>

@@ -10,7 +10,7 @@ Web 与 iOS 独立。共享合约路径：`fire-web/docs/native-account-assets-c
 
 ## 旧记录兼容与发布核对（本轮）
 
-2026-10-05 17:23 北京时间只读核对生产 `/api/health`：buildSha=`4d6151c61ff6403ae922b25407d9dce5b18dd97d`，版本v0.1.51。该提交镜像于16:32北京完成手动发布任务（GitHub Actions 运行编号37282168697，event=workflow_dispatch），生产能力已存在；此前“尚未发布”只描述当时状态。当时本轮兼容修复尚未部署；当前线上状态见下方「订单扩展 v1」核验记录，推送本身不等于部署。
+2026-10-05 17:23 北京时间只读核对生产 `/api/health`：buildSha=`4d6151c61ff6403ae922b25407d9dce5b18dd97d`，版本v0.1.51。该提交镜像于16:32北京完成手动发布任务（GitHub Actions 运行编号37282168697，event=workflow_dispatch），生产能力已存在；此前“尚未发布”只描述当时状态。本轮兼容修复尚未部署，推送不等于生产运行此修复。
 
 旧 `buildOverview` 用 price×qty 和 cost×qty；`orders.executeOrder/fillPendingRow` 把 amount 写为 qty×price，费用另列；`tradeAccounting.applyOrder` 也沿此单位合约计算成本和股息。这足以证明**应用原台账的记账单位**，不足以证明证券是正股、ETF或期权。无需数据库迁移或逐项确认即可恢复原台账估值，绝不补证券类型、乘100、造历史或宣称是券商期权合约市值。
 
@@ -81,7 +81,7 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
 
 现有来源：records + revisions；trade_orders 成交/费用/快照；fund_transactions + card balances + simple-ledger 主市场权益现金对账；真实行情及汇率。没有新建成交台账，也没有历史回填。
 
-尚缺来源：经核对的历史日初 NAV/持仓现金流、每市场券商现金子账户、供应商证券分类/退市状态、期权乘数/标的/合约身份/成交记账、常规与扩展报价独立快照、完整交易周期日初基准。这些能力发现均为 false/限定能力；iOS 应显示缺失或隐藏不支持操作。当前已发布状态见下方「订单扩展 v1」核验记录；以上缺失能力不因订单扩展上线而变为可用。
+尚缺来源：经核对的历史日初 NAV/持仓现金流、每市场券商现金子账户、供应商证券分类/退市状态、期权乘数/标的/合约身份/成交记账、常规与扩展报价独立快照、完整交易周期日初基准。这些能力发现均为 false/限定能力；iOS 应显示缺失或隐藏不支持操作。生产尚未发布；完成测试并推送后更新本文件状态。
 
 ## 完整能力 JSON（v2；v1 路径按所选版本）
 
@@ -103,11 +103,7 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
     "cash_by_market": false,
     "today_orders": true,
     "order_reads_settle": false,
-    "instrument_declarations": [
-      "cash_equity",
-      "etf",
-      "unknown"
-    ],
+    "instrument_declarations": ["cash_equity", "etf", "unknown"],
     "derivatives": false,
     "underlying_merge": false,
     "listing_status": "owner_declared",
@@ -118,35 +114,12 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
     "position_day_pnl": false,
     "extended_hours": "observed_quote_only",
     "regular_hours_price_selection": false,
-    "smart_market_sort": false,
-    "all_orders": true,
-    "batch_cancel_pending": true,
-    "partial_fills": false,
-    "rejected_orders": false
+    "smart_market_sort": false
   },
-  "defaults": {
-    "currency": "USD",
-    "cost_method": "diluted",
-    "us_price": "observed"
-  },
+  "defaults": {"currency": "USD", "cost_method": "diluted", "us_price": "observed"},
   "unavailable_values": "null",
-  "legacy_fallback": [
-    "records",
-    "overview"
-  ],
-  "order_writes": "existing_cash_equity_contract_only_no_new_write_capability",
-  "orders_version": 1,
-  "orders_path": "/api/v2/account-assets/orders",
-  "cancel_orders_path": "/api/v2/account-assets/orders/cancellations",
-  "order_revision_field": "revision",
-  "order_filters": [
-    "all",
-    "pending",
-    "filled",
-    "cancelled",
-    "rejected",
-    "expired"
-  ]
+  "legacy_fallback": ["records", "overview"],
+  "order_writes": "existing_cash_equity_contract_only_no_new_write_capability"
 }
 ```
 
@@ -179,45 +152,3 @@ positions.weightPct 分母为**全账户所有 active 持仓的完整显示币�
 count 为当天所有以上状态的 items 总数，dividend 也计入真实记账条目。如 App 只展示 status=filled，自行过滤并标为“成交条数”；空态仅证明没有记录的当日订单。策略字段保留真实台账值，App 不需要策略入口。
 
 其他数值：qty/price/cost/dilutedCost/averageOpenCost 和金额为number|null，revision/recordRevision/collectionRevision/positionCount/count 为整数；asOf/updatedAt/cycleStartedAt/clearedAt/priceAt 为string|null（asOf必有ISO UTC，priceAt保持行情源原文，可能是交易所本地时间）；timeZone为IANAstring|null、date为YYYY-MM-DD|null，完整性为boolean。
-
-## 订单扩展 v1（2026-10-07，冻结；已只读核验生产上线）
-
-用户已告知线上更新至最新。2026-10-07 Web只读核验生产 `/api/health`：buildSha=`2c4f97fd17cedaf53a85209000069f7aad5b1fa0`，版本v0.1.52；同源v1/v2发现均有orders_version=1、固定同版路径、六种筛选，order_reads_settle=false、all_orders/batch_cancel_pending=true，rejected_orders/partial_fills=false。已发布镜像 `ghcr.io/<owner>/fire-web:sha-2c4f97f`（owner使用部署仓库所有者）的发布日志digest为 `sha256:d1e9b723ef12a6fafd5f3f4c86b74926af43080b58ee8a7086a5e69da3d18f32`；运行容器digest未独立读取，健康接口确认的是实际运行buildSha。
-
-iOS对话补充只读验收：正式签名Alcor 0.2.127使用既有真实连接，两色批量撤单页成功GET scope=all，并通过accountId/source/executionModel/revision/无结算校验；真实pending数量为0，空态与禁用撤单按钮符合实际数据。iOS报告用户ledger SHA-256读取前后一致，未POST任何金融操作；运行回执 `/tmp/alcor-entry-ui.DDVsWg/results.xcresult`。这些真实账户验收结果由iOS提供，Web没有索取或复制App Bearer，也未独立读取私有账户金额和订单；pending=0不代表已经实测生产撤单成功。
-
-本节当前上线状态不构成未来生产变更的批准；后续构建发布或更新生产容器仍须单独确认，不复用80b6800或本次已上线版本的批准。本次文档状态同步不触发服务器变更。App只有在所选同源发现 `account_assets.orders_version === 1` 且存在固定 `orders_path` / `cancel_orders_path` 后使用；旧服务器不猜路径，不调用会结算挂单的 legacy orders GET。v1/v2业务结构一致，不跨版本兜底。新增发现：
-
-```json
-{"orders_version":1,"orders_path":"/api/v2/account-assets/orders","cancel_orders_path":"/api/v2/account-assets/orders/cancellations","order_revision_field":"revision","order_filters":["all","pending","filled","cancelled","rejected","expired"]}
-```
-
-features新增 `all_orders:true,batch_cancel_pending:true,partial_fills:false,rejected_orders:false`。原 `order_writes` 字段仍只描述原现金证券下单能力，不包含本节独立的撤单入口；没有新增下单能力。v1替换全部/api/v2前缀。来源仅本人的真实 `trade_orders` 内部台账；不是券商实时订单或券商远程撤单。
-
-### 无结算只读查询
-
-`GET orders_path?scope=today&status=all&recordId=<可选持仓编号>`：portfolio.read。scope仅today/all，默认today；status仅all/pending/filled/cancelled/rejected/expired，默认all，对应全部、进行中、已成交、已撤单、已拒绝、已过期。未知/重复查询参数拒绝。all读取全部已有订单，不分页或截断；recordId限制本人订单中的对应持仓，无跨账号数据。成功data：
-
-`{accountId,asOf,scope,status,recordId,source:"local_trade_ledger",executionModel:"atomic_internal_orders",items,count,settlesPendingOrders:false,dateBasis:"exchange_local_calendar_date",timeZones,unknownDateOrderIds,supportedStatuses:["pending","filled","cancelled","expired"],rejectedOrdersAvailable:false,partialFillsAvailable:false}`。
-
-当天按每市场tradedAt的交易所本地日历日（与原资产todayOrders同口径）；未知市场或无效日期列入unknownDateOrderIds，today不猜日期，all仍包含。pending按数据库实际状态，不因读取时跨过expiresAt或价格达到触发价自行改为expired/filled。
-
-每项字段：`id/orderNo/recordId/market/code/name/side/status/revision/recordRevision/identityMatches/qty/price/fees/amount/orderType/orderPrice/executedPrice/triggerPrice/filledQty/filledQtySource/tif/expiresAt/session/triggerStatus/tradedAt/createdAt/broker/note/currentPrice/currentPriceSource/currentPriceAt/cancellable`。
-
-- revision：正整数订单版本，数据库插入为1；所有真实订单UPDATE（包括原Web成交/撤销/更正路径）递增，状态改回也不能复用旧版本。recordRevision为当前本人持仓版本或null；证券身份不一致时identityMatches=false、cancellable=false。
-- qty/price/fees/amount/triggerPrice保留真实台账有限数值，缺失null；price是当前台账记载价，成交后可能已被执行价覆盖，不能一律标为原委托价。orderPrice只对未成交状态保留price，filled为null；executedPrice仅filled时为台账price，否则null。
-- 当前引擎单笔整单成交，没有部分成交记录。filledQty仅在已知状态和有效qty下按内部整单状态解释：filled为qty，pending/cancelled/expired为0，并标filledQtySource=atomic_order_status；否则null/unavailable。这不是外部券商已成量或部分成交追踪，App不得造进度。当前数据库不记录rejected，筛选rejected为空且rejectedOrdersAvailable=false；不把失败请求伪造为拒绝订单。
-- currentPrice只来自实际读取到的该市场/代码报价（含已有报价缓存）；缺失null，不能用委托价/触发价冒充。currentPriceSource=quote/quote_cache/unavailable，currentPriceAt为行情源time原文或null；异步I/O后订单版本或身份变化会丢弃旧报价。读取返回前重新检查同一grant/账号/security stamp，在最终读事务读取真实状态。
-- 所有数值缺失为null，不补零；identityMatches/cancellable布尔值；revision整数，recordRevision整数|null，状态/日期/编号字符串，日期兼容原台账格式。cancellable表示内部pending且证券身份一致，不代表券商已接受撤单。
-
-### 明确选择的批量撤单
-
-`POST cancel_orders_path`：portfolio.write，仅App Bearer。无Cookie补权；来源Origin沿用同源App限制。JSON：
-
-```json
-{"requestId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","accountId":"<当前账号编号>","orders":[{"orderId":"o-0123456789abcdef","recordId":"<持仓编号>","market":"US","code":"TEST","revision":1,"recordRevision":1}]}
-```
-
-每次用户新确认生成小写UUID，明确1–100笔且不重复；accountId必须等于授权本人。禁止all、筛选条件、他人owner、替代数量/价格等额外字段。读完请求体再次检查同一授权，立即事务核对每笔本人订单、pending、订单revision、recordRevision、recordId/market/code和当前持仓身份；任意一笔不存在40401或不符40902，整批零变更并保存failed回执。全部核对通过后仅把明确选择的pending改为cancelled/已撤销，订单版本递增；不改变持仓、资金，不执行挂单结算，不删除成交历史。服务器不会把未选择或已成交的订单撤销。
-
-成功data：`{requestId,kind:"cancel_orders",accountId,orderIds,state:"completed",code:0,message:"ok",completedAt,data:{items:[更新后的订单项]}}`；失败回执结构相同，state=failed，code/message真实失败，data=null。复用原asset operation_path本人持久查询，requestId与证券声明共享去重命名空间；重复40901只查询原回执，不执行第二次。超时/进后台不得自动重放；GET未找到回执也不能自动重新提交，重新读取并由用户新确认。参数/来源/授权不合法未执行，不创建业务回执。APNs不在本轮范围。

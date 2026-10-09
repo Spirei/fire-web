@@ -491,7 +491,7 @@ export default function DeployStatusPage() {
   const updaterDot = updaterReason === "正在检查更新服务" ? "bg-slate-400" : updaterAvailable ? "bg-emerald-500" : "bg-red-500";
   const runActionLabel = (run: Run) => {
     const imageRun = run.event === "workflow_dispatch" || run.event === "schedule";
-    const prefix = imageRun ? "镜像构建" : run.event === "pull_request" ? "PR检查" : "推送检查";
+    const prefix = imageRun ? "镜像构建" : "推送";
     if (run.status !== "completed") return `${prefix}中`;
     if (run.conclusion === "success") return `${prefix}成功`;
     if (run.conclusion === "skipped") return `${prefix}跳过`;

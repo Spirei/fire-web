@@ -3,11 +3,9 @@ export function assetsDiscovery(version: 1 | 2) {
   return {
     version: 1, snapshot_path: base, instrument_path: `${base}/instruments/{recordId}`,
     operation_path: `${base}/operations/{requestId}`, read_scope: "portfolio.read", write_scope: "portfolio.write",
-    orders_version: 1, orders_path: `${base}/orders`, cancel_orders_path: `${base}/orders/cancellations`,
-    order_revision_field: "revision", order_filters: ["all", "pending", "filled", "cancelled", "rejected", "expired"],
     snapshot_revision_field: "snapshotRevision", record_collection_revision_field: "collectionRevision",
     request_id_field: "requestId", idempotency: "reject-duplicate-query-original", automatic_mutation_replay: false,
-    features: { cash_by_currency: true, cash_by_market: false, today_orders: true, order_reads_settle: false, all_orders: true, batch_cancel_pending: true, partial_fills: false, rejected_orders: false,
+    features: { cash_by_currency: true, cash_by_market: false, today_orders: true, order_reads_settle: false,
       instrument_declarations: ["cash_equity", "etf", "unknown"], derivatives: false, underlying_merge: false,
       listing_status: "owner_declared", average_open_cost: "reconciled_zero_opening_cycle_only",
       diluted_cost: "stored_position_cost", legacy_record_valuation: "stored_unit_price_times_quantity", account_day_pnl: false, position_day_pnl: false,
