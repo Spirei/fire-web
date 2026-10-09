@@ -43,7 +43,7 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
     const id = `broker:${group?.id || stable(r.group || "ungrouped")}:${cur}`;
     let account = accounts.find(a => a.id === id);
     if (!account) account = add({ id, name: group?.name || r.group || "未归属持仓", kind: "broker", category: "securities", currency: cur, amount: 0, source: "/records", icon: group ? icons.get(group.id.toLowerCase()) || "" : "" });
-    positions.push({ id: r.id, name: r.name, code: r.code, currency: cur, brokerId: group?.id ?? null, revision: r.revision ?? 0, accountId: id });
+    positions.push({ id: r.id, name: r.name, code: r.code, market: r.market, currency: cur, brokerId: group?.id ?? null, revision: r.revision ?? 0, accountId: id });
     account.amount = (account.amount ?? 0) + amount; account.recordIds.push(r.id);
     account.updatedAt = !account.updatedAt || r.updatedAt > account.updatedAt ? r.updatedAt : account.updatedAt;
     account.holdings = account.amount;

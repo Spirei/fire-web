@@ -25,6 +25,14 @@ const snap=f=>allocation.buildAssetAllocation(f.user.id,rates,quotes,'USD');
 const business=()=>Object.fromEntries(['records','fund_transactions','trade_orders','card_amounts','card_holdings','card_details','custom_cards','user_settings'].map(t=>[t,db.prepare('SELECT * FROM '+t+' ORDER BY rowid').all()]));
 async function test(name,fn){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuotes=null;await fn();count++;console.log('PASS '+name);}
 (async()=>{
+ await test('market badges follow owned securities and native CNY valuation survives misleading account names',async()=>{
+  const f=fixture(),cn=rec(f,{name:'Baosteel',code:'600019',market:'CN',price:6,qty:100}),hk=rec(f,{code:'00700',market:'HK',price:20,qty:100});
+  const before=snap(f),a=before.accounts.find(a=>a.recordIds.includes(cn.id));
+  assert.equal((await call(f,'PUT',input({id:a.id,name:'HK label',currency:'CNY',category:a.category,amount:a.amount,amountMode:'automatic'}))).status,200);
+  const after=snap(f),position=after.positions.find(p=>p.id===cn.id),account=after.accounts.find(a=>a.id===position.accountId);
+  assert.equal(position.market,'CN');assert.equal(position.currency,'CNY');assert.equal(account.currency,'CNY');assert.equal(account.amount,600);assert.equal(account.value,+(600/7).toFixed(2));
+  assert.equal(after.positions.find(p=>p.id===hk.id).market,'HK');assert.equal(after.summary.netAsset,before.summary.netAsset);
+ });
  await test('weak conditional snapshots are stable, currency/owner bound and reauthorize before 304',async()=>{
   const f=fixture(),g=fixture(),first=await call(f),tag=first.headers.get('etag');
   assert.match(tag,/^W\/"[a-f0-9]{64}"$/);assert.equal(first.body.data.snapshotRevision,tag.slice(3,-1));

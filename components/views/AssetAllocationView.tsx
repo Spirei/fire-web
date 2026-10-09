@@ -5,6 +5,7 @@ import { IconBuildingBank, IconChartPie, IconCoins, IconPlus, IconRefresh, IconE
 import AppModal from "@/components/AppModal";
 import AppSelect from "@/components/AppSelect";
 import CurrencySelect from "@/components/CurrencySelect";
+import MarketCodeBadge from "@/components/MarketCodeBadge";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import { useDisplayCurrency, CURRENCY_SYMBOLS } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -14,6 +15,12 @@ import { AllocationClientError, allocationAmountMode, writeAllocation } from "@/
 import { useAssetAllocationSnapshot, type AllocationReadEvent } from "@/lib/useAssetAllocationSnapshot";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { ALLOCATION_CATEGORIES, ALLOCATION_LABELS, type AllocationAccount, type AllocationCategory, type AllocationInput, type AllocationSnapshot } from "@/lib/assetAllocationTypes";
+
+function AccountMarketBadges({ account, data }: { account: AllocationAccount; data: AllocationSnapshot }) {
+  const positions = data.positions.filter(p => p.accountId === account.id && p.market);
+  const badges = new Map(positions.map(p => [p.market === "CN" ? /^[69]/.test(p.code.replace(/^\D+/, "")) ? "SH" : "SZ" : p.market!, p]));
+  return <>{[...badges].map(([key, p]) => <MarketCodeBadge key={key} market={p.market!} code={p.code} />)}</>;
+}
 
 // 类别配色唯一来源在 app/globals.css 的 --allocation-* 变量；这里只引用，避免两处定义漂移。
 const COLORS: Record<AllocationCategory, string> = { securities: "var(--allocation-securities)", cash: "var(--allocation-cash)", investment: "var(--allocation-investment)", fixed: "var(--allocation-fixed)", receivable: "var(--allocation-receivable)", debt: "var(--allocation-debt)" };
@@ -92,7 +99,7 @@ function RoutingGraph({ data, nodes, hidden, phase, flow, onEdit, onBanks }: { d
         const note = !a ? "" : a.excluded ? "未计入" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : a.recordIds.some(id => data.quoteStatus.missing.includes(id)) ? "部分记录价" : "";
         return a ? <button key={n.id} ref={el => { if (el) accountNodes.current.set(n.id, el); else accountNodes.current.delete(n.id); }} type="button" className={`allocation-node allocation-account ${n.excluded ? "is-excluded" : ""}`} onClick={() => onEdit(a)}>
         <span className="allocation-node-icon"><SafeAssetImage src={a.icon} style={{ width: 19, height: 19 }} className="rounded object-contain" fallback={a.kind === "broker" ? <IconChartPie size={19} stroke={1.5} /> : a.kind === "bank" ? <IconBuildingBank size={19} stroke={1.5} /> : <IconCoins size={19} stroke={1.5} />} /></span>
-        <span className="allocation-node-body"><b title={a.name}>{a.name}</b>{note ? <small>{note}</small> : null}<strong>{money(a.value)}</strong></span>
+        <span className="allocation-node-body"><span className="flex min-w-0 items-center gap-1.5"><b title={a.name}>{a.name}</b><AccountMarketBadges account={a} data={data} /></span>{note ? <small>{note}</small> : null}<strong>{money(a.value)}</strong></span>
         <span className="allocation-node-dot" style={{ background: COLORS[a.category] }} />
       </button> : <button key={n.id} ref={el => { if (el) accountNodes.current.set(n.id, el); else accountNodes.current.delete(n.id); }} type="button" className={`allocation-node allocation-account ${n.excluded ? "is-excluded" : ""}`} onClick={onBanks} aria-label="展开银行卡">
         <span className="allocation-node-icon"><IconBuildingBank size={19} stroke={1.5} /></span>
@@ -193,7 +200,7 @@ function BrokerAssignment({ data, onClose, onSaved, onReload }: { data: Allocati
   return <AppModal title="关联券商持仓" onClose={onClose} closeDisabled={saving}>
     <div className="allocation-form"><fieldset className="contents" disabled={saving || uncertain}><label>券商<AppSelect ariaLabel="目标券商" value={broker} options={data.brokers.map(b => ({ value: b.id, label: b.name }))} onChange={setBroker} /></label>
       {!data.brokers.length && <p className="allocation-form-note">请先在股票设置中添加券商。</p>}
-      <div className="allocation-position-list">{data.positions.map(p => <label key={p.id} className="allocation-checkbox"><input type="checkbox" checked={selected.has(p.id)} onChange={e => setSelected(prev => { const next = new Set(prev); if (e.target.checked) next.add(p.id); else next.delete(p.id); return next; })} /><span><b>{p.name}</b><small>{p.code} · {p.currency} · {data.brokers.find(b => b.id === p.brokerId)?.name || "未归属"}</small></span></label>)}</div>
+      <div className="allocation-position-list">{data.positions.map(p => <label key={p.id} className="allocation-checkbox"><input type="checkbox" checked={selected.has(p.id)} onChange={e => setSelected(prev => { const next = new Set(prev); if (e.target.checked) next.add(p.id); else next.delete(p.id); return next; })} /><span><span className="flex items-center gap-1.5"><b>{p.name}</b>{p.market && <MarketCodeBadge market={p.market} code={p.code} />}</span><small>{p.code} · {p.currency} · {data.brokers.find(b => b.id === p.brokerId)?.name || "未归属"}</small></span></label>)}</div>
       </fieldset>
       {error && <p className="allocation-error" role="alert">{error}</p>}
       <div className="mt-5 flex justify-end gap-2.5"><button type="button" className="allocation-button" disabled={saving} onClick={onClose}>取消</button>{uncertain ? <button type="button" className="allocation-button is-primary" disabled={saving} onClick={async () => { setSaving(true); if (await onReload()) onClose(); setSaving(false); }}>{saving ? "读取中…" : "重新读取"}</button> : <button type="button" className="allocation-button is-primary" disabled={saving || !selected.size || !broker || selected.size > 200} onClick={() => void save()}>{saving ? "关联中…" : `关联${selected.size ? ` ${selected.size} 项` : ""}`}</button>}</div>
@@ -257,7 +264,7 @@ export default function AssetAllocationView({ initial }: { initial?: AllocationS
       <div className="allocation-account-list"><div className="allocation-list-heading"><h3>账户明细</h3><span>点击账户核对余额</span></div><div className="allocation-table-scroll"><table>
         <thead><tr><th>账户</th><th>来源</th><th>原币余额</th><th>{displayCurrency} 估值</th><th>状态</th></tr></thead>
         <tbody>{nodes.map(n => { const a = n.account; return a ? <tr key={n.id} className={a.excluded ? "is-excluded" : ""}>
-          <td><button type="button" onClick={() => setEditing(a)}>{a.name}<IconArrowUpRight size={13} /></button></td><td>{a.kind === "broker" ? "持仓" : a.kind === "fund" ? "资金系统" : a.kind === "ledger" ? "简化账本" : "手动录入"}</td><td>{hidden ? "******" : `${a.currency} ${a.amount === null ? "—" : a.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })}`}</td><td>{money(a.value)}</td><td>{a.excluded ? "未计入" : a.reconciled ? "已核对" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : "自动关联"}</td>
+          <td><button type="button" onClick={() => setEditing(a)}>{a.name}<AccountMarketBadges account={a} data={data} /><IconArrowUpRight size={13} /></button></td><td>{a.kind === "broker" ? "持仓" : a.kind === "fund" ? "资金系统" : a.kind === "ledger" ? "简化账本" : "手动录入"}</td><td>{hidden ? "******" : `${a.currency} ${a.amount === null ? "—" : a.amount.toLocaleString("en-US", { maximumFractionDigits: 4 })}`}</td><td>{money(a.value)}</td><td>{a.excluded ? "未计入" : a.reconciled ? "已核对" : a.amount === null ? "待补余额" : a.value === null ? "缺汇率" : "自动关联"}</td>
         </tr> : <tr key={n.id} className={n.excluded ? "is-excluded" : ""}>
           <td><button type="button" onClick={() => setBanksOpen(true)}>银行卡<IconArrowUpRight size={13} /></button></td><td>{data.bankSummary.count} 张有余额</td><td><button type="button" onClick={() => setBanksOpen(true)}>查看明细</button></td><td>{money(data.bankSummary.value)}</td><td>{n.excluded ? "未计入" : data.bankSummary.value === null ? "待核对" : "已关联"}</td>
         </tr>; })}</tbody>

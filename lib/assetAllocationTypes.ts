@@ -14,7 +14,7 @@ export interface AllocationSnapshot {
   accounts: AllocationAccount[];
   bankSummary: { count: number; includedCount: number; value: number | null };
   brokers: { id: string; name: string; icon: string }[];
-  positions: { id: string; name: string; code: string; currency: string; brokerId: string | null; revision: number; accountId: string }[];
+  positions: { id: string; name: string; code: string; market?: string; currency: string; brokerId: string | null; revision: number; accountId: string }[];
   categories: { id: AllocationCategory; name: string; value: number | null; weightPct: number | null }[];
   issues: { code: string; accountIds: string[]; message: string }[];
   quoteStatus: { pending: boolean; cached: string[]; missing: string[] };
