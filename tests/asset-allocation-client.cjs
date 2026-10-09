@@ -8,7 +8,7 @@ const snapshot = (currency = 'USD', revision = 'a') => ({ version: 1, accountId:
  accounts: [{ id: 'fund:USD', name: 'Cash', kind: 'fund', category: 'cash', currency: 'USD', amount: 100, value: 100, holdings: null, cash: 100, recordIds: [], icon: '', source: 'funds', updatedAt: null, excluded: false, reconciled: false, revision: 0, components: { cash: 100 } }],
  bankSummary: { count: 0, includedCount: 0, value: 0 }, brokers: [], positions: [], categories: categories.map(id => ({ id, name: id, value: id === 'cash' ? 100 : 0, weightPct: id === 'cash' ? 100 : 0 })), issues: [], quoteStatus: { pending: false, cached: [], missing: [] } });
 const response = (data, status = 200, headers = {}) => new Response(status === 304 ? null : JSON.stringify(status === 200 ? { code: 0, data } : { code: status * 100 + 1, message: 'Rejected' }), { status, headers: { 'Content-Type': 'application/json', ETag: `W/"${data?.snapshotRevision || 'a'.repeat(64)}"`, 'X-Allocation-Observed-At': '2026-10-07T12:01:00.000Z', ...headers } });
-function harness() {
+function harness(initial = null) {
  let cursor = 0, dirty = false, currency = 'USD', foreground = true, value, now = Date.parse('2026-10-07T12:00:00.000Z'), timerId = 0;
  const states = [], effects = [], requests = [], events = [], timers = new Map(), listeners = new Map(), modules = new Map();
  const hooks = {
@@ -26,7 +26,7 @@ function harness() {
  const load = name => { if (modules.has(name)) return modules.get(name); const exports = {}; modules.set(name, exports); vm.runInNewContext(compile(name), { ...environment, exports, require: id => id === 'react' ? hooks : load(id.replace('./', '')) }); return exports; };
  const client = load('assetAllocationClient'), hook = load('useAssetAllocationSnapshot').useAssetAllocationSnapshot;
  const notify = event => events.push({ ...event });
- function render() { for (let n = 0; n < 12; n++) { dirty = false; cursor = 0; value = hook(currency, foreground, notify); for (const e of effects) if (e?.pending) { e.pending = false; e.cleanup?.(); e.cleanup = e.fn(); } if (!dirty) return value; } throw Error('Render loop'); }
+ function render() { for (let n = 0; n < 12; n++) { dirty = false; cursor = 0; value = hook(currency, foreground, notify, initial); for (const e of effects) if (e?.pending) { e.pending = false; e.cleanup?.(); e.cleanup = e.fn(); } if (!dirty) return value; } throw Error('Render loop'); }
  const drain = async () => { for (let n = 0; n < 40; n++) await Promise.resolve(); await new Promise(setImmediate); return render(); };
  return { client, requests, events, timers, listeners, render, drain, get value() { return value; },
   currency: cur => { currency = cur; return render(); }, foreground: on => { foreground = on; return render(); },
@@ -39,6 +39,12 @@ function harness() {
 let checks = 0;
 async function test(name, fn) { await fn(); checks++; console.log('PASS ' + name); }
 (async () => {
+ await test('server bootstrap displays immediately, refreshes quietly and never reuses wrong-currency or invalid data', async () => {
+  const s=snapshot(),h=harness(s);h.render();assert.equal(h.value.data,s);assert.equal(h.value.checkedAt,s.observedAt);assert.equal(h.value.loading,false);assert.equal(h.requests.length,1);assert.equal(h.events.at(-1).animate,false);
+  h.reply(0,s,304);await h.drain();assert.equal(h.value.data,s);h.close();
+  const wrong=harness(snapshot('CNY'));wrong.render();assert.equal(wrong.value.data,null);assert(wrong.value.loading);wrong.reply(0);await wrong.drain();wrong.close();
+  const invalid=harness({...s,summary:{...s.summary,knownAsset:NaN}});invalid.render();assert.equal(invalid.value.data,null);invalid.reply(0);await invalid.drain();invalid.close();
+ });
  await test('account form keeps unchanged automatic balances live while explicit edits and statements remain fixed', async () => {
   const h=harness(),a=snapshot().accounts[0];assert.equal(h.client.allocationAmountMode(a,100),'automatic');assert.equal(h.client.allocationAmountMode(a,101),'statement');assert.equal(h.client.allocationAmountMode({...a,reconciled:true},100),'statement');assert.equal(h.client.allocationAmountMode({...a,kind:'manual'},100),'statement');assert.equal(h.client.allocationAmountMode(null,100),'statement');
  });

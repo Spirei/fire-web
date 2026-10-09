@@ -5,7 +5,7 @@ export function assetsDiscovery(version: 1 | 2) {
     operation_path: `${base}/operations/{requestId}`, read_scope: "portfolio.read", write_scope: "portfolio.write",
     snapshot_revision_field: "snapshotRevision", record_collection_revision_field: "collectionRevision",
     request_id_field: "requestId", idempotency: "reject-duplicate-query-original", automatic_mutation_replay: false,
-    features: { cash_by_currency: true, cash_price_independent: true, cash_valuation: "recorded_cash_ledger_price_independent", imported_equity_requires_opening_cash: true, cash_by_market: false, today_orders: true, order_reads_settle: false,
+    features: { cash_by_currency: true, cash_price_independent: true, cash_valuation: "recorded_cash_ledger_price_independent", imported_equity_requires_opening_cash: false, cash_by_market: false, today_orders: true, order_reads_settle: false,
       instrument_declarations: ["cash_equity", "etf", "unknown"], derivatives: false, underlying_merge: false,
       listing_status: "owner_declared", average_open_cost: "reconciled_zero_opening_cycle_only",
       diluted_cost: "stored_position_cost", legacy_record_valuation: "stored_unit_price_times_quantity", account_day_pnl: false, position_day_pnl: false,

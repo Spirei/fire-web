@@ -63,7 +63,7 @@ export async function assetAllocationResponse(request: Request, appOnly = false)
     if (!/^[A-Z]{3}$/.test(currency) || !Number.isFinite(rates[currency]) || rates[currency] <= 0) throw new RecordsError("缺少显示币种汇率");
     const original = listRecords(initial.id), items = original.filter(r => Number(r.qty) > 0);
     const tracked = await trackQuoteRequest(request, items); assertReadActive();
-    const snapshot = await fetchOverviewQuotes(items, 1_500, { tracked });
+    const snapshot = await fetchOverviewQuotes(items, token ? 1_500 : 150, { tracked });
     return getDb().transaction(() => {
       assertReadActive(); const active = listRecords(initial.id).filter(r => Number(r.qty) > 0), before = new Map(original.map(r => [r.id, r]));
       const quotes = Object.fromEntries(active.filter(r => { const old = before.get(r.id); return old?.revision === r.revision && old?.market === r.market && old?.code === r.code && snapshot.quotes[r.id]; }).map(r => [r.id, snapshot.quotes[r.id]]));

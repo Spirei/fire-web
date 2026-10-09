@@ -201,7 +201,7 @@ function BrokerAssignment({ data, onClose, onSaved, onReload }: { data: Allocati
   </AppModal>;
 }
 
-export default function AssetAllocationView() {
+export default function AssetAllocationView({ initial }: { initial?: AllocationSnapshot | null }) {
   const { currency } = useDisplayCurrency();
   const foreground = useWorkspaceForeground();
   const [hidden, setHidden] = usePersistedState("fire:allocation-hidden", false);
@@ -231,7 +231,7 @@ export default function AssetAllocationView() {
     };
     if (remaining > 0) returnTimer.current = setTimeout(startReturn, remaining); else startReturn();
   }, []);
-  const { data, error, loading, checkedAt, refresh, changingCurrency } = useAssetAllocationSnapshot(currency, foreground, onRead);
+  const { data, error, loading, checkedAt, refresh, changingCurrency } = useAssetAllocationSnapshot(currency, foreground, onRead, initial);
   const phase: ReadPhase = loading ? "request" : error ? "error" : "idle";
   useEffect(() => {
     setEditing(undefined); setAssigning(null); setBanksOpen(false);

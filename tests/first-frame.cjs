@@ -80,6 +80,7 @@ try {
     assert(html.includes('value="腾讯"')&&html.includes('aria-label="关闭股票信息"'));
     assert(html.includes('aria-label="收纳盒，1 个已入池标的"'));
     assert(!html.includes('正在读取股票池')&&!html.includes('盒子还是空的'));
+    assert(!html.includes('pool-back'),'stock pool is a first-level workspace, without a global return button');
     const ordinary=render('components/views/QuotePoolView.tsx',{...props,admin:false},'scope=shared');
     assert(ordinary.includes('腾讯控股')&&!ordinary.includes('Apple')&&!ordinary.includes('共享池'));
     const jp=render('components/views/QuotePoolView.tsx',props,'m=JP');

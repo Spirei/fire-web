@@ -3,6 +3,7 @@ import { getAuthUser } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
 import { FUND_CURRENCIES, isFundCurrency, type FundCurrency } from "@/lib/fundCurrencies";
 import { fundState } from "@/lib/fundState";
+import { setCashBalance } from "@/lib/cashBalance";
 import { countFundTransactions, createFundTransaction, ensureOrderCashTransactions, listFundTransactions, type FundType } from "@/lib/funds";
 
 const currencies = new Set<string>(FUND_CURRENCIES);
@@ -28,6 +29,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = getAuthUser(request); if (!user) return fail(40101, "未登录", 401);
   const body = await readJsonBody(request).catch(() => null); if (!body) return fail(40001, "无效请求", 400);
+  if (body.action === "set_balance") {
+    const currentUser = getAuthUser(request);
+    if (!currentUser || currentUser.id !== user.id) return fail(40101, "未登录", 401);
+    const result = setCashBalance(user.id, body.currency, body.targetBalance, body.expectedBalance);
+    if ("error" in result) return fail(result.status === 409 ? 40901 : 40001, result.error, result.status);
+    return ok({ transaction: result.transaction, ...fundState(user.id) });
+  }
   const rawCurrency = String(body.currency || "").toUpperCase();
   const type = String(body.type || "") as FundType;
   const amount = Number(body.amount); const direction = Number(body.direction);

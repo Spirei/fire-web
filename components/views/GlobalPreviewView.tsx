@@ -10,13 +10,13 @@ import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
-import { IconArrowsExchange, IconChartHistogram, IconCalendarPause, IconBox } from "@tabler/icons-react";
+import { IconArrowsExchange, IconChartHistogram, IconCalendarPause } from "@tabler/icons-react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { sharedRead } from "@/lib/sharedRead";
 import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
-import dynamic from "next/dynamic";
 import { IconHierarchy2 } from "@tabler/icons-react";
-const AssetAllocationView = dynamic(() => import("./AssetAllocationView"));
+import AssetAllocationView from "@/components/views/AssetAllocationView";
+import type { AllocationSnapshot } from "@/lib/assetAllocationTypes";
 
 interface TopAsset {
   market: string;
@@ -448,7 +448,7 @@ function SectionIcon({ section }: { section: GlobalSection }) {
   return <Icon className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" />;
 }
 
-export default function GlobalPreviewView({ pageSize, initialNow, onOpenPool }: { pageSize?: number; initialNow?: number; onOpenPool?: () => void }) {
+export default function GlobalPreviewView({ pageSize, initialNow, initialAllocation }: { pageSize?: number; initialNow?: number; initialAllocation?: AllocationSnapshot | null }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
@@ -484,10 +484,9 @@ export default function GlobalPreviewView({ pageSize, initialNow, onOpenPool }: 
             <span className="sr-only">：{description}</span>
           </button>
         ))}
-        <button type="button" className="global-section-button" onClick={onOpenPool} onPointerEnter={() => { void import("@/components/views/QuotePoolView"); }} aria-label="股票池"><IconBox className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" /><span>股票池</span></button>
       </nav>
       <div key={section} className="global-section-panel">
-        {section === "allocation" ? <AssetAllocationView /> : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
+        {section === "allocation" ? <AssetAllocationView initial={initialAllocation} /> : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
       </div>
     </div>
   );

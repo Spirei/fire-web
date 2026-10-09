@@ -91,6 +91,7 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "fire", label: "FIRE", url: "/fire" },
   { key: "watchlist", label: "自选股", url: "/watchlist" },
   { key: "global", label: "全球经济", url: "/global" },
+  { key: "quote-pool", label: "股票池", url: "/quote-pool" },
   { key: "trading", label: "动态", url: "/trading" },
   { key: "quotes", label: "股票添加", url: "/quotes" },
   { key: "earnings", label: "财报日历", url: "/earnings" },
@@ -135,7 +136,8 @@ export default function RecordsApp({
   initialAssetLibrary = null,
   initialCardLibrary = null,
   initialFeed = null,
-  initialQuotePool = null
+  initialQuotePool = null,
+  initialAllocation = null
 }: {
   initialTab: string;
   initialNow: number;
@@ -158,6 +160,7 @@ export default function RecordsApp({
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
   initialQuotePool?: import("@/lib/quotePoolView").PoolBootstrap | null;
+  initialAllocation?: import("@/lib/assetAllocationTypes").AllocationSnapshot | null;
   initialFeed?: import("@/lib/feedTypes").FeedChrome | import("@/lib/feedTypes").FeedPayload | null;
 }) {
   const router = useRouter();
@@ -191,7 +194,7 @@ export default function RecordsApp({
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [panelDirection, setPanelDirection] = useState("none");
-  const navigationTab = activeTab === "quote-pool" ? "global" : activeTab;
+  const navigationTab = activeTab;
   const [mountedTabs, setMountedTabs] = useState<TabKey[]>(() => [initialTab as TabKey]);
   const [panelEpoch, setPanelEpoch] = useState<Partial<Record<TabKey, number>>>({});
   const activeTabRef = useRef(activeTab);
@@ -1227,7 +1230,7 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" ? initialNow : 0} />}
-          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} onOpenPool={() => navigateFromAssistant("/quote-pool")} />}
+          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} initialAllocation={initialAllocation} />}
           {activeTab === "quote-pool" && <QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateFromAssistant} />}
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}

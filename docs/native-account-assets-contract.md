@@ -102,7 +102,7 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
     "cash_by_currency": true,
     "cash_price_independent": true,
     "cash_valuation": "recorded_cash_ledger_price_independent",
-    "imported_equity_requires_opening_cash": true,
+    "imported_equity_requires_opening_cash": false,
     "cash_by_market": false,
     "today_orders": true,
     "order_reads_settle": false,
@@ -158,11 +158,11 @@ count 为当天所有以上状态的 items 总数，dividend 也计入真实记�
 
 ## 报价独立现金修正（2026-10-09，冻结；待发布）
 
-本节已从c8f607e隔离修复合入c48ad2b主线，待发布和部署。保留主线已恢复的资产配置，订单扩展与APNs仍保持撤回状态。旧80b6800/c8f607e及旧cash.sourceComplete=true可能仍是“导入权益减当前市值”的残差，不能作为独立现金。新同源发现明确新增可选 `account_assets.features.cash_price_independent=true`，以及cash_valuation=recorded_cash_ledger_price_independent、imported_equity_requires_opening_cash=true。缺省/false不得启用本机NAV投影；schemaVersion、API版本、权限和账号身份不变，overview/account-assets同源口径。
+本节已从c8f607e隔离修复合入c48ad2b主线，待发布和部署。保留主线已恢复的资产配置，订单扩展与APNs仍保持撤回状态。旧80b6800/c8f607e及旧cash.sourceComplete=true可能仍是“导入权益减当前市值”的残差，不能作为独立现金。新同源发现明确新增可选 `account_assets.features.cash_price_independent=true`，以及cash_valuation=recorded_cash_ledger_price_independent、imported_equity_requires_opening_cash=false。缺省/false不得启用本机NAV投影；schemaVersion、API版本、权限和账号身份不变，overview/account-assets同源口径。
 
 现金只取已记录资金台账（期初、收支、调整及内部卡转账）+真实filled订单的有符号成交现金流+已记录借记/预付卡余额。自动订单流水不重复计入，pending/cancelled/expired不扣现金；买入扣成交金额及费用，卖出/股息加净回款，允许负现金。现金不是券商直连认证余额，不把独立于报价等同外部机构核验；只证明本站已有台账可核算。当前价格、持仓市值、当日盈亏、投资权益、证券名称不参与现金推算。
 
-旧简化账本正数且有market关联的invest.amount是总权益，不是期初现金。若其结算币种没有本人明确记录的资金type=opening，缺少现金基线；有入金/银行卡余额也不能从权益补造剩余现金。受影响币种为缺失（内部NaN、JSON null），现金整体sourceComplete=false/nativeBalancesByCurrency=null/summary.totalCash=null/totalAsset=null，仍保留真实持仓市值。对应unavailableReasons含missing_explicit_opening_cash_for_imported_equity及missingOpeningCurrencies。读取不自动补期初、改流水、迁移权益或冻结上一轮反推余额。用户需核对其账户完整现金台账后明确记录期初现金；不能把导入总权益直接录成期初现金。其他损坏来源、未知卡币种或订单单位无法核对仍返回缺失。不存在导入权益时沿用本站资金台账的记录净额与真实空账零，不声称证明外部未记录账户不存在。
+旧简化账本有market关联的invest.amount是总权益，不是现金；它不计入现金，也不要求已记录银行卡、资金流水和成交现金再补一笔期初。现金统一为本站资金台账净额、已成交买卖及费用和持有银行卡余额，真实空账为0，允许负余额。missingOpeningCurrencies保持兼容空数组，不再因导入总权益存在返回missing_explicit_opening_cash_for_imported_equity。未知或损坏来源、缺汇率及无法核对的订单单位仍返回缺失；未录入的外部资产不计入，不反推剩余现金或自动补账。
 
 account-assets.cash保留原字段，source改为recorded_cash_ledger，新增valuationIndependent=true、unavailableReasons:string[]、missingOpeningCurrencies:string[]。sourceComplete=true只允许独立现金来源、已成交单位及有限余额均有效；缺汇率不隐藏已确认原币现金。overview新增cashSource=recorded_cash_ledger、cashValuationIndependent=true、cashSourceComplete、cashUnavailableReasons、missingOpeningCashCurrencies，现金/总资产仍按完整性返回null。cash_price_independent是服务器算法能力，不代表任意账号当前现金完整。
 

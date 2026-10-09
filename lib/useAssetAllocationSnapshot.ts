@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AllocationClientError, readAllocation } from "./assetAllocationClient";
+import { AllocationClientError, readAllocation, validAllocationSnapshot } from "./assetAllocationClient";
 import { ALLOCATION_REFRESH_MS } from "./assetAllocationContract";
 import type { AllocationSnapshot } from "./assetAllocationTypes";
 
@@ -9,8 +9,8 @@ type Mode = "manual" | "background" | "mutation";
 export type AllocationReadEvent = { id: number; phase: "request" | "response" | "stop"; animate: boolean; startedAt: number; hadSnapshot: boolean };
 
 /** Private snapshots stay in memory. Currency changes retain correctly labelled old values until the next snapshot arrives. */
-export function useAssetAllocationSnapshot(currency: string, foreground: boolean, onRead: (event: AllocationReadEvent) => void) {
-  const [data, setData] = useState<AllocationSnapshot | null>(null), [error, setError] = useState(""), [loading, setLoading] = useState(false), [checkedAt, setCheckedAt] = useState("");
+export function useAssetAllocationSnapshot(currency: string, foreground: boolean, onRead: (event: AllocationReadEvent) => void, initial?: AllocationSnapshot | null) {
+  const [data, setData] = useState<AllocationSnapshot | null>(() => validAllocationSnapshot(initial, currency) ? initial : null), [error, setError] = useState(""), [loading, setLoading] = useState(false), [checkedAt, setCheckedAt] = useState(() => validAllocationSnapshot(initial, currency) ? initial.observedAt : "");
   const snapshot = useRef(data), context = useRef({ currency, foreground, onRead }); context.current = { currency, foreground, onRead };
   const sequence = useRef(0), alive = useRef(false), failures = useRef(0), nextDue = useRef(0), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pending = useRef<{ currency: string; controller: AbortController; event: AllocationReadEvent; promise: Promise<AllocationSnapshot | null> } | null>(null);

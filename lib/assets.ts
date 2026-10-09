@@ -86,6 +86,7 @@ const ICON_NAMES: Record<string, string> = {
   assets: "资产",
   watchlist: "自选",
   global: "全球经济",
+  "quote-pool": "股票池",
   earnings: "盈利",
   celebs: "名人",
   activities: "动态",

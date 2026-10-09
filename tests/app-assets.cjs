@@ -93,16 +93,16 @@ async function test(name,run){rates={USD:1,HKD:7,CNY:7};quotes={};onRates=onQuot
   const blocks=[...fs.readFileSync(path.join(root,'docs/native-account-assets-contract.md'),'utf8').matchAll(/```json\n([\s\S]*?)\n```/g)];
   const frozen=blocks.map(b=>JSON.parse(b[1])).find(b=>b.snapshot_path&&b.features);assert.deepEqual(load('lib/appAssetsConfig.ts').assetsDiscovery(2),frozen);
  });
- await test('independent cash gate, price-only NAV, actual flows and imported opening omissions agree across v1/v2',async()=>{
+ await test('independent recorded cash and price-only NAV agree across v1/v2 despite imported equity',async()=>{
   const f=fixture(),r=record(f),simple=load('lib/simpleStore.ts');simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{id:'import',market:'US',cur:'USD',amount:500}]});
   funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:100,direction:1});
-  const before=snapshot();for(const v of [1,2]){let s=(await call(v,f)).data.data;assert.equal(s.summary.totalMarket,20);assert.equal(s.summary.totalAsset,null);assert.equal(s.cash.sourceComplete,false);assert.equal(s.cash.nativeBalancesByCurrency,null);assert.deepEqual(s.cash.missingOpeningCurrencies,['USD']);assert.equal(s.cash.valuationIndependent,true);}
+  const before=snapshot();for(const v of [1,2]){let s=(await call(v,f)).data.data;assert.equal(s.summary.totalMarket,20);assert.equal(s.summary.totalAsset,120);assert.equal(s.cash.sourceComplete,true);assert.equal(s.cash.nativeBalancesByCurrency.USD,100);assert.deepEqual(s.cash.missingOpeningCurrencies,[]);assert.equal(s.cash.valuationIndependent,true);}
   assert.deepEqual(snapshot(),before);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'opening',amount:50,direction:1});
   for(const v of [1,2]){quotes={[r.id]:{price:10,time:'2026-10-09T00:00:00Z'}};const a=(await call(v,f)).data.data;quotes={[r.id]:{price:30,time:'2026-10-09T00:01:00Z'}};const b=(await call(v,f)).data.data;assert.equal(a.cash.nativeBalancesByCurrency.USD,150);assert.equal(b.cash.nativeBalancesByCurrency.USD,150);assert.equal(b.summary.totalAsset-a.summary.totalAsset,40);assert.equal(b.cash.source,'recorded_cash_ledger');}
   const bought=orders.executeOrder({userId:f.user.id,recordId:r.id,side:'buy',qty:1,price:12,fees:2}).order;let s=(await call(1,f)).data.data;assert.equal(s.cash.nativeBalancesByCurrency.USD,136);quotes={[r.id]:{price:40,time:'2026-10-09T00:02:00Z'}};assert.equal((await call(2,f)).data.data.cash.nativeBalancesByCurrency.USD,136);
   orders.executeOrder({userId:f.user.id,recordId:r.id,side:'sell',qty:1,price:20,fees:1});assert.equal((await call(1,f)).data.data.cash.nativeBalancesByCurrency.USD,155);
   funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'withdrawal',amount:5,direction:-1});assert.equal((await call(2,f)).data.data.cash.nativeBalancesByCurrency.USD,150);
-  db.prepare("DELETE FROM fund_transactions WHERE user_id=? AND type='opening'").run(f.user.id);s=(await call(2,f)).data.data;assert.equal(s.cash.sourceComplete,false);assert.equal(s.summary.totalAsset,null);assert(s.summary.totalMarket>0);
+  db.prepare("DELETE FROM fund_transactions WHERE user_id=? AND type='opening'").run(f.user.id);s=(await call(2,f)).data.data;assert.equal(s.cash.sourceComplete,true);assert.equal(s.cash.nativeBalancesByCurrency.USD,100);assert.equal(s.summary.totalAsset,s.summary.totalMarket+100);
  });
  await test('original market amounts and account-wide weights never use the display currency label',async()=>{
   const f=fixture(),us=record(f),hk=record(f,{code:'HKFIX',market:'HK',qty:7,price:10,cost:5});await classify(f,us);await classify(f,hk,{kind:'etf'});

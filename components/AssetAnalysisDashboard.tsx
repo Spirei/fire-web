@@ -30,8 +30,9 @@ const PnlTrendChart = dynamic(() => import("@/components/PnlTrendChart"), {
 import QuickTradeDialog from "@/components/QuickTradeDialog";
 import HoldingDividendDialog from "@/components/HoldingDividendDialog";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
-import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, investmentEquities, reconcileAccountCash, type InvestmentEquity } from "@/lib/accountCash";
+import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, reconcileAccountCash } from "@/lib/accountCash";
 import FundsPanel from "@/components/FundsPanel";
+import CashBalanceEditor from "@/components/CashBalanceEditor";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
@@ -57,7 +58,6 @@ interface TrendPoint {
 interface CloseItem { d: string; c: number }
 interface HoldingSort { key: HoldingColumnKey; dir: "asc" | "desc" }
 interface DateRange { start: string; end: string }
-type SimpleInvestmentEquity = InvestmentEquity;
 /** 资金余额按资金系统的币种清单（比展示币种多：含卡面库里会出现的台币 / 英镑等） */
 const EMPTY_CURRENCY_BALANCES: Record<FundCurrency, number> = emptyFundBalances();
 
@@ -350,9 +350,6 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   /** 银行卡现金（借记卡 / 预付卡余额，按卡币种）：用来解释可用现金里有多少来自银行卡 */
   const [cardCash, setCardCash] = useState<Record<string, number>>({});
   const [cachedEffectiveBalances, setCachedEffectiveBalances] = useState<Record<FundCurrency, number> | null>(null);
-  const [simpleInvestmentEquities, setSimpleInvestmentEquities] = useState<SimpleInvestmentEquity[]>([]);
-  const [simpleLedgerReady, setSimpleLedgerReady] = useState(false);
-  const [simpleLedgerSucceeded, setSimpleLedgerSucceeded] = useState(false);
   const handleFundBalances = useCallback((balances: Record<FundCurrency, number>, nextCardCash: Record<string, number>) => {
     setFundBalances(balances);
     setCardCash(nextCardCash || {});
@@ -363,23 +360,6 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     setCachedEffectiveBalances(readEffectiveBalanceCache(effectiveBalanceCacheKey));
   }, [effectiveBalanceCacheKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/v1/simple-ledger", { credentials: "same-origin", cache: "no-store" })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("simple ledger")))
-      .then((payload) => {
-        if (cancelled) return;
-        const state = payload?.data ?? payload;
-        const rows = Array.isArray(state?.invest) ? state.invest : [];
-        const parsed = investmentEquities(rows);
-        if (!parsed.complete) throw new Error("Invalid investment ledger");
-        setSimpleInvestmentEquities(parsed.equities);
-        setSimpleLedgerSucceeded(true);
-        setSimpleLedgerReady(true);
-      })
-      .catch(() => { if (!cancelled) { setSimpleLedgerSucceeded(false); setSimpleLedgerReady(true); } });
-    return () => { cancelled = true; };
-  }, []);
   const [shareOpening, setShareOpening] = useState(false);
   // 快捷交易
   const [tradeTarget, setTradeTarget] = useState<{ record: StockRecord; side: "buy" | "sell"; qty?: number; intent?: "close" } | null>(null);
@@ -659,19 +639,19 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     return acc;
   }, {} as Record<string, { asset: number; cost: number; pnl: number; day: number }>), [positions, quotes, livePrice]);
   const portfolioLedger = useMemo(() => buildPortfolioLedger(positions, orders, livePrice), [positions, orders, livePrice]);
-  const reconciledFundBalances = useMemo(() => reconcileAccountCash(fundBalances, cardCash, simpleInvestmentEquities, Object.fromEntries(Object.entries(nativeSummary).map(([market, row]) => [market, row.asset]))), [fundBalances, cardCash, simpleInvestmentEquities, nativeSummary]);
+  const reconciledFundBalances = useMemo(() => reconcileAccountCash(fundBalances, cardCash, [], {}), [fundBalances, cardCash]);
   const effectiveFundBalances = !fundBalancesReady && cachedEffectiveBalances ? cachedEffectiveBalances : reconciledFundBalances;
-  const effectiveBalancesReady = cachedEffectiveBalances !== null || (fundBalancesReady && simpleLedgerReady);
+  const effectiveBalancesReady = cachedEffectiveBalances !== null || fundBalancesReady;
   useEffect(() => {
-    if ((fundBalancesReady && Object.values(reconciledFundBalances).some(amount => !Number.isFinite(amount))) || (simpleLedgerReady && !simpleLedgerSucceeded)) {
+    if (fundBalancesReady && Object.values(reconciledFundBalances).some(amount => !Number.isFinite(amount))) {
       setCachedEffectiveBalances(null);
       try { localStorage.removeItem(effectiveBalanceCacheKey); } catch { /* 最新缺失状态优先于旧缓存 */ }
       return;
     }
-    if (!fundBalancesReady || !simpleLedgerSucceeded) return;
+    if (!fundBalancesReady) return;
     try { localStorage.setItem(effectiveBalanceCacheKey, JSON.stringify(reconciledFundBalances)); } catch { /* 缓存失败不影响最新数据 */ }
-  }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady, simpleLedgerReady, simpleLedgerSucceeded]);
-  const accountSummaryTotals = useMemo(() => accountTotals(summary.asset, effectiveFundBalances, rates, displayCurrency, Number.isFinite(summary.asset), simpleLedgerSucceeded || !simpleLedgerReady && cachedEffectiveBalances !== null), [summary.asset, effectiveFundBalances, rates, displayCurrency, simpleLedgerSucceeded, simpleLedgerReady, cachedEffectiveBalances]);
+  }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady]);
+  const accountSummaryTotals = useMemo(() => accountTotals(summary.asset, effectiveFundBalances, rates, displayCurrency, Number.isFinite(summary.asset), fundBalancesReady || cachedEffectiveBalances !== null), [summary.asset, effectiveFundBalances, rates, displayCurrency, fundBalancesReady, cachedEffectiveBalances]);
   const cashTotal = accountSummaryTotals.totalCash ?? Number.NaN;
   // 银行卡现金：服务端已把它并进 balances（所以 cashTotal / 可用现金 / 净资产都含它），
   // 这里单独折算出显示货币的金额，用来在「账户资产」里说明这部分来源
@@ -1002,6 +982,14 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     return record?.market.toUpperCase() === assetMarket && record && isCashReservedOrder(order, record) ? total + orderReservedAmount(order, record) : total;
   }, 0);
   const accountAvailableCash = Math.max(0, accountCash - accountFrozenCash);
+  const frozenByCurrency = orders.reduce<Partial<Record<FundCurrency, number>>>((totals, order) => {
+    const record = positions.find(item => item.id === order.recordId);
+    const currency = record && ISO_BY_MARKET[record.market] as FundCurrency | undefined;
+    if (record && currency && isCashReservedOrder(order, record)) {
+      totals[currency] = (totals[currency] ?? 0) + Math.max(0, Number(order.amount) || Number(order.qty) * Number(order.price)) + Math.max(0, Number(order.fees) || 0);
+    }
+    return totals;
+  }, {});
   // 只读展示：借记卡 / 预付卡余额（信用卡额度不算），口径与并进现金的那部分完全一致
   const accountCardCash = cardCashTotal;
   const accountNetAsset = accountSummary.asset + accountCash;
@@ -1136,7 +1124,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
                 </span>
                 <strong className={`mt-1 block text-sm tabular-nums ${summary.pnl >= 0 ? "text-up" : "text-down"}`}>{maskMoney(summary.pnl, true)}</strong>
               </button>
-              <div><span className="text-xs text-muted">现金</span><strong className="mt-1 block text-sm tabular-nums">{maskCashMoney(cashTotal)}</strong></div>
+              <div><div className="flex items-center gap-1"><span className="text-xs text-muted"><span className="md:hidden">可用现金</span><span className="hidden md:inline">现金</span></span><span className="md:hidden"><CashBalanceEditor preferredCurrency={displayCurrency} frozenByCurrency={frozenByCurrency} onSaved={handleFundBalances} /></span></div><strong className="mt-1 block text-sm tabular-nums"><span className="md:hidden">{maskCashMoney(Math.max(0, cashTotal - frozenCashTotal))}</span><span className="hidden md:inline">{maskCashMoney(cashTotal)}</span></strong></div>
             </div>
             <div className="mt-6"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资产分布</span><span className="text-[11px] text-muted">按市场</span></div><div className="flex h-2 overflow-hidden rounded-full bg-bg-gray">{marketEntries.map(([key, value], index) => <span key={key} style={{ width: `${summary.asset ? value.asset / summary.asset * 100 : 0}%`, background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />)}</div><div className="mt-3 grid grid-cols-2 gap-2">{marketEntries.map(([key, value], index) => <div key={key} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-muted"><i className="h-2 w-2 rounded-full" style={{ background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />{marketMeta(key).label}</span><b>{summary.asset ? (value.asset / summary.asset * 100).toFixed(1) : "0.0"}%</b></div>)}</div></div>
           </section>
@@ -1221,7 +1209,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
           <section className="mobile-hide-duplicate-summary card p-5">
             <div className="mb-2"><h3 className="text-base font-bold">账户总览</h3></div>
             <MarketPills value={assetMarket} onChange={setAssetMarket} />
-            <div className="mt-5 grid max-w-[1120px] grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">{accountOverviewItems.map(([label, value]) => <div key={label} className="min-w-0" title={label === "可用现金" ? "现金余额已含借记卡 / 预付卡余额（信用卡额度不计）" : label === "银行卡现金" ? "「我的卡」里借记卡 / 预付卡余额折算成显示货币；信用卡额度属于可透支额度，不计入现金" : undefined}><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={label === "银行卡现金" ? !fundBalancesReady : (label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
+            <div className="mt-5 grid max-w-[1120px] grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">{accountOverviewItems.map(([label, value]) => <div key={label} className="min-w-0" title={label === "可用现金" ? "现金余额已含借记卡 / 预付卡余额（信用卡额度不计）" : label === "银行卡现金" ? "「我的卡」里借记卡 / 预付卡余额折算成显示货币；信用卡额度属于可透支额度，不计入现金" : undefined}><div className="flex h-7 items-center gap-1"><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span>{label === "可用现金" && <CashBalanceEditor preferredCurrency={marketCurrency || displayCurrency} frozenByCurrency={frozenByCurrency} onSaved={handleFundBalances} />}</div><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={label === "银行卡现金" ? !fundBalancesReady : (label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>
           </section>
           {renderModuleHandle("right", "overview")}
         </div>

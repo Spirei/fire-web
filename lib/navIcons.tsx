@@ -5,6 +5,11 @@
  * 素材库 icon 类目上传自定义图标后，按 tab key（大写）全局替换显示。
  */
 export const NAV_ICONS: Record<string, React.ReactNode> = {
+  "quote-pool": (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
+      <path d="M3 9 7 4h10l4 5v11H3Z" /><path d="M3 9h5l2 4h4l2-4h5M9 6h6" />
+    </svg>
+  ),
   fire: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
       <path d="M12 2c.6 2.4-.7 3.8-2 5.2C8.7 8.7 7.3 10.3 7.3 13a4.7 4.7 0 0 0 9.4 0c0-4.7-3-5.8-4.7-11Z" />

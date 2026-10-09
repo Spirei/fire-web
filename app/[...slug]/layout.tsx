@@ -24,6 +24,8 @@ import { feedBootstrap } from "@/lib/feedGeneration";
 import { CURRENT_VERSION } from "@/lib/versions";
 import { readQuotePool } from "@/lib/quotePoolData";
 import { passkeySettingsSnapshot } from "@/lib/passkeySettingsSnapshot";
+import { allocationSnapshotRevision, buildAssetAllocation } from "@/lib/assetAllocation";
+import { getRates } from "@/lib/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +84,12 @@ export default async function SlugLayout({
   // 后台首屏数据在服务端鉴权后直接读取。避免浏览器再次串行请求
   // /api/auth/me → records / activities / settings，首帧不再被全局转圈遮挡。
   const initialQuotePool = tab.key === "quote-pool" ? { mine: readQuotePool(user.id, "mine"), ...(isAdmin(user) ? { shared: readQuotePool(user.id, "shared") } : {}) } : null;
+  // Authenticated, request-local projection: no external quote wait and no shared account cache.
+  const initialAllocation = tab.key === "global" ? buildAssetAllocation(user.id, await getRates(), {}, currencyCookie && ["USD", "HKD", "CNY", "SGD", "JPY", "KRW", "EUR"].includes(currencyCookie) ? currencyCookie : "USD") : null;
+  if (initialAllocation) {
+    initialAllocation.quoteStatus = { pending: initialAllocation.positions.length > 0, cached: [], missing: initialAllocation.positions.map(position => position.id) };
+    initialAllocation.snapshotRevision = allocationSnapshotRevision(initialAllocation);
+  }
   const initialRecords = listRecords(user.id);
   // 自选股分组随记录一并进入服务端首屏，避免刷新时客户端请求完成前只显示“全部”。
   const initialWatchGroups = tab.key === "watchlist" ? listWatchGroups(user.id) : [];
@@ -159,6 +167,7 @@ export default async function SlugLayout({
           initialCardLibrary={initialCardLibrary}
           initialFeed={initialFeed}
           initialQuotePool={initialQuotePool}
+          initialAllocation={initialAllocation}
           initialSettings={{
             title: settings.title,
             logoText: settings.logoText,

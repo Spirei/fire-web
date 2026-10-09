@@ -56,10 +56,10 @@ async function test(name,run) { rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.
     const f=fixture(); funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'withdrawal',amount:150,direction:-1});
     const result=await overview(f); assert.equal(result.totalCash,-41); assert.equal(result.totalAsset,-21); assert.equal(result.totalPnl,10);
   });
-  await test('linked imported equity never reverse-infers cash; missing opening is unavailable',async()=>{
+  await test('linked imported equity never blocks independent cash or reverse-infers a balance',async()=>{
     const f=fixture(); simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{market:'US',cur:'USD',amount:90},{market:'US',cur:'USD',amount:10},{market:'',cur:'USD',amount:99999}]});
-    const before=businessSnapshot(), result=await overview(f);assert.equal(result.totalMarket,20);assert.equal(result.totalCash,null);assert.equal(result.totalAsset,null);assert.equal(result.cashSourceComplete,false);assert.deepEqual(result.missingOpeningCashCurrencies,['USD']);
-    quotes={[f.record.id]:{price:30,time:'2026-10-09T00:00:00Z'}};const next=await overview(f);assert.equal(next.totalMarket,60);assert.equal(next.totalCash,null);assert.equal(next.totalAsset,null);assert.deepEqual(businessSnapshot(),before);
+    const before=businessSnapshot(), result=await overview(f);assert.equal(result.totalMarket,20);assert.equal(result.totalCash,109);assert.equal(result.totalAsset,129);assert.equal(result.cashSourceComplete,true);assert.deepEqual(result.missingOpeningCashCurrencies,[]);
+    quotes={[f.record.id]:{price:30,time:'2026-10-09T00:00:00Z'}};const next=await overview(f);assert.equal(next.totalMarket,60);assert.equal(next.totalCash,109);assert.equal(next.totalAsset,169);assert.deepEqual(businessSnapshot(),before);
     funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'opening',amount:50,direction:1});
     const funded=await overview(f);assert.equal(funded.totalCash,159);assert.equal(funded.totalAsset,219);quotes={[f.record.id]:{price:40,time:'2026-10-09T00:01:00Z'}};const moved=await overview(f);assert.equal(moved.totalCash,159);assert.equal(moved.totalAsset,239);assert.equal(moved.cashValuationIndependent,true);
     funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:5,direction:1});assert.equal((await overview(f)).totalCash,164);
@@ -67,7 +67,7 @@ async function test(name,run) { rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.
   });
   await test('wrong-currency equity cannot override another settlement balance',async()=>{
     const f=fixture(); simple.setSimpleLedger(f.user.id,{...simple.EMPTY_SIMPLE,invest:[{market:'US',cur:'HKD',amount:9000}]});
-    const result=await overview(f); assert.equal(result.totalCash,null); assert.equal(result.totalAsset,null);
+    const result=await overview(f); assert.equal(result.totalCash,109); assert.equal(result.totalAsset,129);
   });
   await test('filled order cash is derived read-only; pending, cancelled and stale auto rows do not inflate cash',async()=>{
     const f=fixture(), orders=load('lib/orders.ts');
@@ -159,6 +159,48 @@ async function test(name,run) { rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.
     try {
       const response=await route.GET(request(f.token)), body=await response.json(); assert.equal(response.status,500); assert.equal(body.code,50001); assert.equal(body.data,undefined); assert(!JSON.stringify(body).includes('SQLite'));
     } finally { cashStore.readAccountCash=read; }
+  });
+  const fundsRoute=load('app/api/v1/funds/route.ts');
+  const saveCash=(f,body)=>fundsRoute.POST(new Request('http://localhost/api/v1/funds',{method:'POST',headers:{cookie:'fire_session='+f.token,'content-type':'application/json'},body:JSON.stringify({action:'set_balance',...body})}));
+  await test('manual cash reconciliation includes bank once and synchronizes overview and allocation',async()=>{
+    const f=fixture(), other=fixture(), before=businessSnapshot();
+    const response=await saveCash(f,{currency:'USD',expectedBalance:107,targetBalance:200});
+    assert.equal(response.status,200); const saved=(await response.json()).data;
+    assert.equal(saved.balances.USD,200); assert.equal(saved.cardCash.USD,7);
+    assert.equal(saved.transaction.type,'adjustment'); assert.equal(saved.transaction.amount,93); assert.equal(saved.transaction.direction,1);
+    const result=await overview(f); assert.equal(result.totalCash,202); assert.equal(result.totalAsset,222);
+    const allocation=load('lib/assetAllocation.ts').buildAssetAllocation(f.user.id,rates,{},'USD');
+    assert.equal(allocation.summary.totalAsset,222);
+    assert.equal(cashStore.readAccountCash(other.user.id).balances.USD,107);
+    const after=businessSnapshot(); for(const table of ['records','trade_orders','card_amounts','card_holdings']) assert.deepEqual(after[table],before[table]);
+    const again=await saveCash(f,{currency:'USD',expectedBalance:107,targetBalance:200}); assert.equal(again.status,200);
+    assert.equal((await again.json()).data.transaction,null); assert.deepEqual(businessSnapshot(),after);
+  });
+  await test('native zero balance is accepted and does not change another currency or bank record',async()=>{
+    const f=fixture(); const response=await saveCash(f,{currency:'USD',expectedBalance:107,targetBalance:0});
+    assert.equal(response.status,200); const saved=(await response.json()).data;
+    assert.equal(saved.balances.USD,0); assert.equal(saved.balances.HKD,14); assert.equal(saved.cardCash.USD,7);
+    assert.equal(saved.transaction.amount,107); assert.equal(saved.transaction.direction,-1);
+    assert.equal((await overview(f)).totalCash,2);
+  });
+  await test('concurrent ledger and bank changes reject stale cash edits without overwriting',async()=>{
+    const f=fixture(); funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:10,direction:1});
+    const before=businessSnapshot(); assert.equal((await saveCash(f,{currency:'USD',expectedBalance:107,targetBalance:200})).status,409); assert.deepEqual(businessSnapshot(),before);
+    cards.upsertCardAmount(f.user.id,{cardKey:'debit.png',amount:8,currency:'USD'});
+    const changed=businessSnapshot(); assert.equal((await saveCash(f,{currency:'USD',expectedBalance:117,targetBalance:200})).status,409); assert.deepEqual(businessSnapshot(),changed);
+  });
+  await test('cash adjustments remain a ledger entry and later sell proceeds and bank updates still apply',async()=>{
+    const f=fixture(); assert.equal((await saveCash(f,{currency:'USD',expectedBalance:107,targetBalance:200})).status,200);
+    load('lib/orders.ts').executeOrder({userId:f.user.id,recordId:f.record.id,side:'sell',qty:1,price:12,fees:1});
+    assert.equal(cashStore.readAccountCash(f.user.id).balances.USD,211);
+    cards.upsertCardAmount(f.user.id,{cardKey:'debit.png',amount:8,currency:'USD'});
+    assert.equal(cashStore.readAccountCash(f.user.id).balances.USD,212);
+  });
+  await test('manual cash edits validate inputs and require an authenticated owner',async()=>{
+    const f=fixture(), before=businessSnapshot();
+    for(const body of [{currency:'XXX',expectedBalance:107,targetBalance:200},{currency:'USD',expectedBalance:null,targetBalance:200},{currency:'USD',expectedBalance:107,targetBalance:null},{currency:'USD',expectedBalance:107,targetBalance:''},{currency:'USD',expectedBalance:107,targetBalance:-1},{currency:'USD',expectedBalance:107,targetBalance:1e13}]) assert.equal((await saveCash(f,body)).status,400);
+    assert.equal((await saveCash({token:'invalid'},{currency:'USD',expectedBalance:107,targetBalance:200})).status,401);
+    assert.deepEqual(businessSnapshot(),before);
   });
   console.log(`PASS ${count} canonical account overview suites`);
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});process.exit(process.exitCode||0);});

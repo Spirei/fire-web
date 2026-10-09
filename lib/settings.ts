@@ -57,6 +57,7 @@ const DEFAULTS: SiteSettings = {
     { key: "fire", label: "FIRE", url: "/fire" },
     { key: "watchlist", label: "自选股", url: "/watchlist" },
     { key: "global", label: "全球经济", url: "/global" },
+    { key: "quote-pool", label: "股票池", url: "/quote-pool" },
     { key: "trading", label: "动态", url: "/trading" },
     { key: "earnings", label: "财报日历", url: "/earnings" },
     { key: "assistant", label: "智能助手", url: "/assistant" },
@@ -319,6 +320,10 @@ export function getSiteSettings(): SiteSettings {
       if (t.key === "trading" && t.label === "交易广场") return { ...t, label: "动态" };
       return t;
     });
+  }
+  if (!result.tabs.some(tab => tab.key === "quote-pool")) {
+    const index = result.tabs.findIndex(tab => tab.key === "global");
+    result.tabs.splice(index >= 0 ? index + 1 : result.tabs.length, 0, { key: "quote-pool", label: "股票池", url: "/quote-pool" });
   }
   try {
     result.mobileNavigationOrder = normalizeMobileNavigationOrder(JSON.parse(map.mobileNavigationOrder || "[]"), result.tabs.map(tab => tab.key));
