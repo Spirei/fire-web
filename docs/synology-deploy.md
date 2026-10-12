@@ -45,20 +45,25 @@ chmod -R u+rwX  data uploads
 - DSM 的 File Station 里这些文件会显示成 UID `1000`（DSM 没有这个用户），但 admin 有特权，照样能浏览和编辑。
 - 只改 `uploads` 不改 `data` 不够：SQLite 的建库、WAL 与临时文件都在 `data/` 下。
 
-### 1d. 挂载插图 / 字体 / 图标素材（少了会「丢鱼」）
+### 1d. FIRE 鱼素材与自定义插图 / 字体 / 图标
 
-FIRE 页面那对游动的小丑鱼、礁石贴图，以及全站自定义字体与图标，属于**部署者自行提供的素材**：
-它们不进 Git 仓库、也不进镜像（见 `ASSETS.md`），镜像里连这些目录都不存在。所以必须从宿主机挂进去，
-否则 `/images/fire/clownfish-family.png` 直接 404 —— 页面不会报错，只是**鱼不见了**（鱼和礁石是 sprite 贴图，
-缺图就是一片空白，很容易被当成动画 bug）。
+自 v0.1.56 起，FIRE 小丑鱼素材 `public/fire-assets/clownfish-family.png` 已随镜像提供，
+构建时会检查文件存在。它位于独立目录，不会被宿主机的 `images` 挂载覆盖，不需要手动上传。
+升级后验证（应返回 `200`）：
 
-在 `/volume1/docker/fire` 下建好这四个目录并放入文件（目录名与 Compose 默认值一致，无需改 Compose）：
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/fire-assets/clownfish-family.png
+```
+
+其他自定义插图、字体、图标与分享图仍由部署者自行提供（见 `ASSETS.md`）。在宿主机准备
+`images`、`fonts`、`icons`、`share` 目录，放入对应文件后由 Compose 挂载。旧版鱼素材路径为
+`/images/fire/clownfish-family.png`，继续使用旧镜像时需在 `images/fire/` 提供该文件并挂载目录。
 
 ```bash
 cd /volume1/docker/fire
 mkdir -p images fonts icons share
 
-# 在 Mac 上从本项目目录上传（按需只传 images 也能先把鱼找回来）：
+# 从 Mac 按需上传到宿主机对应目录：
 #   scp -r public/images/fire  <群晖账号>@<群晖IP>:/volume1/docker/fire/images/
 #   scp    public/fonts/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/fonts/
 #   scp    public/icons/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/icons/
@@ -68,18 +73,10 @@ chown -R 1000:1000 images fonts icons share
 docker compose -f docker-compose.ghcr.yml up -d --force-recreate
 ```
 
-验证（两条都应返回 `200`）：
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/images/fire/clownfish-family.png
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/images/fire/coral-reef-transparent.png
-```
-
-- 这四个目录是**只读挂载**（`:ro`），容器只读不写，不会影响备份与数据卷。
+- 这四个目录是只读挂载（`:ro`），与数据卷独立。
 - 路径可用 `.env` 覆盖：`IMAGES_DIR` / `FONTS_DIR` / `ICONS_DIR` / `SHARE_DIR`。
-- 目录为空或未挂载时行为与旧版一致：对应资源 404，但**不影响服务启动**；此时容器启动日志会打印一行
-  `[entrypoint] 提示：/app/public 下缺少部署素材：…`，看到它就说明有素材没放。
-- 素材是宿主机文件、不在镜像里，所以之后升级镜像、`up -d --force-recreate` 都不会把它们覆盖掉。
+- 自定义目录为空或未挂载时，对应资源返回 404；入口脚本会提示缺少部署素材。
+- 宿主机素材不会被后续镜像升级覆盖。FIRE 小丑鱼则由新镜像自行提供。
 
 ### 2. 准备生产环境变量
 在项目根目录创建 `.env`（复制 `.env.example` 后填写）：
@@ -148,23 +145,17 @@ docker inspect fire --format 'status={{.State.Status}} restarts={{.RestartCount}
 
 ## 排查：FIRE 页面的小丑鱼不见了 / 图片、字体、图标 404
 
-症状：FIRE 页面里那对游动的小丑鱼（父子鱼）与礁石贴图不见了，页面本身不报错；或浏览器控制台里
-`/images/...`、`/fonts/...`、`/icons/...` 一律 404。
+先确认使用的镜像版本和页面请求的素材路径：
 
-原因：这些素材不进仓库也不进镜像，只从宿主机挂载提供；旧版部署没有这几个挂载点，所以线上必然是 404
-（本地 `next dev` 直接读源码目录下的 `public/`，因此本地看着一切正常，容易误判成"线上代码有 bug"）。
-
-处理：按「1d. 挂载插图 / 字体 / 图标素材」把文件放到宿主机对应目录并重建容器，然后用同一节里的
-两条 `curl` 验证 200。日志里出现 `[entrypoint] 提示：/app/public 下缺少部署素材：…` 时，
-按提示补对应目录即可。
-
-排查命令：
+- v0.1.56 起，小丑鱼使用 `/fire-assets/clownfish-family.png`，应直接由镜像返回 `200`。
+  若仍请求旧路径，确认容器已更新并刷新页面；若新路径返回 `404`，确认运行镜像包含本次素材修复。
+- 旧镜像使用 `/images/fire/clownfish-family.png`。该素材此前被 Git 和构建规则排除，
+  必须补齐宿主机 `images/fire/` 并挂载到 `/app/public/images`，或升级到含本次修复的镜像。
+- 其他 `/images/...`、`/fonts/...`、`/icons/...` 的 404，按「1d」检查宿主机文件和只读挂载。
+- 系统开启减少动态效果时，新版会保留静止的小丑鱼。
 
 ```bash
-cd /volume1/docker/fire
-ls -l images/fire/                       # 期望看到 clownfish-family.png / coral-reef-transparent.png
-docker compose -f docker-compose.ghcr.yml config | grep -A8 'volumes'   # 期望看到四个只读挂载
-docker logs --tail 30 fire | grep '部署素材'
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/fire-assets/clownfish-family.png
 ```
 
 ## 说明 / 注意

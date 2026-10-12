@@ -20,6 +20,7 @@ import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 import { readLimitedResponseJson } from "@/lib/requestBody";
 import { resetModelProvider, switchModelProvider, updateModelEndpoint } from "@/lib/modelServiceDrafts";
 import { moveMobileNavigation } from "@/lib/workspaceNavigation";
+import { useFutuConnectionStatus } from "@/lib/useFutuConnectionStatus";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isSixDigitTotp, normalizeTotpDigits } from "@/lib/totpInput";
@@ -1576,9 +1577,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [srcSaving, setSrcSaving] = useState(false);
-  const [futuOnline, setFutuOnline] = useState<boolean | null>(null);
-  const [futuSkipped, setFutuSkipped] = useState(false);
-  const [futuTest, setFutuTest] = useState<{ busy: boolean; ok?: boolean; msg?: string } | null>(null);
+  const { label: futuStatusLabel, online: futuOnline, checking: futuChecking, skipped: futuSkipped, result: futuTest, test: testFutu } = useFutuConnectionStatus(site.futuHost, site.futuPort);
   const [futuQuota, setFutuQuota] = useState<{
     loading: boolean;
     data?: {
@@ -1638,41 +1637,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       setFutuQuota((s) => ({ ...s, loading: false, ok: false }));
     }
   }
-
-  async function testFutu() {
-    setFutuTest({ busy: true });
-    try {
-      const res = await fetch("/api/futu/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host: site.futuHost, port: site.futuPort })
-      });
-      const data = await res.json().catch(() => null);
-      setFutuTest({
-        busy: false,
-        ok: Boolean(data?.ok),
-        msg: data?.message || (res.ok ? "连接成功" : data?.error || "连接失败")
-      });
-    } catch {
-      setFutuTest({ busy: false, ok: false, msg: "连接失败" });
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/health")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled) {
-          setFutuOnline(Boolean(data?.data?.futuOpenD?.available));
-          setFutuSkipped(Boolean(data?.data?.futuOpenD?.skipped));
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function saveStockSources(): Promise<boolean> {
     setSrcSaving(true);
@@ -3362,7 +3326,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   action={editingFutu ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
                 >
                   <SettingsManagedGroup scope="trade" inline editing={editingFutu}>
-                    <SettingsManagedPane name="connection" title="OpenD 连接" summary={`${site.futuHost || "127.0.0.1"}:${site.futuPort || "11111"} · ${futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地跳过" : "未连接"}`}>
+                    <SettingsManagedPane name="connection" title="OpenD 连接" summary={`${site.futuHost || "127.0.0.1"}:${site.futuPort || "11111"} · ${futuStatusLabel}`}>
                       <div className={`sw-row ${editingFutu ? "" : "settings-inline-row"}`}>
                         <div className="sw-row-label"><b>OpenD 主机</b><span>填写运行 OpenD 的设备地址</span></div>
                         <input className={`sw-row-input ${editingFutu ? "" : "pointer-events-none !border-transparent !bg-transparent !shadow-none"}`} value={site.futuHost} readOnly={!editingFutu} onChange={(e) => setSiteField("futuHost", e.target.value)} placeholder="127.0.0.1" />
@@ -3374,9 +3338,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <div className="sw-row settings-inline-row">
                       <div className="sw-row-label"><b>连接状态</b>{futuSkipped && <span title="本地开发服务默认不连接 OpenD；如需启用，设置 STOCKLOG_FUTU=on 后重启。">本地默认跳过，测试仍会连接</span>}</div>
                       <div className="ctrl">
-                        <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${futuOnline === null ? "text-faint" : futuOnline ? "text-[#0fa07b]" : "text-[#e5a13b]"}`}>
-                          <i className={`h-1.5 w-1.5 rounded-full ${futuOnline === null ? "bg-[#d1d5db]" : futuOnline ? "bg-[#0fa07b]" : "bg-[#e5a13b]"}`} />
-                          {futuOnline === null ? "检测中…" : futuOnline ? "已连接" : futuSkipped ? "本地跳过" : "未连接"}
+                        <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${futuChecking ? "text-faint" : futuOnline ? "text-[#0fa07b]" : "text-[#e5a13b]"}`} role="status" aria-live="polite">
+                          <i className={`h-1.5 w-1.5 rounded-full ${futuChecking ? "bg-[#d1d5db]" : futuOnline ? "bg-[#0fa07b]" : "bg-[#e5a13b]"}`} />
+                          {futuStatusLabel}
                         </span>
                         <button type="button" disabled={futuTest?.busy} onClick={testFutu} className="btn btn-line btn-sm disabled:opacity-60">
                           {futuTest?.busy ? "测试中…" : "测试连接"}

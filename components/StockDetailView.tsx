@@ -698,7 +698,7 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
             onClick={onBack}
             aria-label="返回行情板"
             title="返回行情板"
-            className="stock-detail-back -ml-1 mr-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover active:scale-[.97] dark:text-white"
+            className="stock-detail-back mr-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-full bg-bg-gray text-ink-2 transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover active:scale-[.97] dark:text-white"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
               <path d="m15 18-6-6 6-6" />

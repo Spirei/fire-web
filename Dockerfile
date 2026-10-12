@@ -39,6 +39,7 @@ ENV FIRE_BUILD_SHA=${FIRE_BUILD_SHA}
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN test -s public/fire-assets/clownfish-family.png
 RUN npm run build
 
 # ---------- 4. 运行：纯净精简镜像 ----------

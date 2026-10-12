@@ -4,7 +4,7 @@ import VisibilityIcon from "@/components/VisibilityIcon";
 
 import { usePersistedState } from "@/lib/usePersistedState";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
 import RainbowNumberInput from "@/components/RainbowNumberInput";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
@@ -1272,8 +1272,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
             </button>)}
           </div>}
         </div>
-        <div ref={rangeScrollRef} className="stock-chart-range-scroll stock-chart-primary-ranges" style={{ "--range-index": Math.max(0, RANGES.findIndex((item) => item.value === range)), "--range-active": RANGES.some((item) => item.value === range) ? 1 : 0 } as CSSProperties} onPointerDown={startRangeDrag} onPointerMove={moveRangeDrag} onPointerUp={endRangeDrag} onPointerCancel={endRangeDrag}>
-          <span className="stock-chart-range-indicator" aria-hidden="true" />
+        <div ref={rangeScrollRef} className="stock-chart-range-scroll stock-chart-primary-ranges" onPointerDown={startRangeDrag} onPointerMove={moveRangeDrag} onPointerUp={endRangeDrag} onPointerCancel={endRangeDrag}>
           {RANGES.map((item) => <button key={item.value} type="button" data-range={item.value} className={`stock-chart-range ${range === item.value ? "is-active" : ""}`} onClick={() => { if (suppressRangeClickRef.current) { suppressRangeClickRef.current = false; return; } setAllDayView(false); setRange(item.value); setSession("ALL"); setSessionOpen(false); setPeriodOpen(false); }}>{item.label}</button>)}
         </div>
         <div className="stock-chart-popover-wrap period-picker-wrap">

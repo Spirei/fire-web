@@ -301,12 +301,12 @@ const fireCss = `
 .fire-family-father { animation:fireFatherJourney 20s cubic-bezier(.36,.03,.28,1) infinite; }
 .fire-family-child { animation:fireChildJourney 20s cubic-bezier(.36,.03,.28,1) infinite; }
 .fire-jump-fish { position:relative; display:block; filter:drop-shadow(0 9px 12px rgba(8,72,117,.3)); transform-origin:64% 52%; animation:fireFishSwimBody .72s ease-in-out infinite; will-change:transform; }
-.fire-jump-fish::before { content:""; position:absolute; inset:0; z-index:0; background-image:url('/images/fire/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); clip-path:polygon(20% 29%,32% 29%,32% 71%,20% 71%); }
+.fire-jump-fish::before { content:""; position:absolute; inset:0; z-index:0; background-image:url('/fire-assets/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); clip-path:polygon(20% 29%,32% 29%,32% 71%,20% 71%); }
 .fire-jump-fish::after { content:""; position:absolute; z-index:3; left:35%; top:42%; width:31%; height:38%; border-radius:50%; transform-origin:68% 48%; background:radial-gradient(ellipse at 58% 52%,rgba(255,207,128,.42) 0 13%,rgba(255,126,54,.14) 34%,transparent 67%); mix-blend-mode:screen; pointer-events:none; animation:fireFinBreathe 1.65s cubic-bezier(.45,.05,.35,1) infinite; }
 .fire-jump-fish-child::after { animation-duration:1.38s; animation-delay:-.42s; }
 .fire-jump-fish-father { width:118px; height:86px; --fish-bg-size:194px 109px; --fish-bg-position:-3px -11px; }
 .fire-jump-fish-child { width:82px; height:60px; --fish-bg-size:208px 117px; --fish-bg-position:-128px -48px; animation-duration:.58s; }
-.fire-fish-body,.fire-fish-tail { position:absolute; inset:0; z-index:1; display:block; background-image:url('/images/fire/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); }
+.fire-fish-body,.fire-fish-tail { position:absolute; inset:0; z-index:1; display:block; background-image:url('/fire-assets/clownfish-family.png'); background-repeat:no-repeat; background-size:var(--fish-bg-size); background-position:var(--fish-bg-position); }
 .fire-fish-body { clip-path:polygon(24.5% 0,100% 0,100% 100%,24.5% 100%); }
 /* 尾鳍图层只裁出尾部，避免把腹鳍/胸鳍再次绘制并随尾部旋转形成重影。 */
 .fire-fish-tail { clip-path:polygon(0 17%,24.8% 31%,24.8% 69%,0 84%); transform-origin:24% 52%; animation:fireTailBeat .36s ease-in-out infinite; }
@@ -338,7 +338,9 @@ const fireCss = `
   .fire-fish-family-stage { width:172%; height:172%; transform:scale(.58); opacity:.88; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .fire-family-father, .fire-family-child, .fire-jump-fish, .fire-fish-tail, .fire-fish-breath i, .fire-jelly-friend, .fire-crab-friend { animation:none; opacity:0; }
+  .fire-family-father, .fire-family-child, .fire-jump-fish, .fire-fish-tail { animation:none; opacity:1; }
+  .fire-jump-fish::after { animation:none; }
+  .fire-fish-breath i, .fire-jelly-friend, .fire-crab-friend { animation:none; opacity:0; }
   .fire-family-home i { animation:none; }
   .fire-reef-depth, .fire-ocean-surface, .fire-ocean-rays, .fire-ocean-particles i, .fire-anemone i { animation: none; }
 }
@@ -356,6 +358,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     if (!hydrated || !oceanSceneEnabled) return;
     const stage = fishStageRef.current;
     if (!stage) return;
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const father = { x: 100, y: 105, vx: 1.15, vy: .22 };
     const child = { x: 250, y: 175, vx: 1.45, vy: -.18 };
     let raf = 0;
@@ -413,7 +416,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     };
     let intersecting = false;
     const sync = () => {
-      if (intersecting && panelIsShown(stage)) start();
+      if (intersecting && panelIsShown(stage) && !motionPreference.matches) start();
       else stop();
     };
     const observer = new IntersectionObserver(([entry]) => {
@@ -421,8 +424,9 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       sync();
     });
     observer.observe(stage);
+    motionPreference.addEventListener("change", sync);
     const releasePanel = observePanelVisibility(stage, sync);
-    return () => { stop(); observer.disconnect(); releasePanel(); };
+    return () => { stop(); observer.disconnect(); motionPreference.removeEventListener("change", sync); releasePanel(); };
   }, [hydrated, oceanSceneEnabled]);
   const [annualExpense, setAnnualExpense] = useState(() => Number(lsGet("fire:p-expense", "60000")) || 60000);
   const [withdrawalRate, setWithdrawalRate] = useState(() => Number(lsGet("fire:p-withdrawal", "4")) || 4); // %
