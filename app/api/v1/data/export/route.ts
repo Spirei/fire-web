@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { buildBackupPayload } from "@/lib/dataTransfer";
+import { buildBackupPayload, UnsupportedPortableLedgerError } from "@/lib/dataTransfer";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { logSecurityEvent } from "@/lib/securityAudit";
 
@@ -17,7 +17,8 @@ export async function GET(request: Request) {
     const payload = buildBackupPayload(user.id, user.role === "admin");
     logSecurityEvent(request, user.id, "data_export", JSON.stringify(payload.manifest.counts));
     return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, private", Pragma: "no-cache", "X-Content-Type-Options": "nosniff" } });
-  } catch {
+  } catch (error) {
+    if (error instanceof UnsupportedPortableLedgerError) return NextResponse.json({ error: error.message }, { status: 409, headers: { "Cache-Control": "no-store, private" } });
     return NextResponse.json({ error: "导出失败" }, { status: 500 });
   }
 }

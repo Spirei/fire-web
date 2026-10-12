@@ -2250,6 +2250,9 @@ function fontHeaderFixture(ext) {
       const markup = renderToStaticMarkup(React.createElement(Consent, {authorization:readOnly, account:'Review', username:'Review', avatar:'', serverName:'review.example:18520', brand:automatic}));
       assert(markup.includes('Nook 账户')); assert(markup.includes('允许 Nook App')); assert(markup.includes('查看投资数据')); assert(!markup.includes('管理投资数据'));
       assert(!markup.includes('随时撤销')); assert.equal(auth.APP_CLIENT_ID,'fire-ios'); assert.equal(auth.APP_REDIRECT_URI,'com.fire.app:/oauth/callback');
+      assert(!markup.includes('提交与修改交易')); assert(!markup.includes('撤销待成交订单'));
+      const tradingConsent = renderToStaticMarkup(React.createElement(Consent, {authorization:{...readOnly,scope:'portfolio.read orders.write orders.cancel'}, account:'Review', username:'Review', avatar:'', serverName:'review.example:18520', brand:automatic}));
+      assert(tradingConsent.includes('提交与修改交易')); assert(tradingConsent.includes('撤销待成交订单')); assert(tradingConsent.includes('不向外部券商下单'));
     } finally { settings.updateSiteSettings({domain:original.domain, appDisplayName:original.appDisplayName, appDisplayIcon:original.appDisplayIcon}); }
   });
   await test('settings secrets filtered for admin/user and anonymous rejected; saving preserves secrets', async () => {

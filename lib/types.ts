@@ -52,6 +52,8 @@ export interface TradeOrder {
   accountMarket?: string;
   settlementCurrency?: string;
   settlementAmount?: number;
+  apiManaged?: boolean;
+  historyLocked?: boolean;
   recordId: string;
   market: Market;
   code: string;

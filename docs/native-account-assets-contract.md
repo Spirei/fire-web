@@ -106,7 +106,11 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
     "cash_by_market": false,
     "today_orders": true,
     "order_reads_settle": false,
-    "instrument_declarations": ["cash_equity", "etf", "unknown"],
+    "instrument_declarations": [
+      "cash_equity",
+      "etf",
+      "unknown"
+    ],
     "derivatives": false,
     "underlying_merge": false,
     "listing_status": "owner_declared",
@@ -117,12 +121,36 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
     "position_day_pnl": false,
     "extended_hours": "observed_quote_only",
     "regular_hours_price_selection": false,
-    "smart_market_sort": false
+    "smart_market_sort": false,
+    "all_orders": true,
+    "batch_cancel_pending": true,
+    "partial_fills": false,
+    "rejected_orders": false
   },
-  "defaults": {"currency": "USD", "cost_method": "diluted", "us_price": "observed"},
+  "defaults": {
+    "currency": "USD",
+    "cost_method": "diluted",
+    "us_price": "observed"
+  },
   "unavailable_values": "null",
-  "legacy_fallback": ["records", "overview"],
-  "order_writes": "existing_cash_equity_contract_only_no_new_write_capability"
+  "legacy_fallback": [
+    "records",
+    "overview"
+  ],
+  "order_writes": "existing_cash_equity_contract_only_no_new_write_capability",
+  "orders_version": 1,
+  "orders_path": "/api/v2/account-assets/orders",
+  "cancel_orders_path": "/api/v2/account-assets/orders/cancellations",
+  "order_revision_field": "revision",
+  "order_filters": [
+    "all",
+    "pending",
+    "filled",
+    "cancelled",
+    "rejected",
+    "expired"
+  ],
+  "cancel_scope": "orders.cancel"
 }
 ```
 
@@ -171,3 +199,9 @@ App本机投影只能在同源所选API/grant/account、安全凭据代次一致
 来源/授权/API版本/账号/安全凭据或缓存代次变化立即使旧现金失效；已知收支、成交、现金记录修改后必须重新读取确认，不能复用变更前现金。新响应sourceComplete=false或null、缺失/不符来源或能力撤销时立即撤掉旧完整总额，禁止以缓存113580.83兜底。异步返回保持请求代次顺序，不能旧响应覆盖新现金。报价/记录/现金/汇率任务可分别更新；客户端需明确现金观察时间与有效性，独立任务本身不延长现金有效期。后续来源规则变化须新发现或合同约束，不让旧能力true绕过新缺失状态。
 
 本轮不修改iOS源码/版本、不自动发布生产。待批准并部署后以health真实buildSha与同源能力核验，再由iOS既有授权只读核对现金不反变与资产响应；此前在线113580.83现象不作为修正已上线的证据。
+
+## 2026-10-13 当前订单扩展与交易能力
+
+订单读取与带版本的批量撤单恢复，撤单现在须显式 orders.cancel；新订单写入独立使用 account_trading 发现与 orders.write，旧 grant 不自动扩权。完整端点、输入、现金核对、明确行情观察、附加单和回执见 [App API 账户交易合同](app-account-trading.md)。生产部署状态须另按镜像核对，APNs 保持暂停。
+
+当前现金能力 imported_equity_requires_opening_cash=false：独立已记录的银行卡资金、现金流水和真实卖出回款不因旧导入总权益而要求补造期初现金。导入权益不进入现金核算，来源损坏、未验证单位和缺输入仍保持缺失。此段替代前文2026-10-09历史说明中开仓现金要求，数据不回填，行情不改变独立现金。

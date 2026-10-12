@@ -18,6 +18,8 @@ function rowToOrder(row: OrderRow): TradeOrder {
     id: String(row.id),
     orderNo: String(row.order_no || ""),
     ...(row.account_market ? { accountMarket: String(row.account_market) } : {}),
+    ...(row.api_managed ? { apiManaged: true } : {}),
+    ...(row.history_locked ? { historyLocked: true } : {}),
     ...(row.settlement_currency ? { settlementCurrency: String(row.settlement_currency), settlementAmount: Number(row.settlement_amount) } : {}),
     recordId: String(row.record_id),
     market: String(row.market),
@@ -97,7 +99,10 @@ export function listOrders(
     conditions.push("status = ?");
     params.push(status);
   }
-  const rows = db.prepare(`SELECT trade_orders.*, (SELECT r.account_market FROM records r WHERE r.id=trade_orders.record_id AND r.user_id=trade_orders.user_id) AS account_market FROM trade_orders WHERE ${conditions.join(" AND ")} ORDER BY traded_at DESC, created_at DESC`).all(...params) as OrderRow[];
+  const rows = db.prepare(`SELECT trade_orders.*, (SELECT r.account_market FROM records r WHERE r.id=trade_orders.record_id AND r.user_id=trade_orders.user_id) AS account_market,
+    EXISTS(SELECT 1 FROM app_trade_metadata m WHERE m.order_id=trade_orders.id) AS api_managed,
+    EXISTS(SELECT 1 FROM app_trade_metadata m JOIN trade_orders linked ON linked.id=m.order_id WHERE linked.user_id=trade_orders.user_id AND linked.record_id=trade_orders.record_id AND linked.status='filled') AS history_locked
+    FROM trade_orders WHERE ${conditions.join(" AND ")} ORDER BY traded_at DESC, created_at DESC`).all(...params) as OrderRow[];
   const now = Date.now();
   return rows.map(rowToOrder).filter((order) => {
     if (scope === "all") return true;
@@ -166,7 +171,7 @@ export function executeOrder(input: {
     );
     if (connect) db.prepare("UPDATE trade_orders SET settlement_currency='CNY', settlement_amount=? WHERE id=?").run(input.settlementAmount!, id);
     db.prepare("UPDATE records SET qty = ?, cost = ?, updated_at = ? WHERE id = ? AND user_id = ?")
-      .run(nextQty || null, nextCost, now, input.recordId, input.userId);
+      .run(nextQty, nextCost, now, input.recordId, input.userId);
     refreshEconomicRealizedPnl(input.userId, input.recordId);
     syncOrderCashTransaction(input.userId, id);
     const order = db.prepare("SELECT * FROM trade_orders WHERE id = ?").get(id) as OrderRow;
@@ -195,7 +200,7 @@ function shouldFill(order: { side: OrderSide; orderType: OrderType; price: numbe
 }
 
 /** 把一笔 pending 挂单按行情价成交（原子，含持仓更新）；返回是否成功。 */
-function fillPendingRow(row: OrderRow, fillPrice: number): boolean {
+export function fillPendingRow(row: OrderRow, fillPrice: number, observedAt?: string): boolean {
   const db = getDb();
   return db.transaction(() => {
     const still = db.prepare("SELECT status FROM trade_orders WHERE id = ?").get(String(row.id)) as { status: string } | undefined;
@@ -218,11 +223,11 @@ function fillPendingRow(row: OrderRow, fillPrice: number): boolean {
     const calculated = applyOrder({ qty: oldQty, cost: oldCost }, { side, qty, price: fillPrice, fees: Number(row.fees || 0) });
     const nextQty = calculated.qty;
     const nextCost = nextQty > 0 ? calculated.cost : null;
-    const now = new Date().toISOString();
+    const now = observedAt ?? new Date().toISOString();
     db.prepare(`UPDATE trade_orders SET status='filled', amount=?, price=?, realized_pnl=?, position_qty_before=?, position_cost_before=?, position_qty_after=?, position_cost_after=?, traded_at=?, trigger_status='已触发' WHERE id=? AND status='pending'`)
       .run(qty * fillPrice, fillPrice, calculated.realizedPnl, oldQty, oldCost, nextQty, nextCost, now, String(row.id));
     db.prepare("UPDATE records SET qty=?, cost=?, updated_at=? WHERE id=? AND user_id=?")
-      .run(nextQty || null, nextCost, now, String(row.record_id), userId);
+      .run(nextQty, nextCost, now, String(row.record_id), userId);
     refreshEconomicRealizedPnl(userId, String(row.record_id));
     syncOrderCashTransaction(userId, String(row.id));
     return true;
@@ -244,7 +249,7 @@ function exchangeDate(value: string | number, market: string) {
 /** 惰性结算挂单：拉取挂单标的现价，命中触发价则成交，超期/失效则标记过期。 */
 export async function settlePendingOrders(userId: string): Promise<{ checked: number; filled: number; expired: number }> {
   const db = getDb();
-  const pending = db.prepare("SELECT * FROM trade_orders WHERE user_id = ? AND status = 'pending'").all(userId) as OrderRow[];
+  const pending = db.prepare("SELECT * FROM trade_orders WHERE user_id = ? AND status = 'pending' AND NOT EXISTS(SELECT 1 FROM app_trade_metadata m WHERE m.order_id=trade_orders.id)").all(userId) as OrderRow[];
   if (pending.length === 0) return { checked: 0, filled: 0, expired: 0 };
   const last = lastSettle.get(userId) || 0;
   if (Date.now() - last < SETTLE_MIN_INTERVAL) return { checked: 0, filled: 0, expired: 0 };
@@ -369,6 +374,7 @@ export function cancelOrder(input: { userId: string; orderId: string }): TradeOr
   const db = getDb();
   const row = db.prepare("SELECT * FROM trade_orders WHERE id = ? AND user_id = ?").get(input.orderId, input.userId) as OrderRow | undefined;
   if (!row) throw new Error("订单不存在");
+  if (db.prepare("SELECT 1 FROM app_trade_metadata WHERE order_id=?").get(input.orderId)) throw new Error("API 交易须使用带版本和回执的撤单接口");
   if (String(row.status) !== "pending") throw new Error("仅待成交的挂单可撤单");
   db.prepare("UPDATE trade_orders SET status='cancelled', trigger_status='已撤销' WHERE id=? AND user_id=? AND status='pending'").run(input.orderId, input.userId);
   const updated = db.prepare("SELECT * FROM trade_orders WHERE id = ?").get(input.orderId) as OrderRow;
@@ -407,7 +413,9 @@ export function updateOrder(input: {
   return db.transaction(() => {
     const targetRow = db.prepare("SELECT * FROM trade_orders WHERE id = ? AND user_id = ?").get(input.orderId, input.userId) as OrderRow | undefined;
     if (!targetRow) throw new Error("订单不存在");
+    if (db.prepare("SELECT 1 FROM app_trade_metadata WHERE order_id=?").get(input.orderId)) throw new Error("API 交易须使用带版本和回执的改单接口");
     const target = rowToOrder(targetRow);
+    if (db.prepare("SELECT 1 FROM app_trade_metadata m JOIN trade_orders o ON o.id=m.order_id WHERE o.user_id=? AND o.record_id=? AND o.status='filled' LIMIT 1").get(input.userId, target.recordId)) throw new Error("同证券包含 API 成交回执，旧接口不能重放历史");
     const record = db.prepare("SELECT market,account_market FROM records WHERE id=? AND user_id=?").get(target.recordId, input.userId) as OrderRow | undefined;
     const connect = record && isStockConnect({ market: String(record.market), accountMarket: String(record.account_market) });
     const financialChange = target.side !== input.side || target.qty !== input.qty || target.price !== input.price || target.fees !== input.fees;
@@ -462,7 +470,9 @@ export function deleteOrder(input: {
   return db.transaction(() => {
     const targetRow = db.prepare("SELECT * FROM trade_orders WHERE id = ? AND user_id = ?").get(input.orderId, input.userId) as OrderRow | undefined;
     if (!targetRow) throw new Error("订单不存在");
+    if (db.prepare("SELECT 1 FROM app_trade_metadata WHERE order_id=?").get(input.orderId)) throw new Error("API 交易保留历史回执，不能通过旧接口删除");
     const target = rowToOrder(targetRow);
+    if (db.prepare("SELECT 1 FROM app_trade_metadata m JOIN trade_orders o ON o.id=m.order_id WHERE o.user_id=? AND o.record_id=? AND o.status='filled' LIMIT 1").get(input.userId, target.recordId)) throw new Error("同证券包含 API 成交回执，旧接口不能重放历史");
     const rows = db.prepare("SELECT * FROM trade_orders WHERE user_id = ? AND record_id = ? AND status = 'filled' ORDER BY traded_at ASC, created_at ASC")
       .all(input.userId, target.recordId) as OrderRow[];
     if (rows.length === 0) throw new Error("订单不存在");

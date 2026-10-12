@@ -474,6 +474,7 @@ export default function TradeOrdersPanel({
   const totalColumnWidth = visibleColumns.reduce((sum, item) => sum + (ORDER_COLUMNS.find((column) => column.key === item.key)?.minWidth ?? 90), 0);
 
   async function handleCancel(order: TradeOrder) {
+    if (order.apiManaged) return;
     if (!await appConfirm(`确认撤下这笔挂单？\n${order.name} · ${order.side === "buy" ? "买入" : "卖出"} ${order.qty} 股`, { title: "撤下挂单", danger: true })) return;
     try {
       const res = await fetch(`/api/v1/orders/${order.id}`, { method: "PATCH" });
@@ -997,7 +998,7 @@ export default function TradeOrdersPanel({
       case "actions":
         return (
           <div className="inline-flex items-center gap-1">
-            {order.status === "pending" && (
+            {order.status === "pending" && !order.apiManaged && (
               <button
                 type="button"
                 onClick={() => void handleCancel(order)}
@@ -1021,8 +1022,9 @@ export default function TradeOrdersPanel({
                 <path d="M9 5h11M9 10h11M9 15h11M9 20h11" /><path d="M4 5h1M4 10h1M4 15h1M4 20h1" />
               </svg>
             </button>
-            {onEdit && <button type="button" onClick={() => onEdit(order)} className="btn btn-ghost btn-sm">编辑</button>}
-            {onDelete && (
+            {(order.apiManaged || order.historyLocked) && <span className="text-[11px] text-muted" title={order.apiManaged ? "在 App 中管理此订单" : "此证券包含 App 成交回执，保留历史记录"}>{order.apiManaged ? "App 订单" : "只读"}</span>}
+            {onEdit && !order.apiManaged && !order.historyLocked && <button type="button" onClick={() => onEdit(order)} className="btn btn-ghost btn-sm">编辑</button>}
+            {onDelete && !order.apiManaged && !order.historyLocked && (
               <button type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="btn btn-ghost btn-sm text-down disabled:opacity-50">
                 {deletingId === order.id ? "删除中…" : <DeleteIcon size={13} />}
               </button>

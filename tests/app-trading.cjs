@@ -1,0 +1,160 @@
+// Real v1/v2 handlers, tokens and SQLite; every financial write is disposable.
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto'),Module=require('node:module'),ts=require('typescript');
+const root=path.resolve(__dirname,'..'),resolve=Module._resolveFilename;
+Module._resolveFilename=function(id,parent,...rest){return resolve.call(this,id.startsWith('@/')?path.join(root,id.slice(2)):id,parent,...rest);};
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
+require.extensions['.tsx']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true,jsx:ts.JsxEmit.ReactJSX}}).outputText,f);
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'alcor-api-trading-'));process.chdir(temp);process.env.STOCKLOG_FUTU='off';process.env.FIRE_APP_ORIGIN='https://trades.example.test';global.fetch=async()=>{throw Error('Network disabled');};
+const load=f=>require(path.join(root,f)),auth=load('lib/auth.ts'),app=load('lib/appAuth.ts'),db=load('lib/db.ts').getDb(),store=load('lib/store.ts'),orders=load('lib/orders.ts'),funds=load('lib/funds.ts'),assets=load('lib/appAssets.ts'),trading=load('lib/appTrading.ts');
+let quote,afterQuote,quoteReads=0,index=0,count=0;
+load('lib/quotes.ts').fetchOverviewQuotes=async items=>{quoteReads++;if(afterQuote)await afterQuote();return{quotes:quote?Object.fromEntries(items.map(i=>[i.id,quote])):{},cached:[],pending:false};};
+load('lib/rates.ts').getRates=async()=>({USD:1,HKD:7,CNY:7});
+const full='portfolio.read portfolio.write assets.read positions.read cash.read orders.read orders.write orders.cancel';
+function fixture(scope=full){
+ const user=auth.createUser('api_trade_'+(++index),'Trade-test-123'),cookie=auth.createSession(user.id),verifier=crypto.randomBytes(32).toString('base64url');
+ const a={client_id:app.APP_CLIENT_ID,redirect_uri:app.APP_REDIRECT_URI,response_type:'code',code_challenge_method:'S256',code_challenge:crypto.createHash('sha256').update(verifier).digest('base64url'),state:crypto.randomBytes(32).toString('base64url'),scope};
+ const code=app.issueAppCode(app.parseAppAuthorization(a),user.id,cookie),grant=app.exchangeAppCode({...a,code,code_verifier:verifier});
+ const r=store.createRecord(user.id,{name:'Synthetic',code:'TEST',market:'US',qty:10,cost:5,price:10,group:'Broker',note:''});
+ assets.declareInstrument(user.id,r.id,{requestId:crypto.randomUUID(),recordRevision:r.revision,revision:0,kind:'cash_equity',listingStatus:'listed'},()=>user.id);
+ funds.createFundTransaction({userId:user.id,currency:'USD',type:'opening',amount:1000,direction:1});return{user,cookie,grant,r};
+}
+const state=f=>trading.tradingSnapshot(f.user.id);
+function input(f,over={}){const s=state(f),r=store.readRecord(f.user.id,f.r.id);return{requestId:crypto.randomUUID(),accountId:f.user.id,recordId:r.id,recordRevision:r.revision,snapshotRevision:s.snapshotRevision,side:'buy',mode:'record',orderType:'limit',qty:2,price:10,fees:1,tif:'gtc',session:'REGULAR',tradedAt:new Date(Date.now()-1000).toISOString(),...over};}
+async function call(v,f,tail='trading',method='GET',body,headers={}){
+ let file=tail.split('?')[0],params={};
+ if(file.startsWith('operations/')){params.requestId=file.split('/')[1];file='operations/[requestId]';}
+ if(file.startsWith('trading/orders/')){params.orderId=file.split('/')[2];file='trading/orders/[orderId]'+(file.endsWith('/observations')?'/observations':'');}
+ const request=new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/account-assets/`+tail,{method,headers:{authorization:'Bearer '+f.grant.access_token,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
+ const r=await load(`app/api/v${v}/account-assets/${file}/route.ts`)[method](request,{params:Promise.resolve(params)});return{status:r.status,...await r.json()};
+}
+const economic=f=>Object.fromEntries(['records','trade_orders','fund_transactions','app_trade_metadata'].map(t=>[t,db.prepare('SELECT * FROM '+t+' WHERE '+(t==='app_trade_metadata'?'order_id IN(SELECT id FROM trade_orders WHERE user_id=?)':'user_id=?')+' ORDER BY rowid').all(f.user.id)]));
+const observe=(f,o)=>({requestId:crypto.randomUUID(),accountId:f.user.id,snapshotRevision:state(f).snapshotRevision,orderRevision:o.revision,recordRevision:store.readRecord(f.user.id,f.r.id).revision});
+async function pending(f,over={}){const reply=await call(2,f,'trading/submissions','POST',input(f,{mode:'order',tradedAt:undefined,...over}));assert.equal(reply.status,200,JSON.stringify(reply));return reply.data.data.items[0];}
+async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;db.prepare('DELETE FROM rate_limit').run();await run();count++;console.log('PASS '+name);}
+(async()=>{
+ await test('discovery provides fixed paths without expanding existing grants or broker claims',async()=>{
+  for(const v of [1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const d=(await r.json()).data;assert.equal(d.scope,'portfolio.read portfolio.write');assert.equal(d.account_trading.submit_path,`/api/v${v}/account-assets/trading/submissions`);assert.equal(d.account_trading.external_broker_execution,false);assert.equal(d.account_trading.background_execution,false);assert.equal(d.account_assets.cancel_scope,'orders.cancel');}
+  const f=fixture('portfolio.read portfolio.write');assert.equal((await call(2,f)).status,403);assert.equal((await call(1,f,'trading/preview','POST',input(f))).status,403);
+  assert.equal(app.refreshAppTokens('fire-ios',f.grant.refresh_token).scope,'portfolio.read portfolio.write');
+ });
+ await test('native permission consent issues usable explicit trading rights without upgrading the original grant',async()=>{
+  const f=fixture('portfolio.read portfolio.write'),original=f.grant,scope='assets.read positions.read cash.read orders.read orders.write orders.cancel';
+  const request=new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/auth/permissions',{method:'POST',headers:{authorization:'Bearer '+original.access_token,'content-type':'application/json'},body:JSON.stringify({client_id:'fire-ios',scope})});
+  const response=await load('app/api/v2/auth/permissions/route.ts').POST(request),reply=await response.json();assert.equal(response.status,200,JSON.stringify(reply));
+  assert.equal(reply.data.replaces_grant_id,original.grant_id);for(const s of scope.split(' ')){assert(reply.data.scope.split(' ').includes(s));assert.equal(reply.data.user.capabilities[s],true);}
+  assert.equal((await call(2,f)).status,403);assert.equal(app.authenticateAppAccess(original.access_token,new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/auth/me')).scope,'portfolio.read portfolio.write');
+  f.grant=reply.data;assert.equal((await call(2,f)).status,200);assert.equal((await call(2,f,'cash')).status,200);assert.equal((await call(2,f,'trading/preview','POST',input(f))).status,200);
+ });
+ await test('scoped views and previews are read-only and preserve account/currency cash',async()=>{
+  const f=fixture(),before=economic(f);for(const v of [1,2]){assert.equal((await call(v,f,'cash')).data.nativeBalancesByCurrency.USD,1000);assert.equal((await call(v,f,'positions')).data.items[0].recordId,f.r.id);assert.equal((await call(v,f,'summary')).data.summary.totalAsset,1100);const p=await call(v,f,'trading/preview','POST',input(f));assert.equal(p.status,200);assert.equal(p.data.cashAfter,979);assert.equal(p.data.feeBreakdown,null);}assert.deepEqual(economic(f),before);
+ });
+ await test('confirmed registration commits cash, position and durable cross-version receipt once',async()=>{
+  const f=fixture(),b=input(f),reply=await call(2,f,'trading/submissions','POST',b);assert.equal(reply.status,200,JSON.stringify(reply));assert.equal(store.readRecord(f.user.id,f.r.id).qty,12);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,979);assert.equal(reply.data.data.items[0].status,'filled');assert.equal(reply.data.data.items[0].executionModel,'owner_recorded_fill');assert.equal((await call(1,f,'trading/submissions','POST',b)).code,40901);assert.deepEqual((await call(1,f,'operations/'+b.requestId)).data,reply.data);
+ });
+ await test('financial changes invalidate preview; failures preserve financial data and have receipts',async()=>{
+  const f=fixture(),b=input(f);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'withdrawal',amount:5,direction:-1});const before=economic(f),r=await call(1,f,'trading/submissions','POST',b);assert.equal(r.code,40902);assert.deepEqual(economic(f),before);assert.equal((await call(2,f,'operations/'+b.requestId)).data.state,'failed');assert.equal((await call(2,f,'trading/submissions','POST',b)).code,40901);
+ });
+ await test('invalid amounts, unknown fields, missing units, oversells and insufficient cash cannot commit',async()=>{
+  const f=fixture(),before=economic(f);for(const change of [{qty:-1},{price:null},{fees:undefined},{fees:'0'},{userId:f.user.id},{qty:1000},{side:'sell',qty:11},{tradedAt:new Date(Date.now()+86400000).toISOString()}])assert.notEqual((await call(2,f,'trading/submissions','POST',input(f,change))).status,200);assert.deepEqual(economic(f),before);
+  db.prepare("UPDATE app_asset_instruments SET kind='unknown' WHERE record_id=?").run(f.r.id);assert.equal((await call(1,f,'trading/preview','POST',input(f))).code,40902);
+ });
+ await test('cash reconciliation records only a signed delta with CAS, pagination and one-time receipts',async()=>{
+  const f=fixture(),s=state(f),b={requestId:crypto.randomUUID(),accountId:f.user.id,snapshotRevision:s.snapshotRevision,currency:'USD',balance:200};const r=await call(2,f,'cash','POST',b);assert.equal(r.status,200);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,200);assert.equal(funds.listFundTransactions(f.user.id)[0].amount,800);assert.equal((await call(1,f,'cash','POST',b)).code,40901);assert.equal((await call(1,f,'cash?limit=1&offset=1')).data.transactions.length,1);assert.equal((await call(2,f,'cash?snapshotRevision='+s.snapshotRevision)).code,40902);for(const q of ['limit=0','limit=201','offset=.1','offset=-1','currency=BAD','owner=x','limit=1&limit=2'])assert.equal((await call(2,f,'cash?'+q)).status,400);
+ });
+ await test('new conditions never execute from GET or the old lazy settlement path',async()=>{
+  const f=fixture(),o=await pending(f),before=economic(f);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await call(1,f);await call(2,f,'orders?scope=all');const settled=await orders.settlePendingOrders(f.user.id);assert.equal(settled.checked,0);assert.deepEqual(economic(f),before);assert.equal(state(f).orders.find(x=>x.id===o.id).status,'pending');
+ });
+ await test('fresh server quotes execute once while stale, future and unsupported sessions cannot fill',async()=>{
+  const f=fixture(),o=await pending(f),before=economic(f);for(const q of [{price:9,time:new Date(Date.now()-60000).toISOString(),source:'futu',session:'REGULAR'},{price:9,time:new Date(Date.now()+60000).toISOString(),source:'futu',session:'REGULAR'},{price:9,time:new Date().toISOString(),source:'futu',session:'OVERNIGHT'},{price:9,time:new Date().toISOString(),source:'auto',session:'REGULAR'}]){quote=q;assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o))).code,40902);assert.deepEqual(economic(f),before);}
+  quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};const b=observe(f,o),r=await call(1,f,'trading/orders/'+o.id+'/observations','POST',b);assert.equal(r.status,200,JSON.stringify(r));assert.equal(store.readRecord(f.user.id,f.r.id).qty,12);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,981);assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',b)).code,40901);
+ });
+ await test('bracket children start only after full fill and one side atomically cancels its sibling',async()=>{
+  const f=fixture(),a={takeProfit:{percent:10,orderType:'market',fees:0},stopLoss:{percent:10,orderType:'market',fees:0},session:'REGULAR',tif:'gtc'},o=await pending(f,{attachments:a});assert.equal(state(f).orders.length,1);
+  quote={price:10,time:new Date().toISOString(),source:'futu',session:'REGULAR'};let r=await call(2,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o));assert.equal(r.status,200,JSON.stringify(r));assert.equal(state(f).orders.length,3);const children=db.prepare('SELECT * FROM app_trade_metadata WHERE parent_id=?').all(o.id),profit=children.find(x=>x.role==='take_profit'),child=state(f).orders.find(x=>x.id===profit.order_id);
+  quote={price:12,time:new Date().toISOString(),source:'futu',session:'REGULAR'};r=await call(1,f,'trading/orders/'+child.id+'/observations','POST',observe(f,child));assert.equal(r.status,200,JSON.stringify(r));assert.equal(store.readRecord(f.user.id,f.r.id).qty,10);const states=children.map(c=>state(f).orders.find(x=>x.id===c.order_id).status);assert.deepEqual(states.sort(),['cancelled','filled']);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,1003);
+ });
+ await test('order reservations prevent oversubscribing cash or quantity, OCO shares one reservation',async()=>{
+  const f=fixture();await pending(f,{qty:60});assert.equal((await call(1,f,'trading/preview','POST',input(f,{qty:50}))).code,40902);await pending(f,{side:'sell',qty:6});assert.equal((await call(2,f,'trading/preview','POST',input(f,{side:'sell',qty:5}))).code,40902);
+ });
+ await test('amend preserves the order number, increments revision and rejects stale or old-route writers',async()=>{
+  const f=fixture(),o=await pending(f),b=input(f,{mode:'order',tradedAt:undefined,price:8,orderRevision:o.revision});const r=await call(1,f,'trading/orders/'+o.id,'PUT',b);assert.equal(r.status,200,JSON.stringify(r));const latest=state(f).orders.find(x=>x.id===o.id);assert.equal(latest.orderNo,o.orderNo);assert(latest.revision>o.revision);assert.equal(latest.price,8);assert.equal((await call(2,f,'trading/orders/'+o.id,'PUT',b)).code,40901);assert.throws(()=>orders.cancelOrder({userId:f.user.id,orderId:o.id}),/版本/);assert.throws(()=>orders.deleteOrder({userId:f.user.id,orderId:o.id}),/回执/);assert.throws(()=>orders.updateOrder({userId:f.user.id,orderId:o.id,side:'buy',qty:1,price:3,fees:0}),/版本/);
+ });
+ await test('Stock Connect keeps HKD price/fees and records the actual CNY net amount exactly once',async()=>{
+  const f=fixture();db.prepare("UPDATE records SET market='HK',code='00700',account_market='CN' WHERE id=?").run(f.r.id);const rr=store.readRecord(f.user.id,f.r.id);assert.equal(assets.declareInstrument(f.user.id,rr.id,{requestId:crypto.randomUUID(),recordRevision:rr.revision,revision:assets.instrumentSnapshot(f.user.id,rr.id).instrument.revision,kind:'cash_equity',listingStatus:'listed'},()=>f.user.id).error,null);funds.createFundTransaction({userId:f.user.id,currency:'CNY',type:'opening',amount:1000,direction:1});
+  assert.equal((await call(2,f,'trading/submissions','POST',input(f))).status,400);const b=input(f,{settlementAmount:19}),r=await call(2,f,'trading/submissions','POST',b);assert.equal(r.status,200,JSON.stringify(r));assert.equal(state(f).cash.nativeBalancesByCurrency.CNY,981);assert.equal(state(f).cash.nativeBalancesByCurrency.HKD,0);const o=r.data.data.items[0];assert.equal(o.accountMarket,'CN');assert.equal(o.settlementCurrency,'CNY');assert.equal(o.settlementAmount,19);assert.equal(o.fees,1);assert.equal((await call(1,f,'trading/submissions','POST',input(f,{mode:'order',tradedAt:undefined,settlementAmount:19}))).status,400);
+ });
+ await test('owner, Cookie, method, origin and late grant revocation fail without financial changes',async()=>{
+  const f=fixture(),other=fixture(),before=economic(f);assert.equal((await call(1,other,'trading/submissions','POST',input(f))).status,400);assert.equal((await call(2,f,'trading','GET',undefined,{authorization:'',cookie:'fire_session='+f.cookie})).status,401);assert.equal((await call(1,f,'cash','GET',undefined,{origin:'https://evil.test'})).status,403);assert.deepEqual(economic(f),before);
+  const o=await pending(f);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};afterQuote=()=>app.revokeAppGrant(f.grant.grant_id);const rows=economic(f);assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o))).status,401);assert.deepEqual(economic(f),rows);
+ });
+ await test('exchange quote clocks handle compact dates, milliseconds, DST and invalid wall times',async()=>{
+  assert.equal(trading.tradingQuoteTime('20261013160000','US'),Date.parse('2026-10-13T20:00:00Z'));assert.equal(trading.tradingQuoteTime('2026-10-13 09:30:00.123','HK'),Date.parse('2026-10-13T01:30:00.123Z'));assert.equal(trading.tradingQuoteTime('2026-11-01 01:30:00','US'),null);assert.equal(trading.tradingQuoteTime('2026-03-08 02:30:00','US'),null);assert.equal(trading.tradingQuoteTime('2026-02-30 09:30:00','HK'),null);assert.equal(trading.tradingQuoteTime('bad','US'),null);
+  assert.equal(trading.tradingQuoteTime('2026-02-30T09:30:00Z','US'),null);
+  assert.equal(trading.tradingQuoteTime('2026/10/13 09:30:00','HK'),Date.parse('2026-10-13T01:30:00Z'));assert.equal(trading.tradingQuoteTime('2026/02/30 09:30:00','HK'),null);
+  assert.equal(trading.tradingQuoteTime(null,'HK'),null);assert.equal(trading.tradingQuoteTime(undefined,'US'),null);
+ });
+ await test('direct Hong Kong conditions consume real Tencent slash-date format and settle in HKD',async()=>{
+  const f=fixture();db.prepare("UPDATE records SET market='HK',code='00700' WHERE id=?").run(f.r.id);const r=store.readRecord(f.user.id,f.r.id);assets.declareInstrument(f.user.id,r.id,{requestId:crypto.randomUUID(),recordRevision:r.revision,revision:assets.instrumentSnapshot(f.user.id,r.id).instrument.revision,kind:'cash_equity',listingStatus:'listed'},()=>f.user.id);funds.createFundTransaction({userId:f.user.id,currency:'HKD',type:'opening',amount:1000,direction:1});
+  const o=await pending(f),d=JSON.parse(db.prepare('SELECT draft_json FROM app_trade_metadata WHERE order_id=?').get(o.id).draft_json);d.confirmedAt=new Date(Date.now()-2000).toISOString();db.prepare('UPDATE app_trade_metadata SET draft_json=? WHERE order_id=?').run(JSON.stringify(d),o.id);
+  quote={price:9,time:new Date(Date.now()+8*3600000).toISOString().slice(0,19).replace(/-/g,'/').replace('T',' '),source:'tencent',session:'REGULAR'};
+  const reply=await call(2,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o));assert.equal(reply.status,200,JSON.stringify(reply));assert.equal(state(f).cash.nativeBalancesByCurrency.HKD,981);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,1000);assert.equal(store.readRecord(f.user.id,f.r.id).qty,12);
+ });
+ await test('stop-limit activation survives recrossing and fills at its actual later limit price',async()=>{
+  const f=fixture(),o=await pending(f,{attachments:{stopLoss:{percent:10,orderType:'limit',limitPrice:12,fees:0},session:'REGULAR',tif:'gtc'}});
+  quote={price:10,time:new Date().toISOString(),source:'futu',session:'REGULAR'};assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o))).status,200);
+  const id=db.prepare("SELECT order_id FROM app_trade_metadata WHERE parent_id=? AND role='stop_loss'").get(o.id).order_id;let child=state(f).orders.find(x=>x.id===id);
+  quote={price:8,time:new Date().toISOString(),source:'futu',session:'REGULAR'};assert.equal((await call(1,f,'trading/orders/'+id+'/observations','POST',observe(f,child))).status,200);child=state(f).orders.find(x=>x.id===id);assert.equal(child.status,'pending');assert(child.triggerStatus.includes('已触发'));
+  quote={price:13,time:new Date().toISOString(),source:'futu',session:'REGULAR'};const r=await call(2,f,'trading/orders/'+id+'/observations','POST',observe(f,child));assert.equal(r.status,200,JSON.stringify(r));assert.equal(state(f).orders.find(x=>x.id===id).status,'filled');assert.equal(state(f).cash.nativeBalancesByCurrency.USD,1005);
+ });
+ await test('day expiry is explicit and quotes cannot overwrite a concurrent financial mutation',async()=>{
+  const f=fixture(),o=await pending(f,{tif:'day'}),meta=db.prepare('SELECT draft_json FROM app_trade_metadata WHERE order_id=?').get(o.id);const d=JSON.parse(meta.draft_json);d.confirmedAt='2000-01-01T00:00:00Z';db.prepare('UPDATE app_trade_metadata SET draft_json=? WHERE order_id=?').run(JSON.stringify(d),o.id);const position=store.readRecord(f.user.id,f.r.id),balance=state(f).cash.nativeBalancesByCurrency.USD;
+  const r=await call(1,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o));assert.equal(r.status,200);assert.equal(state(f).orders.find(x=>x.id===o.id).status,'expired');assert.deepEqual(store.readRecord(f.user.id,f.r.id),position);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,balance);
+  const g=fixture(),p=await pending(g),b=observe(g,p);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};afterQuote=()=>funds.createFundTransaction({userId:g.user.id,currency:'USD',type:'deposit',amount:1,direction:1});assert.equal((await call(2,g,'trading/orders/'+p.id+'/observations','POST',b)).code,40902);assert.equal(state(g).orders.find(x=>x.id===p.id).status,'pending');assert.equal(store.readRecord(g.user.id,g.r.id).qty,10);
+ });
+ await test('market conditions use server price; duplicate confirmations have exactly one winner',async()=>{
+  const f=fixture(),o=await pending(f,{orderType:'market'});quote={price:20,time:new Date().toISOString(),source:'futu',session:'REGULAR'};assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o))).status,200);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,959);assert.equal(state(f).orders.find(x=>x.id===o.id).price,20);
+  const g=fixture(),b=input(g),replies=await Promise.all([1,2].map(v=>call(v,g,'trading/submissions','POST',b)));assert.deepEqual(replies.map(r=>r.status).sort(),[200,409]);assert.equal(store.readRecord(g.user.id,g.r.id).qty,12);const receipt=replies.find(r=>r.status===200).data;assert.equal(receipt.data.snapshot.orders,undefined,'receipt must not duplicate all account history');assert.equal(receipt.data.items.length,1);
+ });
+ await test('invalid calendar dates, quantities below supported precision and stale chronology are rejected',async()=>{
+  const f=fixture();for(const over of [{qty:1e-11},{price:1e-11},{fees:1e-11},{tradedAt:'2026-02-30T09:30:00Z'}])assert.equal((await call(2,f,'trading/preview','POST',input(f,over))).status,400);
+  assert.equal((await call(2,f,'trading/submissions','POST',input(f))).status,200);const before=economic(f);assert.equal((await call(1,f,'trading/submissions','POST',input(f,{tradedAt:'2000-01-01T00:00:00Z'}))).code,40902);assert.deepEqual(economic(f),before);
+ });
+ await test('clearing retains verified zero quantity and permits a new buy without guessing missing holdings',async()=>{
+  for(const mode of ['record','order']){
+   const f=fixture();let r;
+   if(mode==='record')r=await call(2,f,'trading/submissions','POST',input(f,{side:'sell',qty:10}));
+   else {const o=await pending(f,{side:'sell',qty:10});quote={price:10,time:new Date().toISOString(),source:'futu',session:'REGULAR'};r=await call(2,f,'trading/orders/'+o.id+'/observations','POST',observe(f,o));}
+   assert.equal(r.status,200,JSON.stringify(r));assert.equal(store.readRecord(f.user.id,f.r.id).qty,0);assert.equal(state(f).positions[0].qty,0);assert.equal(state(f).positions[0].nativeMarketValue,0);
+   r=await call(1,f,'trading/submissions','POST',input(f,{tradedAt:new Date().toISOString()}));assert.equal(r.status,200,JSON.stringify(r));assert.equal(store.readRecord(f.user.id,f.r.id).qty,2);
+  }
+  const f=fixture();db.prepare('UPDATE records SET qty=NULL WHERE id=?').run(f.r.id);assert.equal((await call(2,f,'trading/preview','POST',input(f))).code,40902);
+ });
+ await test('malformed observation versions never consume quote-provider work',async()=>{
+  const f=fixture(),o=await pending(f);for(const bad of [{orderRevision:0},{recordRevision:-1},{requestId:'bad'},{unexpected:true}])assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',{...observe(f,o),...bad})).status,400);assert.equal(quoteReads,0);assert.equal(state(f).orders.find(x=>x.id===o.id).status,'pending');
+ });
+ await test('legacy history replay cannot rewrite later API receipts and Web hides incompatible actions',async()=>{
+  const f=fixture(),old=orders.executeOrder({userId:f.user.id,recordId:f.r.id,side:'buy',qty:1,price:10,fees:0,tradedAt:new Date(Date.now()-2000).toISOString()}).order;
+  const React=load('node_modules/react'),render=load('node_modules/react-dom/server').renderToStaticMarkup,Panel=load('components/TradeOrdersPanel.tsx').default;
+  const props={onEdit:()=>{},onDelete:()=>{}};assert(render(React.createElement(Panel,{...props,orders:[old]})).includes('>编辑</button>'));
+  const receipt=await call(2,f,'trading/submissions','POST',input(f));assert.equal(receipt.status,200);const before=economic(f);
+  assert.throws(()=>orders.updateOrder({userId:f.user.id,orderId:old.id,side:'buy',qty:2,price:10,fees:0}),/不能重放历史/);assert.throws(()=>orders.deleteOrder({userId:f.user.id,orderId:old.id}),/不能重放历史/);assert.deepEqual(economic(f),before);
+  const rows=orders.listOrders(f.user.id,'all'),locked=rows.find(o=>o.id===old.id),managed=rows.find(o=>o.apiManaged);assert.equal(locked.historyLocked,true);assert.equal(locked.apiManaged,undefined);
+  const lockedMarkup=render(React.createElement(Panel,{...props,orders:[locked]}));assert(lockedMarkup.includes('只读'));assert(!lockedMarkup.includes('>编辑</button>'));
+  const managedMarkup=render(React.createElement(Panel,{...props,orders:[managed]}));assert(managedMarkup.includes('App 订单'));assert(!managedMarkup.includes('>编辑</button>'));assert(!managedMarkup.includes('title="撤单"'));
+ });
+ await test('portable backups cannot erase API execution metadata or historical receipts',async()=>{
+  const transfer=load('lib/dataTransfer.ts'),source=fixture(),payload=transfer.buildBackupPayload(source.user.id,false),target=fixture();await pending(target);const before=economic(target);
+  assert.throws(()=>transfer.buildBackupPayload(target.user.id,false),/完整数据库备份/);assert.throws(()=>transfer.restoreBackupPayload(payload,target.user.id,false),/完整数据库备份/);assert.deepEqual(economic(target),before);
+  assert.throws(()=>transfer.validateBackupAccess(payload,target.user.id,false),/完整数据库备份/);
+  const response=await load('app/api/v1/data/export/route.ts').GET(new Request(process.env.FIRE_APP_ORIGIN+'/api/v1/data/export',{headers:{cookie:'fire_session='+target.cookie}}));assert.equal(response.status,409);assert((await response.json()).error.includes('完整数据库备份'));
+  const backup=path.join(temp,'complete-api-backup.db');await db.backup(backup);const clone=load('node_modules/better-sqlite3')(backup);
+  try{for(const [table,where] of [['app_trade_metadata','order_id IN(SELECT id FROM trade_orders WHERE user_id=?)'],['app_asset_order_versions','order_id IN(SELECT id FROM trade_orders WHERE user_id=?)'],['app_asset_operations','user_id=?']]){const sql='SELECT * FROM '+table+' WHERE '+where+' ORDER BY rowid';assert.deepEqual(clone.prepare(sql).all(target.user.id),db.prepare(sql).all(target.user.id));}}finally{clone.close();fs.rmSync(backup,{force:true});}
+ });
+ await test('Stock Connect portable restore preserves account market, actual CNY cash, and rolls back cash-sync failures',async()=>{
+  const transfer=load('lib/dataTransfer.ts'),f=fixture(),target=fixture();db.prepare("UPDATE records SET market='HK',code='00700',account_market='CN' WHERE id=?").run(f.r.id);funds.createFundTransaction({userId:f.user.id,currency:'CNY',type:'opening',amount:1000,direction:1});orders.executeOrder({userId:f.user.id,recordId:f.r.id,side:'buy',qty:2,price:10,fees:1,settlementAmount:19});
+  const payload=transfer.buildBackupPayload(f.user.id,false);assert.equal(payload.data.records[0].account_market,'CN');assert.equal(payload.data.tradeOrders[0].settlement_amount,19);
+  const before=economic(target),sync=funds.syncOrderCashTransactions;funds.syncOrderCashTransactions=()=>{throw Error('injected cash failure');};try{assert.throws(()=>transfer.restoreBackupPayload(payload,target.user.id,false),/injected cash failure/);assert.deepEqual(economic(target),before);}finally{funds.syncOrderCashTransactions=sync;}
+  transfer.restoreBackupPayload(payload,target.user.id,false);const r=store.listRecords(target.user.id).find(r=>r.code==='00700');assert.equal(r.accountMarket,'CN');assert.equal(r.qty,12);const o=orders.listOrders(target.user.id,'all').find(o=>o.code==='00700');assert.equal(o.settlementCurrency,'CNY');assert.equal(o.settlementAmount,19);assert.equal(funds.readFundBalances(target.user.id).CNY,981);assert.equal(funds.readFundBalances(target.user.id).HKD,0);
+ });
+ console.log(count+' API trading chain suites passed');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});});

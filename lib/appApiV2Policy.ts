@@ -33,6 +33,16 @@ export const APP_V2_ROUTES = [
   {path:"auth/security-devices",methods:["GET","DELETE"],access:"security.read",writeAccess:"security.write"},
   {path:"account-assets",methods:["GET"],access:"portfolio.read"},
   {path:"account-assets/instruments/[recordId]",methods:["GET","PUT"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"account-assets/orders",methods:["GET"],access:"portfolio.read"},
+  {path:"account-assets/orders/cancellations",methods:["POST"],access:"orders.cancel"},
+  {path:"account-assets/trading",methods:["GET"],access:"orders.read"},
+  {path:"account-assets/trading/preview",methods:["POST"],access:"orders.write"},
+  {path:"account-assets/trading/submissions",methods:["POST"],access:"orders.write"},
+  {path:"account-assets/trading/orders/[orderId]",methods:["PUT"],access:"orders.write"},
+  {path:"account-assets/trading/orders/[orderId]/observations",methods:["POST"],access:"orders.write"},
+  {path:"account-assets/summary",methods:["GET"],access:"assets.read"},
+  {path:"account-assets/positions",methods:["GET"],access:"positions.read"},
+  {path:"account-assets/cash",methods:["GET","POST"],access:"cash.read",writeAccess:"portfolio.write"},
   {path:"account-assets/operations/[requestId]",methods:["GET"],access:"portfolio.read"},
   {path:"overview",methods:["GET"],access:"portfolio.read"},
   {path:"asset-allocation",methods:["GET","POST","PUT","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
@@ -96,7 +106,7 @@ export const APP_V2_ROUTES = [
   {path:"feed/posts/[postId]/discussion",methods:["GET","POST"],access:"feed.read",writeAccess:"feed.write"}
 ] as const;
 type Entry = {path:string;methods:readonly string[];access:string;writeAccess?:string};
-const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[folderId]"?"rld_[a-f0-9]{32}":segment==="[fileId]"?"rlf_[a-f0-9]{32}":segment==="[requestId]"?"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}":segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":(segment==="[id]" || segment==="[recordId]")?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
+const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[folderId]"?"rld_[a-f0-9]{32}":segment==="[fileId]"?"rlf_[a-f0-9]{32}":segment==="[orderId]"?"o-[a-f0-9]{16}":segment==="[requestId]"?"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}":segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":(segment==="[id]" || segment==="[recordId]")?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
 export function appV2KnownPath(path:string) { return routes.some(item=>item.pattern.test(path)); }
 export function appV2Access(path:string,method:string): string|null {
   // Literal routes must win over dynamic IDs (e.g. watch-groups/reorder).

@@ -22,6 +22,8 @@ export default function AppAuthorizationConsent({ authorization, account, userna
   const operation = useRef<AbortController | null>(null);
   useEffect(() => () => operation.current?.abort(), []);
   const writable = authorization.scope.split(" ").includes("portfolio.write");
+  const tradeWritable = authorization.scope.split(" ").includes("orders.write");
+  const orderCancellable = authorization.scope.split(" ").includes("orders.cancel");
   const profileWritable = authorization.scope.split(" ").includes("profile.write");
   const securityReadable = authorization.scope.split(" ").includes("security.read");
   const securityWritable = authorization.scope.split(" ").includes("security.write");
@@ -64,6 +66,8 @@ export default function AppAuthorizationConsent({ authorization, account, userna
         <h2 id="app-permissions-title">允许 {brand.appName}</h2>
         <div className="app-consent-permission"><SubNavIcon name="stocks" /><span><strong>查看投资数据</strong><small>持仓、自选、订单与资金记录</small></span></div>
         {writable && <div className="app-consent-permission"><SubNavIcon name="pen" /><span><strong>管理投资数据</strong><small>新增、修改和删除你的投资记录</small></span></div>}
+        {tradeWritable && <div className="app-consent-permission"><SubNavIcon name="trade" /><span><strong>提交与修改交易</strong><small>登记实际成交、创建和修改条件单；不向外部券商下单</small></span></div>}
+        {orderCancellable && <div className="app-consent-permission"><SubNavIcon name="order-cancel" /><span><strong>撤销待成交订单</strong><small>撤销已选择的本人待成交订单</small></span></div>}
         {profileWritable && <div className="app-consent-permission"><SubNavIcon name="profile" /><span><strong>修改个人资料</strong><small>昵称、用户名、邮箱和头像；改邮箱仍需当前密码</small></span></div>}
         {securityReadable && <div className="app-consent-permission"><SubNavIcon name="account" /><span><strong>查看账户安全</strong><small>邮箱验证、两步验证、通行密钥与登录设备状态</small></span></div>}
         {securityWritable && <div className="app-consent-permission"><SubNavIcon name="password" /><span><strong>管理账户安全</strong><small>验证邮箱、管理验证器和备用码、删除通行密钥与撤销登录设备；敏感操作仍需验证密码</small></span></div>}

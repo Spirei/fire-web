@@ -9,7 +9,7 @@ export const APP_CLIENT_ID = "fire-ios";
 export const APP_REDIRECT_URI = "com.fire.app:/oauth/callback";
 export const APP_SCOPE = "portfolio.read portfolio.write";
 // Default connections stay unchanged. Editing identity requires explicit new consent.
-export const APP_SUPPORTED_SCOPES = [...APP_SCOPE.split(" "), "profile.write", "feed.read", "feed.write", "security.read", "security.write", "resources.read", "resources.write"];
+export const APP_SUPPORTED_SCOPES = [...APP_SCOPE.split(" "), "assets.read", "positions.read", "cash.read", "orders.read", "orders.write", "orders.cancel", "profile.write", "feed.read", "feed.write", "security.read", "security.write", "resources.read", "resources.write"];
 const ACCESS_SECONDS = 15 * 60;
 const REFRESH_IDLE_MS = 30 * 86400_000;
 const REFRESH_MAX_MS = 90 * 86400_000;

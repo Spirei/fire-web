@@ -14,7 +14,7 @@ import { normalizeBrandSetting } from "@/lib/brand";
  *      重映射为当前导入用户，做到不覆盖不丢失。
  */
 const FORMAT = "fire-site-backup";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 // 环境专属、不应随站点迁移的设置键（数据库连接串等；线上由部署方在目标环境配置）
 const ENV_SETTING_KEYS = new Set(["dbType", "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword"]);
 const SITE_SETTING_KEYS = new Set([
@@ -27,8 +27,8 @@ const MAX_ROWS = { records: 5000, tradeOrders: 20000, activities: 50000, watchGr
 const MAX_SITE_SETTINGS = 500;
 const MAX_TOTAL_ROWS = 75000;
 const COLUMNS = {
-  records: ["id", "user_id", "name", "code", "market", "price", "cost", "qty", "group_name", "note", "updated_at", "source", "watch_group_id"],
-  trade_orders: ["id", "user_id", "record_id", "market", "code", "name", "side", "status", "qty", "price", "fees", "amount", "realized_pnl", "position_qty_after", "position_cost_after", "broker", "note", "traded_at", "created_at", "position_qty_before", "position_cost_before", "order_no", "order_type", "trigger_price", "tif", "expires_at", "session", "trigger_status"],
+  records: ["id", "user_id", "name", "code", "market", "account_market", "price", "cost", "qty", "group_name", "note", "updated_at", "source", "watch_group_id"],
+  trade_orders: ["id", "user_id", "record_id", "market", "code", "name", "side", "status", "qty", "price", "fees", "amount", "realized_pnl", "position_qty_after", "position_cost_after", "broker", "note", "traded_at", "created_at", "position_qty_before", "position_cost_before", "order_no", "order_type", "trigger_price", "tif", "expires_at", "session", "trigger_status", "settlement_currency", "settlement_amount"],
   activities: ["id", "user_id", "action", "stock_name", "stock_code", "created_at", "market", "price", "cost", "qty"],
   watch_groups: ["id", "user_id", "name", "icon", "sort", "visible", "kind", "market", "created_at"],
   fund_transactions: ["id", "user_id", "currency", "type", "amount", "direction", "note", "occurred_at", "created_at"],
@@ -72,7 +72,17 @@ function assertKnownColumns(row: Record<string, unknown>, table: TableName) {
   if (unknown.length) throw new Error(`${table} 包含不允许字段：${unknown.slice(0, 3).join("、")}`);
 }
 
+export class UnsupportedPortableLedgerError extends Error {}
+function requirePortableLedger(userId: string) {
+  if (getDb().prepare("SELECT 1 FROM app_trade_metadata m JOIN trade_orders o ON o.id=m.order_id WHERE o.user_id=? LIMIT 1").get(userId)) throw new UnsupportedPortableLedgerError("此账户包含 App 交易回执和条件单，请使用完整数据库备份恢复；旧版 JSON 迁移不能保留执行状态");
+}
+
 export function buildBackupPayload(userId: string, isAdmin: boolean) {
+  return getDb().transaction(() => buildPortableBackup(userId, isAdmin))();
+}
+
+function buildPortableBackup(userId: string, isAdmin: boolean) {
+  requirePortableLedger(userId);
   const db = getDb();
   const settingsRows = db.prepare("SELECT key,value FROM site_settings").all() as { key: string; value: string }[];
   const siteSettings: Record<string, string> = {};
@@ -187,6 +197,7 @@ export function validateBackupPayload(payload: unknown) {
 
 /** 校验与当前账号相关的引用关系；预览和正式导入都调用，不产生写入。 */
 export function validateBackupAccess(payload: unknown, userId: string, isAdmin: boolean) {
+  requirePortableLedger(userId);
   const p = payload as { data?: Record<string, unknown> };
   const d = p.data ?? {};
   const records = Array.isArray(d.records) ? d.records as Record<string, unknown>[] : [];
@@ -273,9 +284,11 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
     const mappedGroupId = sourceGroupId ? groupIdMap.get(sourceGroupId) : "";
     const ownedGroup = sourceGroupId && !mappedGroupId ? db.prepare("SELECT id FROM watch_groups WHERE id = ? AND user_id = ?").get(sourceGroupId, userId) : undefined;
     const market = text(r.market, "records.market", 20, true);
+    const accountMarket = text(r.account_market, "records.account_market", 20).toUpperCase();
+    if (accountMarket && accountMarket !== market.toUpperCase() && !(market.toUpperCase() === "HK" && accountMarket === "CN")) throw new Error("账户市场与证券市场不匹配");
     const code = text(r.code, "records.code", 40, true);
     recordCodeMap.set(`${market.toUpperCase()}:${code.toUpperCase()}`, ids.id);
-    return { id: ids.id, user_id: userId, name: text(r.name, "records.name", 200, true), code, market, price: numberValue(r.price, "records.price", false) ?? 0, cost: numberValue(r.cost, "records.cost"), qty: numberValue(r.qty, "records.qty"), group_name: text(r.group_name, "records.group_name", 100), note: text(r.note, "records.note", 2000), updated_at: text(r.updated_at, "records.updated_at", 64, true), source: text(r.source, "records.source", 50), watch_group_id: mappedGroupId ?? (ownedGroup ? sourceGroupId : "") };
+    return { id: ids.id, user_id: userId, name: text(r.name, "records.name", 200, true), code, market, ...(r.account_market === undefined ? {} : { account_market: accountMarket }), price: numberValue(r.price, "records.price", false) ?? 0, cost: numberValue(r.cost, "records.cost"), qty: numberValue(r.qty, "records.qty"), group_name: text(r.group_name, "records.group_name", 100), note: text(r.note, "records.note", 2000), updated_at: text(r.updated_at, "records.updated_at", 64, true), source: text(r.source, "records.source", 50), watch_group_id: mappedGroupId ?? (ownedGroup ? sourceGroupId : "") };
   });
   const orders = asArr("tradeOrders").map((o) => {
     const ids = mapOwnedId("trade_orders", o.id, "ord");
@@ -288,7 +301,10 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
     if (ids.id !== ids.oldId || !/^\d{10}$/.test(orderNo)) {
       do { orderNo = generateOrderNo(); } while (db.prepare("SELECT 1 FROM trade_orders WHERE order_no = ?").get(orderNo));
     }
-    return { id: ids.id, user_id: userId, record_id: mappedRecordId ?? stockMappedRecordId ?? sourceRecordId, market: text(o.market, "tradeOrders.market", 20, true), code: text(o.code, "tradeOrders.code", 40, true), name: text(o.name, "tradeOrders.name", 200, true), side: enumValue(o.side, "tradeOrders.side", ["buy", "sell", "dividend"], "buy"), status: enumValue(o.status, "tradeOrders.status", ["filled", "cancelled", "pending", "expired"], "filled"), qty: numberValue(o.qty, "tradeOrders.qty", false), price: numberValue(o.price, "tradeOrders.price", false), fees: numberValue(o.fees, "tradeOrders.fees", false), amount: numberValue(o.amount, "tradeOrders.amount", false), realized_pnl: numberValue(o.realized_pnl, "tradeOrders.realized_pnl"), position_qty_after: numberValue(o.position_qty_after, "tradeOrders.position_qty_after", false), position_cost_after: numberValue(o.position_cost_after, "tradeOrders.position_cost_after"), broker: text(o.broker, "tradeOrders.broker", 100), note: text(o.note, "tradeOrders.note", 2000), traded_at: text(o.traded_at, "tradeOrders.traded_at", 64, true), created_at: text(o.created_at, "tradeOrders.created_at", 64, true), position_qty_before: numberValue(o.position_qty_before, "tradeOrders.position_qty_before"), position_cost_before: numberValue(o.position_cost_before, "tradeOrders.position_cost_before"), order_no: orderNo, order_type: enumValue(o.order_type, "tradeOrders.order_type", ["market", "limit", "trigger_buy", "trigger_sell", "rebound_buy", "rebound_sell"], "limit"), trigger_price: numberValue(o.trigger_price, "tradeOrders.trigger_price"), tif: enumValue(o.tif, "tradeOrders.tif", ["day", "gtc", "custom"], "day"), expires_at: o.expires_at ? text(o.expires_at, "tradeOrders.expires_at", 64) : null, session: text(o.session, "tradeOrders.session", 32), trigger_status: text(o.trigger_status, "tradeOrders.trigger_status", 32) };
+    const settlementCurrency = text(o.settlement_currency, "tradeOrders.settlement_currency", 3);
+    const settlementAmount = numberValue(o.settlement_amount, "tradeOrders.settlement_amount");
+    if (settlementCurrency && (settlementCurrency !== "CNY" || String(o.market).toUpperCase() !== "HK" || settlementAmount === null || settlementAmount <= 0) || !settlementCurrency && settlementAmount !== null) throw new Error("实际人民币结算信息无效");
+    return { id: ids.id, user_id: userId, ...(o.settlement_currency === undefined && o.settlement_amount === undefined ? {} : { settlement_currency: settlementCurrency || null, settlement_amount: settlementAmount }), record_id: mappedRecordId ?? stockMappedRecordId ?? sourceRecordId, market: text(o.market, "tradeOrders.market", 20, true), code: text(o.code, "tradeOrders.code", 40, true), name: text(o.name, "tradeOrders.name", 200, true), side: enumValue(o.side, "tradeOrders.side", ["buy", "sell", "dividend"], "buy"), status: enumValue(o.status, "tradeOrders.status", ["filled", "cancelled", "pending", "expired"], "filled"), qty: numberValue(o.qty, "tradeOrders.qty", false), price: numberValue(o.price, "tradeOrders.price", false), fees: numberValue(o.fees, "tradeOrders.fees", false), amount: numberValue(o.amount, "tradeOrders.amount", false), realized_pnl: numberValue(o.realized_pnl, "tradeOrders.realized_pnl"), position_qty_after: numberValue(o.position_qty_after, "tradeOrders.position_qty_after", false), position_cost_after: numberValue(o.position_cost_after, "tradeOrders.position_cost_after"), broker: text(o.broker, "tradeOrders.broker", 100), note: text(o.note, "tradeOrders.note", 2000), traded_at: text(o.traded_at, "tradeOrders.traded_at", 64, true), created_at: text(o.created_at, "tradeOrders.created_at", 64, true), position_qty_before: numberValue(o.position_qty_before, "tradeOrders.position_qty_before"), position_cost_before: numberValue(o.position_cost_before, "tradeOrders.position_cost_before"), order_no: orderNo, order_type: enumValue(o.order_type, "tradeOrders.order_type", ["market", "limit", "trigger_buy", "trigger_sell", "rebound_buy", "rebound_sell"], "limit"), trigger_price: numberValue(o.trigger_price, "tradeOrders.trigger_price"), tif: enumValue(o.tif, "tradeOrders.tif", ["day", "gtc", "custom"], "day"), expires_at: o.expires_at ? text(o.expires_at, "tradeOrders.expires_at", 64) : null, session: text(o.session, "tradeOrders.session", 32), trigger_status: text(o.trigger_status, "tradeOrders.trigger_status", 32) };
   });
   const acts = asArr("activities").map((a) => { const ids = mapOwnedId("activities", a.id, "a"); return { id: ids.id, user_id: userId, action: text(a.action, "activities.action", 30, true), stock_name: text(a.stock_name, "activities.stock_name", 200, true), stock_code: text(a.stock_code, "activities.stock_code", 40, true), created_at: text(a.created_at, "activities.created_at", 64, true), market: text(a.market, "activities.market", 20), price: numberValue(a.price, "activities.price"), cost: numberValue(a.cost, "activities.cost"), qty: numberValue(a.qty, "activities.qty") }; });
   const fundTransactions = asArr("fundTransactions").map((item) => { const ids = mapOwnedId("fund_transactions", item.id, "fund"); return { id: ids.id, user_id: userId, currency: enumValue(item.currency, "fundTransactions.currency", [...FUND_CURRENCIES], "USD"), type: enumValue(item.type, "fundTransactions.type", ["opening", "deposit", "withdrawal", "adjustment"], "deposit"), amount: numberValue(item.amount, "fundTransactions.amount", false), direction: numberValue(item.direction, "fundTransactions.direction", false), note: text(item.note, "fundTransactions.note", 200), occurred_at: text(item.occurred_at, "fundTransactions.occurred_at", 64, true), created_at: text(item.created_at, "fundTransactions.created_at", 64, true) }; });
@@ -296,6 +312,7 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
   const celebs = asArr("celebs").map((c) => ({ id: text(c.id, "celebs.id", 128, true), name: text(c.name, "celebs.name", 200, true), title: text(c.title, "celebs.title", 200), avatar: text(c.avatar, "celebs.avatar", 1000), enabled: numberValue(c.enabled, "celebs.enabled", false) ?? 1, sort: numberValue(c.sort, "celebs.sort", false) ?? 0, source_kind: text(c.source_kind, "celebs.source_kind", 30), cik: text(c.cik, "celebs.cik", 20), entity: text(c.entity, "celebs.entity", 200), source_label: text(c.source_label, "celebs.source_label", 200), holdings_json: jsonText(c.holdings_json, "celebs.holdings_json", 5_000_000), trades_json: jsonText(c.trades_json, "celebs.trades_json", 5_000_000), returns_json: jsonText(c.returns_json, "celebs.returns_json", 1_000_000), created_at: text(c.created_at, "celebs.created_at", 64, true), updated_at: text(c.updated_at, "celebs.updated_at", 64, true), stock_icons_json: jsonText(c.stock_icons_json, "celebs.stock_icons_json", 1_000_000), refresh_hours: numberValue(c.refresh_hours, "celebs.refresh_hours", false) ?? 0 }));
 
   const tx = db.transaction(() => {
+    requirePortableLedger(userId);
     // 导入必须幂等：市场按 market、自定义分组按规范化名称合并；同时收敛历史导入留下的重复分组。
     for (const [duplicateId, canonicalId] of duplicateGroupIds) {
       db.prepare("UPDATE records SET watch_group_id = ? WHERE user_id = ? AND watch_group_id = ?").run(canonicalId, userId, duplicateId);
@@ -320,9 +337,9 @@ export function restoreBackupPayload(payload: unknown, userId: string, isAdmin: 
     const profile = (d.profile ?? {}) as { nickname?: unknown; avatar?: unknown };
     const nickname = typeof profile.nickname === "string" ? text(profile.nickname.trim(), "profile.nickname", 20) : "";
     if (nickname) db.prepare("UPDATE users SET nickname = ? WHERE id = ?").run(nickname, userId);
+    syncOrderCashTransactions(userId);
   });
-  tx();
-  syncOrderCashTransactions(userId);
+  tx.immediate();
 
   return {
     counts: {
