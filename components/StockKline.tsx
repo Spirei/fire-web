@@ -421,6 +421,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const rangeScrollRef = useRef<HTMLDivElement>(null);
   const rangeDragRef = useRef<{ pointerId: number; startX: number; startLeft: number; moved: boolean } | null>(null);
   const suppressRangeClickRef = useRef(false);
+  const rangeClickResetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 每次进入个股或切换股票时恢复用户最后选择的周期。
   useLayoutEffect(() => {
@@ -1195,6 +1196,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   }, [data, style, code, name, market, range, session, selectedIndicators, maConfigs, maLinesVisible, compareSeries, compareItems, allDayView]);
 
   useEffect(() => () => {
+    clearTimeout(rangeClickResetTimerRef.current);
     chartInst.current?.dispose();
     chartInst.current = null;
   }, []);
@@ -1226,6 +1228,8 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const endMADrag = (event: React.PointerEvent<HTMLDivElement>) => { if (maDragRef.current?.pointerId === event.pointerId) maDragRef.current = null; };
   const startRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!rangeScrollRef.current) return;
+    clearTimeout(rangeClickResetTimerRef.current);
+    suppressRangeClickRef.current = false;
     rangeDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startLeft: rangeScrollRef.current.scrollLeft, moved: false };
   };
   const moveRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1240,7 +1244,13 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   };
   const endRangeDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     if (rangeDragRef.current?.pointerId === event.pointerId) {
-      if (rangeDragRef.current.moved) suppressRangeClickRef.current = true;
+      suppressRangeClickRef.current = rangeDragRef.current.moved && event.type !== "pointercancel";
+      if (suppressRangeClickRef.current) {
+        // Pointer capture can send this gesture's click to the container. Do not
+        // leave suppression armed for the user's next mouse, touch or key click.
+        clearTimeout(rangeClickResetTimerRef.current);
+        rangeClickResetTimerRef.current = setTimeout(() => { suppressRangeClickRef.current = false; }, 0);
+      }
       rangeDragRef.current = null;
     }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);

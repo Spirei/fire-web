@@ -27,8 +27,7 @@ const sharedCompose = [
   "path: .env",
   "${DATA_DIR:-./data}:/app/data",
   "${UPLOADS_DIR:-./uploads}:/app/public/uploads",
-  // 插图 / 字体 / 图标 / 分享图既不进仓库也不进镜像，只能靠运行时挂载提供；
-  // 少了它们 FIRE 页面的小丑鱼、礁石、自定义字体与图标会 404（曾以「我的鱼丢了」的形式暴露）。
+  // 自定义素材仍由运行时挂载提供，FIRE 鱼素材独立随镜像提供。
   "${IMAGES_DIR:-./images}:/app/public/images:ro",
   "${FONTS_DIR:-./fonts}:/app/public/fonts:ro",
   "${ICONS_DIR:-./icons}:/app/public/icons:ro",
@@ -66,6 +65,13 @@ requireText("生产镜像", dockerfile, [
   'ENV PATH="/opt/futu-venv/bin:${PATH}"',
   'ENTRYPOINT ["sh", "/app/entrypoint.sh"]'
 ]);
+const fishFile = "public/fire-assets/clownfish-family.png";
+const fishPath = path.join(root, fishFile);
+if (!fs.existsSync(fishPath) || fs.readFileSync(fishPath).subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
+  failures.push(`FIRE 必需鱼素材缺失或不是 PNG：${fishFile}`);
+}
+requireText("FIRE 素材构建检查", dockerfile, [`RUN test -s ${fishFile}`]);
+requireText("FIRE 独立素材路径", read("components/views/FireView.tsx"), ["/fire-assets/clownfish-family.png"]);
 // System illustrations must not depend on optional deployer-owned media volumes.
 requireText("安全插图系统兜底", read("next.config.mjs"), [
   'source: "/icons/security-check.svg"', 'destination: "/api/system-assets/security-check"'
