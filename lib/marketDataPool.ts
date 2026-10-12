@@ -17,7 +17,7 @@ export class MarketDataPool<T> {
     return result;
   }
 
-  async fetch(items: QuoteItem[], namespace: string, load: (items: QuoteItem[], publish: (item: QuoteItem, value: T) => void) => Promise<Record<string, T>>): Promise<Record<string, T>> {
+  async fetch(items: QuoteItem[], namespace: string, load: (items: QuoteItem[], publish: (item: QuoteItem, value: T) => void) => Promise<Record<string, T>>, acceptCached: (value: T) => boolean = () => true): Promise<Record<string, T>> {
     const now = Date.now();
     const unique = new Map<string, QuoteItem>();
     const keys = items.map(item => {
@@ -29,7 +29,7 @@ export class MarketDataPool<T> {
     const missing: Array<{ key: string; item: QuoteItem }> = [];
     for (const [key, item] of unique) {
       const cached = this.cached.get(key);
-      if (cached && now - cached.at < this.ttl) reads.set(key, Promise.resolve(cached.value));
+      if (cached && now - cached.at < this.ttl && acceptCached(cached.value)) reads.set(key, Promise.resolve(cached.value));
       else if (this.pending.has(key)) reads.set(key, this.pending.get(key)!);
       else missing.push({ key, item });
     }

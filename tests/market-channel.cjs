@@ -10,7 +10,7 @@ let settings = { quoteSource: 'tencent', quoteApiUrl: 'https://quote.test/q=', c
 Module._load = function (id, parent, ...rest) {
   if (parent?.filename === path.join(root, 'lib/quotes.ts')) {
     if (id === './settings') return { getSiteSettings: () => settings };
-    if (id === './futuQuotes') return { fetchFutuQuotes: async () => new Map(), searchFutu: async () => [] };
+    if (id === './futuQuotes') return { fetchFutuQuotes: async () => new Map(), fetchFutuIntraday: async () => ({}), isFutuAvailable: async () => false, searchFutu: async () => [] };
     if (id === './usExtendedQuote') return { fetchUsExtendedQuote: async () => null, fetchUsRegularQuote: async () => null };
     if (id === './assetQuotes') return { getCryptoQuote: async () => null };
     if (id === './net') return { proxyFetch: async () => { throw new Error('Synthetic upstream only'); } };
@@ -101,7 +101,7 @@ const value = { price: 200, points: [{ price: 200 }] };
     const calls = [];
     global.fetch = async url => {
       calls.push(String(url)); await sleep(15);
-      return Response.json({ data: { hk00700: { data: { date: '20260930', data: ['09:30 400 10', '09:31 401 20'] } } } });
+      return Response.json({ data: { hk00700: { data: { date: new Date().toISOString().slice(0,10).replaceAll('-', ''), data: ['09:30 400 10', '09:31 401 20'] } } } });
     };
     const [a, b] = await Promise.all([fetchIntraday([{ id: 'web', market: 'HK', code: '700' }]), fetchIntraday([{ id: 'app', market: 'HK', code: '00700' }])]);
     assert.equal(calls.length, 1); assert.equal(a.web.points.length, 2); assert.equal(b.app.points.length, 2);

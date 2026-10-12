@@ -205,6 +205,49 @@ def main():
     try:
         ctx = OpenQuoteContext(host=host, port=port)
 
+        if cmd == "intraday":
+            from futu import SubType, Session
+            charts = {}
+            for item in items:
+                market = str(item.get("market") or "").upper()
+                symbol = _to_futu_code(market, str(item.get("code") or ""))
+                if not symbol:
+                    continue
+                try:
+                    # No pushes or extra connection; only this bridge's own subscription.
+                    options = {"subscribe_push": False}
+                    if market == "US":
+                        options["session"] = Session.ALL
+                    ret, _ = ctx.subscribe([symbol], [SubType.RT_DATA], **options)
+                    if ret != RET_OK:
+                        continue
+                    ret, data = ctx.get_rt_data(symbol)
+                    if ret != RET_OK or data.empty:
+                        continue
+                    rows = []
+                    for _, row in data.iterrows():
+                        if bool(row.get("is_blank", True)) or str(row.get("code") or "") != symbol:
+                            continue
+                        stamp = str(row.get("time") or "")
+                        price = _num(row.get("cur_price"))
+                        if not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", stamp) or price is None or price <= 0:
+                            continue
+                        minute = stamp[11:16]
+                        # Current contract is one 04:00–20:00 US trading day.
+                        if market == "US" and not "04:00" <= minute < "20:00":
+                            continue
+                        rows.append((stamp[:10], {"time": minute, "price": price, "volume": _num(row.get("volume")) or 0}))
+                    if rows:
+                        date = max(row[0] for row in rows)
+                        points = {row[1]["time"]: row[1] for row in rows if row[0] == date}
+                        if len(points) >= 2:
+                            charts[str(item.get("id") or symbol)] = {"date": date, "points": [points[key] for key in sorted(points)], "source": "futu"}
+                except Exception:
+                    # A rejected instrument must not discard other supported symbols.
+                    continue
+            print(json.dumps({"ok": True, "charts": charts}, ensure_ascii=False))
+            return
+
         if cmd == "quota":
             # 富途 OpenAPI 额度：实时订阅（query_subscription）+ 历史K线（get_history_kl_quota）
             quota = {}

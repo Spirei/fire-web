@@ -45,14 +45,14 @@ function futuDisabledByEnv(): boolean {
   return process.env.NODE_ENV !== "production";
 }
 
-async function isFutuAvailable(): Promise<boolean> {
+export async function isFutuAvailable(unavailableMaxAge = UNAVAILABLE_TTL): Promise<boolean> {
   if (futuDisabledByEnv()) return false;
   const now = Date.now();
   const { futuHost, futuPort } = getSiteSettings();
   const host = normalizeFutuHost(futuHost || "127.0.0.1");
   const port = Number(futuPort) || 11111;
   if (availabilityCache && availabilityCache.host === host && availabilityCache.port === port) {
-    const ttl = availabilityCache.ok ? AVAILABLE_TTL : UNAVAILABLE_TTL;
+    const ttl = availabilityCache.ok ? AVAILABLE_TTL : Math.min(UNAVAILABLE_TTL, unavailableMaxAge);
     if (now - availabilityCache.at < ttl) return availabilityCache.ok;
   }
   const ok = await checkPort(host, port, 800);
@@ -163,6 +163,18 @@ export async function fetchFutuQuotes(items: Array<Omit<QuoteItem, "market"> & {
   }));
   const parsed = await runBridge({ cmd: "quotes", items: withSession }, futuHost, Number(futuPort) || 11111, signal);
   return new Map(Object.entries((parsed.quotes as Record<string, Quote> | undefined) || {}));
+}
+
+/** Actual RT_DATA, sharing the existing single OpenD connection queue and caller deadline. */
+export async function fetchFutuIntraday(items: QuoteItem[], signal: AbortSignal): Promise<Record<string, import("./quotes").Intraday>> {
+  signal.throwIfAborted();
+  const supported = items.filter(item => ["US", "HK", "CN"].includes(item.market));
+  if (!supported.length || !(await isFutuAvailable())) return {};
+  signal.throwIfAborted();
+  const { futuHost, futuPort } = getSiteSettings();
+  const parsed = await runBridge({ cmd: "intraday", items: supported }, futuHost, Number(futuPort) || 11111, signal);
+  signal.throwIfAborted();
+  return (parsed.charts as Record<string, import("./quotes").Intraday> | undefined) || {};
 }
 
 /** 富途搜索（get_search_quote + 快照补价）；失败抛错由调用方回退腾讯。 */

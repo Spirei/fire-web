@@ -1,12 +1,13 @@
 import { MARKET_META, type Market, type SearchMatch } from "./types";
 import { getSiteSettings } from "./settings";
 import { fetchUsExtendedQuote, fetchUsRegularQuote } from "./usExtendedQuote";
-import { fetchFutuQuotes, searchFutu } from "./futuQuotes";
+import { fetchFutuQuotes, fetchFutuIntraday, isFutuAvailable, searchFutu } from "./futuQuotes";
 import { getCryptoQuote } from "./assetQuotes";
 import { proxyFetch } from "./net";
 import { MarketDataPool } from "./marketDataPool";
 import { normalizeMarketCode } from "./marketCode";
 import { waitForMarketTask } from "./marketDeadline";
+import { readLimitedResponseJson } from "./requestBody";
 import { ActiveQuotePool } from "./activeQuotePool";
 import { marketSessionState } from "./marketSessions";
 import { QUOTE_DEMAND_MARKETS, type PublicQuoteDemand } from "./quoteDemand";
@@ -535,10 +536,9 @@ export interface Intraday {
   date: string;
   points: IntradayPoint[];
   stale?: boolean;
+  source?: "futu" | "tencent" | "eastmoney" | "yahoo";
 }
 
-const yahooIntradayCache = new Map<string, { at: number; data: Intraday }>();
-const tencentIntradayCache = new Map<string, { at: number; data: Intraday }>();
 
 /** 迷你走势抽样：每个区间保留高低点与首尾，避免等距抽样漏掉短暂尖峰。 */
 export function samplePoints(points: IntradayPoint[], target = 60): IntradayPoint[] {
@@ -565,182 +565,189 @@ export function samplePoints(points: IntradayPoint[], target = 60): IntradayPoin
   return out;
 }
 
+/** Bound proxy preparation, headers and body reads, even if a source ignores cancellation. */
+async function intradayDeadline<T>(milliseconds: number, work: (signal: AbortSignal) => Promise<T>, parent?: AbortSignal): Promise<T> {
+  const controller = new AbortController();
+  const abort = () => controller.abort(parent?.reason ?? new Error("intraday cancelled"));
+  if (parent?.aborted) abort(); else parent?.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(() => controller.abort(new Error("intraday source deadline")), milliseconds);
+  try { controller.signal.throwIfAborted(); return await waitForMarketTask(work(controller.signal), controller.signal); }
+  finally { clearTimeout(timeout); parent?.removeEventListener("abort", abort); controller.abort(); }
+}
+
+function normalizeIntraday(value: Intraday | null | undefined, item: QuoteItem): Intraday | null {
+  if (!value || typeof value.date !== "string" || !Array.isArray(value.points)) return null;
+  const rawDate = value.date.replace(/-/g, "");
+  if (!/^\d{8}$/.test(rawDate)) return null;
+  const date = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6)}`;
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return null;
+  const state = marketSessionState(item.market);
+  if (date > state.localDate) return null;
+  const points = new Map<string, IntradayPoint>();
+  for (const point of value.points ?? []) {
+    if (!point || typeof point.time !== "string") continue;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(point.time) || !Number.isFinite(point.price) || point.price <= 0) continue;
+    if (item.market === "US" && (point.time < "04:00" || point.time >= "20:00")) continue;
+    points.set(point.time, { ...point });
+  }
+  if (points.size < 2) return null;
+  const expected = state.pnlSettled || state.session === "overnight" ? state.settlementDate : state.localDate;
+  return { ...value, date, points: [...points.values()].sort((a, b) => a.time.localeCompare(b.time)),
+    ...(value.stale || date < expected ? { stale: true } : {}) };
+}
+
+async function chartJson(url: string, signal: AbortSignal, proxied = false): Promise<any> {
+  return waitForMarketTask((async () => {
+    const response = await (proxied ? proxyFetch : fetch)(url, {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal
+    });
+    if (!response.ok) throw new Error("intraday source unavailable");
+    return readLimitedResponseJson(response, 4 * 1024 * 1024);
+  })(), signal);
+}
+
 function minuteQueryCodes(item: QuoteItem): string[] {
   const c = item.code.trim().toUpperCase();
   switch (item.market) {
-    case "CN": {
-      if (/^(4|8|920)/.test(c)) return [`bj${c}`]; // 北交所：4xx / 8xx / 920xxx
-      if (/^[69]/.test(c)) return [`sh${c}`];
-      if (/^[0-3]/.test(c)) return [`sz${c}`];
-      return [`bj${c}`];
-    }
-    case "HK":
-      return [`hk${c.padStart(5, "0")}`];
-    case "US":
-      return [`us${c.replace(US_EXCHANGE_SUFFIX, "")}`, `us${c}.OQ`, `us${c}.N`];
-    case "JP":
-      return [`jp${c.replace(/\.T$/, "")}`];
-    case "KR":
-      return [`kr${c.replace(/\.(KS|KQ)$/, "")}`];
-    default:
-      return [];
+    case "CN": return [`${/^(4|8|920)/.test(c) ? "bj" : /^[69]/.test(c) ? "sh" : "sz"}${c}`];
+    case "HK": return [`hk${c.padStart(5, "0")}`];
+    case "US": return [`us${c}`, `us${c}.OQ`, `us${c}.N`];
+    case "JP": return [`jp${c.replace(/\.T$/, "")}`];
+    case "KR": return [`kr${c.replace(/\.(KS|KQ)$/, "")}`];
+    default: return [];
   }
 }
 
-function parseMinutePoints(raw: unknown[]): IntradayPoint[] {
-  const points: IntradayPoint[] = [];
-  for (const row of raw) {
-    if (typeof row !== "string") continue;
-    const parts = row.trim().split(/\s+/);
-    if (parts.length < 2) continue;
-    const time = parts[0];
-    const price = Number(parts[1]);
-    if (!price || !time) continue;
-    points.push({
-      time: time.length === 4 ? `${time.slice(0, 2)}:${time.slice(2)}` : time,
-      price,
-      volume: Number(parts[2]) || 0
-    });
-  }
-  return points;
-}
-
-async function fetchIntradayForCode(code: string): Promise<Intraday | null> {
-  const tpl = getSiteSettings().chartApiUrl || DEFAULT_CHART_URL;
-  const cacheKey = JSON.stringify([tpl, code]);
-  const cached = tencentIntradayCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < 30_000) return cached.data;
+async function tencentIntraday(item: QuoteItem, signal: AbortSignal): Promise<Intraday | null> {
+  const codes = minuteQueryCodes(item), template = getSiteSettings().chartApiUrl || DEFAULT_CHART_URL;
+  if (!codes.length) return null;
   try {
-    const res = await fetch(
-      tpl.replace("{code}", encodeURIComponent(code)),
-      {
-        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
-        signal: AbortSignal.timeout(8000)
-      }
-    );
-    if (!res.ok) throw new Error("chart source unavailable");
-    const json = await res.json().catch(() => null);
-    const node = json?.data?.[code]?.data;
-    if (!node || typeof node !== "object") throw new Error("empty chart");
-    const raw = Array.isArray(node.data) ? node.data : null;
-    const date = typeof node.date === "string" ? node.date : "";
-    if (!raw || raw.length === 0) throw new Error("empty chart");
-    const points = parseMinutePoints(raw);
-    if (points.length === 0) throw new Error("empty chart");
-    const data = { date, points };
-    tencentIntradayCache.set(cacheKey, { at: Date.now(), data });
-    return data;
-  } catch {
-    return cached ? { ...cached.data, stale: true } : null;
-  }
+    return await intradayDeadline(2500, async sourceSignal => Promise.any(codes.map(async code => {
+      const json = await chartJson(template.replace("{code}", encodeURIComponent(code)), sourceSignal);
+      const node = json?.data?.[code]?.data;
+      const points: IntradayPoint[] = (Array.isArray(node?.data) ? node.data : []).flatMap((row: unknown) => {
+        if (typeof row !== "string") return [];
+        const [time, price, volume] = row.trim().split(/\s+/);
+        return [{ time: time?.length === 4 ? `${time.slice(0, 2)}:${time.slice(2)}` : time, price: Number(price), volume: Number(volume) || 0 }];
+      });
+      const value = normalizeIntraday({ date: String(node?.date ?? ""), points, source: "tencent" }, item);
+      if (!value) throw new Error("empty tencent chart");
+      return value;
+    })), signal);
+  } catch { return null; }
+}
+
+function eastmoneySymbols(item: QuoteItem): string[] {
+  if (item.market === "CN" && /^\d{6}$/.test(item.code)) return [`${/^[69]/.test(item.code) ? 1 : 0}.${item.code}`];
+  if (item.market === "HK" && /^\d{5}$/.test(item.code)) return [`116.${item.code}`];
+  if (item.market === "US") return [105, 106, 107].map(market => `${market}.${item.code}`);
+  return [];
+}
+
+async function eastmoneyIntraday(item: QuoteItem, signal: AbortSignal): Promise<Intraday | null> {
+  const symbols = eastmoneySymbols(item);
+  if (!symbols.length) return null;
+  try {
+    return await intradayDeadline(2500, async sourceSignal => Promise.any(symbols.map(async symbol => {
+      const query = `secid=${encodeURIComponent(symbol)}&fields1=f1,f2,f3,f4,f5&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=1`;
+      const json = await chartJson(`https://push2his.eastmoney.com/api/qt/stock/trends2/get?${query}`, sourceSignal);
+      // secid guesses are admitted only after upstream confirms the exact symbol.
+      if (String(json?.data?.code ?? "").toUpperCase() !== item.code) throw new Error("different eastmoney security");
+      const rows: string[] = Array.isArray(json?.data?.trends) ? json.data.trends.filter((row: unknown) => typeof row === "string") : [];
+      const date = rows.map(row => row.slice(0, 10)).sort().at(-1) ?? "";
+      const points = rows.filter(row => row.slice(0, 10) === date).map(row => {
+        const cells = row.split(",");
+        return { time: cells[0].slice(11, 16), price: Number(cells[2]), volume: Number(cells[5]) || 0 };
+      });
+      const value = normalizeIntraday({ date, points, source: "eastmoney" }, item);
+      if (!value) throw new Error("empty eastmoney chart");
+      return value;
+    })), signal);
+  } catch { return null; }
 }
 
 function yahooMinuteSymbols(item: QuoteItem) {
-  const code = item.code.trim().toUpperCase();
-  if (item.market === "US") return [code.replace(US_EXCHANGE_SUFFIX, "")];
+  const code = item.code;
+  if (item.market === "US") return [code];
   if (item.market === "HK") return [`${code.replace(/^0+/, "").padStart(4, "0")}.HK`];
-  if (item.market === "CN") {
-    if (/^[69]/.test(code)) return [`${code}.SS`];
-    if (/^[0-3]/.test(code)) return [`${code}.SZ`];
-    return [];
-  }
+  if (item.market === "CN") return /^[69]/.test(code) ? [`${code}.SS`] : /^[0-3]/.test(code) ? [`${code}.SZ`] : [];
   if (item.market === "JP") return [`${code}.T`];
   if (item.market === "KR") return [`${code}.KS`, `${code}.KQ`];
   if (item.market === "SG") return [`${code}.SI`];
   return [];
 }
 
-async function fetchYahooIntraday(item: QuoteItem): Promise<Intraday | null> {
-  const key = `${item.market}:${item.code.trim().toUpperCase()}`;
-  const cached = yahooIntradayCache.get(key);
-  if (cached && Date.now() - cached.at < 30_000) return cached.data;
-  for (const symbol of yahooMinuteSymbols(item)) try {
-    // Yahoo 属境外源：走可选代理（STOCKLOG_PROXY），代理不可达自动回退直连
-    const response = await proxyFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=${item.market === "US" ? "true" : "false"}&events=div%2Csplits`, {
-      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(12_000)
-    });
-    if (!response.ok) continue;
-    const chart = (await response.json())?.chart?.result?.[0];
-    const timestamps: number[] = Array.isArray(chart?.timestamp) ? chart.timestamp : [];
-    const quote = chart?.indicators?.quote?.[0] || {};
-    const closes: Array<number | null> = Array.isArray(quote.close) ? quote.close : [];
-    const volumes: Array<number | null> = Array.isArray(quote.volume) ? quote.volume : [];
-    const points: IntradayPoint[] = [];
-    let date = "";
-    const timeZone = typeof chart?.meta?.exchangeTimezoneName === "string" ? chart.meta.exchangeTimezoneName : item.market === "US" ? "America/New_York" : "UTC";
-    timestamps.forEach((timestamp, index) => {
-      const price = Number(closes[index]);
-      if (!Number.isFinite(price) || price <= 0) return;
-      const parts: Record<string, string> = {};
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone, year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", hour12: false
-      }).formatToParts(new Date(timestamp * 1000)).forEach((part) => { parts[part.type] = part.value; });
-      const hour = Number(parts.hour) % 24;
-      const minute = hour * 60 + Number(parts.minute);
-      if (item.market === "US" && (minute < 240 || minute >= 1200)) return;
-      date = `${parts.year}-${parts.month}-${parts.day}`;
-      points.push({ time: `${String(hour).padStart(2, "0")}:${parts.minute}`, price, volume: Number(volumes[index]) || 0 });
-    });
-    if (points.length < 2) continue;
-    const data = { date, points };
-    yahooIntradayCache.set(key, { at: Date.now(), data });
-    return data;
-  } catch {
-    continue;
-  }
-  return cached ? { ...cached.data, stale: true } : null;
+async function yahooIntraday(item: QuoteItem, signal: AbortSignal): Promise<Intraday | null> {
+  const symbols = yahooMinuteSymbols(item);
+  if (!symbols.length) return null;
+  try {
+    return await intradayDeadline(2500, async sourceSignal => Promise.any(symbols.flatMap(symbol =>
+      ["query1.finance.yahoo.com", "query2.finance.yahoo.com"].map(async (host, index) => {
+        if (index) await waitForMarketTask(new Promise<void>(resolve => setTimeout(resolve, 200)), sourceSignal);
+        sourceSignal.throwIfAborted();
+        const json = await chartJson(`https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=${item.market === "US"}&events=div%2Csplits`, sourceSignal, true);
+        const chart = json?.chart?.result?.[0], quote = chart?.indicators?.quote?.[0];
+        if (String(chart?.meta?.symbol ?? "").toUpperCase() !== symbol.toUpperCase()) throw new Error("different yahoo security");
+        const timeZone = chart?.meta?.exchangeTimezoneName || (item.market === "US" ? "America/New_York" : "UTC");
+        const formatter = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+        const rows = (Array.isArray(chart?.timestamp) ? chart.timestamp : []).map((stamp: number, i: number) => {
+          const parts = Object.fromEntries(formatter.formatToParts(new Date(stamp * 1000)).map(p => [p.type, p.value]));
+          return { date: `${parts.year}-${parts.month}-${parts.day}`, point: { time: `${parts.hour}:${parts.minute}`, price: Number(quote?.close?.[i]), volume: Number(quote?.volume?.[i]) || 0 } };
+        });
+        const date = rows.map((row: { date: string }) => row.date).sort().at(-1) ?? "";
+        const value = normalizeIntraday({ date, points: rows.filter((row: { date: string }) => row.date === date).map((row: { point: IntradayPoint }) => row.point), source: "yahoo" }, item);
+        if (!value) throw new Error("empty yahoo chart");
+        return value;
+      }))), signal);
+  } catch { return null; }
 }
 
 export async function fetchIntraday(items: QuoteItem[]): Promise<Record<string, Intraday>> {
-  const namespace = JSON.stringify([getSiteSettings().chartApiUrl, process.env.STOCKLOG_PROXY]);
-  return sharedCharts.fetch(items.map(normalizedMarketItem), namespace, fetchIntradayUnshared);
+  const settings = getSiteSettings();
+  // OpenD recovery must not remain behind a still-fresh lower-priority chart cache.
+  let futuAvailable = false;
+  if (items.some(item => ["US", "HK", "CN"].includes(item.market))) {
+    try { futuAvailable = await intradayDeadline(1000, signal => waitForMarketTask(isFutuAvailable(1000), signal)); } catch { /* Bound discovery too. */ }
+  }
+  const namespace = JSON.stringify([settings.chartApiUrl, settings.futuHost, settings.futuPort, futuAvailable, process.env.STOCKLOG_FUTU, process.env.STOCKLOG_PROXY]);
+  return sharedCharts.fetch(items.map(normalizedMarketItem), namespace, fetchIntradayUnshared,
+    chart => !futuAvailable || chart.source === "futu");
 }
 
-async function fetchIntradayUnshared(items: QuoteItem[]): Promise<Record<string, Intraday>> {
-  const result: Record<string, Intraday> = {};
-  const grouped = new Map<string, QuoteItem[]>();
-  items.forEach((item) => {
-    if (item.market === "US") return;
-    minuteQueryCodes(item).forEach((code) => {
-      const list = grouped.get(code) || [];
-      list.push(item);
-      grouped.set(code, list);
-    });
-  });
-
-  const codes = [...grouped.keys()];
-  const CHUNK = 12;
-  for (let i = 0; i < codes.length; i += CHUNK) {
-    const chunk = codes.slice(i, i + CHUNK);
-    await Promise.all(
-      chunk.map(async (code) => {
-        const data = await fetchIntradayForCode(code);
-        if (data) {
-          grouped.get(code)!.forEach((item) => {
-            if (!result[item.id] || data.points.length > result[item.id].points.length) {
-              result[item.id] = data;
-            }
-          });
+async function fetchIntradayUnshared(items: QuoteItem[], publish: (item: QuoteItem, value: Intraday) => void): Promise<Record<string, Intraday>> {
+  const result: Record<string, Intraday> = Object.create(null);
+  try {
+    await intradayDeadline(14000, async signal => {
+      let futu: Record<string, Intraday> = {};
+      try { futu = await intradayDeadline(3500, sourceSignal => fetchFutuIntraday(items, sourceSignal), signal); } catch { /* Next supported source. */ }
+      const missing: Array<{ item: QuoteItem; fallback: Intraday | null }> = [];
+      for (const item of items) {
+        const value = normalizeIntraday(futu[item.id], item);
+        if (value && !value.stale) { result[item.id] = value; publish(item, value); }
+        else missing.push({ item, fallback: value });
+      }
+      // Bounded workers; finished instruments release joined Web/App reads immediately.
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(12, missing.length) }, async () => {
+        while (next < missing.length && !signal.aborted) {
+          const { item, fallback } = missing[next++];
+          let retained = fallback;
+          for (const provider of [tencentIntraday, eastmoneyIntraday, yahooIntraday]) {
+            signal.throwIfAborted();
+            const value = await provider(item, signal);
+            signal.throwIfAborted();
+            if (!value) continue;
+            if (value.stale) { if (!retained || value.date > retained.date) retained = value; continue; }
+            result[item.id] = value; publish(item, value); retained = null; break;
+          }
+          if (!result[item.id] && retained) { result[item.id] = retained; publish(item, retained); }
         }
-      })
-    );
-  }
-  // 腾讯分钟行情缺失时统一回退 Yahoo；美股直接使用 Yahoo（覆盖盘前 / 盘中 / 盘后）。
-  const fallbackGroups = new Map<string, QuoteItem[]>();
-  items.filter((item) => !result[item.id]).forEach((item) => {
-    if (!yahooMinuteSymbols(item).length) return;
-    const key = `${item.market}:${item.code.trim().toUpperCase()}`;
-    const list = fallbackGroups.get(key) || [];
-    list.push(item); fallbackGroups.set(key, list);
-  });
-  const fallbackKeys = [...fallbackGroups.keys()];
-  for (let i = 0; i < fallbackKeys.length; i += 6) {
-    await Promise.all(fallbackKeys.slice(i, i + 6).map(async (key) => {
-      const matches = fallbackGroups.get(key)!;
-      const data = await fetchYahooIntraday(matches[0]);
-      if (data) matches.forEach((item) => { result[item.id] = data; });
-    }));
+      }));
+    });
+  } catch { /* Return only completed actual data; no late task can publish after expiry. */ }
+  if (!Object.keys(result).length && items.some(item => minuteQueryCodes(item).length || yahooMinuteSymbols(item).length)) {
+    throw new Error("intraday sources unavailable");
   }
   return result;
 }
