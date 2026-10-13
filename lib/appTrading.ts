@@ -42,16 +42,21 @@ function metas(userId: string) {
   return getDb().prepare("SELECT m.* FROM app_trade_metadata m JOIN trade_orders o ON o.id=m.order_id WHERE o.user_id=? ORDER BY m.order_id").all(userId) as Meta[];
 }
 /** Quotes never alter this revision. Every financial writer and cash adjustment does. */
-export function tradingSnapshot(userId: string) {
+function tradingState(userId: string) {
   const db = getDb(), records = listRecords(userId), rows = assetOrderRows(userId);
   const assets = buildAssets(userId, profile, { USD: 1 }, {}, defaults);
   const funds = db.prepare("SELECT * FROM fund_transactions WHERE user_id=? ORDER BY id").all(userId);
   const declarations = db.prepare("SELECT * FROM app_asset_instruments WHERE user_id=? ORDER BY record_id").all(userId);
   const metadata = metas(userId);
-  const byRecord = new Map(records.map(r => [r.id, r]));
   const snapshotRevision = createHash("sha256").update(JSON.stringify({ records, rows, funds, declarations, metadata, cash: assets.cash })).digest("hex");
-  return { accountId: userId, snapshotRevision, collectionRevision: assets.collectionRevision, asOf: new Date().toISOString(),
-    cash: assets.cash, positions: assets.positions, orders: rows.map(row => assetOrderItem(userId, row, undefined, byRecord.get(row.record_id) ?? null)) };
+  return { records, rows, metadata, snapshot: { accountId: userId, snapshotRevision, collectionRevision: assets.collectionRevision, asOf: new Date().toISOString(),
+    cash: assets.cash, positions: assets.positions } };
+}
+/** Only the public trading panel needs the complete order response objects. */
+export function tradingSnapshot(userId: string) {
+  const { records, rows, snapshot } = tradingState(userId);
+  const byRecord = new Map(records.map(r => [r.id, r]));
+  return { ...snapshot, orders: rows.map(row => assetOrderItem(userId, row, undefined, byRecord.get(row.record_id) ?? null)) };
 }
 function leg(value: unknown): Leg {
   const v = object(value, ["percent", "orderType", "limitPrice", "fees"]), percent = number(v.percent);
@@ -78,12 +83,12 @@ function draft(body: unknown, userId: string): Draft {
   return { recordId: v.recordId, recordRevision: Number(v.recordRevision), snapshotRevision: v.snapshotRevision, side: v.side as Draft["side"], mode: v.mode as Draft["mode"], orderType: v.orderType as Draft["orderType"], qty, price, fees,
     tif: v.tif as Draft["tif"], session: String(v.session), tradedAt: v.tradedAt as string | undefined, settlementAmount: v.settlementAmount === undefined ? undefined : number(v.settlementAmount), attachments: attachments(v.attachments), note: String(v.note ?? "") };
 }
-function reservation(userId: string, record: StockRecord, excluded?: string) {
-  const metadata = new Map(metas(userId).map(m => [m.order_id, m]));
-  const records = new Map(listRecords(userId).map(r => [r.id, r]));
+function reservation(source: ReturnType<typeof tradingState>, record: StockRecord, excluded?: string) {
+  const metadata = new Map(source.metadata.map(m => [m.order_id, m]));
+  const records = new Map(source.records.map(r => [r.id, r]));
   const sells = new Map<string, number>(), buys = new Map<string, number>();
   const excludedGroup = excluded ? metadata.get(excluded)?.parent_id : null;
-  for (const row of assetOrderRows(userId).filter(o => o.status === "pending" && o.id !== excluded)) {
+  for (const row of source.rows.filter(o => o.status === "pending" && o.id !== excluded)) {
     const current = records.get(row.record_id);
     if (!current || current.market !== row.market || current.code !== row.code) continue;
     const group = metadata.get(row.id)?.parent_id || row.id;
@@ -100,11 +105,11 @@ function reservation(userId: string, record: StockRecord, excluded?: string) {
   return { cash, qty };
 }
 function preview(userId: string, d: Draft, excluded?: string) {
-  const state = tradingSnapshot(userId), record = readRecord(userId, d.recordId);
+  const source = tradingState(userId), state = source.snapshot, record = source.records.find(r => r.id === d.recordId);
   if (!record) throw new RecordsError("本人证券不存在", 404);
   if (state.snapshotRevision !== d.snapshotRevision || record.revision !== d.recordRevision) throw conflict("账户或证券已变化，请重新预览");
   if (d.mode === "record") {
-    const dates = assetOrderRows(userId).filter(o => o.record_id === record.id && o.status === "filled").map(o => Date.parse(o.traded_at));
+    const dates = source.rows.filter(o => o.record_id === record.id && o.status === "filled").map(o => Date.parse(o.traded_at));
     if (dates.some(n => !Number.isFinite(n) || n > Date.parse(d.tradedAt!))) throw conflict("已有成交历史晚于本次记录，请先核对历史顺序");
   }
   const declared = instrumentSnapshot(userId, record.id).instrument;
@@ -114,7 +119,7 @@ function preview(userId: string, d: Draft, excluded?: string) {
   const currency = holdingAccountCurrency(record), cash = state.cash.nativeBalancesByCurrency?.[currency];
   const qty = record.qty === "" ? NaN : Number(record.qty), cost = record.cost === "" ? qty > 0 ? null : 0 : Number(record.cost);
   if (!state.cash.sourceComplete || !Number.isFinite(cash) || !Number.isFinite(qty) || qty < 0 || cost === null || !Number.isFinite(cost)) throw conflict("现金、数量或成本来源不完整，请先核对");
-  const reserved = reservation(userId, record, excluded), amount = d.qty * d.price;
+  const reserved = reservation(source, record, excluded), amount = d.qty * d.price;
   const total = d.settlementAmount ?? (d.side === "buy" ? amount + d.fees : amount - d.fees);
   if (total < 0 || total > 1e12 || d.side === "buy" && total > cash! - reserved.cash + 1e-8 || d.side === "sell" && d.qty > qty - reserved.qty + 1e-10) throw conflict("可用现金或可卖数量不足");
   const position = applyOrder({ qty, cost }, d);
@@ -149,7 +154,7 @@ function saveMeta(userId: string, id: string, d: Draft, parent: string | null = 
   getDb().prepare("INSERT INTO app_trade_metadata VALUES(?,?,?,?,?,?)").run(id, parent, role, above === null ? null : Number(above), JSON.stringify({ ...d, confirmedAt: new Date().toISOString() }), identity(r));
 }
 function committedState(userId: string, recordId: string) {
-  const s = tradingSnapshot(userId);
+  const s = tradingState(userId).snapshot;
   return { accountId: userId, snapshotRevision: s.snapshotRevision, collectionRevision: s.collectionRevision, cash: s.cash,
     position: s.positions.find(p => p.recordId === recordId) ?? null };
 }
@@ -241,7 +246,7 @@ export function observeTrade(userId: string, id: string, body: unknown, quote: Q
   return mutation(userId, b, "observe_trade", authorize, () => {
     const row = assetOrderRows(userId).find(row => row.id === id), meta = metas(userId).find(m => m.order_id === id);
     if (!row || !meta) throw new RecordsError("本人 API 委托不存在", 404);
-    const record = readRecord(userId, row.record_id), state = tradingSnapshot(userId);
+    const record = readRecord(userId, row.record_id), state = tradingState(userId).snapshot;
     if (!record || row.status !== "pending" || row.revision !== b.orderRevision || record.revision !== b.recordRevision || state.snapshotRevision !== b.snapshotRevision || identity(record) !== meta.identity_json || isStockConnect(record)) throw conflict("委托、证券或账户已变化，请重新读取");
     const d = JSON.parse(meta.draft_json) as Draft, now = Date.now(), created = Date.parse(d.confirmedAt ?? String(row.created_at));
     if (!Number.isFinite(created)) throw conflict("委托确认时间无法核对");
@@ -268,7 +273,7 @@ export function observeTrade(userId: string, id: string, body: unknown, quote: Q
   });
 }
 export function cashSnapshot(userId: string, options: { limit?: number; offset?: number; currency?: string; snapshotRevision?: string } = {}) {
-  const state = tradingSnapshot(userId);
+  const state = tradingState(userId).snapshot;
   if (options.snapshotRevision && state.snapshotRevision !== options.snapshotRevision) throw conflict("资金流水已变化，请重新读取第一页");
   const currency = options.currency && isFundCurrency(options.currency) ? options.currency : undefined;
   const limit = options.limit ?? 100, offset = options.offset ?? 0;
@@ -282,7 +287,7 @@ export function reconcileCash(userId: string, body: unknown, authorize: () => st
   if (Number(b.balance.toFixed(8)) !== b.balance) throw new RecordsError("现金核对不能超过八位小数");
   const currency = b.currency;
   return mutation(userId, b, "reconcile_cash", authorize, () => {
-    const state = tradingSnapshot(userId), before = state.cash.nativeBalancesByCurrency?.[currency];
+    const state = tradingState(userId).snapshot, before = state.cash.nativeBalancesByCurrency?.[currency];
     if (state.snapshotRevision !== b.snapshotRevision) throw conflict("账户已变化，请重新核对现金");
     if (!state.cash.sourceComplete || !Number.isFinite(before)) throw conflict("现有现金来源不完整，不能猜测调整差额");
     const delta = Number(b.balance) - before!;

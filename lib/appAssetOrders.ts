@@ -11,8 +11,15 @@ export function assetOrderRows(userId: string) {
   return getDb().prepare("SELECT o.*,v.revision,m.parent_id,m.role,m.trigger_above,m.draft_json AS submission_draft,json_extract(m.draft_json,'$.mode') AS submission_mode FROM trade_orders o JOIN app_asset_order_versions v ON v.order_id=o.id LEFT JOIN app_trade_metadata m ON m.order_id=o.id WHERE o.user_id=? ORDER BY o.traded_at DESC,o.created_at DESC,o.id DESC").all(userId) as Row[];
 }
 export function selectAssetOrders(rows: Row[], scope: string, status: string, recordId: string | null, now: number) {
-  return rows.filter(row => (!recordId || row.record_id === recordId) && (status === "all" || row.status === status) &&
-    (scope === "all" || assetLocalDate(row.traded_at, row.market) !== null && assetLocalDate(row.traded_at, row.market) === assetLocalDate(now, row.market)));
+  const todayByMarket = new Map<string, string | null>();
+  return rows.filter(row => {
+    if (recordId && row.record_id !== recordId || status !== "all" && row.status !== status) return false;
+    if (scope === "all") return true;
+    const day = assetLocalDate(row.traded_at, row.market);
+    if (day === null) return false;
+    if (!todayByMarket.has(row.market)) todayByMarket.set(row.market, assetLocalDate(now, row.market));
+    return day === todayByMarket.get(row.market);
+  });
 }
 export function assetOrderItem(userId: string, row: Row, quote?: Quote, cachedRecord?: StockRecord | null) {
   const record = cachedRecord === undefined ? readRecord(userId, row.record_id) : cachedRecord, identityMatches = !!record && record.market === row.market && record.code === row.code;

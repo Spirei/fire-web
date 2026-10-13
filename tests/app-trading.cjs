@@ -48,6 +48,20 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
  await test('scoped views and previews are read-only and preserve account/currency cash',async()=>{
   const f=fixture(),before=economic(f);for(const v of [1,2]){assert.equal((await call(v,f,'cash')).data.nativeBalancesByCurrency.USD,1000);assert.equal((await call(v,f,'positions')).data.items[0].recordId,f.r.id);assert.equal((await call(v,f,'summary')).data.summary.totalAsset,1100);const p=await call(v,f,'trading/preview','POST',input(f));assert.equal(p.status,200);assert.equal(p.data.cashAfter,979);assert.equal(p.data.feeBreakdown,null);}assert.deepEqual(economic(f),before);
  });
+ await test('cash reads and previews avoid formatting unused order history while preserving the snapshot',async()=>{
+  const f=fixture();for(let i=0;i<40;i++)orders.placeOrder({userId:f.user.id,recordId:f.r.id,side:'buy',qty:1,price:1,fees:0,orderType:'limit',tif:'gtc',mode:'order'});
+  const module=load('lib/appAssetOrders.ts'),original=module.assetOrderItem;let formatted=0;
+  module.assetOrderItem=(...args)=>{formatted++;return original(...args);};
+  try {
+   const full=state(f),b=input(f);assert.equal(full.orders.length,40);formatted=0;
+   for(const v of [1,2]){
+    const cash=await call(v,f,'cash');assert.equal(cash.status,200);assert.equal(cash.data.snapshotRevision,full.snapshotRevision);assert.equal(cash.data.nativeBalancesByCurrency.USD,full.cash.nativeBalancesByCurrency.USD);
+    const preview=await call(v,f,'trading/preview','POST',b);assert.equal(preview.status,200);assert.equal(preview.data.snapshotRevision,full.snapshotRevision);assert.equal(preview.data.reservedCash,40);
+   }
+   assert.equal(formatted,0,'cash and preview must not format unused historical order DTOs');
+   const again=await call(2,f);assert.deepEqual(again.data.orders,full.orders);assert.equal(again.data.snapshotRevision,full.snapshotRevision);assert.equal(formatted,40);
+  } finally {module.assetOrderItem=original;}
+ });
  await test('confirmed registration commits cash, position and durable cross-version receipt once',async()=>{
   const f=fixture(),b=input(f),reply=await call(2,f,'trading/submissions','POST',b);assert.equal(reply.status,200,JSON.stringify(reply));assert.equal(store.readRecord(f.user.id,f.r.id).qty,12);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,979);assert.equal(reply.data.data.items[0].status,'filled');assert.equal(reply.data.data.items[0].executionModel,'owner_recorded_fill');assert.equal((await call(1,f,'trading/submissions','POST',b)).code,40901);assert.deepEqual((await call(1,f,'operations/'+b.requestId)).data,reply.data);
  });

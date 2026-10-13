@@ -93,3 +93,7 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 备份恢复：普通 JSON 迁移升级为格式 v2，保留港股通 account_market、实际 settlement_currency/settlement_amount，仍接受旧 v1；资金重建与导入同一事务。含 API 交易元数据的账户不使用旧 JSON 导出或覆盖恢复，发现声明 portable_json_transfer 不支持；请使用保留所有表的完整数据库备份。原账户回执与条件单不能在迁移中被删除或降成旧惰性执行单。
 
 验收：tests/app-asset-orders.cjs、tests/app-trading.cjs 使用独立 SQLite、真实 v1/v2 路由和授权，禁止向真实账户写测试成交、现金或条件单。生产镜像更新后，再检查同源 auth/config 和实际 buildSha；App 原生适配器、手机安装与真实外部券商执行不能由服务端回归代替。
+
+## 账户读取开销
+
+现金查询、预览和写入内部核对只构造所需返回数据，不生成整份订单 DTO；交易面板仍返回完整原合同。预览复用同次读取的订单、持仓和附加单占用数据。财务版本继续包含全部原始校验输入，不缓存跨请求的账户状态，也不省略任何订单或资金对版本的影响。今日订单筛选按证券市场分别计算日期，单次筛选内复用各市场当天日期。

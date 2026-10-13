@@ -26,6 +26,19 @@ const pending=(f,r,over={})=>orders.placeOrder({userId:f.user.id,recordId:r.id,s
 const mutation=(f,items)=>({requestId:crypto.randomUUID(),accountId:f.user.id,orders:items.map(o=>({orderId:o.id,recordId:o.recordId,market:o.market,code:o.code,revision:o.revision,recordRevision:o.recordRevision}))});
 async function test(name,run){quotes={};onRates=onQuotes=null;db.prepare('DELETE FROM rate_limit').run();await run();count++;console.log('PASS '+name);}
 (async()=>{
+ await test('today filtering converts each order once and today once per market without crossing dates',async()=>{
+  const orderAPI=load('lib/appAssetOrders.ts'),original=assets.assetLocalDate;let calls=0;
+  const samples=Array.from({length:40},(_,i)=>({id:String(i),record_id:'sample',market:i<20?'US':'CN',status:'pending',traded_at:i%2?'2026-10-11T00:00:00Z':'2026-10-13T00:30:00Z'}));
+  assets.assetLocalDate=(...args)=>{calls++;return original(...args);};
+  try {
+   const now=Date.parse('2026-10-13T01:00:00Z');
+   assert.deepEqual(orderAPI.selectAssetOrders(samples,'today','all',null,now).map(r=>r.id),samples.filter((_,i)=>i%2===0).map(r=>r.id));
+   assert.equal(calls,42);calls=0;
+   assert.equal(orderAPI.selectAssetOrders(samples,'all','all',null,now).length,40);assert.equal(calls,0);
+   assert.equal(orderAPI.selectAssetOrders(samples,'today','filled',null,now).length,0);assert.equal(calls,0);
+   assert.equal(orderAPI.selectAssetOrders([{...samples[0],traded_at:'bad'}],'today','all',null,now).length,0);
+  } finally {assets.assetLocalDate=original;}
+ });
  await test('fixed discovery paths do not grant new scopes or modify legacy routes',async()=>{for(const v of [1,2]){const response=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(origin+`/api/v${v}/auth/config`));const d=(await response.json()).data.account_assets;assert.equal(d.orders_version,1);assert.equal(d.orders_path,`/api/v${v}/account-assets/orders`);assert.equal(d.cancel_orders_path,`/api/v${v}/account-assets/orders/cancellations`);assert.equal(d.features.rejected_orders,false);}});
  await test('six filters expose real states and reads never settle or expire pending orders',async()=>{const f=fixture(),r=record(f),o=pending(f,r);for(const status of ['filled','cancelled','expired']){const p=pending(f,r);db.prepare('UPDATE trade_orders SET status=? WHERE id=?').run(status,p.id);}const before=rows(f);quotes={[o.id]:{price:15,time:'2026-10-07T00:00:00Z',cached:true}};for(const v of [1,2]){for(const status of ['all','pending','filled','cancelled','rejected','expired']){const result=await call(v,f,'/orders?scope=all&status='+status);assert.equal(result.status,200);assert.equal(result.data.count,status==='all'?4:status==='rejected'?0:1);assert.equal(result.data.settlesPendingOrders,false);}const items=(await call(v,f)).data.items;const p=items.find(i=>i.id===o.id);assert.equal(p.filledQty,0);assert.equal(p.currentPrice,15);assert.equal(p.currentPriceSource,'quote_cache');const filled=items.find(i=>i.status==='filled');assert.equal(filled.filledQty,2);assert.equal(filled.orderPrice,null);assert.equal(filled.executedPrice,10);assert.equal(filled.currentPrice,null);}assert.deepEqual(rows(f),before);});
  await test('today uses exchange calendar, all includes older rows, malformed filters reject',async()=>{const f=fixture(),r=record(f),o=pending(f,r);db.prepare("UPDATE trade_orders SET traded_at='2000-01-01T00:00:00Z' WHERE id=?").run(o.id);assert.equal((await call(1,f,'/orders')).data.count,0);assert.equal((await call(2,f)).data.count,1);db.prepare("UPDATE trade_orders SET traded_at='bad' WHERE id=?").run(o.id);assert.equal((await call(1,f,'/orders')).data.unknownDateOrderIds[0],o.id);for(const q of ['status=unknown','scope=history','status=all&status=pending','owner=x','recordId='])assert.equal((await call(2,f,'/orders?'+q)).status,400);});
