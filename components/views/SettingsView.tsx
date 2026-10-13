@@ -2212,7 +2212,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           {cmdQuery === "" ? <span className="sw-search-kbd">⌘K</span> : null}
         </div>
         <div className="sw-sidebar-nav">
-        {!cmdQuery.trim() && <nav aria-label="设置分类" className="sc-nav">
+        {!cmdQuery.trim() && <nav aria-label="设置分类" className="sc-settings-nav">
           {[{ key: "home", label: "首页", icon: "home" }, ...categories].map((category) => <button type="button" key={category.key} onClick={() => openCategory(category.key)} aria-current={(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "page" : undefined} className={`sc-nav-link ${(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "is-active" : ""}`}><SubNavIcon name={category.icon} className="h-5 w-5"/><span>{category.label}</span></button>)}
         </nav>}
         {cmdQuery.trim() && visibleNavGroups.map((g) => (

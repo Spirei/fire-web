@@ -6419,7 +6419,7 @@ button.PhotoView-Slider__toolbarIcon {
 .sv-center .sw-search-wrap { margin:0 4px; padding:0; border-bottom:0; }
 .sv-center .sw-search-icon { left:12px; }
 .sv-center .sw-search-kbd { right:8px; }
-.sv-center .sc-nav { display:flex; flex-direction:column; gap:4px; }
+.sv-center .sc-settings-nav { display:flex; flex-direction:column; gap:4px; }
 .sv-center .sc-nav-link { display:flex; align-items:center; gap:14px; width:100%; min-height:44px; padding:10px 16px; border-radius:14px; font-size:14px; font-weight:550; color:var(--sv-text); text-align:left; transition:background-color .15s; }
 .sv-center .sc-nav-link:hover { background:var(--sv-hover-bg); }
 .sv-center .sc-nav-link.is-active { background:#44494b; color:#fff; }
