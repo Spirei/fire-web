@@ -151,7 +151,13 @@ export default function PnlTrendChart({
       }, { replaceMerge: ["series"] });
     };
     draw();
-    const themeObserver = new MutationObserver(draw);
+    let dark = document.documentElement.classList.contains("dark");
+    const themeObserver = new MutationObserver(() => {
+      const nextDark = document.documentElement.classList.contains("dark");
+      if (dark === nextDark) return;
+      dark = nextDark;
+      draw();
+    });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => themeObserver.disconnect();
   }, [points, tab, weighting, benchLabel]);

@@ -41,6 +41,9 @@ export default function AppModal({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const closeDisabledRef = useRef(closeDisabled);
   closeDisabledRef.current = closeDisabled;
   const dragRef = useRef<{ pointerId: number; x: number; y: number; startX: number; startY: number; rect: DOMRect } | null>(null);
@@ -48,12 +51,14 @@ export default function AppModal({
   useEffect(() => {
     if (!mounted) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented || e.repeat) return;
       if (!priority && document.querySelector("[data-system-modal='true']")) return;
       requestClose();
     };
     window.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const panel = panelRef.current;
     document.body.style.overflow = "hidden";
     // Forms can place focus directly in their first required field.
     (panelRef.current?.querySelector<HTMLElement>("[data-autofocus]") || panelRef.current)?.focus({ preventScroll: true });
@@ -61,16 +66,21 @@ export default function AppModal({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
       if (closeTimer.current) clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+      // Do not steal focus from a newer dialog or an explicit navigation target.
+      if (previousFocus?.isConnected && (document.activeElement === document.body || panel?.contains(document.activeElement))) previousFocus.focus({ preventScroll: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
   function requestClose() {
-    if (closing || closeDisabledRef.current) return;
+    if (closingRef.current || closeDisabledRef.current) return;
+    closingRef.current = true;
     setClosing(true);
     closeTimer.current = setTimeout(() => {
-      if (closeDisabledRef.current) { setClosing(false); return; }
-      onClose();
+      closeTimer.current = null;
+      if (closeDisabledRef.current) { closingRef.current = false; setClosing(false); return; }
+      onCloseRef.current();
     }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160);
   }
 

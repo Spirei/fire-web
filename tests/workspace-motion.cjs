@@ -77,13 +77,14 @@ const hooks = { ...React,
   }
 };
 const chartPreference = { matches: false, addEventListener() {}, removeEventListener() {} };
+let chartDark = false, themeObserver;
 const chartContext = { exports: {},
   require: name => name === 'react' ? hooks : name === '@/lib/echarts' ? {
     init() { const chart = { options: [], disposed: false, setOption(option) { this.options.push(option); }, resize() {}, clear() { this.cleared = true; }, dispose() { this.disposed = true; } }; charts.push(chart); return chart; },
     graphic: { LinearGradient: function () {} }
   } : require(name),
-  window: { matchMedia: () => chartPreference }, document: { documentElement: { classList: { contains: () => false } } },
-  MutationObserver: class { observe() {} disconnect() {} },
+  window: { matchMedia: () => chartPreference }, document: { documentElement: { classList: { contains: () => chartDark } } },
+  MutationObserver: class { constructor(fn) { this.fn = fn; themeObserver = this; } observe() {} disconnect() {} },
   ResizeObserver: class { observe() {} disconnect() {} }
 };
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../components/PnlTrendChart.tsx'), 'utf8'), {
@@ -99,6 +100,10 @@ renderChart({ ...props, points: props.points.map(point => ({ ...point, asset: po
 assert.equal(charts.length, 1, 'data updates reuse the canvas and preserve update animations');
 assert.equal(charts[0].disposed, false);
 assert(Math.abs(charts[0].options.at(-1).series[0].data[1] - 5) < .0001, 'time-weighted return is unchanged');
+const updates = charts[0].options.length;
+themeObserver.fn(); assert.equal(charts[0].options.length, updates, 'navigation classes do not redraw the chart');
+chartDark = true; themeObserver.fn(); assert.equal(charts[0].options.length, updates + 1, 'actual theme changes redraw the retained canvas');
+assert.equal(charts[0].options.at(-1).tooltip.backgroundColor, '#202630');
 renderChart({ ...props, tab: 'asset' });
 assert.equal(charts[0].options.at(-1).series.length, 1, 'switching to assets removes the comparison series');
 chartPreference.matches = true; renderChart({ ...props, benchLabel: '新基准' });
