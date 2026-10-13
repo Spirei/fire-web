@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isTopPriorityModal, lockScroll } from "@/lib/overlayLifecycle";
 
 const SIZES = {
   sm: "max-w-[400px]",
@@ -52,19 +53,20 @@ export default function AppModal({
     if (!mounted) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || e.repeat) return;
-      if (!priority && document.querySelector("[data-system-modal='true']")) return;
+      if (!isTopPriorityModal(panelRef.current)) return;
+      e.preventDefault();
+      e.stopPropagation();
       requestClose();
     };
     window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
+    const unlockScroll = lockScroll();
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = panelRef.current;
-    document.body.style.overflow = "hidden";
     // Forms can place focus directly in their first required field.
-    (panelRef.current?.querySelector<HTMLElement>("[data-autofocus]") || panelRef.current)?.focus({ preventScroll: true });
+    if (isTopPriorityModal(panel)) (panel?.querySelector<HTMLElement>("[data-autofocus]") || panel)?.focus({ preventScroll: true });
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      unlockScroll();
       if (closeTimer.current) clearTimeout(closeTimer.current);
       closeTimer.current = null;
       // Do not steal focus from a newer dialog or an explicit navigation target.

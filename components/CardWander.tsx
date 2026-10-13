@@ -1,5 +1,7 @@
 "use client";
 
+import { lockScroll } from "@/lib/overlayLifecycle";
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import { flushSync } from "react-dom";
 import { selectWanderCards } from "@/lib/cardWander";
@@ -439,19 +441,18 @@ export default function CardWander({ cards, seed, onClose, onShuffle, onOpenDeta
   }, [selected]);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    const previousRootOverflow = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
+    const unlockScroll = lockScroll();
+    const unlockRootScroll = lockScroll(document.documentElement);
     closeRef.current?.focus();
     return () => {
-      document.body.style.overflow = previousOverflow;
-      document.documentElement.style.overflow = previousRootOverflow;
+      unlockScroll();
+      unlockRootScroll();
     };
   }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.key === "Escape" && event.repeat) || document.querySelector("[data-priority-modal='true']")) return;
       if (event.key === "Escape") {
         event.preventDefault();
         if (zoomOpen) void closeZoom();

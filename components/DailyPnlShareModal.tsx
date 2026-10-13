@@ -1,5 +1,7 @@
 "use client";
 
+import { lockScroll } from "@/lib/overlayLifecycle";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -180,13 +182,14 @@ export default function DailyPnlShareModal({ dayPnl, totalPnl, totalAsset, curre
   }, [shareHeight]);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const unlockScroll = lockScroll();
+    const keydown = (event: KeyboardEvent) => { if (event.key !== "Escape" || event.defaultPrevented || event.repeat || document.querySelector("[data-priority-modal='true']")) return;
+      event.preventDefault();
+      onClose(); };
     document.addEventListener("keydown", keydown);
     void loadHtml2canvas();
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       document.removeEventListener("keydown", keydown);
     };
   }, [onClose]);

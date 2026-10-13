@@ -1,5 +1,7 @@
 "use client";
 
+import { lockScroll } from "@/lib/overlayLifecycle";
+
 import { sharedRead } from "@/lib/sharedRead";
 import { useWorkspaceSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import { createPortal } from "react-dom";
@@ -913,16 +915,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   /** 卡片详情弹窗：手机上锁住背景滚动，Esc 关闭 */
   useEffect(() => {
     if (!active && !addOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockScroll();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented || event.repeat || document.querySelector("[data-priority-modal='true']")) return;
+      event.preventDefault();
       if (addOpen) setAddOpen(false);
       else setActive(null);
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = previous;
+      unlockScroll();
       window.removeEventListener("keydown", onKey);
     };
   }, [active, addOpen]);

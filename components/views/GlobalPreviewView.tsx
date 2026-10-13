@@ -10,11 +10,10 @@ import MarketIcon from "@/components/MarketIcon";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
-import { IconArrowsExchange, IconChartHistogram, IconCalendarPause } from "@tabler/icons-react";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { sharedRead } from "@/lib/sharedRead";
 import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
-import { IconHierarchy2 } from "@tabler/icons-react";
+import GlobalSectionNav, { type GlobalSection } from "@/components/GlobalSectionNav";
 import AssetAllocationView from "@/components/views/AssetAllocationView";
 import type { AllocationSnapshot } from "@/lib/assetAllocationTypes";
 
@@ -422,39 +421,19 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   );
 }
 
-type GlobalSection = "allocation" | "assets" | "convert" | "calendar";
-
-const GLOBAL_SECTIONS: [GlobalSection, string, string][] = [
-  ["allocation", "资产配置", "账户关联与资产分布"],
-  ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
-  ["convert", "汇率换算", "输入金额，按当前汇率换算其他货币"],
-  ["calendar", "休市日历", "A 股、港股及美股全年交易与休市安排"]
-];
-
-const SECTION_ICONS = {
-  allocation: IconHierarchy2,
-  assets: IconChartHistogram,
-  convert: IconArrowsExchange,
-  calendar: IconCalendarPause
-} as const;
-
 function parseGlobalSection(value: string | null): GlobalSection {
   if (value === "allocation" || value === "convert" || value === "calendar") return value;
   return "assets";
 }
 
-function SectionIcon({ section }: { section: GlobalSection }) {
-  const Icon = SECTION_ICONS[section];
-  return <Icon className="global-section-icon" size={18} stroke={1.65} aria-hidden="true" />;
-}
-
-export default function GlobalPreviewView({ pageSize, initialNow, initialAllocation }: { pageSize?: number; initialNow?: number; initialAllocation?: AllocationSnapshot | null }) {
+export default function GlobalPreviewView({ pageSize, initialNow, initialAllocation, onOpenQuotePool }: { pageSize?: number; initialNow?: number; initialAllocation?: AllocationSnapshot | null; onOpenQuotePool?: () => void }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
   const selectSection = (next: GlobalSection) => {
     if (!canUseWorkspaceUrl()) return;
     if (pageSize) return;
+    if (next === "quote-pool") { onOpenQuotePool?.(); return; }
     const params = new URLSearchParams(window.location.search);
     params.set("section", next);
     if (next !== "convert") {
@@ -468,23 +447,7 @@ export default function GlobalPreviewView({ pageSize, initialNow, initialAllocat
 
   return (
     <div className="global-economy-page flex flex-col gap-6">
-      <nav className="global-section-nav" aria-label="全球经济功能">
-        {GLOBAL_SECTIONS.map(([key, label, description]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => selectSection(key)}
-            title={label}
-            aria-label={label}
-            aria-current={section === key ? "page" : undefined}
-            className={`global-section-button ${section === key ? "is-active" : ""}`}
-          >
-            <SectionIcon section={key} />
-            <span>{label}</span>
-            <span className="sr-only">：{description}</span>
-          </button>
-        ))}
-      </nav>
+      <GlobalSectionNav section={section} onSelect={selectSection} />
       <div key={section} className="global-section-panel">
         {section === "allocation" ? <AssetAllocationView initial={initialAllocation} /> : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
       </div>

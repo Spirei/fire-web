@@ -1046,6 +1046,28 @@ function fontHeaderFixture(ext) {
   });
   const { getDb } = require(path.join(root, 'lib/db.ts'));
   const db = getDb();
+  await test('old stock-pool navigation moves under global without disturbing desktop or mobile order', () => {
+    const { getSiteSettings, updateSiteSettings } = require(path.join(root, 'lib/settings.ts'));
+    const saved = db.prepare("SELECT key,value FROM site_settings WHERE key IN ('tabs','mobileNavigationOrder')").all();
+    const write = db.prepare('INSERT OR REPLACE INTO site_settings(key,value) VALUES (?,?)');
+    const tabs = getSiteSettings().tabs;
+    try {
+      const legacy = [...tabs]; legacy.splice(2, 0, {key:'quote-pool',label:'股票池',url:'/quote-pool'});
+      write.run('tabs', JSON.stringify(legacy));
+      write.run('mobileNavigationOrder', JSON.stringify(['quote-pool','global','watchlist','assets','holdings']));
+      const current = updateSiteSettings({});
+      assert.deepEqual(current.tabs.map(tab=>({...tab,default:!!tab.default})), tabs.map(tab=>({...tab,default:!!tab.default})));
+      assert.deepEqual(current.mobileNavigationOrder, ['global','watchlist','assets','holdings']);
+      assert(!current.tabs.some(tab=>tab.key==='quote-pool'));
+      const { workspaceForPath, workspaceDestination } = require(path.join(root, 'lib/workspaceRouting.ts'));
+      assert.equal(workspaceForPath('/quote-pool', current.tabs),'quote-pool');
+      assert.equal(workspaceDestination('quote-pool',current.tabs,new Map([['quote-pool','/quote-pool?m=HK&p=2']]),'tab').url,'/quote-pool?m=HK&p=2');
+    } finally {
+      db.prepare("DELETE FROM site_settings WHERE key IN ('tabs','mobileNavigationOrder')").run();
+      for (const row of saved) write.run(row.key,row.value);
+      updateSiteSettings({});
+    }
+  });
   await test('ticker retains last valid prices across empty weekends and isolates full security IDs', async () => {
     const { preserveTicker, readLastTicker } = require(path.join(root, 'lib/ticker.ts'));
     const good = { key: 'index', label: 'Index', market: 'US', price: 123, change: 2, changePct: 1.65, points: [120, 123] };
@@ -3200,7 +3222,7 @@ function fontHeaderFixture(ext) {
   await test('global economy removes archived heatmap but keeps converter', () => {
     const view = fs.readFileSync(path.join(root, 'components/views/GlobalPreviewView.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    const convert = view.indexOf('["convert", "汇率换算"');
+    const convert = fs.readFileSync(path.join(root, 'components/GlobalSectionNav.tsx'), 'utf8').indexOf('["convert", "汇率换算"');
     assert(convert >= 0, '汇率换算入口必须保留');
     assert(!view.includes('GlobalEconomyHeatmap'));
     assert(!view.includes('["heatmap", "经济热图"'));
@@ -3937,7 +3959,7 @@ function fontHeaderFixture(ext) {
     assert(dialogHost.includes('size="sm" priority'), '全局确认与输入弹窗必须使用系统层级');
     assert(toaster.includes('z-[13000]') && toaster.includes('aria-live="polite"'), '操作反馈必须位于所有弹窗上方并可被辅助技术播报');
     assert(settings.includes('document.querySelector("[data-priority-modal=\'true\']")'), '设置详情不得响应上层弹窗的 Esc');
-    assert(modal.includes('document.querySelector("[data-system-modal=\'true\']")'), '普通业务弹窗不得响应系统确认层的 Esc');
+    assert(modal.includes('isTopPriorityModal(panelRef.current)'), '普通业务弹窗不得响应更高弹层的 Esc');
   });
   await test('toast copy is concise without hiding diagnostic details', () => {
     const { conciseToast } = require(path.join(root, 'lib/toast.ts'));

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isTopPriorityModal, lockScroll } from "@/lib/overlayLifecycle";
 import { CURRENT_VERSION, VERSIONS, type VersionEntry, type ChangeKind } from "@/lib/versions";
 
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
@@ -26,6 +27,9 @@ export default function VersionModal({
     VERSIONS.find((v) => v.version === initialVersion) ?? CURRENT_VERSION
   );
   const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -41,24 +45,27 @@ export default function VersionModal({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") requestClose();
+      if (e.key !== "Escape" || e.defaultPrevented || e.repeat || !isTopPriorityModal(panelRef.current)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      requestClose();
     };
     window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    panelRef.current?.focus({ preventScroll: true });
+    const unlockScroll = lockScroll();
+    if (isTopPriorityModal(panelRef.current)) panelRef.current?.focus({ preventScroll: true });
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      unlockScroll();
       if (closeTimer.current) clearTimeout(closeTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function requestClose() {
-    if (closing) return;
+    if (closingRef.current) return;
+    closingRef.current = true;
     setClosing(true);
-    closeTimer.current = setTimeout(() => onClose(), 180);
+    closeTimer.current = setTimeout(() => onCloseRef.current(), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180);
   }
 
   return createPortal(

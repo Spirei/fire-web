@@ -13,6 +13,7 @@ import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
+import { lockScroll } from "@/lib/overlayLifecycle";
 import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
@@ -88,22 +89,27 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
     closingRef.current = true;
     setClosing(true);
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    closeTimer.current = setTimeout(() => onCloseRef.current(), reducedMotion ? 0 : 180);
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      if (closeDisabledRef.current) { closingRef.current = false; setClosing(false); return; }
+      onCloseRef.current();
+    }, reducedMotion ? 0 : 180);
   }, []);
   useLayoutEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     if (!mounted) return;
-    const previous = document.body.style.overflow;
+    const unlockScroll = lockScroll();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented || event.repeat) return;
       // 详情上方还有确认、找回密码或版本弹窗时，只允许最上层弹窗处理 Esc。
       if (document.querySelector("[data-priority-modal='true']")) return;
+      event.preventDefault();
+      event.stopPropagation();
       requestClose();
     };
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      document.body.style.overflow = previous;
+      unlockScroll();
       window.removeEventListener("keydown", onKeyDown);
       if (closeTimer.current) clearTimeout(closeTimer.current);
     };
@@ -346,7 +352,6 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "watchlist", label: "自选股", url: "/watchlist" },
   { key: "holdings", label: "账户资产", url: "/holdings", default: true },
   { key: "global", label: "全球预览", url: "/global" },
-  { key: "quote-pool", label: "股票池", url: "/quote-pool" },
   { key: "earnings", label: "财报日历", url: "/earnings" },
   { key: "assistant", label: "智能助手", url: "/assistant" },
   { key: "celebs", label: "名人持仓", url: "/celebs" },
@@ -483,7 +488,6 @@ const TAB_HINTS: Record<string, string> = {
   holdings: "账户资产",
   watchlist: "自选股",
   global: "全球预览",
-  "quote-pool": "股票池",
   earnings: "财报日历",
   assistant: "智能助手",
   users: "用户管理",

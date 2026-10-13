@@ -36,6 +36,7 @@ import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
+import GlobalSectionNav from "@/components/GlobalSectionNav";
 import SidebarScrollIndicator from "@/components/SidebarScrollIndicator";
 import type { WatchGroup } from "@/lib/watchGroups";
 import { useDesktopViewport, useFourDoorViewport, useTabletDevice } from "@/lib/useDesktopViewport";
@@ -92,7 +93,6 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "fire", label: "FIRE", url: "/fire" },
   { key: "watchlist", label: "自选股", url: "/watchlist" },
   { key: "global", label: "全球经济", url: "/global" },
-  { key: "quote-pool", label: "股票池", url: "/quote-pool" },
   { key: "trading", label: "动态", url: "/trading" },
   { key: "quotes", label: "股票添加", url: "/quotes" },
   { key: "earnings", label: "财报日历", url: "/earnings" },
@@ -195,7 +195,7 @@ export default function RecordsApp({
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [panelDirection, setPanelDirection] = useState("none");
-  const navigationTab = activeTab;
+  const navigationTab = activeTab === "quote-pool" ? "global" : activeTab;
   const [mountedTabs, setMountedTabs] = useState<TabKey[]>(() => [initialTab as TabKey]);
   const [panelEpoch, setPanelEpoch] = useState<Partial<Record<TabKey, number>>>({});
   const activeTabRef = useRef(activeTab);
@@ -1234,8 +1234,11 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" ? initialNow : 0} />}
-          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} initialAllocation={initialAllocation} />}
-          {activeTab === "quote-pool" && <QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateFromAssistant} />}
+          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} initialAllocation={initialAllocation} onOpenQuotePool={() => selectTab("quote-pool")} />}
+          {activeTab === "quote-pool" && <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-6">
+            <GlobalSectionNav section="quote-pool" onSelect={section => { if (section !== "quote-pool") navigateFromAssistant(`/global?section=${section}`); }} />
+            <QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateFromAssistant} />
+          </div>}
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}

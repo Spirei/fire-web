@@ -1,5 +1,7 @@
 "use client";
 
+import { lockScroll } from "@/lib/overlayLifecycle";
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { gsap } from "gsap";
 import AppModal from "@/components/AppModal";
@@ -213,10 +215,9 @@ export default function CardWalletStack({
   }, [sorted.length]);
 
   useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockScroll();
     return () => {
-      document.body.style.overflow = previous;
+      unlockScroll();
     };
   }, []);
 
@@ -427,6 +428,7 @@ export default function CardWalletStack({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.key === "Escape" && event.repeat) || document.querySelector("[data-priority-modal='true']")) return;
       if (event.key === "Escape") {
         if (detailKey) setDetailKey(null);
         else requestClose();

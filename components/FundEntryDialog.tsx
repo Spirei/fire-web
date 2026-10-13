@@ -1,5 +1,7 @@
 "use client";
 
+import { lockScroll } from "@/lib/overlayLifecycle";
+
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CurrencySelect from "@/components/CurrencySelect";
@@ -118,19 +120,22 @@ export default function FundEntryDialog(props: Props) {
   const projectedBalance = props.currentBalance + (amountValid ? amountValue * props.direction : 0);
   const responsiveMoney = (value: number) => fmtMoneyAdaptive(value, symbol);
   useEffect(() => {
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") props.onClose(); };
+    const unlockScroll = lockScroll();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.repeat || document.querySelector("[data-priority-modal='true']")) return;
+      event.preventDefault();
+      if (!props.saving) props.onClose();
+    };
     window.addEventListener("keydown", closeOnEscape);
-    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", closeOnEscape); };
-  }, [props.onClose]);
+    return () => { unlockScroll(); window.removeEventListener("keydown", closeOnEscape); };
+  }, [props.onClose, props.saving]);
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={(event) => { if (event.key === "Escape") props.onClose(); }} onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => { if (!props.saving && event.target === event.currentTarget) props.onClose(); }}>
       <form onSubmit={(event) => { event.preventDefault(); if (!props.saving && amountValid) props.onSubmit(); }} role="dialog" aria-modal="true" aria-labelledby="fund-dialog-title" className="max-h-[calc(100dvh-32px)] w-full max-w-[420px] overflow-y-auto rounded-[20px] border border-edge bg-white shadow-2xl dark:bg-[#1b2029] sm:max-h-none sm:overflow-visible">
         <div className="flex items-start justify-between border-b border-edge px-5 py-4">
           <div><h3 id="fund-dialog-title" className="text-base font-bold">新增资金记录</h3><p className="mt-1 text-[11px] text-muted">记录后将同步更新现金余额与账户净资产</p></div>
-          <button type="button" onClick={props.onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-edge text-lg leading-none text-muted transition hover:bg-bg-gray hover:text-ink" aria-label="关闭">×</button>
+          <button type="button" disabled={props.saving} onClick={props.onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-edge text-lg leading-none text-muted transition hover:bg-bg-gray hover:text-ink disabled:opacity-40" aria-label="关闭">×</button>
         </div>
 
         <div className="space-y-4 px-5 py-5">
@@ -176,7 +181,7 @@ export default function FundEntryDialog(props: Props) {
         </div>
 
         <div className="flex items-center justify-end gap-2.5 border-t border-edge px-5 py-4">
-          <button type="button" onClick={props.onClose} className="rounded-lg px-4 py-2 text-xs font-semibold text-muted transition hover:bg-bg-gray hover:text-ink">取消</button>
+          <button type="button" disabled={props.saving} onClick={props.onClose} className="rounded-lg px-4 py-2 text-xs font-semibold text-muted transition hover:bg-bg-gray hover:text-ink disabled:opacity-40">取消</button>
           <button type="submit" disabled={props.saving || !amountValid} className="btn-line min-w-[98px] px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40">{props.saving ? "保存中…" : "确认记录"}</button>
         </div>
       </form>

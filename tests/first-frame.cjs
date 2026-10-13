@@ -367,9 +367,9 @@ try {
     query=new URLSearchParams('section=assets');global.render();
     query=new URLSearchParams('section=convert&from=USD&amount=250');
     let tree=elements(global.render());
-    assert.equal(tree.find(node=>node.props['aria-current']==='page').props['aria-label'],'汇率换算');
+    assert.equal(tree.find(node=>node.props.onSelect && node.props.section).props.section,'convert');
     query=new URLSearchParams('section=assets');tree=elements(global.render());
-    assert.equal(tree.find(node=>node.props['aria-current']==='page').props['aria-label'],'市值排行');
+    assert.equal(tree.find(node=>node.props.onSelect && node.props.section).props.section,'assets');
     const converter=frameHarness('components/FxConverter.tsx',overrides);
     query=new URLSearchParams('section=convert&from=USD&amount=100');
     assert(elements(converter.render()).some(node=>node.type==='input'&&node.props.value==='100'));
@@ -609,6 +609,18 @@ try {
       const html=render('components/MarketCodeBadge.tsx',{market:'CN',code:'600019',alwaysVisible:true});
       assert(html.includes('SH 市场'));assert(html.includes('>SH<'));
     } finally { badges.applyMarketBadges(undefined,true); }
+  });
+  test('global navigation ends in quote pool and preserves its active entry before hydration',()=>{
+    const html=render('components/GlobalSectionNav.tsx',{section:'quote-pool',onSelect() {}});
+    const labels=[...html.matchAll(/<button[^>]+aria-label="([^"]+)"/g)].map(match=>match[1]);
+    assert.deepEqual(labels,['资产配置','市值排行','汇率换算','休市日历','股票池']);
+    assert.match(html, /aria-label="股票池" aria-current="page"/);
+    let opened=0;
+    const view=frameHarness('components/views/GlobalPreviewView.tsx',{
+      '@/lib/workspacePanel':{useWorkspaceSearchParams:()=>new URLSearchParams('section=convert'),useWorkspaceLocationGuard:()=>()=>true}
+    });
+    const nav=elements(view.render({onOpenQuotePool:()=>opened++})).find(node=>node.props.onSelect && node.props.section);
+    nav.props.onSelect('quote-pool'); assert.equal(opened,1,'pool opens through workspace navigation, not a local content-only tab');
   });
   console.log(`${passed} first-frame suites passed (no browser effects or real data writes)`);
   if(failures) process.exitCode=1;

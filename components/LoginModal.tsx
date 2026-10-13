@@ -1,5 +1,7 @@
 "use client";
 
+import { lockScroll } from "@/lib/overlayLifecycle";
+
 import { useEffect, useState } from "react";
 import LoginForm from "@/components/LoginForm";
 import { logoFontClass } from "@/lib/logoFont";
@@ -44,13 +46,15 @@ export default function LoginModal() {
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key !== "Escape" || e.defaultPrevented || e.repeat || document.querySelector("[data-priority-modal='true']")) return;
+      e.preventDefault();
+      setOpen(false);
     }
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      unlockScroll();
     };
   }, [open]);
 
