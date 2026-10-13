@@ -7,7 +7,7 @@ import { rateLimit } from "./rateLimit";
 import { fetchOverviewQuotes } from "./quotes";
 import { assetOrderRows } from "./appAssetOrders";
 import { isFundCurrency } from "./funds";
-import { tradingSnapshot, previewTrade, previewAmendTrade, submitTrade, amendTrade, observeTrade, validateObservation, cashSnapshot, reconcileCash } from "./appTrading";
+import { tradingSnapshot, previewTrade, previewAmendTrade, submitTrade, amendTrade, observeTrade, validateObservation, assertUnusedTradeRequest, cashSnapshot, reconcileCash } from "./appTrading";
 
 type Action = "snapshot" | "preview" | "preview-amend" | "submit" | "amend" | "observe" | "cash" | "positions" | "summary";
 export async function tradingResponse(request: Request, action: Action, params?: Promise<{ orderId: string }>) {
@@ -43,7 +43,8 @@ export async function tradingResponse(request: Request, action: Action, params?:
     if (action === "preview-amend") return ok(getDb().transaction(() => { authorize(); return previewAmendTrade(first.user_id, args?.orderId ?? "", body); })());
     let outcome;
     if (action === "observe") {
-      validateObservation(first.user_id, body);
+      const observation = validateObservation(first.user_id, body);
+      assertUnusedTradeRequest(first.user_id, observation.requestId);
       const row = assetOrderRows(first.user_id).find(row => row.id === args?.orderId);
       if (!row) throw new RecordsError("本人订单不存在", 404);
       const snapshot = await fetchOverviewQuotes([{ id: row.id, market: row.market, code: row.code }], 1_500, { tracked: false }); authorize();

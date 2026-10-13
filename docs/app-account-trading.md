@@ -40,7 +40,7 @@
 
 ## 预览与提交
 
-先 GET trading，捕获 accountId、snapshotRevision 及对应持仓 recordRevision。版本是服务端金融输入的 SHA-256，行情变化不会改变它；记录、声明、订单状态、现金流水和附加单状态变化会使旧预览失效。只能提供本人已存在、已声明 cash_equity/etf 且未声明退市的证券。未知数量／成本／现金不得补零。数量、价格、费用为有限 JSON number，至多八位小数，单笔金额上限 10^12；这只是内部记账单位，不冒充交易所最小手数。
+先 GET trading，捕获 accountId、snapshotRevision 及对应持仓 recordRevision。版本是服务端金融输入的 SHA-256，行情变化不会改变它；记录、声明、订单状态、现金流水和附加单状态变化会使旧预览失效。只能提供本人已存在、已声明 cash_equity/etf 且未声明退市的证券。未知数量／成本／现金不得补零。数量、价格、费用、附加单比例及限价／费用、港股通实际净结算额为有限 JSON number，至多八位小数，单笔金额上限 10^12；这只是内部记账单位，不冒充交易所最小手数。
 
 示例（占位 ID／版本由实际读取替换）：
 
@@ -82,11 +82,11 @@ attachments 可选，结构为 `{takeProfit?,stopLoss?,session,tif}`，至少一
 
 GET cash 返回本人 accountId/snapshotRevision、独立原币现金来源与完整性、已存资金流水及 pagination。查询只接受 limit（1–200，默认100）、offset（非负整数）、currency、snapshotRevision；后续分页沿相同快照，变化为40902，重新读取第一页。transactionSource=stored_fund_ledger，ordersCashSource=filled_trade_orders；旧成交尚无存储的自动流水时，读取不补写，独立余额仍按真实成交核算。
 
-POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；balance 为本人核对的该币种合计现金，含银行与既有现金来源，不能当某个券商独立子账户。核对只追加 adjustment 差额，保留名称和原流水；数值没有变化也保存一次确定回执。当前来源不完整、版本冲突或差额不可核对时拒绝，不从总权益／股价反推余额。市场现金拆分仍不可用。
+POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；balance 为本人核对的该币种合计现金，含银行与既有现金来源，不能当某个券商独立子账户。balance 为有限 JSON number，绝对值不超过 10^12，至多八位小数，允许明确的零及负余额；超出精度直接拒绝。核对只追加 adjustment 差额，保留名称和原流水；数值没有变化也保存一次确定回执。当前来源不完整、版本冲突或差额不可核对时拒绝，不从总权益／股价反推余额。市场现金拆分仍不可用。
 
 ## 回执、失败与生命周期
 
-所有写请求只发送一次，requestId 为小写 UUID，与证券声明及撤单共用本人操作命名空间；跨版本重复为40901，不能重放。成功信封 data 为 `{requestId,accountId,kind,state,code,message,data,completedAt}`，kind 为 submit_trade/amend_trade/observe_trade/reconcile_cash/cancel_orders。确定业务冲突返回相应错误并保存 state=failed/data=null 回执；存储异常完整回滚，不伪造成功。
+所有写请求只发送一次，requestId 为小写 UUID，与证券声明及撤单共用本人操作命名空间；跨版本重复为40901，不能重放。行情观察在访问行情源之前按本人账户检查已有回执，避免重复请求消耗行情；真正记账的事务内再次检查，覆盖等待行情期间另一请求完成的并发情形。成功信封 data 为 `{requestId,accountId,kind,state,code,message,data,completedAt}`，kind 为 submit_trade/amend_trade/observe_trade/reconcile_cash/cancel_orders。确定业务冲突返回相应错误并保存 state=failed/data=null 回执；存储异常完整回滚，不伪造成功。
 
 请求超时、断网、返回后台或401时，不刷新并重放写入；只用原 requestId 查询 operations。查询404不等于可以自动重发，须重新读取并由本人确认新请求。grant/origin/apiVersion/account/cache 代次变化取消旧请求与草稿消费，迟到结果不覆盖新账户；成功写入或明确失败后重新读取真实账户状态。普通读取可以沿原 token 刷新合并规则，新写入不得自动刷新重发。
 

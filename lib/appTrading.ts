@@ -34,6 +34,7 @@ function object(value: unknown, fields: string[]) {
 }
 function number(value: unknown, zero = false) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < (zero ? 0 : Number.MIN_VALUE) || value > 1e12) throw new RecordsError("金额、价格、数量或费用无效");
+  if (Number(value.toFixed(8)) !== value) throw new RecordsError("交易输入不能超过八位小数");
   return value;
 }
 const identity = (r: StockRecord) => JSON.stringify({ market: r.market, code: r.code, accountMarket: r.accountMarket || r.market });
@@ -167,12 +168,17 @@ function children(userId: string, parent: string, d: Draft, fillPrice: number) {
     getDb().prepare("UPDATE trade_orders SET trigger_price=? WHERE id=?").run(trigger, id);
   }
 }
+/** Fast rejection before provider I/O; mutations must repeat this inside their transaction. */
+export function assertUnusedTradeRequest(userId: string, requestId: unknown) {
+  const id = validRecordRequestId(requestId);
+  if (getDb().prepare("SELECT 1 FROM app_asset_operations WHERE user_id=? AND request_id=?").get(userId, id)) throw new RecordsError("requestId 已使用，请查询原回执", 409, 40901);
+}
 /** Receipt and every financial change commit once, including deterministic failures. */
 function mutation(userId: string, body: unknown, kind: string, authorize: () => string, run: () => unknown) {
   const b = body as Values, requestId = validRecordRequestId(b?.requestId), db = getDb();
   return db.transaction(() => {
     if (authorize() !== userId) throw new RecordsError("连接已失效", 401);
-    if (db.prepare("SELECT 1 FROM app_asset_operations WHERE user_id=? AND request_id=?").get(userId, requestId)) throw new RecordsError("requestId 已使用，请查询原回执", 409, 40901);
+    assertUnusedTradeRequest(userId, requestId);
     let data: unknown = null, error: RecordsError | null = null;
     try { data = db.transaction(run)(); }
     catch (e) { if (!(e instanceof RecordsError)) throw e; error = e; }
@@ -273,6 +279,7 @@ export function cashSnapshot(userId: string, options: { limit?: number; offset?:
 export function reconcileCash(userId: string, body: unknown, authorize: () => string) {
   const b = object(body, ["requestId", "accountId", "snapshotRevision", "currency", "balance", "note"]);
   if (b.accountId !== userId || typeof b.snapshotRevision !== "string" || !/^[a-f0-9]{64}$/.test(b.snapshotRevision) || typeof b.currency !== "string" || !isFundCurrency(b.currency) || typeof b.balance !== "number" || !Number.isFinite(b.balance) || Math.abs(b.balance) > 1e12 || b.note !== undefined && (typeof b.note !== "string" || b.note.length > 200)) throw new RecordsError("现金核对参数无效");
+  if (Number(b.balance.toFixed(8)) !== b.balance) throw new RecordsError("现金核对不能超过八位小数");
   const currency = b.currency;
   return mutation(userId, b, "reconcile_cash", authorize, () => {
     const state = tradingSnapshot(userId), before = state.cash.nativeBalancesByCurrency?.[currency];

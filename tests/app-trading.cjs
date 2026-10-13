@@ -168,6 +168,40 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
  await test('malformed observation versions never consume quote-provider work',async()=>{
   const f=fixture(),o=await pending(f);for(const bad of [{orderRevision:0},{recordRevision:-1},{requestId:'bad'},{unexpected:true}])assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',{...observe(f,o),...bad})).status,400);assert.equal(quoteReads,0);assert.equal(state(f).orders.find(x=>x.id===o.id).status,'pending');
  });
+ await test('attachment fees, prices, percentages and net settlements obey the same precision limit',async()=>{
+  const f=fixture(),before=economic(f);
+  for(const balance of [1.000000001,-1.000000001]) assert.equal((await call(2,f,'cash','POST',{requestId:crypto.randomUUID(),accountId:f.user.id,snapshotRevision:state(f).snapshotRevision,currency:'USD',balance})).status,400);
+  const leg={percent:10,orderType:'limit',limitPrice:12,fees:0};
+  for(const field of ['percent','limitPrice','fees']) {
+   const attachments={takeProfit:{...leg,[field]:0.000000001},session:'REGULAR',tif:'gtc'};
+   assert.equal((await call(2,f,'trading/preview','POST',input(f,{attachments}))).status,400,field);
+  }
+  assert.equal((await call(1,f,'trading/preview','POST',input(f,{attachments:{takeProfit:{...leg,fees:0.00000001},session:'REGULAR',tif:'gtc'}}))).status,200);
+  db.prepare("UPDATE records SET market='HK',code='00700',account_market='CN' WHERE id=?").run(f.r.id);
+  assert.equal((await call(2,f,'trading/preview','POST',input(f,{settlementAmount:1.000000001}))).status,400);
+  assert.deepEqual(economic(f).trade_orders,before.trade_orders);assert.deepEqual(economic(f).fund_transactions,before.fund_transactions);
+ });
+ await test('duplicate observation receipts are rejected before provider work and remain owner scoped',async()=>{
+  const f=fixture(),o=await pending(f),b=observe(f,o);
+  quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};
+  assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',b)).status,200);
+  const before=economic(f),receipt=(await call(2,f,'operations/'+b.requestId)).data;
+  quoteReads=0;
+  assert.equal((await call(1,f,'trading/orders/'+o.id+'/observations','POST',b)).code,40901);
+  assert.equal(quoteReads,0);assert.deepEqual(economic(f),before);
+  assert.deepEqual((await call(1,f,'operations/'+b.requestId)).data,receipt);
+  const other=fixture(),otherOrder=await pending(other);
+  quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};
+  assert.equal((await call(2,other,'trading/orders/'+otherOrder.id+'/observations','POST',{...observe(other,otherOrder),requestId:b.requestId})).status,200);
+  assert.equal(quoteReads,1);
+ });
+ await test('concurrent observation completion during provider wait cannot execute twice',async()=>{
+  const f=fixture(),o=await pending(f),b=observe(f,o);
+  quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};
+  afterQuote=()=>{assert.equal(trading.observeTrade(f.user.id,o.id,b,quote,()=>f.user.id).error,null);};
+  assert.equal((await call(2,f,'trading/orders/'+o.id+'/observations','POST',b)).code,40901);
+  assert.equal(store.readRecord(f.user.id,f.r.id).qty,12);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,981);
+ });
  await test('legacy history replay cannot rewrite later API receipts and Web hides incompatible actions',async()=>{
   const f=fixture(),old=orders.executeOrder({userId:f.user.id,recordId:f.r.id,side:'buy',qty:1,price:10,fees:0,tradedAt:new Date(Date.now()-2000).toISOString()}).order;
   const React=load('node_modules/react'),render=load('node_modules/react-dom/server').renderToStaticMarkup,Panel=load('components/TradeOrdersPanel.tsx').default;
