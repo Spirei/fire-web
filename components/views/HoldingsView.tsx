@@ -1023,14 +1023,14 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   return (
     <div className="min-w-0 max-w-full">
       {/* 一级标题 */}
-      <div className="mb-4 flex items-center gap-2.5">
+      <div data-workspace-reveal className="mb-4 flex items-center gap-2.5">
         <h2 className="text-lg font-bold">我的持仓</h2>
         <QuoteSourceBadge records={records} quotes={quotes} />
         <RefreshButton onClick={() => void refreshAccount()} title="刷新账户资产" />
       </div>
 
       {/* 添加股票 */}
-      <div className="card mb-5 p-5">
+      <div data-workspace-reveal className="card mb-5 p-5">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-bold">添加股票</span>
           {added && <span className="text-xs font-semibold text-brand-deep">{added} ✓</span>}
@@ -1046,7 +1046,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       </div>
 
       {/* 市场按钮（可拖动排序，第一个为默认显示，加号编辑/新增市场） */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div data-workspace-reveal className="mb-5 flex flex-wrap items-center gap-2">
         {/* 总资产：全市场汇总，位于最左侧 */}
         <button aria-pressed={active === "TOTAL"}
           type="button"
@@ -1123,7 +1123,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       )}
 
       {/* 五张指标卡 */}
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div data-workspace-reveal className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">净资产（{totalCurLabel}）</span>
           <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? compactMoney(displayedNetAsset, totalCurLabel) : "…"}</strong>

@@ -16,7 +16,7 @@ export default function AppSelect({ value, options, onChange, className = "", me
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ left: 0, top: 0, width: 0 });
+  const [position, setPosition] = useState({ left: 0, top: 0, width: 0, above: false });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   const selected = options.find((option) => option.value === String(value));
@@ -27,7 +27,8 @@ export default function AppSelect({ value, options, onChange, className = "", me
     const width = Math.max(rect.width, 148);
     const roomBelow = window.innerHeight - rect.bottom;
     const estimatedHeight = Math.min(options.length * 40 + 12, 300);
-    setPosition({ left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), top: roomBelow >= estimatedHeight + 8 ? rect.bottom + 6 : Math.max(8, rect.top - estimatedHeight - 6), width });
+    const above = roomBelow < estimatedHeight + 8;
+    setPosition({ left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), top: above ? Math.max(8, rect.top - estimatedHeight - 6) : rect.bottom + 6, width, above });
   }
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function AppSelect({ value, options, onChange, className = "", me
     </button>
     {open && createPortal(<>
       <button type="button" aria-label="关闭选择菜单" className="fixed inset-0 z-[11990] cursor-default" onClick={() => setOpen(false)} />
-      <div id={menuId} role="listbox" aria-label={ariaLabel} style={{ left: position.left, top: position.top, minWidth: position.width }} className={`fixed z-[12000] max-h-[300px] overflow-auto rounded-xl border border-edge bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,.18)] dark:bg-[#252525] dark:shadow-[0_20px_60px_rgba(0,0,0,.48)] ${menuClassName}`}>
+      <div id={menuId} role="listbox" aria-label={ariaLabel} data-side={position.above ? "top" : "bottom"} style={{ left: position.left, top: position.top, minWidth: position.width }} className={`app-select-menu fixed z-[12000] max-h-[300px] overflow-auto rounded-xl border border-edge bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,.18)] dark:bg-[#252525] dark:shadow-[0_20px_60px_rgba(0,0,0,.48)] ${menuClassName}`}>
         {options.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === String(value)} disabled={option.disabled} onClick={() => { onChange(option.value); setOpen(false); }} className={`flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors disabled:opacity-40 ${option.value === String(value) ? "bg-bg-gray font-semibold text-ink dark:bg-white/10" : "text-ink-2 hover:bg-bg-gray dark:hover:bg-white/[.07]"}`}>
           <span className="min-w-0 flex-1 truncate">{option.label}</span>{option.value === String(value) && <IconCheck className="h-4 w-4 flex-none" />}
         </button>)}

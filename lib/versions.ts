@@ -4872,7 +4872,7 @@ const V0_1_55_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_56_ENTRY: VersionEntry = {
   ...V0_1_55_ENTRY,
   version: "v0.1.56",
   date: "2026-10-13",
@@ -4892,10 +4892,22 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_56_ENTRY,
+  version: "v0.1.57",
+  date: "2026-10-14",
+  summary: "保留原有配色与布局，融入清爽风页面、图表和弹层动效。",
+  software: V0_1_56_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.57" } : item),
+  changes: [
+    { kind: "feature", title: "清爽风交互动效", desc: "参考视频的短距离、分层入场节奏：主动切页时持仓和资产分析的可见模块按屏幕位置依次显露，其他业务页轻淡入，首屏直接显示。保留原有布局、主题色、侧栏和玻璃材质；设置与助手保持独立交互。菜单从触发方向展开，通用弹窗轻缩放入场、短距离收起；趋势线首次绘制，后续数据更新复用图表。快速切页取消旧动效，系统减少动态效果时直接展示。" }
+  ]
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_56_ENTRY,
   V0_1_55_ENTRY,
   V0_1_54_ENTRY,
   V0_1_51_ENTRY,

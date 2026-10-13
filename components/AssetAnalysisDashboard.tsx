@@ -1098,7 +1098,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   };
 
   return <div className="asset-analysis-page space-y-4">
-    <div className="asset-analysis-heading">
+    <div data-workspace-reveal className="asset-analysis-heading">
       <h2 className="text-lg font-extrabold">资产分析</h2>
       <nav className="asset-analysis-shortcuts" aria-label="资产分析区块">
         <a href="#asset-trend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 17 10 11l4 3 6-8M15 6h5v5"/></svg>趋势</a>
@@ -1110,7 +1110,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     <div ref={splitRef} className="asset-analysis-split" style={splitReady ? splitPaneStyle(leftPanePct) : undefined}>
       <aside className="flex min-w-0 flex-col gap-4">
         <div {...moduleDragProps("left", "account")} className={moduleWrapperClass("left", "account")} style={{ order: moduleOrderIndex("left", "account") }}>
-          <section className="asset-account-card card p-5">
+          <section data-workspace-reveal className="asset-account-card card p-5">
             <div className="mb-5 flex items-center justify-between"><div className="flex min-w-0 items-center gap-2"><h3 className="text-base font-bold">账户资产</h3><QuoteSourceBadge records={positions} quotes={quotes} /></div><div className="flex items-center gap-1.5"><button type="button" disabled={shareOpening} onClick={async () => { if (shareOpening) return; setShareOpening(true); try { preloadDailyPnlTemplates(summary.day >= 0); await waitForDailyPnlTemplates(); setDailyShareOpen(true); } finally { setShareOpening(false); } }} title={shareOpening ? "正在准备分享图…" : "分享当日盈亏"} aria-label="分享当日盈亏" className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border border-edge bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] disabled:opacity-50 dark:border-white/10 dark:bg-[#1c222d] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg></button><RefreshButton onClick={() => void handleRefresh("assets")} title="刷新账户资产" /></div></div>
             <div className="asset-account-highlight">
               <div className="asset-account-primary">
@@ -1147,7 +1147,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
         </div>
 
         <div id="asset-trend" {...moduleDragProps("left", "trend")} className={moduleWrapperClass("left", "trend")} style={{ order: moduleOrderIndex("left", "trend") }}>
-          <section className="card relative overflow-visible">
+          <section data-workspace-reveal className="card relative overflow-visible">
             <div className="flex items-end gap-6 border-b border-edge px-4 pt-3">{([['return', '收益率趋势图'], ['asset', '总资产趋势图']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setChartTab(key)} className={`relative shrink-0 whitespace-nowrap px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>{label}{chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}</button>)}</div>
             <div className="relative flex items-center gap-2 px-4 py-3"><div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{PERIODS.map(([key, label]) => <button aria-pressed={period === key} key={key} type="button" onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>{label}</button>)}</div><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`} title="选择日期区间" aria-label="选择日期区间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" /></svg></button>{datePickerOpen && <DateRangePicker range={customRange} onClose={() => setDatePickerOpen(false)} onApply={(range) => { setCustomRange(range); setPeriod("custom"); setDatePickerOpen(false); setPnlExpanded(false); }} />}</div>
             {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">{formatRangeDate(customRange.start)} – {formatRangeDate(customRange.end)}</div>}
@@ -1221,7 +1221,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
 
       <main className="flex min-w-0 flex-col gap-4">
         <div {...moduleDragProps("right", "overview")} className={moduleWrapperClass("right", "overview")} style={{ order: moduleOrderIndex("right", "overview") }}>
-          <section className="mobile-hide-duplicate-summary card p-5">
+          <section data-workspace-reveal className="mobile-hide-duplicate-summary card p-5">
             <div className="mb-2"><h3 className="text-base font-bold">账户总览</h3></div>
             <MarketPills value={assetMarket} onChange={setAssetMarket} />
             <div className="mt-5 grid max-w-[1120px] grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">{accountOverviewItems.map(([label, value]) => <div key={label} className="min-w-0" title={label === "可用现金" ? "现金余额已含借记卡 / 预付卡余额（信用卡额度不计）" : label === "银行卡现金" ? "「我的卡」里借记卡 / 预付卡余额折算成显示货币；信用卡额度属于可透支额度，不计入现金" : undefined}><div className="flex h-7 items-center gap-1"><span className="block truncate text-[11px] text-muted">{label === "净资产" ? `净资产(${accountCurrency})` : label}</span>{label === "可用现金" && <CashBalanceEditor preferredCurrency={marketCurrency || displayCurrency} frozenByCurrency={frozenByCurrency} onSaved={handleFundBalances} />}</div><strong className={`mt-1 block min-w-0 text-sm tabular-nums ${label === "当日盈亏" || label === "浮动盈亏" ? Number(value) >= 0 ? "text-up" : "text-down" : ""}`}><AccountOverviewValue value={Number(value)} hidden={!assetsVisible} pending={label === "银行卡现金" ? !fundBalancesReady : (label === "净资产" || label === "可用现金") && !effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></strong></div>)}</div>

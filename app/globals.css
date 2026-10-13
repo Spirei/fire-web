@@ -742,7 +742,7 @@
   animation: tab-in 0.28s ease both;
 }
 
-/* 工作区切换在手机、平板、桌面都直接显示。设置内部页签仍使用上面的淡入。 */
+/* 首屏直接显示；主动切页由 workspaceMotion 按可见模块做一次轻量入场。 */
 .records-content > .tab-panel {
   animation: none;
 }
@@ -1265,6 +1265,33 @@
 }
 .modal-overlay-closing {
   animation: fade-out 0.16s ease-in both;
+}
+/* 清爽风参考：遮罩先建立层次，面板只移动 6px，不做弹跳或大幅缩放。 */
+.app-modal-panel.modal-panel:not(.pk-reference-modal) {
+  animation: app-modal-enter 240ms cubic-bezier(.22,1,.36,1) both;
+}
+.app-modal-panel.modal-panel-closing:not(.pk-reference-modal) {
+  animation: app-modal-exit 160ms cubic-bezier(.4,0,1,1) both;
+}
+@keyframes app-modal-enter {
+  from { opacity:0; transform:translateY(6px) scale(.975); }
+  to { opacity:1; transform:none; }
+}
+@keyframes app-modal-exit {
+  from { opacity:1; transform:none; }
+  to { opacity:0; transform:translateY(4px) scale(.985); }
+}
+.app-select-menu { transform-origin:top left; animation:app-menu-enter 160ms cubic-bezier(.22,1,.36,1) both; }
+.app-select-menu[data-side="top"] { transform-origin:bottom left; }
+@keyframes app-menu-enter {
+  from { opacity:0; transform:scale(.98); }
+  to { opacity:1; transform:none; }
+}
+.mini-trend-line { stroke-dasharray:1; stroke-dashoffset:0; animation:mini-trend-draw 480ms cubic-bezier(.22,1,.36,1) backwards; }
+@keyframes mini-trend-draw { from { stroke-dashoffset:1; } to { stroke-dashoffset:0; } }
+@media (prefers-reduced-motion:reduce) {
+  .app-modal-panel.modal-panel,.app-modal-panel.modal-panel-closing,
+  .modal-overlay,.modal-overlay-closing,.app-select-menu,.mini-trend-line { animation:none!important; }
 }
 .modal-glass {
   background-color: rgba(255, 255, 255, 0.97);

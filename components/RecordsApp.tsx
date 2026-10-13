@@ -43,6 +43,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
 import { workspaceForPath, workspaceDestination, type WorkspaceVisit } from "@/lib/workspaceRouting";
 import { observeWorkspaceReady } from "@/lib/workspaceTiming";
+import { animateWorkspaceEntrance } from "@/lib/workspaceMotion";
 import { ownWorkspaceScroll, restoreWorkspaceScroll } from "@/lib/workspaceScroll";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
 import { createRecordsRefresh, RECORDS_WORKSPACES } from "@/lib/recordsRefresh";
@@ -283,12 +284,14 @@ export default function RecordsApp({
     if(!timing||timing.key!==activeTab||!panel)return;
     delete panel.dataset.workspaceOpenMs;
     panel.dataset.workspaceOpenResult="loading";
-    return observeWorkspaceReady(panel,timing.start,(ms,failed)=>{
+    const stopEntrance = ["settings", "assistant"].includes(activeTab) ? () => {} : animateWorkspaceEntrance(panel);
+    const stopTiming = observeWorkspaceReady(panel,timing.start,(ms,failed)=>{
       if(navigationTimingRef.current!==timing)return;
       panel.dataset.workspaceOpenMs=String(ms);
       panel.dataset.workspaceOpenResult=failed?"error":"ready";
       navigationTimingRef.current=null;
     });
+    return () => { stopEntrance(); stopTiming(); };
   },[activeTab,searchParams,panelEpoch]);
   useLayoutEffect(() => {
     workspaceUrlRef.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;

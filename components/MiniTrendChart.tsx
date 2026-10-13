@@ -41,7 +41,7 @@ export default function MiniTrendChart({ points = [], baseline, stale = false, w
   return (
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className={className} role="img" aria-label={label}>
       <line x1="1" x2={width - 1} y1={svg.baselineY.toFixed(1)} y2={svg.baselineY.toFixed(1)} stroke="#9ca3af" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.72" />
-      <path d={svg.path} fill="none" stroke={svg.color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <path className="mini-trend-line" pathLength="1" d={svg.path} fill="none" stroke={svg.color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

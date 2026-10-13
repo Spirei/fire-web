@@ -71,7 +71,7 @@ export default function AppModal({
     closeTimer.current = setTimeout(() => {
       if (closeDisabledRef.current) { setClosing(false); return; }
       onClose();
-    }, 140);
+    }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160);
   }
 
   function startDrag(event: React.PointerEvent<HTMLDivElement>) {
