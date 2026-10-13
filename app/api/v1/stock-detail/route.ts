@@ -37,7 +37,14 @@ export async function GET(request: Request) {
   // 组合曲线只读取历史，避免实时快照、汇率及 ETF 份额查询阻塞日线。
   // 无此参数时保留完整详情契约；旧容器忽略 view 时 App 仍可读取 kline。
   if (historyOnly) {
-    try { return ok({ market, code, kline: await fetchDailyKline(market, code, 320) }); }
+    // Existing callers keep their 320-bar contract; long-period clients opt in.
+    // Reject malformed bounds rather than accepting numeric prefixes or Infinity.
+    const rawLimit = searchParams.get("limit");
+    if (rawLimit !== null && (!/^[0-9]{1,5}$/.test(rawLimit) || Number(rawLimit) < 60 || Number(rawLimit) > 12000)) {
+      return fail(40001, "历史条数须为60至12000的整数", 400);
+    }
+    const historyLimit = rawLimit === null ? 320 : Number(rawLimit);
+    try { return ok({ market, code, historyLimit, kline: await fetchDailyKline(market, code, historyLimit) }); }
     catch { return fail(50002, "K 线获取失败，请稍后重试", 502); }
   }
 
