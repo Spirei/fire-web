@@ -1,7 +1,7 @@
 export function tradingDiscovery(version: 1 | 2) {
   const base = `/api/v${version}/account-assets`;
   return { version: 1, supported: true, snapshot_path: `${base}/trading`, preview_path: `${base}/trading/preview`,
-    submit_path: `${base}/trading/submissions`, amend_path: `${base}/trading/orders/{orderId}`,
+    submit_path: `${base}/trading/submissions`, amend_path: `${base}/trading/orders/{orderId}`, amend_preview_path: `${base}/trading/orders/{orderId}/preview`,
     observe_path: `${base}/trading/orders/{orderId}/observations`, operation_path: `${base}/operations/{requestId}`,
     summary_path: `${base}/summary`, positions_path: `${base}/positions`, cash_path: `${base}/cash`,
     read_scope: "orders.read", write_scope: "orders.write", cancel_scope: "orders.cancel", cash_read_scope: "cash.read", cash_write_scope: "portfolio.write",

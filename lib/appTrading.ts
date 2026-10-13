@@ -124,7 +124,25 @@ function preview(userId: string, d: Draft, excluded?: string) {
     cashBefore: cash!, cashAfter: cash! + (d.side === "buy" ? -total : total), qtyBefore: qty, qtyAfter: position.qty, costBefore: cost, costAfter: position.cost,
     reservedCash: reserved.cash, reservedQty: reserved.qty, attachments: d.attachments ?? null, immediateAccounting: d.mode === "record", canSubmit: true };
 }
-export function previewTrade(userId: string, body: unknown) { return preview(userId, draft(body, userId)); }
+export function previewTrade(userId: string, body: unknown) {
+  const d = draft(body, userId);
+  if ("orderRevision" in (body as Values)) throw new RecordsError("新建预览不接受订单版本，请使用改单预览");
+  return preview(userId, d);
+}
+function amendTarget(userId: string, id: string, d: Draft, b: Values) {
+  if (!Number.isSafeInteger(b.orderRevision) || Number(b.orderRevision) < 1 || d.mode !== "order") throw new RecordsError("改单版本或模式无效");
+  const row = assetOrderRows(userId).find(row => row.id === id), meta = metas(userId).find(m => m.order_id === id);
+  if (!row || !meta) throw new RecordsError("本人 API 委托不存在", 404);
+  const record = readRecord(userId, d.recordId);
+  if (!record || row.status !== "pending" || row.revision !== b.orderRevision || row.record_id !== d.recordId || meta.parent_id ||
+    row.market !== record.market || row.code !== record.code || identity(record) !== meta.identity_json) throw conflict("只能修改身份一致的最新未成交主单");
+  return row;
+}
+export function previewAmendTrade(userId: string, id: string, body: unknown) {
+  const d = draft(body, userId);
+  const row = amendTarget(userId, id, d, body as Values);
+  return { ...preview(userId, d, id), orderId: row.id, orderRevision: row.revision };
+}
 function saveMeta(userId: string, id: string, d: Draft, parent: string | null = null, role = "parent", above: boolean | null = null) {
   const r = readRecord(userId, d.recordId)!;
   getDb().prepare("INSERT INTO app_trade_metadata VALUES(?,?,?,?,?,?)").run(id, parent, role, above === null ? null : Number(above), JSON.stringify({ ...d, confirmedAt: new Date().toISOString() }), identity(r));
@@ -179,9 +197,7 @@ export function amendTrade(userId: string, id: string, body: unknown, authorize:
   const d = draft(body, userId), b = body as Values;
   if (!Number.isSafeInteger(b.orderRevision) || Number(b.orderRevision) < 1 || d.mode !== "order") throw new RecordsError("改单版本或模式无效");
   return mutation(userId, body, "amend_trade", authorize, () => {
-    const row = assetOrderRows(userId).find(row => row.id === id), meta = metas(userId).find(m => m.order_id === id);
-    if (!row || !meta) throw new RecordsError("本人 API 委托不存在", 404);
-    if (row.status !== "pending" || row.revision !== b.orderRevision || row.record_id !== d.recordId || meta.parent_id) throw conflict("只能修改最新的未成交主单");
+    amendTarget(userId, id, d, b);
     const p = preview(userId, d, id), db = getDb();
     db.prepare("UPDATE trade_orders SET side=?,qty=?,price=?,fees=?,amount=?,order_type=?,tif=?,session=?,note=?,trigger_status='等待明确行情观察' WHERE id=? AND user_id=?").run(d.side, d.qty, d.price, d.fees, d.qty * d.price, d.orderType, d.tif, d.session, d.note, id, userId);
     db.prepare("UPDATE app_trade_metadata SET draft_json=?,identity_json=? WHERE order_id=?").run(JSON.stringify({ ...d, confirmedAt: new Date().toISOString() }), identity(readRecord(userId, d.recordId)!), id);

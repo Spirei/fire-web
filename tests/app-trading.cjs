@@ -23,7 +23,7 @@ function input(f,over={}){const s=state(f),r=store.readRecord(f.user.id,f.r.id);
 async function call(v,f,tail='trading',method='GET',body,headers={}){
  let file=tail.split('?')[0],params={};
  if(file.startsWith('operations/')){params.requestId=file.split('/')[1];file='operations/[requestId]';}
- if(file.startsWith('trading/orders/')){params.orderId=file.split('/')[2];file='trading/orders/[orderId]'+(file.endsWith('/observations')?'/observations':'');}
+ if(file.startsWith('trading/orders/')){params.orderId=file.split('/')[2];file='trading/orders/[orderId]'+(file.endsWith('/observations')?'/observations':file.endsWith('/preview')?'/preview':'');}
  const request=new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/account-assets/`+tail,{method,headers:{authorization:'Bearer '+f.grant.access_token,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
  const r=await load(`app/api/v${v}/account-assets/${file}/route.ts`)[method](request,{params:Promise.resolve(params)});return{status:r.status,...await r.json()};
 }
@@ -33,7 +33,7 @@ async function pending(f,over={}){const reply=await call(2,f,'trading/submission
 async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;db.prepare('DELETE FROM rate_limit').run();await run();count++;console.log('PASS '+name);}
 (async()=>{
  await test('discovery provides fixed paths without expanding existing grants or broker claims',async()=>{
-  for(const v of [1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const d=(await r.json()).data;assert.equal(d.scope,'portfolio.read portfolio.write');assert.equal(d.account_trading.submit_path,`/api/v${v}/account-assets/trading/submissions`);assert.equal(d.account_trading.external_broker_execution,false);assert.equal(d.account_trading.background_execution,false);assert.equal(d.account_assets.cancel_scope,'orders.cancel');}
+  for(const v of [1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const d=(await r.json()).data;assert.equal(d.scope,'portfolio.read portfolio.write');assert.equal(d.account_trading.submit_path,`/api/v${v}/account-assets/trading/submissions`);assert.equal(d.account_trading.amend_preview_path,`/api/v${v}/account-assets/trading/orders/{orderId}/preview`);assert.equal(d.account_trading.external_broker_execution,false);assert.equal(d.account_trading.background_execution,false);assert.equal(d.account_assets.cancel_scope,'orders.cancel');}
   const f=fixture('portfolio.read portfolio.write');assert.equal((await call(2,f)).status,403);assert.equal((await call(1,f,'trading/preview','POST',input(f))).status,403);
   assert.equal(app.refreshAppTokens('fire-ios',f.grant.refresh_token).scope,'portfolio.read portfolio.write');
  });
@@ -78,6 +78,42 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
  });
  await test('amend preserves the order number, increments revision and rejects stale or old-route writers',async()=>{
   const f=fixture(),o=await pending(f),b=input(f,{mode:'order',tradedAt:undefined,price:8,orderRevision:o.revision});const r=await call(1,f,'trading/orders/'+o.id,'PUT',b);assert.equal(r.status,200,JSON.stringify(r));const latest=state(f).orders.find(x=>x.id===o.id);assert.equal(latest.orderNo,o.orderNo);assert(latest.revision>o.revision);assert.equal(latest.price,8);assert.equal((await call(2,f,'trading/orders/'+o.id,'PUT',b)).code,40901);assert.throws(()=>orders.cancelOrder({userId:f.user.id,orderId:o.id}),/版本/);assert.throws(()=>orders.deleteOrder({userId:f.user.id,orderId:o.id}),/回执/);assert.throws(()=>orders.updateOrder({userId:f.user.id,orderId:o.id,side:'buy',qty:1,price:3,fees:0}),/版本/);
+ });
+ await test('amend previews exclude the original cash or quantity reservation and preserve other orders',async()=>{
+  const f=fixture(),o=await pending(f,{qty:80,fees:0});await pending(f,{qty:10,fees:0});
+  const b=input(f,{mode:'order',tradedAt:undefined,qty:85,fees:0,orderRevision:o.revision}),before=economic(f),receipts=db.prepare('SELECT count(*) AS n FROM app_asset_operations WHERE user_id=?').get(f.user.id).n;
+  assert.equal((await call(1,f,'trading/preview','POST',b)).status,400);
+  for(const v of [1,2]){const p=await call(v,f,'trading/orders/'+o.id+'/preview','POST',b);assert.equal(p.status,200,JSON.stringify(p));assert.equal(p.data.orderId,o.id);assert.equal(p.data.orderRevision,o.revision);assert.equal(p.data.reservedCash,100);assert.equal(p.data.cashAfter,150);}
+  assert.deepEqual(economic(f),before);assert.equal(db.prepare('SELECT count(*) AS n FROM app_asset_operations WHERE user_id=?').get(f.user.id).n,receipts);
+  const result=await call(2,f,'trading/orders/'+o.id,'PUT',b);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.data.preview.cashAfter,150);
+  const g=fixture(),s=await pending(g,{side:'sell',qty:9,fees:0}),sb=input(g,{mode:'order',tradedAt:undefined,side:'sell',qty:8,fees:0,orderRevision:s.revision});
+  assert.equal((await call(2,g,'trading/orders/'+s.id+'/preview','POST',sb)).data.qtyAfter,2);
+ });
+ await test('amend previews and mutations reject foreign, stale and changed security identities',async()=>{
+  const f=fixture(),other=fixture(),o=await pending(f),b=input(f,{mode:'order',tradedAt:undefined,orderRevision:o.revision}),before=economic(f);
+  assert.equal((await call(2,other,'trading/orders/'+o.id+'/preview','POST',input(other,{mode:'order',tradedAt:undefined,orderRevision:o.revision}))).status,404);
+  assert.equal((await call(1,f,'trading/orders/'+o.id+'/preview','POST',{...b,orderRevision:o.revision+1})).code,40902);
+  assert.equal((await call(2,f,'trading/orders/'+o.id+'/preview','POST',{...b,recordRevision:b.recordRevision+1})).code,40902);
+  assert.equal((await call(2,f,'trading/orders/'+o.id+'/preview','POST',b,{authorization:'',cookie:'fire_session='+f.cookie})).status,401);
+  assert.deepEqual(economic(f),before);
+  const weak=fixture('portfolio.read portfolio.write');assert.equal((await call(2,weak,'trading/orders/'+o.id+'/preview','POST',input(weak,{mode:'order',tradedAt:undefined,orderRevision:1}))).status,403);
+  db.prepare("UPDATE records SET code='CHANGED' WHERE id=?").run(f.r.id);const current=store.readRecord(f.user.id,f.r.id);
+  assets.declareInstrument(f.user.id,current.id,{requestId:crypto.randomUUID(),recordRevision:current.revision,revision:assets.instrumentSnapshot(f.user.id,current.id).instrument.revision,kind:'cash_equity',listingStatus:'listed'},()=>f.user.id);
+  const changed=input(f,{mode:'order',tradedAt:undefined,orderRevision:o.revision}),economicBefore=economic(f);
+  assert.equal((await call(1,f,'trading/orders/'+o.id+'/preview','POST',changed)).code,40902);
+  const result=await call(2,f,'trading/orders/'+o.id,'PUT',changed);assert.equal(result.code,40902);assert.deepEqual(economic(f),economicBefore);
+  assert.equal((await call(1,f,'operations/'+changed.requestId)).data.state,'failed');
+ });
+ await test('pending parent order reads preserve attachment inputs before children exist and after amendment',async()=>{
+  const f=fixture(),a={takeProfit:{percent:10,orderType:'market',fees:1},stopLoss:{percent:5,orderType:'limit',limitPrice:8,fees:2},session:'EXTENDED',tif:'gtc'},o=await pending(f,{attachments:a});
+  assert.equal(o.attachmentInputsAvailable,true);assert.deepEqual(o.attachments,a);assert.equal(state(f).orders.length,1);
+  for(const v of [1,2]){const list=await call(v,f,'orders?scope=all');assert.equal(list.data.items[0].attachmentInputsAvailable,true);assert.deepEqual(list.data.items[0].attachments,a);}
+  const b=input(f,{mode:'order',tradedAt:undefined,price:9,orderRevision:o.revision,attachments:o.attachments});
+  assert.equal((await call(2,f,'trading/orders/'+o.id+'/preview','POST',b)).status,200);
+  const changed=await call(1,f,'trading/orders/'+o.id,'PUT',b);assert.equal(changed.status,200);assert.deepEqual(changed.data.data.items[0].attachments,a);
+  const plain=await pending(f);assert.equal(plain.attachmentInputsAvailable,true);assert.equal(plain.attachments,null);
+  const legacy=orders.placeOrder({userId:f.user.id,recordId:f.r.id,side:'buy',qty:1,price:1,fees:0,mode:'order',orderType:'limit'}).order;
+  assert.equal(state(f).orders.find(x=>x.id===legacy.id).attachmentInputsAvailable,false);
  });
  await test('Stock Connect keeps HKD price/fees and records the actual CNY net amount exactly once',async()=>{
   const f=fixture();db.prepare("UPDATE records SET market='HK',code='00700',account_market='CN' WHERE id=?").run(f.r.id);const rr=store.readRecord(f.user.id,f.r.id);assert.equal(assets.declareInstrument(f.user.id,rr.id,{requestId:crypto.randomUUID(),recordRevision:rr.revision,revision:assets.instrumentSnapshot(f.user.id,rr.id).instrument.revision,kind:'cash_equity',listingStatus:'listed'},()=>f.user.id).error,null);funds.createFundTransaction({userId:f.user.id,currency:'CNY',type:'opening',amount:1000,direction:1});

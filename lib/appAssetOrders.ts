@@ -8,7 +8,7 @@ export const ASSET_ORDER_FILTERS = ["all", "pending", "filled", "cancelled", "re
 type Row = Record<string, unknown> & { id: string; record_id: string; market: string; code: string; revision: number; status: string; traded_at: string };
 const num = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
 export function assetOrderRows(userId: string) {
-  return getDb().prepare("SELECT o.*,v.revision,m.parent_id,m.role,m.trigger_above,json_extract(m.draft_json,'$.mode') AS submission_mode FROM trade_orders o JOIN app_asset_order_versions v ON v.order_id=o.id LEFT JOIN app_trade_metadata m ON m.order_id=o.id WHERE o.user_id=? ORDER BY o.traded_at DESC,o.created_at DESC,o.id DESC").all(userId) as Row[];
+  return getDb().prepare("SELECT o.*,v.revision,m.parent_id,m.role,m.trigger_above,m.draft_json AS submission_draft,json_extract(m.draft_json,'$.mode') AS submission_mode FROM trade_orders o JOIN app_asset_order_versions v ON v.order_id=o.id LEFT JOIN app_trade_metadata m ON m.order_id=o.id WHERE o.user_id=? ORDER BY o.traded_at DESC,o.created_at DESC,o.id DESC").all(userId) as Row[];
 }
 export function selectAssetOrders(rows: Row[], scope: string, status: string, recordId: string | null, now: number) {
   return rows.filter(row => (!recordId || row.record_id === recordId) && (status === "all" || row.status === status) &&
@@ -20,6 +20,17 @@ export function assetOrderItem(userId: string, row: Row, quote?: Quote, cachedRe
   // The existing engine settles each order atomically. No partial fills are recorded.
   const filledQty = qty !== null && knownStatus ? row.status === "filled" ? qty : 0 : null;
   const currentPrice = quote && num(quote.price) !== null && quote.price > 0 ? quote.price : null;
+  let attachments: unknown = null, attachmentInputsAvailable = false;
+  if (row.role === "parent" && typeof row.submission_draft === "string") {
+    try {
+      const draft = JSON.parse(row.submission_draft);
+      if (draft && typeof draft === "object" && !Array.isArray(draft) &&
+        (draft.attachments === undefined || draft.attachments && typeof draft.attachments === "object" && !Array.isArray(draft.attachments))) {
+        attachmentInputsAvailable = true;
+        attachments = draft.attachments ?? null;
+      }
+    } catch { /* Missing confirmation inputs must not be guessed by amendment editors. */ }
+  }
   return {
     id: row.id, orderNo: row.order_no, recordId: row.record_id, market: row.market, code: row.code, name: row.name,
     side: row.side, status: row.status, revision: row.revision, recordRevision: record?.revision ?? null, identityMatches,
@@ -29,6 +40,7 @@ export function assetOrderItem(userId: string, row: Row, quote?: Quote, cachedRe
     realizedPnl: num(row.realized_pnl), positionQtyBefore: num(row.position_qty_before), positionQtyAfter: num(row.position_qty_after),
     positionCostBefore: num(row.position_cost_before), positionCostAfter: num(row.position_cost_after),
     parentOrderId: row.parent_id ?? null, attachmentRole: row.role ?? null,
+    attachments, attachmentInputsAvailable,
     executionModel: row.role ? row.submission_mode === "record" ? "owner_recorded_fill" : "explicit_quote_observation" : "legacy_internal_orders",
     qty, price: num(row.price), fees: num(row.fees), amount: num(row.amount), orderType: row.order_type,
     orderPrice: row.status === "filled" ? null : num(row.price), executedPrice: row.status === "filled" ? num(row.price) : null,

@@ -7,9 +7,9 @@ import { rateLimit } from "./rateLimit";
 import { fetchOverviewQuotes } from "./quotes";
 import { assetOrderRows } from "./appAssetOrders";
 import { isFundCurrency } from "./funds";
-import { tradingSnapshot, previewTrade, submitTrade, amendTrade, observeTrade, validateObservation, cashSnapshot, reconcileCash } from "./appTrading";
+import { tradingSnapshot, previewTrade, previewAmendTrade, submitTrade, amendTrade, observeTrade, validateObservation, cashSnapshot, reconcileCash } from "./appTrading";
 
-type Action = "snapshot" | "preview" | "submit" | "amend" | "observe" | "cash" | "positions" | "summary";
+type Action = "snapshot" | "preview" | "preview-amend" | "submit" | "amend" | "observe" | "cash" | "positions" | "summary";
 export async function tradingResponse(request: Request, action: Action, params?: Promise<{ orderId: string }>) {
   try {
     const scope = action === "cash" ? request.method === "GET" ? "cash.read" : "portfolio.write"
@@ -40,6 +40,7 @@ export async function tradingResponse(request: Request, action: Action, params?:
     if (!rateLimit(`app-trade:${first.user_id}`, 120, 60_000)) throw new RecordsError("请求过于频繁", 429);
     const body = await readJsonBody(request, 65_536); authorize();
     if (action === "preview") return ok(getDb().transaction(() => { authorize(); return previewTrade(first.user_id, body); })());
+    if (action === "preview-amend") return ok(getDb().transaction(() => { authorize(); return previewAmendTrade(first.user_id, args?.orderId ?? "", body); })());
     let outcome;
     if (action === "observe") {
       validateObservation(first.user_id, body);

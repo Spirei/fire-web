@@ -162,6 +162,8 @@ positions.weightPct 分母为**全账户所有 active 持仓的完整显示币�
 
 ### TradeOrder 精确类型
 
+新 API 订单项额外提供 `attachmentInputsAvailable:boolean`、`attachments:object|null`。仅 API 主单有完整原确认配置证明，null 表示明确未设置；旧订单及子单为 false，不能用于还原改单输入。配置结构遵从账户交易合同，比例、逐腿类型／委托价／费用、时段及有效期均须保留，不能从尚未生成的子单推测。新字段缺失时 App 禁用相应改单入口，原只读订单不受影响。
+
 资产接口保留原始未知数量快照为 null，与旧 orders 强制转成0不同。
 
 | 字段 | 类型/含义 |

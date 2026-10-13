@@ -39,6 +39,7 @@ export const APP_V2_ROUTES = [
   {path:"account-assets/trading/preview",methods:["POST"],access:"orders.write"},
   {path:"account-assets/trading/submissions",methods:["POST"],access:"orders.write"},
   {path:"account-assets/trading/orders/[orderId]",methods:["PUT"],access:"orders.write"},
+  {path:"account-assets/trading/orders/[orderId]/preview",methods:["POST"],access:"orders.write"},
   {path:"account-assets/trading/orders/[orderId]/observations",methods:["POST"],access:"orders.write"},
   {path:"account-assets/summary",methods:["GET"],access:"assets.read"},
   {path:"account-assets/positions",methods:["GET"],access:"positions.read"},

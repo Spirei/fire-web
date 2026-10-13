@@ -180,6 +180,8 @@ side 为 buy/sell/dividend；dividend 仅 actual record，不能附加单。mode
 
 preview 不写业务数据，返回金额、费用、原币、净结算额、现金／数量／摊薄成本前后值和其他待执行单占用。费用、数量和价格或账户输入变化后必须重新预览。pending 占用在每次实际成交前再核对，同一 OCO 组只占一次；没有融资、卖空或部分成交。API 金额与 Web 共用既有摊薄成本和现金记账，不套用本机不同的成本策略。
 
+改单确认使用发现的 `amend_preview_path`：POST `trading/orders/{orderId}/preview`，请求与 PUT 相同并提供 orderRevision。服务端只读核对本人最新 pending API 主单及原证券／渠道身份，排除被修改订单本身的占用，继续保留其他委托占用，返回 orderId/orderRevision。修改提交复用同一校验；新建 preview 不接受 orderRevision，不能冒充改单预览。 API 主单项提供 attachmentInputsAvailable 及 attachments（原确认输入，null 表示明确未设置）；子单和旧订单不提供完整配置证明。改单编辑必须先还原全部比例、逐腿类型／委托价／费用、时段及有效期，不能从尚未生成的子单反推或默默清空原配置。
+
 submissions 在同一事务核对 grant、账户、快照、证券版本、现金和数量，再写订单、持仓、资金流水、附加单元数据和回执。record 原子登记真实成交，订单项 executionModel=owner_recorded_fill；order 创建 pending，executionModel=explicit_quote_observation，不在提交时猜测市价成交。清仓保留明确数量 0，允许核对后再次买入；缺失数量仍拒绝，不推断为 0。回执只保留本次变动及必要核对状态，不重复存整份账户历史。PUT 改单提供同一交易输入及最新 orderRevision；仅支持尚未成交的 API 主单，保留 ID／订单号／原创建时间。确认时间单独记录，旧报价不能用于改后委托。已成交历史不经旧订单接口删除或重写；同一证券存在 API 成交后，旧接口也不能通过更正早期订单重放并改写这些回执，Web 隐藏对应入口。
 
 ## 明确行情观察与附加单
