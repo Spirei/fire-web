@@ -113,22 +113,35 @@ async function test(name, run) { await run(); count++; console.log('PASS ' + nam
     assert.deepEqual(detailReads, { quotes: 1, rates: 1, cap: 0 });
     assert.equal((await GET(new Request('https://fire.test/api/v1/stock-detail?market=HK&code=' + 'A'.repeat(41)))).status, 400);
   });
-  await test('extended daily history requests max range while defaults and invalid bounds stay isolated', async () => {
+  await test('extended daily history uses explicit daily bounds while invalid limits stay isolated', async () => {
     const { GET } = require('../app/api/v1/stock-detail/route.ts');
     const ranges = [];
     global.fetch = async url => {
-      ranges.push(new URL(url).searchParams.get('range'));
-      return Response.json({ chart: { result: [{ timestamp: [1609459200, 1767225600], indicators: { quote: [{ open: [10, 20], high: [12, 24], low: [9, 19], close: [11, 22] }] } }] } });
+      const query = new URL(url).searchParams;
+      assert.equal(query.get('interval'), '1d'); assert.equal(query.get('period1'), '0');
+      assert(Number(query.get('period2')) > 1700000000); assert.equal(query.get('range'), null);
+      ranges.push('explicit-daily');
+      return Response.json({ chart: { result: [{ meta: { dataGranularity: '1d' }, timestamp: [1609459200, 1767225600], indicators: { quote: [{ open: [10, 20], high: [12, 24], low: [9, 19], close: [11, 22] }] } }] } });
     };
     const response = await GET(new Request('https://fire.test/api/v1/stock-detail?market=US&code=HISTORYEXT&view=history&limit=12000'));
     const body = await response.json();
     assert.equal(response.status, 200); assert.equal(body.data.historyLimit, 12000);
-    assert.equal(body.data.kline.length, 2); assert.deepEqual(ranges, ['max']);
+    assert.equal(body.data.kline.length, 2); assert.deepEqual(ranges, ['explicit-daily']);
     for (const limit of ['0', '59', '12001', 'Infinity', '12x', '120.5', '-320']) {
       assert.equal((await GET(new Request('https://fire.test/api/v1/stock-detail?market=US&code=HISTORYEXT&view=history&limit=' + limit))).status, 400);
     }
-    assert.deepEqual(ranges, ['max'], 'Invalid requests never reach upstream');
+    assert.deepEqual(ranges, ['explicit-daily'], 'Invalid requests never reach upstream');
     assert.deepEqual(detailReads, { quotes: 1, rates: 1, cap: 0 });
+  });
+  await test('daily history rejects a coarse Yahoo response and tries the next host', async () => {
+    const hosts = [];
+    global.fetch = async url => {
+      hosts.push(new URL(url).hostname);
+      return Response.json({ chart: { result: [{ meta: { dataGranularity: hosts.length === 1 ? '3mo' : '1d' }, timestamp: [1767225600], indicators: { quote: [{ open: [20], high: [24], low: [19], close: [22] }] } }] } });
+    };
+    const rows = await fetchDailyKline('US', 'COARSEFIX', 12000);
+    assert.equal(rows.length, 1); assert.equal(rows[0].c, 22);
+    assert.deepEqual(hosts, ['query2.finance.yahoo.com', 'query1.finance.yahoo.com']);
   });
   await test('monthly route returns retryable upstream errors instead of caching successful empty arrays', async () => {
     const { GET } = require('../app/api/v1/kline/route.ts');

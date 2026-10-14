@@ -95,20 +95,25 @@ function normalizedUsCode(code: string) {
 
 async function fetchYahooDaily(code: string, limit: number, adjust: "qfq" | "none" | "hfq" = "qfq"): Promise<KlineItem[]> {
   const range = limit > 7000 ? "max" : limit > 2600 ? "15y" : limit > 1300 ? "10y" : limit > 800 ? "5y" : limit > 300 ? "2y" : "1y";
+  // Yahoo range=max may silently return 3mo candles even with interval=1d.
+  // Explicit epoch bounds preserve daily granularity across the full history.
+  const historyQuery = limit > 7000
+    ? `period1=0&period2=${Math.floor(Date.now() / 1000)}`
+    : `range=${range}`;
   let result: { timestamp?: number[]; indicators?: Record<string, Array<Record<string, Array<number | null>>>> } | null = null;
   // query2 实测更稳（query1 对美股大 range 常 429 限流），优先 query2，其次 query1。
   for (const host of ["query2.finance.yahoo.com", "query1.finance.yahoo.com"]) {
     try {
       // Yahoo 日 K 属境外源：优先走可选代理（STOCKLOG_PROXY），失败自动回退直连
       const response = await proxyFetch(
-        `https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1d&range=${range}`,
+        `https://${host}/v8/finance/chart/${encodeURIComponent(code)}?interval=1d&${historyQuery}`,
         // Yahoo 对完整 Chrome UA（Chrome/126...）会 429 限流，简单 Mozilla UA 更稳。
         { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, signal: AbortSignal.timeout(16000) }
       );
       if (!response.ok) throw new Error(`yahoo ${response.status}`);
       const json = await response.json().catch(() => null);
       const r = json?.chart?.result?.[0];
-      if (r) { result = r; break; }
+      if (r && (!r.meta?.dataGranularity || r.meta.dataGranularity === "1d")) { result = r; break; }
     } catch {
       /* 当前主机失败，切下一个 */
     }
