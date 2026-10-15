@@ -32,6 +32,18 @@ const observe=(f,o)=>({requestId:crypto.randomUUID(),accountId:f.user.id,snapsho
 async function pending(f,over={}){const reply=await call(2,f,'trading/submissions','POST',input(f,{mode:'order',tradedAt:undefined,...over}));assert.equal(reply.status,200,JSON.stringify(reply));return reply.data.data.items[0];}
 async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;db.prepare('DELETE FROM rate_limit').run();await run();count++;console.log('PASS '+name);}
 (async()=>{
+ await test('undeclared securities trade without modifying classification; declared delisting remains blocked',async()=>{
+  const f=fixture();db.prepare('DELETE FROM app_asset_instruments WHERE user_id=? AND record_id=?').run(f.user.id,f.r.id);
+  const before=assets.instrumentSnapshot(f.user.id,f.r.id).instrument;
+  assert.equal(before.kind,'unknown');
+  const request=input(f);assert.equal(trading.previewTrade(f.user.id,request).amount,20);
+  const receipt=trading.submitTrade(f.user.id,request,()=>f.user.id);assert.equal(receipt.result.state,'completed');
+  assert.equal(assets.instrumentSnapshot(f.user.id,f.r.id).instrument.kind,'unknown');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM app_asset_instruments WHERE user_id=? AND record_id=?').get(f.user.id,f.r.id).n,0);
+  const current=store.readRecord(f.user.id,f.r.id);
+  assets.declareInstrument(f.user.id,current.id,{requestId:crypto.randomUUID(),recordRevision:current.revision,revision:0,kind:'cash_equity',listingStatus:'delisted'},()=>f.user.id);
+  assert.throws(()=>trading.previewTrade(f.user.id,input(f)),/已声明退市/);
+ });
  await test('discovery provides fixed paths without expanding existing grants or broker claims',async()=>{
   for(const v of [1,2]){const r=await load(`app/api/v${v}/auth/config/route.ts`).GET(new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`));const d=(await r.json()).data;assert.equal(d.scope,'portfolio.read portfolio.write');assert.equal(d.account_trading.submit_path,`/api/v${v}/account-assets/trading/submissions`);assert.equal(d.account_trading.amend_preview_path,`/api/v${v}/account-assets/trading/orders/{orderId}/preview`);assert.equal(d.account_trading.external_broker_execution,false);assert.equal(d.account_trading.background_execution,false);assert.equal(d.account_assets.cancel_scope,'orders.cancel');}
   const f=fixture('portfolio.read portfolio.write');assert.equal((await call(2,f)).status,403);assert.equal((await call(1,f,'trading/preview','POST',input(f))).status,403);
@@ -70,7 +82,7 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
  });
  await test('invalid amounts, unknown fields, missing units, oversells and insufficient cash cannot commit',async()=>{
   const f=fixture(),before=economic(f);for(const change of [{qty:-1},{price:null},{fees:undefined},{fees:'0'},{userId:f.user.id},{qty:1000},{side:'sell',qty:11},{tradedAt:new Date(Date.now()+86400000).toISOString()}])assert.notEqual((await call(2,f,'trading/submissions','POST',input(f,change))).status,200);assert.deepEqual(economic(f),before);
-  db.prepare("UPDATE app_asset_instruments SET kind='unknown' WHERE record_id=?").run(f.r.id);assert.equal((await call(1,f,'trading/preview','POST',input(f))).code,40902);
+  db.prepare("UPDATE app_asset_instruments SET kind='unknown' WHERE record_id=?").run(f.r.id);const unclassifiedBefore=economic(f);assert.equal((await call(1,f,'trading/preview','POST',input(f))).code,0);assert.deepEqual(economic(f),unclassifiedBefore);
  });
  await test('cash reconciliation records only a signed delta with CAS, pagination and one-time receipts',async()=>{
   const f=fixture(),s=state(f),b={requestId:crypto.randomUUID(),accountId:f.user.id,snapshotRevision:s.snapshotRevision,currency:'USD',balance:200};const r=await call(2,f,'cash','POST',b);assert.equal(r.status,200);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,200);assert.equal(funds.listFundTransactions(f.user.id)[0].amount,800);assert.equal((await call(1,f,'cash','POST',b)).code,40901);assert.equal((await call(1,f,'cash?limit=1&offset=1')).data.transactions.length,1);assert.equal((await call(2,f,'cash?snapshotRevision='+s.snapshotRevision)).code,40902);for(const q of ['limit=0','limit=201','offset=.1','offset=-1','currency=BAD','owner=x','limit=1&limit=2'])assert.equal((await call(2,f,'cash?'+q)).status,400);

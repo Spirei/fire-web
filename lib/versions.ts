@@ -4892,7 +4892,7 @@ const V0_1_56_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_57_ENTRY: VersionEntry = {
   ...V0_1_56_ENTRY,
   version: "v0.1.57",
   date: "2026-10-14",
@@ -4909,10 +4909,19 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ]
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_57_ENTRY,
+  version: "v0.1.58",
+  date: "2026-10-15",
+  summary: "统一 Web 与 App 的下单证券校验，取消额外声明步骤。",
+  software: V0_1_57_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.58" } : item),
+  changes: [{ kind: "fix", title: "App 下单流程对齐 Web", desc: "股票记录没有证券分类声明时允许按现有交易账本预览与提交，不额外要求确认股票或ETF；不创建、推断或修改分类。当前身份已明确退市仍拒绝，过期声明不套用到新证券。账户授权、版本核验、现金及数量限制、唯一回执和不重放保持，发现接口明确返回无需声明。" }]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_57_ENTRY,
   V0_1_56_ENTRY,
   V0_1_55_ENTRY,
   V0_1_54_ENTRY,

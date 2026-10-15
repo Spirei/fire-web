@@ -113,7 +113,10 @@ function preview(userId: string, d: Draft, excluded?: string) {
     if (dates.some(n => !Number.isFinite(n) || n > Date.parse(d.tradedAt!))) throw conflict("已有成交历史晚于本次记录，请先核对历史顺序");
   }
   const declared = instrumentSnapshot(userId, record.id).instrument;
-  if (!declared.identityMatches || !["cash_equity", "etf"].includes(declared.kind) || declared.listingStatus === "delisted") throw conflict("须先确认当前证券为股票或 ETF 且未声明退市");
+  // Match Web order entry: an undeclared record is not a mandatory setup step.
+  // Never write or infer a declaration; stale declarations do not classify a new identity.
+  if (declared.identityMatches && declared.listingStatus === "delisted") throw conflict("该证券已声明退市，无法下单");
+  if (declared.identityMatches && !["unknown", "cash_equity", "etf"].includes(declared.kind)) throw conflict("当前证券类型不支持股票交易");
   if (!assetTimeZones[record.market] || record.market !== "US" && (d.session !== "REGULAR" || d.attachments?.session === "EXTENDED")) throw new RecordsError("该市场不支持所选时段");
   if (isStockConnect(record) ? d.mode !== "record" || d.attachments || !d.settlementAmount : d.settlementAmount !== undefined) throw new RecordsError("港股通仅登记已成交订单及实际人民币净额，不支持自动委托或附加单");
   const currency = holdingAccountCurrency(record), cash = state.cash.nativeBalancesByCurrency?.[currency];
