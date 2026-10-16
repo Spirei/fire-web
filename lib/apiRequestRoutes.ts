@@ -39,6 +39,8 @@ export const API_REQUEST_ROUTES = [
   "/api/auth/password-reset/verify",
   "/api/auth/profile",
   "/api/auth/register",
+  "/api/auth/register/email/confirm",
+  "/api/auth/register/email/request",
   "/api/auth/setup-status",
   "/api/auth/totp",
   "/api/backup",
