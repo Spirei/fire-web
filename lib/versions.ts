@@ -4917,7 +4917,7 @@ export const V0_1_58_ENTRY: VersionEntry = {
   software: V0_1_57_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.58" } : item),
   changes: [{ kind: "fix", title: "App 下单流程对齐 Web", desc: "股票记录没有证券分类声明时允许按现有交易账本预览与提交，不额外要求确认股票或ETF；不创建、推断或修改分类。当前身份已明确退市仍拒绝，过期声明不套用到新证券。账户授权、版本核验、现金及数量限制、唯一回执和不重放保持，发现接口明确返回无需声明。" }]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_59_ENTRY: VersionEntry = {
   ...V0_1_58_ENTRY,
   version: "v0.1.59",
   date: "2026-10-16",
@@ -4931,10 +4931,18 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "fix", title: "提交与冷却反馈", desc: "登录、注册和二次验证防止并发重复提交，按服务器冷却时间禁用按钮，到期仍须手动重试。" }
   ]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_59_ENTRY,
+  version: "v0.1.60", date: "2026-10-17",
+  summary: "为原生搜索提供按真实成交量排序的市场榜单。",
+  software: V0_1_59_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.60" } : item),
+  changes: [{ kind: "fix", title: "App搜索与Web同源提速", desc: "原生v1/v2搜索先走与Web共用的素材目录及关联ETF身份，命中即返回，不等待外部行情补价。" }, { kind: "feature", title: "美港A股成交量前十", desc: "v2发现协议声明公开成交量榜，按东方财富各市场证券池的成交量排序取前十，返回实际交易日期；缓存合并并发请求，拒绝不完整、重复、乱序及混合日期数据，不以持仓或市值榜冒充。" }]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_59_ENTRY,
   V0_1_58_ENTRY,
   V0_1_57_ENTRY,
   V0_1_56_ENTRY,

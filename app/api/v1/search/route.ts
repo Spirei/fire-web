@@ -1,3 +1,4 @@
+import { localStockMatches } from "@/lib/stockSearchCatalog";
 import { searchStocks } from "@/lib/quotes";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { fail, ok } from "@/lib/api";
@@ -11,7 +12,8 @@ export async function GET(request: Request) {
   if (!q) return ok({ results: [] });
   if (q.length > 50) return fail(40001, "搜索关键词过长", 400);
   try {
-    return ok({ results: await searchStocks(q) });
+    const local = localStockMatches(q);
+    return ok({ results: local.length ? local : await searchStocks(q) });
   } catch {
     return fail(50002, "搜索失败，请稍后重试", 502);
   }
