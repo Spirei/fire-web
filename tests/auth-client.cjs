@@ -6,8 +6,8 @@ const functions=[];
 assert.equal(functions.length,4);
 function fixture(mode='register',shared=new Map()){
  let calls=0,pushes=0;const context={Date,Error,Number,Math,Response,JSON,mode,step:mode,retryDeadlines:shared,submitting:{current:false},totpSubmitting:{current:false},loading:false,
-  username:'client_user',password:'Client-password-123',confirm:'Client-password-123',totpTicket:'',totpCode:'',totpAutoTried:{current:''},useBackupCode:false,
-  setClock(){},setError(v){context.error=v;},setLoading(v){context.loading=v;},setTotpTicket(v){context.totpTicket=v;},setTotpCode(v){context.totpCode=v;},setUseBackupCode(v){context.useBackupCode=v;},setPassword(v){context.password=v;},onClose(){},destination:'/records',router:{push(){pushes++;}},fetch:async()=>{calls++;return context.respond();}};
+  emailRegistration:false,emailRegistrationSupported:false,registrationEmail:null,registrationCode:'',setRegistrationEmail(v){context.registrationEmail=v;},setRegistrationCode(v){context.registrationCode=v;},username:'client_user',password:'Client-password-123',confirm:'Client-password-123',totpTicket:'',totpCode:'',totpAutoTried:{current:''},useBackupCode:false,
+  setClock(){},setError(v){context.error=v;},setLoading(v){context.loading=v;},setTotpTicket(v){context.totpTicket=v;},setTotpCode(v){context.totpCode=v;},setUseBackupCode(v){context.useBackupCode=v;},setPassword(v){context.password=v;},onClose(){},destination:'/records',router:{push(){pushes++;}},fetch:async(url,options)=>{calls++;context.lastRequest={url,body:JSON.parse(options.body)};return context.respond();}};
  vm.createContext(context);vm.runInContext(ts.transpileModule(functions.join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
  return {context,shared,calls:()=>calls,pushes:()=>pushes};
 }
@@ -26,5 +26,15 @@ function fixture(mode='register',shared=new Map()){
  const factorPending=factor.context.completeTotp('000000');await factor.context.completeTotp('000000');assert.equal(factor.calls(),1);factorRelease(new Response('{}',{status:200}));await factorPending;assert.equal(factor.pushes(),1);
  const delay=fixture();assert.equal(delay.context.retryDelay(new Response('',{status:429})),60);assert.equal(delay.context.retryDelay(new Response('',{status:429,headers:{'retry-after':'999999999'}})),86400);
  console.log('PASS actual factor handler rejects concurrent posts and Retry-After is bounded');
- console.log('3 authentication client suites passed');
+ const email=fixture();Object.assign(email.context,{emailRegistration:true,emailRegistrationSupported:true,username:'Native@Example.test',password:'',confirm:'',step:'register-email'});
+ email.context.respond=async()=>new Response(JSON.stringify({challenge:'e'.repeat(43),email:'native@example.test',expires_in:1800,retry_after:60}));
+ await email.context.submit(event);assert.equal(email.context.lastRequest.url,'/api/auth/register/email/request');assert.equal(JSON.stringify(email.context.lastRequest.body),JSON.stringify({email:'Native@Example.test'}));assert.equal(email.pushes(),0);assert(email.context.registrationEmail);assert(email.shared.get('register-email')>Date.now());
+ Object.assign(email.context,{step:'register',registrationCode:'123456',password:'Client-password-123',confirm:'Client-password-123'});
+ email.context.respond=async()=>new Response(JSON.stringify({user:{id:'email-user',email:'native@example.test',emailVerified:true,role:'user'}}),{status:201});
+ await email.context.submit(event);assert.equal(email.context.lastRequest.url,'/api/auth/register/email/confirm');assert.equal(email.pushes(),1);assert.equal(email.context.lastRequest.body.challenge,'e'.repeat(43));
+ console.log('PASS email registration sends no password before verification and only routes after a bound/verified receipt');
+ const mismatch=fixture();Object.assign(mismatch.context,{emailRegistration:true,emailRegistrationSupported:true,username:'native@example.test',registrationEmail:{challenge:'e'.repeat(43),email:'native@example.test',expiresAt:Date.now()+60000},registrationCode:'123456'});
+ mismatch.context.respond=async()=>new Response(JSON.stringify({user:{id:'email-user',email:'',emailVerified:false,role:'user'}}),{status:201});await mismatch.context.submit(event);assert.equal(mismatch.pushes(),0);assert(mismatch.context.error.includes('邮箱绑定'));
+ console.log('PASS unbound email receipt never reports email registration success');
+ console.log('5 authentication client suites passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

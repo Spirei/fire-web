@@ -76,7 +76,7 @@ function web(f,body,method='PUT',source=origin){return new Request(origin+'/api/
   }
   assert.throws(()=>templates.renderMailTemplate(model.DEFAULT_MAIL_TEMPLATES[2],{email:'a@example.com',siteName:'Alcor',minutes:30,url:'javascript:evil()'}));
   const response=await load('app/api/v2/auth/mail-templates/route.ts').GET(new Request(origin+'/api/v2/auth/mail-templates'));
-  const data=(await response.json()).data;assert.equal(response.status,200);assert.equal(data.templates.length,4);assert(!JSON.stringify(data).includes('smtpPassword'));
+  const data=(await response.json()).data;assert.equal(response.status,200);assert.equal(data.templates.length,5);assert(!JSON.stringify(data).includes('smtpPassword'));
  });
  await test('all real senders use the saved renderer and embed banner without remote fetching',async()=>{
   const mailer=load('node_modules/nodemailer').default || load('node_modules/nodemailer'), original=mailer.createTransport, sent=[];
@@ -88,7 +88,8 @@ function web(f,body,method='PUT',source=origin){return new Request(origin+'/api/
    await realMail.sendEmailVerification('verify@example.test','https://safe.example/verify-email?token=fixture',undefined,'fixture-token');
    await realMail.sendAccountEmailChangeCode('change@example.test','234567',mailBudget.reserveMailAttempt('change@example.test','verification'));
    await realMail.sendTestEmail('test@example.test');
-   assert.equal(sent.length,4);for(const message of sent){assert(message.html.includes('cid:alcor-mail-banner'));assert(message.attachments[0].content.length>1000);assert(!message.html.includes('https://fire.'));}
+   await realMail.sendRegistrationCode('register@example.test','456789',mailBudget.reserveMailAttempt('register@example.test','verification'));
+   assert.equal(sent.length,5);for(const message of sent){assert(message.html.includes('cid:alcor-mail-banner'));assert(message.attachments[0].content.length>1000);assert(!message.html.includes('https://fire.'));}
    assert(sent[0].text.includes('30 分钟'));assert(sent[2].text.includes('30 分钟'));
   }finally{mailer.createTransport=original;}
  });

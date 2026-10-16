@@ -99,7 +99,7 @@ export function createUser(username: string, password: string, isTest = false, e
     ).run(id, username, hash, now, normalizedEmail, role, next);
     uid = next;
   }).immediate();
-  return { id, username, nickname: "", uid, email: "", avatar: "", role };
+  return { id, username, nickname: "", uid, email: normalizedEmail, avatar: "", role };
 }
 
 /** 没有任何非测试用户时，需要走首次管理员设置。 */

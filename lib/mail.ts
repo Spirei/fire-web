@@ -97,3 +97,11 @@ export async function sendAccountEmailChangeCode(to: string, code: string, permi
   const rendered=configuredMailTemplate("email_change",{email:to,siteName:config.fromName || "Alcor",minutes:30,code});
   await createMailTransport(config).sendMail({from:{name:config.fromName || "Alcor",address:config.fromEmail},to,...rendered,attachments:[await mailBannerAttachment()]});
 }
+
+export async function sendRegistrationCode(to: string, code: string, permit: MailPermit) {
+  const config = getMailConfig();
+  if (!config.host || !config.fromEmail) throw new Error("邮件服务未配置");
+  consumeMailPermit(to, "verification", permit);
+  const rendered = configuredMailTemplate("registration", {email: to, siteName: config.fromName || "Alcor", minutes: 30, code});
+  await createMailTransport(config).sendMail({from: {name: config.fromName || "Alcor", address: config.fromEmail}, to, ...rendered, attachments: [await mailBannerAttachment()]});
+}

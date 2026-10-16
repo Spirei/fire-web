@@ -4924,6 +4924,8 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   summary: "加固登录注册输入、并发提交与持久防刷限制。",
   software: V0_1_58_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.59" } : item),
   changes: [
+    { kind: "feature", title: "邮箱注册与绑定", desc: "邮箱验证码通过后原子创建账户和保存绑定、已验证状态，注册回执、登录及资料同步；公开用户名独立于私人邮箱。" },
+    { kind: "fix", title: "邮箱验证体验", desc: "修复创建回执丢失邮箱，注册、邮箱验证和密码恢复共享品牌模板，保持独立验证用途和发送预算。" },
     { kind: "security", title: "登录注册防刷", desc: "注册尝试、成功间隔和每日配额按服务端持久预算共同核验，跨进程和重启生效；账户、会话和成功配额原子保存，失败不产生半完成账户。" },
     { kind: "security", title: "输入与代理校验", desc: "拒绝凭证对象、数组、额外权限字段和超长请求，密码保持原值及参数化查询；可信代理从转发链右端取地址，归一映射地址并限制IPv6网段注册。" },
     { kind: "fix", title: "提交与冷却反馈", desc: "登录、注册和二次验证防止并发重复提交，按服务器冷却时间禁用按钮，到期仍须手动重试。" }

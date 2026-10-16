@@ -123,6 +123,16 @@ function migrate(database: Database.Database) {
       email TEXT NOT NULL,
       verified_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS registration_email_challenges (
+      challenge_hash TEXT PRIMARY KEY,
+      email_key TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      origin TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS password_reset_totp (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       challenge_hash TEXT UNIQUE NOT NULL,
@@ -760,6 +770,18 @@ function migrate(database: Database.Database) {
   // users 表增量字段（兼容旧库）
   const userCols = (database.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((c) => c.name);
   if (!userCols.includes("email")) database.exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''");
+  // Preserve legacy rows, but serialize every future email assignment across all
+  // account entry points. A preflight lookup alone races between workers.
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_users_email_normalized ON users(LOWER(TRIM(email)));
+    CREATE TRIGGER IF NOT EXISTS users_unique_email_insert BEFORE INSERT ON users
+    WHEN LOWER(TRIM(NEW.email))<>'' AND EXISTS(SELECT 1 FROM users WHERE LOWER(TRIM(email))=LOWER(TRIM(NEW.email)))
+    BEGIN SELECT RAISE(ABORT,'email already bound'); END;
+    CREATE TRIGGER IF NOT EXISTS users_unique_email_update BEFORE UPDATE OF email ON users
+    WHEN LOWER(TRIM(NEW.email))<>'' AND LOWER(TRIM(NEW.email))<>LOWER(TRIM(OLD.email))
+      AND EXISTS(SELECT 1 FROM users WHERE id<>NEW.id AND LOWER(TRIM(email))=LOWER(TRIM(NEW.email)))
+    BEGIN SELECT RAISE(ABORT,'email already bound'); END;
+  `);
   if (!userCols.includes("avatar")) database.exec("ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''");
   if (!userCols.includes("role")) database.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
   if (!userCols.includes("nickname")) database.exec("ALTER TABLE users ADD COLUMN nickname TEXT DEFAULT ''");

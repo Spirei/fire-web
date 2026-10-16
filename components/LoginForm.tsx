@@ -10,7 +10,7 @@ import PasswordStrength from "@/components/PasswordStrength";
 import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTotpDigits } from "@/lib/totpInput";
 
 type Mode = "login" | "register";
-type AuthStep = Mode | "factor";
+type AuthStep = Mode | "factor" | "register-email";
 // Memory only. Closing and reopening a form does not immediately bypass a server pause.
 const retryDeadlines = new Map<AuthStep, number>();
 function retryDelay(response: Response) {
@@ -31,10 +31,15 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [totpTicket, setTotpTicket] = useState("");
+  const [emailRegistrationSupported, setEmailRegistrationSupported] = useState(false);
+  const [registrationEmail, setRegistrationEmail] = useState<{challenge: string; email: string; expiresAt: number} | null>(null);
+  const [registrationCode, setRegistrationCode] = useState("");
+  const emailRegistration = mode === "register" && username.includes("@");
   const submitting = useRef(false);
   const [clock, setClock] = useState(0);
-  const step: AuthStep = totpTicket ? "factor" : mode;
+  const step: AuthStep = totpTicket ? "factor" : emailRegistration && !registrationEmail ? "register-email" : mode;
   const retrySeconds = Math.max(0, Math.ceil(((retryDeadlines.get(step) || 0) - (clock || Date.now())) / 1000));
+  const emailSendSeconds = Math.max(0, Math.ceil(((retryDeadlines.get("register-email") || 0) - (clock || Date.now())) / 1000));
   function pause(response: Response, action: AuthStep) {
     if (response.status === 429) {
       retryDeadlines.set(action, Math.max(retryDeadlines.get(action) || 0, Date.now() + retryDelay(response) * 1000));
@@ -43,10 +48,10 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   }
   useEffect(() => {
     setClock(Date.now());
-    if ((retryDeadlines.get(step) || 0) <= Date.now()) return;
+    if ((retryDeadlines.get(step) || 0) <= Date.now() && (retryDeadlines.get("register-email") || 0) <= Date.now()) return;
     const timer = setInterval(() => setClock(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [step, retrySeconds > 0]);
+  }, [step, retrySeconds > 0, emailSendSeconds > 0]);
   const [totpCode, setTotpCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
   const totpAutoTried = useRef("");
@@ -69,6 +74,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
       .then((data) => {
         if (data?.settings && typeof data.settings.allowRegister === "boolean") {
           setAllowRegister(data.settings.allowRegister);
+          setEmailRegistrationSupported(data.settings.emailRegistration === true);
         }
       })
       .catch(() => {});
@@ -77,8 +83,9 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   const formValid = useMemo(
     () => totpTicket
       ? (useBackupCode ? isCompleteBackupCode(totpCode) : isSixDigitTotp(totpCode))
-      : username.trim().length > 0 && password.length > 0 && (mode === "login" || confirm.length > 0),
-    [username, password, mode, confirm, totpTicket, totpCode, useBackupCode]
+      : emailRegistration && !registrationEmail ? emailRegistrationSupported && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username.trim())
+      : username.trim().length > 0 && password.length > 0 && (mode === "login" || confirm.length > 0) && (!emailRegistration || /^\d{6}$/.test(registrationCode)),
+    [username, password, mode, confirm, totpTicket, totpCode, useBackupCode, emailRegistration, registrationEmail, emailRegistrationSupported, registrationCode]
   );
 
   async function completeTotp(code: string) {
@@ -128,7 +135,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
     e.preventDefault();
     if (submitting.current || loading || (retryDeadlines.get(step) || 0) > Date.now()) return;
     setError("");
-    if (mode === "register" && password !== confirm) {
+    if (mode === "register" && (!emailRegistration || registrationEmail) && password !== confirm) {
       setError("两次输入的密码不一致");
       return;
     }
@@ -138,14 +145,27 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
     }
     submitting.current = true; setLoading(true);
     try {
-      const res = await fetch(`/api/auth/${mode === "login" ? "login" : "register"}`, {
+      if (emailRegistration && !emailRegistrationSupported) throw new Error("邮箱注册暂不可用");
+      const requestingCode = emailRegistration && !registrationEmail;
+      if (emailRegistration && registrationEmail && registrationEmail.expiresAt <= Date.now()) {
+        setRegistrationEmail(null); setRegistrationCode(""); throw new Error("验证码已失效，请重新获取");
+      }
+      const path = emailRegistration ? `/api/auth/register/email/${requestingCode ? "request" : "confirm"}` : `/api/auth/${mode === "login" ? "login" : "register"}`;
+      const payload = emailRegistration ? requestingCode ? {email: username.trim()} : {email: username.trim(), challenge: registrationEmail!.challenge, code: registrationCode, password} : {username, password};
+      const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify(payload)
       });
-      pause(res, mode);
+      pause(res, requestingCode ? "register-email" : mode);
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "操作失败");
+      if (requestingCode) {
+        if (!/^[A-Za-z0-9_-]{43}$/.test(data?.challenge || "") || data.email !== username.trim().toLowerCase() || data.expires_in !== 1800 || data.retry_after !== 60) throw new Error("验证码发送未确认，请稍后重试");
+        setRegistrationEmail({challenge: data.challenge, email: data.email, expiresAt: Date.now() + data.expires_in * 1000});
+        setRegistrationCode(""); retryDeadlines.set("register-email", Date.now() + 60_000); setClock(Date.now()); return;
+      }
+      if (emailRegistration && (data?.user?.email !== username.trim().toLowerCase() || data?.user?.emailVerified !== true || data?.user?.role !== "user")) throw new Error("邮箱绑定未确认，请尝试登录");
       if (data?.requires2fa && data?.ticket) {
         setTotpTicket(data.ticket);
         setTotpCode("");
@@ -231,15 +251,16 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
         {!totpTicket && !recovering && (
         <>
         <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-          {mode === "login" ? (loginType === "email" ? "邮箱" : "用户名") : "用户名"}
+          {mode === "login" ? (loginType === "email" ? "邮箱" : "用户名") : emailRegistrationSupported ? "用户名或邮箱" : "用户名"}
           <input
             type={mode === "login" && loginType === "email" ? "email" : "text"}
-            maxLength={mode === "register" ? 20 : 254}
+            maxLength={mode === "register" && !emailRegistrationSupported ? 20 : 254}
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            disabled={loading}
+            onChange={(e) => { setUsername(e.target.value); if (registrationEmail && e.target.value.trim().toLowerCase() !== registrationEmail.email) {setRegistrationEmail(null);setRegistrationCode("");} }}
             placeholder={
               mode === "register"
-                ? "3-20 位字母、数字、下划线或中文"
+                ? emailRegistrationSupported ? "请输入用户名或邮箱" : "3-20 位字母、数字、下划线或中文"
                 : loginType === "email"
                   ? "请输入邮箱"
                   : "请输入用户名"
@@ -249,6 +270,12 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
           />
         </label>
 
+        {emailRegistration && registrationEmail && <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
+          邮箱验证码
+          <input value={registrationCode} onChange={e => setRegistrationCode(e.target.value.replace(/\D/g, "").slice(0,6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="六位验证码" className={inputCls} required />
+          <button type="button" disabled={loading || emailSendSeconds > 0} onClick={() => {setRegistrationEmail(null);setRegistrationCode("");}} className="self-end text-[13px] text-muted disabled:opacity-50">{emailSendSeconds > 0 ? `${emailSendSeconds} 秒后重试` : "重新获取验证码"}</button>
+        </label>}
+        {(!emailRegistration || registrationEmail) && <>
         <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
           密码
           <div className="relative">
@@ -301,6 +328,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
             </div>
           </label>
         )}
+        </>}
         </>
         )}
 
@@ -312,7 +340,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
           disabled={loading || !formValid || retrySeconds > 0}
           className="mt-1 h-[46px] rounded-[10px] bg-[#1FBE9E] text-[15px] font-bold text-white transition-all duration-200 hover:bg-[#17A887] active:scale-[.98] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint dark:disabled:bg-[#263040] dark:disabled:text-[#aab4c2]"
         >
-          {retrySeconds > 0 ? (retrySeconds >= 3600 ? `${Math.ceil(retrySeconds / 3600)} 小时后重试` : retrySeconds >= 60 ? `${Math.ceil(retrySeconds / 60)} 分钟后重试` : `${retrySeconds} 秒后重试`) : loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : "注册并登录"}
+          {retrySeconds > 0 ? (retrySeconds >= 3600 ? `${Math.ceil(retrySeconds / 3600)} 小时后重试` : retrySeconds >= 60 ? `${Math.ceil(retrySeconds / 60)} 分钟后重试` : `${retrySeconds} 秒后重试`) : loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : emailRegistration ? registrationEmail ? "验证并注册" : "获取验证码" : "注册并登录"}
         </button>
 
 
@@ -339,12 +367,12 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
             {mode === "login" ? (
               <>
                 没有账号？
-                <button type="button" onClick={() => { setMode("register"); setError(""); }} className="ml-1 font-semibold text-ink underline-offset-4 hover:underline">去注册</button>
+                <button type="button" onClick={() => { setMode("register"); setRegistrationEmail(null); setRegistrationCode(""); setPassword(""); setConfirm(""); setError(""); }} className="ml-1 font-semibold text-ink underline-offset-4 hover:underline">去注册</button>
               </>
             ) : (
               <>
                 已有账号？
-                <button type="button" onClick={() => { setMode("login"); setError(""); }} className="ml-1 font-semibold text-ink underline-offset-4 hover:underline">去登录</button>
+                <button type="button" onClick={() => { setMode("login"); setRegistrationEmail(null); setRegistrationCode(""); setPassword(""); setConfirm(""); setError(""); }} className="ml-1 font-semibold text-ink underline-offset-4 hover:underline">去登录</button>
               </>
             )}
           </p>

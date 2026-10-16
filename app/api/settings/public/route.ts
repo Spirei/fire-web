@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSiteSettings } from "@/lib/settings";
 import { publicSiteDomain } from "@/lib/publicSiteUrl";
+import { emailRegistrationDiscovery } from "@/lib/emailRegistration";
 
 export async function GET() {
   const s = getSiteSettings();
@@ -17,6 +18,7 @@ export async function GET() {
       footerDesc: s.footerDesc,
       homeNav: s.homeNav,
       allowRegister: s.allowRegister,
+      emailRegistration: emailRegistrationDiscovery().supported,
       marketBadges: s.marketBadges,
       marketBadgesVisible: s.marketBadgesVisible
     }
