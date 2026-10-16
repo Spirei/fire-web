@@ -4909,7 +4909,7 @@ const V0_1_57_ENTRY: VersionEntry = {
   ]
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_58_ENTRY: VersionEntry = {
   ...V0_1_57_ENTRY,
   version: "v0.1.58",
   date: "2026-10-15",
@@ -4917,10 +4917,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_57_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.58" } : item),
   changes: [{ kind: "fix", title: "App 下单流程对齐 Web", desc: "股票记录没有证券分类声明时允许按现有交易账本预览与提交，不额外要求确认股票或ETF；不创建、推断或修改分类。当前身份已明确退市仍拒绝，过期声明不套用到新证券。账户授权、版本核验、现金及数量限制、唯一回执和不重放保持，发现接口明确返回无需声明。" }]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_58_ENTRY,
+  version: "v0.1.59",
+  date: "2026-10-16",
+  summary: "加固登录注册输入、并发提交与持久防刷限制。",
+  software: V0_1_58_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.59" } : item),
+  changes: [
+    { kind: "security", title: "登录注册防刷", desc: "注册尝试、成功间隔和每日配额按服务端持久预算共同核验，跨进程和重启生效；账户、会话和成功配额原子保存，失败不产生半完成账户。" },
+    { kind: "security", title: "输入与代理校验", desc: "拒绝凭证对象、数组、额外权限字段和超长请求，密码保持原值及参数化查询；可信代理从转发链右端取地址，归一映射地址并限制IPv6网段注册。" },
+    { kind: "fix", title: "提交与冷却反馈", desc: "登录、注册和二次验证防止并发重复提交，按服务器冷却时间禁用按钮，到期仍须手动重试。" }
+  ]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_58_ENTRY,
   V0_1_57_ENTRY,
   V0_1_56_ENTRY,
   V0_1_55_ENTRY,

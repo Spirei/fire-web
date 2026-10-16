@@ -13,7 +13,7 @@ function loadLimiter(db, source = 'rateLimit') {
   const m = new Module(filename, module);
   m.filename = filename; m.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = m.require.bind(m);
-  m.require = name => name === './db' ? { getDb: () => db } : original(name);
+  m.require = name => name === './db' ? { getDb: () => db } : name === './rateLimit' ? loadLimiter(db) : original(name);
   m._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }
   }).outputText, filename);
@@ -26,7 +26,10 @@ if (!isMainThread) {
   const gate = new Int32Array(workerData.gate);
   parentPort.postMessage('ready'); Atomics.wait(gate, 0, 0);
   let admitted = 0;
-  if (workerData.mail) {
+  if (workerData.auth) {
+    const {reserveAuthBudget}=loadLimiter(db,'authAbuse');
+    for(let i=0;i<40;i++){try{reserveAuthBudget([{key:'auth-concurrent-minute',limit:1,windowMs:60000},{key:'auth-concurrent-day',limit:5,windowMs:86400000}]);admitted++;}catch{}}
+  } else if (workerData.mail) {
     const { reserveMailAttempt } = loadLimiter(db, 'mailBudget');
     for (let i=0; i<40; i++) { try { reserveMailAttempt('concurrent@example.test','reset'); admitted++; } catch {} }
   } else for (let i=0; i<40; i++) if (rateLimit('concurrent', 25, 60000)) admitted++;
@@ -59,7 +62,13 @@ if (!isMainThread) {
       assert.equal(clientIp(req('192.0.2.1')), 'direct');
       process.env.FIRE_TRUST_PROXY_HEADERS = 'true';
       for (const bad of ['deadbeef', '999.1.1.1', '::::', 'fe80::1%en0', '']) assert.equal(clientIp(req(bad)), 'unknown');
+      assert.equal(clientIp(req('198.51.100.99, 192.0.2.1')), '192.0.2.1', 'caller prefix cannot spoof the address appended by one trusted proxy');
+      process.env.FIRE_TRUST_PROXY_HOPS='2';
       assert.equal(clientIp(req('192.0.2.1, 10.0.0.1')), '192.0.2.1');
+      assert.equal(clientIp(req('192.0.2.1')), 'unknown');
+      process.env.FIRE_TRUST_PROXY_HOPS='0'; assert.equal(clientIp(req('192.0.2.1')), 'unknown');
+      process.env.FIRE_TRUST_PROXY_HOPS='1';
+      assert.equal(clientIp(req('::ffff:192.0.2.1')), '192.0.2.1');
       assert.equal(clientIp(req('2001:0DB8:0000:0000:0000:0000:0000:0001')), clientIp(req('2001:db8::1')));
       console.log('PASS proxy trust, malformed IP rejection and IPv6 canonicalization');
       process.env.RATE_LIMIT_STORE = 'memory';
@@ -84,6 +93,24 @@ if (!isMainThread) {
       assert.equal(counts.reduce((a,b) => a+b, 0), 25);
       assert.equal(db.prepare('SELECT count FROM rate_limit WHERE key=?').get('concurrent').count, 25);
       console.log('PASS four concurrent workers admit exactly 25 of 160 attempts');
+      const authGate = new SharedArrayBuffer(4), authReady=[], authResults=[];
+      for(let i=0;i<4;i++){
+        const worker=new Worker(__filename,{workerData:{file,gate:authGate,auth:true}});workers.push(worker);
+        authReady.push(new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject);}));
+        authResults.push(new Promise((resolve,reject)=>{worker.on('message',v=>{if(typeof v==='number')resolve(v);});worker.once('error',reject);}));
+      }
+      await Promise.all(authReady);Atomics.store(new Int32Array(authGate),0,1);Atomics.notify(new Int32Array(authGate),0);
+      assert.equal((await Promise.all(authResults)).reduce((a,b)=>a+b,0),1);
+      assert.equal(db.prepare('SELECT count FROM rate_limit WHERE key=?').get('auth-concurrent-day').count,1);
+      const strict=loadLimiter(db,'authAbuse');
+      assert.throws(()=>strict.reserveAuthBudget([{key:'auth-atomic-unused',limit:1,windowMs:60000},{key:'auth-concurrent-minute',limit:1,windowMs:60000}]),/过于频繁/);
+      assert.equal(db.prepare('SELECT 1 FROM rate_limit WHERE key=?').get('auth-atomic-unused'),undefined);
+      process.env.RATE_LIMIT_STORE='memory';
+      assert.throws(()=>loadLimiter(db,'authAbuse').reserveAuthBudget([{key:'auth-concurrent-minute',limit:1,windowMs:60000}]));
+      const unavailable=loadLimiter({transaction(){throw new Error('disk failure');}},'authAbuse');
+      assert.throws(()=>unavailable.reserveAuthBudget([{key:'auth-storage',limit:1,windowMs:60000}]),e=>e.unavailable&&e.retryAfter===60);
+      process.env.RATE_LIMIT_STORE='sqlite';
+      console.log('PASS concurrent authentication windows admit once, roll back together, survive reload/memory mode and fail closed');
       const mailGate = new SharedArrayBuffer(4), mailReady = [], mailResults = [];
       for (let i=0; i<4; i++) {
         const worker = new Worker(__filename, {workerData:{file,gate:mailGate,mail:true}});
@@ -101,7 +128,7 @@ if (!isMainThread) {
       const broken=loadLimiter({transaction(){throw new Error('disk unavailable');}},'mailBudget');
       assert.throws(()=>broken.reserveMailAttempt('safe@example.test','reset'),/暂不可用/);
       console.log('PASS SMTP remains persistent in memory-limit mode and fails closed on storage failure');
-      console.log('7 rate-limit suites passed');
+      console.log('8 rate-limit suites passed');
     } finally {
       await Promise.all(workers.map(worker => worker.terminate()));
       db.close(); fs.rmSync(temp, { recursive: true, force: true });

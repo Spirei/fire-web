@@ -10,6 +10,7 @@ import { clientIp, loginIdentityKey, rateLimit, rateLimitGlobal } from "./rateLi
 import { API_CODE, fail, ok } from "./api";
 import { logSecurityEvent } from "./securityAudit";
 import { decryptSecret } from "./secretStorage";
+import { authenticationBurst, AuthBudgetError, authBudgetHeaders } from "./authAbuse";
 
 const CHALLENGE_SECONDS = 300, MAX_ATTEMPTS = 8;
 type NativeUser = { id: string; password_hash: string; totp_enabled: number; totp_secret: string };
@@ -23,6 +24,7 @@ function userById(id: string) {
   return getDb().prepare("SELECT id,password_hash,totp_enabled,totp_secret FROM users WHERE id=?").get(id) as NativeUser | undefined;
 }
 function budget(request: Request, factor = false) {
+  authenticationBurst(request, factor);
   const category = factor ? "login-totp" : "login";
   if (!rateLimit(`${category}:${clientIp(request)}`, factor ? 40 : 50, 15 * 60_000) || !rateLimitGlobal(category, factor ? 80 : 100, 15 * 60_000)) throw new LoginError("尝试过于频繁，请稍后再试",42901,429);
 }
@@ -131,5 +133,14 @@ export async function nativeLoginFactor(request: Request) {
 }
 export async function nativeLoginResponse(operation:()=>unknown|Promise<unknown>) {
   try {return ok(await operation());}
-  catch(error) {return fail(error instanceof LoginError?error.code:50001,error instanceof LoginError?error.message:"登录操作失败，请稍后重试",error instanceof LoginError?error.status:500);}
+  catch(error) {
+    if (error instanceof AuthBudgetError) {
+      const response = fail(error.unavailable ? 50301 : 42901, error.message, error.unavailable ? 503 : 429);
+      for (const [key,value] of Object.entries(authBudgetHeaders(error))) response.headers.set(key,value);
+      return response;
+    }
+    const response = fail(error instanceof LoginError?error.code:50001,error instanceof LoginError?error.message:"登录操作失败，请稍后重试",error instanceof LoginError?error.status:500);
+    if (error instanceof LoginError && error.status===429) response.headers.set("Retry-After","900");
+    return response;
+  }
 }

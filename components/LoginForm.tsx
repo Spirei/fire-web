@@ -10,6 +10,14 @@ import PasswordStrength from "@/components/PasswordStrength";
 import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTotpDigits } from "@/lib/totpInput";
 
 type Mode = "login" | "register";
+type AuthStep = Mode | "factor";
+// Memory only. Closing and reopening a form does not immediately bypass a server pause.
+const retryDeadlines = new Map<AuthStep, number>();
+function retryDelay(response: Response) {
+  const raw = response.headers.get("retry-after") || "";
+  const value = /^\d+$/.test(raw) ? Number(raw) : (Date.parse(raw) - Date.now()) / 1000;
+  return Number.isFinite(value) ? Math.min(86400, Math.max(1, value)) : 60;
+}
 
 export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?: () => void; returnTo?: string }) {
   const authorizationLogin = returnTo.startsWith("/app/authorize?");
@@ -23,6 +31,22 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [totpTicket, setTotpTicket] = useState("");
+  const submitting = useRef(false);
+  const [clock, setClock] = useState(0);
+  const step: AuthStep = totpTicket ? "factor" : mode;
+  const retrySeconds = Math.max(0, Math.ceil(((retryDeadlines.get(step) || 0) - (clock || Date.now())) / 1000));
+  function pause(response: Response, action: AuthStep) {
+    if (response.status === 429) {
+      retryDeadlines.set(action, Math.max(retryDeadlines.get(action) || 0, Date.now() + retryDelay(response) * 1000));
+      setClock(Date.now());
+    }
+  }
+  useEffect(() => {
+    setClock(Date.now());
+    if ((retryDeadlines.get(step) || 0) <= Date.now()) return;
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [step, retrySeconds > 0]);
   const [totpCode, setTotpCode] = useState("");
   const [useBackupCode, setUseBackupCode] = useState(false);
   const totpAutoTried = useRef("");
@@ -58,8 +82,8 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   );
 
   async function completeTotp(code: string) {
-    if (!totpTicket || totpSubmitting.current) return;
-    totpSubmitting.current = true;
+    if (!totpTicket || totpSubmitting.current || submitting.current || loading || (retryDeadlines.get("factor") || 0) > Date.now()) return;
+    totpSubmitting.current = true; submitting.current = true;
     setError("");
     setLoading(true);
     try {
@@ -68,6 +92,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticket: totpTicket, code })
       });
+      pause(res, "factor");
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         const message = data?.error || "验证失败";
@@ -83,7 +108,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
     } catch (err) {
       setError(err instanceof Error ? err.message : "验证失败");
     } finally {
-      totpSubmitting.current = false;
+      totpSubmitting.current = false; submitting.current = false;
       setLoading(false);
     }
   }
@@ -101,6 +126,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting.current || loading || (retryDeadlines.get(step) || 0) > Date.now()) return;
     setError("");
     if (mode === "register" && password !== confirm) {
       setError("两次输入的密码不一致");
@@ -110,13 +136,14 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
       void completeTotp(totpCode);
       return;
     }
-    setLoading(true);
+    submitting.current = true; setLoading(true);
     try {
       const res = await fetch(`/api/auth/${mode === "login" ? "login" : "register"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password })
       });
+      pause(res, mode);
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "操作失败");
       if (data?.requires2fa && data?.ticket) {
@@ -133,7 +160,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失败");
     } finally {
-      setLoading(false);
+      submitting.current = false; setLoading(false);
     }
   }
 
@@ -207,6 +234,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
           {mode === "login" ? (loginType === "email" ? "邮箱" : "用户名") : "用户名"}
           <input
             type={mode === "login" && loginType === "email" ? "email" : "text"}
+            maxLength={mode === "register" ? 20 : 254}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder={
@@ -281,10 +309,10 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
         {/* 主按钮：填写完整才可点，未填呈禁用 */}
         <button
           type="submit"
-          disabled={loading || !formValid}
+          disabled={loading || !formValid || retrySeconds > 0}
           className="mt-1 h-[46px] rounded-[10px] bg-[#1FBE9E] text-[15px] font-bold text-white transition-all duration-200 hover:bg-[#17A887] active:scale-[.98] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint dark:disabled:bg-[#263040] dark:disabled:text-[#aab4c2]"
         >
-          {loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : "注册并登录"}
+          {retrySeconds > 0 ? (retrySeconds >= 3600 ? `${Math.ceil(retrySeconds / 3600)} 小时后重试` : retrySeconds >= 60 ? `${Math.ceil(retrySeconds / 60)} 分钟后重试` : `${retrySeconds} 秒后重试`) : loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : "注册并登录"}
         </button>
 
 

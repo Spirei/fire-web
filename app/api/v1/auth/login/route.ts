@@ -1,4 +1,5 @@
-import { readJsonBody } from "@/lib/requestBody";
+import { credentials, readAuthObject } from "@/lib/authInput";
+import { AuthBudgetError, authBudgetHeaders, authenticationBurst } from "@/lib/authAbuse";
 import { authenticateUser, createSession, sessionCookieMaxAge } from "@/lib/auth";
 import { createLoginTicket, userTotpEnabled } from "@/lib/totpAuth";
 import { clientIp, loginIdentityKey, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
@@ -6,18 +7,23 @@ import { fail, ok } from "@/lib/api";
 
 /** v1 登录：返回 token（移动端 Authorization: Bearer 使用）与用户信息 */
 export async function POST(request: Request) {
+  try { authenticationBurst(request); }
+  catch (error) {
+    if (!(error instanceof AuthBudgetError)) throw error;
+    const response = fail(error.unavailable ? 50301 : 42901, error.message, error.unavailable ? 503 : 429);
+    for (const [key, value] of Object.entries(authBudgetHeaders(error))) response.headers.set(key, value);
+    return response;
+  }
   if (!rateLimit(`login:${clientIp(request)}`, 50, 15 * 60 * 1000) || !rateLimitGlobal("login", 100, 15 * 60 * 1000)) {
-    return fail(42901, "尝试过于频繁，请 15 分钟后再试", 429);
+    const response = fail(42901, "尝试过于频繁，请稍后再试", 429);
+    response.headers.set("Retry-After", "900"); return response;
   }
-  const body = await readJsonBody(request, 16 * 1024).catch(() => null);
-  if (!body) return fail(40002, "无效的请求体", 400);
-  const username = String(body.username ?? "").trim();
-  const password = String(body.password ?? "");
-  if (username.length > 254 || password.length > 128) {
-    return fail(40103, "用户名或密码错误", 401);
-  }
+  const input = credentials(await readAuthObject(request, ["username", "password"]));
+  if (!input) return fail(40103, "用户名或密码错误", 401);
+  const { username, password } = input;
   if (!rateLimit(`login-account:${loginIdentityKey(username)}`, 20, 15 * 60 * 1000)) {
-    return fail(42901, "尝试过于频繁，请 15 分钟后再试", 429);
+    const response = fail(42901, "尝试过于频繁，请稍后再试", 429);
+    response.headers.set("Retry-After", "900"); return response;
   }
   const userRow = authenticateUser(username, password);
   if (!userRow) {

@@ -1,4 +1,5 @@
-import { readJsonBody } from "@/lib/requestBody";
+import { loginFactor, readAuthObject } from "@/lib/authInput";
+import { authenticationBurst, AuthBudgetError, authBudgetHeaders } from "@/lib/authAbuse";
 import { NextResponse } from "next/server";
 import { applySessionCookie, createSession, findUserById, isTrustedMutationRequest, sessionCookieMaxAge } from "@/lib/auth";
 import { completeLoginTicket } from "@/lib/totpAuth";
@@ -7,14 +8,17 @@ import { logSecurityEvent } from "@/lib/securityAudit";
 
 export async function POST(request: Request) {
   if (!isTrustedMutationRequest(request)) return NextResponse.json({ error: "请求来源不受信任" }, { status: 403, headers: { "Cache-Control": "no-store" } });
-  if (!rateLimit(`login-totp:${clientIp(request)}`, 40, 15 * 60 * 1000) || !rateLimitGlobal("login-totp", 80, 15 * 60 * 1000)) {
-    return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
+  try { authenticationBurst(request, true); }
+  catch (error) {
+    if (!(error instanceof AuthBudgetError)) throw error;
+    return NextResponse.json({ error: error.message }, { status: error.unavailable ? 503 : 429, headers: authBudgetHeaders(error) });
   }
-  const body = await readJsonBody(request, 8 * 1024).catch(() => null);
-  if (!body) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
-  const ticket = String(body.ticket ?? "");
-  const code = String(body.code ?? "");
-  const result = completeLoginTicket(ticket, code);
+  if (!rateLimit(`login-totp:${clientIp(request)}`, 40, 15 * 60 * 1000) || !rateLimitGlobal("login-totp", 80, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429, headers: { "Retry-After":"900", "Cache-Control":"no-store" } });
+  }
+  const factor = loginFactor(await readAuthObject(request, ["ticket", "code"]));
+  if (!factor) return NextResponse.json({ error: "请求参数无效" }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  const result = completeLoginTicket(factor.ticket, factor.code);
   if (!result.ok || !result.userId) {
     logSecurityEvent(request, "", "auth.login.totp_failed", result.error || "二次验证失败");
     return NextResponse.json({ error: result.error || "验证码不正确" }, { status: 401 });

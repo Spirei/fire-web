@@ -20,13 +20,23 @@ export function clientIp(request: Request): string {
   if (!/^(1|true|yes)$/i.test(process.env.FIRE_TRUST_PROXY_HEADERS || "")) return "direct";
   const fwd = request.headers.get("x-forwarded-for");
   const xri = request.headers.get("x-real-ip");
-  const candidate = fwd ? fwd.split(",")[0].trim() : "";
-  const ip = (candidate || xri || "").trim();
+  // Read from the trusted end: an appending proxy must not trust a caller's
+  // leftmost spoofed address. Additional proxy hops require explicit configuration.
+  const configured = process.env.FIRE_TRUST_PROXY_HOPS || "1";
+  if (!/^[1-9]\d?$/.test(configured) || Number(configured) > 16) return "unknown";
+  const chain = fwd?.split(",");
+  if (fwd && (fwd.length > 2048 || !chain || chain.length > 32 || chain.length < Number(configured))) return "unknown";
+  const ip = (fwd ? chain![chain!.length - Number(configured)] : xri || "").trim();
   // 仅接受格式合法的 IP（IPv4 / IPv6），非法值一律归入 unknown，防止垃圾值注入绕过
   const family = isIP(ip);
   if (family === 4) return ip;
   // Normalize equivalent IPv6 spellings so one address cannot obtain multiple budgets.
-  if (family === 6 && !ip.includes("%")) return new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+  if (family === 6 && !ip.includes("%")) {
+    const canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+    const mapped = canonical.match(/^::ffff:([a-f\d]{1,4}):([a-f\d]{1,4})$/);
+    if (mapped) { const a = parseInt(mapped[1], 16), b = parseInt(mapped[2], 16); return [a >> 8, a & 255, b >> 8, b & 255].join("."); }
+    return canonical;
+  }
   return "unknown";
 }
 
