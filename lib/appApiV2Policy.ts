@@ -1,5 +1,10 @@
 /** App contract allowlist. Native password login never creates a Cookie/Web session. */
 export const APP_V2_ROUTES = [
+  {path:"broker-accounts/[accountId]/connection",methods:["GET","PUT","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"broker-accounts/[accountId]/statements/preview",methods:["POST"],access:"portfolio.write"},
+  {path:"broker-accounts/[accountId]/statements/fetch",methods:["POST"],access:"portfolio.write"},
+  {path:"broker-accounts/[accountId]/statements/apply",methods:["POST"],access:"portfolio.write"},
+  {path:"broker-accounts/[accountId]/bindings",methods:["POST"],access:"portfolio.write"},
   {path:"broker-accounts/presets",methods:["GET"],access:"portfolio.read"},
   {path:"broker-accounts/operations/[requestId]",methods:["GET"],access:"portfolio.read"},
   {path:"broker-accounts",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},

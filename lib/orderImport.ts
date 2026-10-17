@@ -147,7 +147,9 @@ export function importBrokerOrders(userId: string, rawRows: ImportOrderInput[], 
     .all(userId) as Array<{ id: string; name: string; code: string; market: string; account_market?: string; qty: number | null; cost: number | null; watch_group_id: string }>;
   const byCode = new Map<string, (typeof records)[number]>();
   for (const rec of records) {
-    byCode.set(`${rec.market.toUpperCase()}:${normalizeImportCode(rec.code)}`, rec);
+    const identity=`${rec.market.toUpperCase()}:${normalizeImportCode(rec.code)}`;
+    if(byCode.has(identity))throw new Error('同一证券存在多个账户，请使用指定账户的官方账单导入');
+    byCode.set(identity, rec);
   }
 
   // 库内已有订单的内容指纹（排除重复）

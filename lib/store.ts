@@ -19,6 +19,7 @@ function rowToRecord(row: Record<string, unknown>): StockRecord {
     cost: row.cost === null ? "" : (row.cost as number),
     qty: row.qty === null ? "" : (row.qty as number),
     group: String(row.group_name ?? ""),
+    ...(row.broker_account_id ? {brokerAccountId:String(row.broker_account_id)} : {}),
     watchGroupId: row.watch_group_id ? String(row.watch_group_id) : "",
     watchGroupSort: Number(row.watch_group_sort) || 0,
     note: String(row.note ?? ""),
@@ -40,15 +41,28 @@ export function readRecord(userId: string, id: string): StockRecord | null {
   return row ? rowToRecord(row as Record<string, unknown>) : null;
 }
 
+function resolveBroker(userId:string,input:RecordInput,old?:StockRecord|null) {
+  if (input.brokerAccountId === undefined && old?.brokerAccountId && input.group === old.group) {
+    input={...input,brokerAccountId:old.brokerAccountId};
+  }
+  if (input.brokerAccountId === undefined) return input;
+  if (typeof input.brokerAccountId !== 'string') throw new Error('券商账户无效');
+  if (!input.brokerAccountId) return {...input,group:input.group};
+  const account=getDb().prepare('SELECT name FROM broker_accounts WHERE id=? AND user_id=?').get(input.brokerAccountId,userId) as {name:string}|undefined;
+  if(!account)throw new Error('券商账户不存在');
+  return {...input,group:account.name};
+}
+
 export function createRecord(userId: string, input: RecordInput): StockRecord {
   const db = getDb();
   const routeError = stockAccountError(input.market, input.accountMarket);
   if (routeError) throw new Error(routeError);
+  input=resolveBroker(userId,input);
   const id = uid();
   const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
   db.prepare(`
-    INSERT INTO records (id, user_id, name, code, market, account_market, price, cost, qty, group_name, watch_group_id, note, source, updated_at)
-    VALUES (@id, @userId, @name, @code, @market, @accountMarket, @price, @cost, @qty, @group, @watchGroupId, @note, @source, @updatedAt)
+    INSERT INTO records (id, user_id, name, code, market, account_market, price, cost, qty, group_name, broker_account_id, watch_group_id, note, source, updated_at)
+    VALUES (@id, @userId, @name, @code, @market, @accountMarket, @price, @cost, @qty, @group, @brokerAccountId, @watchGroupId, @note, @source, @updatedAt)
   `).run({
     id,
     userId,
@@ -60,6 +74,7 @@ export function createRecord(userId: string, input: RecordInput): StockRecord {
     cost: input.cost === "" ? null : input.cost,
     qty: input.qty === "" ? null : input.qty,
     group: input.group,
+    brokerAccountId: input.brokerAccountId ?? "",
     watchGroupId: input.watchGroupId ?? "",
     note: input.note,
     source: input.source ?? "",
@@ -72,13 +87,14 @@ export function updateRecord(id: string, userId: string, input: RecordInput): St
   const db = getDb();
   const routeError = stockAccountError(input.market, input.accountMarket);
   if (routeError) throw new Error(routeError);
-  const exists = db.prepare("SELECT id FROM records WHERE id = ? AND user_id = ?").get(id, userId);
+  const exists = readRecord(userId,id);
   if (!exists) return null;
+  input=resolveBroker(userId,input,exists);
   const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
   db.prepare(`
     UPDATE records
     SET name = @name, code = @code, market = @market, account_market = CASE WHEN @market='HK' THEN COALESCE(@accountMarket,account_market) ELSE '' END, price = @price,
-        cost = @cost, qty = @qty, group_name = @group, watch_group_id = COALESCE(@watchGroupId, watch_group_id), note = @note, source = @source, updated_at = @updatedAt
+        cost = @cost, qty = @qty, group_name = @group, broker_account_id = @brokerAccountId, watch_group_id = COALESCE(@watchGroupId, watch_group_id), note = @note, source = @source, updated_at = @updatedAt
     WHERE id = @id AND user_id = @userId
   `).run({
     id,
@@ -91,6 +107,7 @@ export function updateRecord(id: string, userId: string, input: RecordInput): St
     cost: input.cost === "" ? null : input.cost,
     qty: input.qty === "" ? null : input.qty,
     group: input.group,
+    brokerAccountId: input.brokerAccountId ?? "",
     watchGroupId: input.watchGroupId === undefined ? null : input.watchGroupId,
     note: input.note,
     source: input.source ?? "",

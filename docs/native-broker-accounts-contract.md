@@ -19,7 +19,56 @@
   "request_id_field": "requestId",
   "revision_field": "revision",
   "automatic_mutation_replay": false,
-  "icon_upload": {"content_types":["image/png","image/jpeg","image/webp"],"max_bytes":2097152,"max_dimension":4096,"max_pixels":16777216},
+  "icon_upload": {
+    "content_types": [
+      "image/png",
+      "image/jpeg",
+      "image/webp"
+    ],
+    "max_bytes": 2097152,
+    "max_dimension": 4096,
+    "max_pixels": 16777216
+  },
+  "record_binding_id_field": "brokerAccountId",
+  "binding_path": "/api/v2/broker-accounts/{accountId}/bindings",
+  "statements": {
+    "connectors": [
+      {
+        "id": "ibkr-flex",
+        "providerId": "ibkr",
+        "label": "IBKR · Flex官方账单",
+        "helpUrl": "https://www.ibkrguides.com/advisorportal/ug/flex3.htm",
+        "accept": ".xml,application/xml,text/xml",
+        "fileLabel": "Activity Flex XML",
+        "maxBytes": 8388608,
+        "externalAccountLabel": "官方账户编号",
+        "fields": [
+          {
+            "key": "externalAccount",
+            "label": "官方账户编号",
+            "secret": false
+          },
+          {
+            "key": "queryId",
+            "label": "Flex Query ID",
+            "secret": false
+          },
+          {
+            "key": "token",
+            "label": "Flex Token",
+            "secret": true
+          }
+        ]
+      }
+    ],
+    "connection_path": "/api/v2/broker-accounts/{accountId}/connection",
+    "preview_path": "/api/v2/broker-accounts/{accountId}/statements/preview",
+    "fetch_path": "/api/v2/broker-accounts/{accountId}/statements/fetch",
+    "apply_path": "/api/v2/broker-accounts/{accountId}/statements/apply",
+    "max_bytes": 8388608,
+    "preview_required": true,
+    "automatic_apply": false
+  },
   "record_binding": "owner_record_group_exact_account_name",
   "delete_referenced_account": "reject"
 }

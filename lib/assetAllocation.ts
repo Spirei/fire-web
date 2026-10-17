@@ -41,7 +41,7 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
     const qty = Number(r.qty); if (!Number.isFinite(qty) || qty <= 0) continue;
     const price = accountHoldingPrice(r, quotes), cur = holdingAccountCurrency(r), amount = finite(qty * price * holdingMoneyFactor(r, rates, cur));
     nativeHoldings[r.market] = (nativeHoldings[r.market] ?? 0) + qty * price;
-    const group = groups.find(g => g.name === r.group || g.alias && g.alias === r.group);
+    const group = groups.find(g => r.brokerAccountId ? g.id === r.brokerAccountId : g.name === r.group || g.alias && g.alias === r.group);
     const id = allocationBrokerId(r, groups);
     let account = accounts.find(a => a.id === id);
     if (!account) account = add({ id, name: group?.name || r.group || "未归属持仓", kind: "broker", category: "securities", currency: cur, amount: 0, source: "/records", icon: group ? icons.get(group.id.toLowerCase()) || "" : "" });

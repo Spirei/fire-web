@@ -14,7 +14,7 @@ export interface AllocationBasis {
 }
 export function allocationBrokerId(record: StockRecord, groups: GroupConfig[] = getSiteSettings().groups) {
   const group = groups.find(g => g.name === record.group || g.alias && g.alias === record.group);
-  const identity = group?.id || createHash("sha256").update(record.group || "ungrouped").digest("hex").slice(0, 20);
+  const identity = record.brokerAccountId || group?.id || createHash("sha256").update(record.group || "ungrouped").digest("hex").slice(0, 20);
   return `broker:${identity}:${holdingAccountCurrency(record)}`;
 }
 /** Native cash totals remain native. Only changes since reconciliation enter its valuation. */

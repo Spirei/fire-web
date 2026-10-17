@@ -1104,6 +1104,13 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
+| POST | `/api/v2/broker-accounts/{accountId}/bindings` | portfolio.write |
+| GET | `/api/v2/broker-accounts/{accountId}/connection` | portfolio.read |
+| PUT | `/api/v2/broker-accounts/{accountId}/connection` | portfolio.write |
+| DELETE | `/api/v2/broker-accounts/{accountId}/connection` | portfolio.write |
+| POST | `/api/v2/broker-accounts/{accountId}/statements/preview` | portfolio.write |
+| POST | `/api/v2/broker-accounts/{accountId}/statements/fetch` | portfolio.write |
+| POST | `/api/v2/broker-accounts/{accountId}/statements/apply` | portfolio.write |
 | GET | `/api/v2/broker-accounts/presets` | portfolio.read |
 | GET | `/api/v2/broker-accounts` | portfolio.read |
 | POST | `/api/v2/broker-accounts` | portfolio.write |
@@ -1114,3 +1121,5 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 | POST | `/api/v2/broker-accounts/{accountId}/icon` | portfolio.write |
 | DELETE | `/api/v2/broker-accounts/{accountId}/icon` | portfolio.write |
 | GET | `/api/v2/broker-accounts/operations/{requestId}` | portfolio.read |
+
+个人账户持仓使用稳定 `brokerAccountId`；IBKR Flex配置、上传/读取预览及确认导入详见 [官方账单合约](native-broker-statements.md)。

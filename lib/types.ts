@@ -11,6 +11,8 @@ export interface StockRecord {
   cost: number | "";
   qty: number | "";
   group: string;
+  /** Stable owner-scoped personal brokerage account; empty means unassigned. */
+  brokerAccountId?: string;
   /** 自选股分组 id（方案 A 独立分组实体），空串 = 未分组 */
   watchGroupId?: string;
   /** 自定义分组内排序，数值越小越靠前 */
@@ -32,6 +34,8 @@ export interface RecordInput {
   cost: number | "";
   qty: number | "";
   group: string;
+  /** Stable owner-scoped personal brokerage account; empty means unassigned. */
+  brokerAccountId?: string;
   watchGroupId?: string;
   note: string;
   source?: string;

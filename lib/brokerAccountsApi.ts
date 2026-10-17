@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { getDb } from "./db";
-import { assetGrant } from "./appAssetsApi";
+import { brokerRequestAuth } from "./brokerRequestAuth";
 import { fail, ok } from "./api";
 import { readFormBody, readJsonBody, RequestBodyTooLargeError } from "./requestBody";
 import { RecordsError } from "./recordsContract";
@@ -27,11 +27,9 @@ async function imageUpload(request:Request) {
     return {body:{requestId:f.get('requestId'),revision:Number(revision)},icon};
   }catch{throw new RecordsError('图片无法安全解码');}
 }
-export async function brokerAccountsResponse(request:Request,action:'list'|'account'|'presets'|'operation'|'icon',version:1|2,params?:Promise<{accountId?:string;requestId?:string}>) {
+export async function brokerAccountsResponse(request:Request,action:'list'|'account'|'presets'|'operation'|'icon'|'bindings',version:1|2,params?:Promise<{accountId?:string;requestId?:string}>) {
   try {
-    const initial=assetGrant(request),authorize=()=>{
-      const g=assetGrant(request);if(g.id!==initial.id||g.user_id!==initial.user_id||g.security_stamp!==initial.security_stamp)throw new RecordsError('连接已变化',401);return g.user_id;
-    };
+    const auth=brokerRequestAuth(request),initial={user_id:auth.userId},authorize=auth.authorize;
     const p=params?await params:{};authorize();
     if(new URL(request.url).searchParams.size)throw new RecordsError('不支持查询参数');
     if(p.accountId&&!/^ba-[a-f0-9]{24}$/.test(p.accountId))throw new RecordsError('账户不存在',404);
@@ -50,7 +48,7 @@ export async function brokerAccountsResponse(request:Request,action:'list'|'acco
     else {
       if(request.headers.get('content-type')?.split(';')[0].trim()!=='application/json')throw new RecordsError('需要JSON请求');
       body=await readJsonBody(request,8192);
-      kind=action==='list'&&request.method==='POST'?'create':action==='account'&&request.method==='PUT'?'update':action==='account'&&request.method==='DELETE'?'delete':action==='icon'&&request.method==='DELETE'?'reset_icon':(()=>{throw new RecordsError('不支持此方法',405);})();
+      kind=action==='bindings'&&request.method==='POST'?'bind_records':action==='list'&&request.method==='POST'?'create':action==='account'&&request.method==='PUT'?'update':action==='account'&&request.method==='DELETE'?'delete':action==='icon'&&request.method==='DELETE'?'reset_icon':(()=>{throw new RecordsError('不支持此方法',405);})();
     }
     const {result,error}=mutateBroker(initial.user_id,kind,p.accountId??'',body,version,authorize,icon);
     if(error)return fail(error.code,error.message,error.status);

@@ -9,7 +9,7 @@ import { isFundCurrency } from "./fundCurrencies";
 import { listRecords, updateRecord } from "./store";
 
 type Row = {id:string;user_id:string;name:string;provider_id:string|null;currency:string;revision:number;icon:Buffer|null;created_at:string;updated_at:string};
-export type BrokerKind = "create"|"update"|"delete"|"upload_icon"|"reset_icon";
+export type BrokerKind = "create"|"update"|"delete"|"upload_icon"|"reset_icon"|"bind_records";
 export function brokerPresets() {
   const icons = getDb().prepare("SELECT code,name,url,updated_at FROM assets WHERE type='broker'").all() as {code:string;name:string;url:string;updated_at:string}[];
   return presets.map(p => {
@@ -30,7 +30,7 @@ function row(userId:string,id:string) {
 export function brokerAccount(userId:string,id:string,version:1|2) {
   const r=row(userId,id);if(!r)throw new RecordsError("账户不存在",404);
   const preset=brokerPresets().find(p=>p.id===r.provider_id);
-  const count=getDb().prepare("SELECT COUNT(*) n FROM records WHERE user_id=? AND group_name=?").get(userId,r.name) as {n:number};
+  const count=getDb().prepare("SELECT COUNT(*) n FROM records WHERE user_id=? AND broker_account_id=?").get(userId,r.id) as {n:number};
   return {id:r.id,name:r.name,providerId:r.provider_id,currency:r.currency,revision:r.revision,
     icon:r.icon?`/api/v${version}/broker-accounts/${r.id}/icon`:preset?.icon??null,
     iconSource:r.icon?"custom":preset?"preset":"none",recordGroup:r.name,recordCount:count.n,createdAt:r.created_at,updatedAt:r.updated_at};
@@ -62,7 +62,7 @@ function nameAvailable(userId:string,name:string,id:string) {
 export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown,version:1|2,authorize:()=>string,icon?:Buffer) {
   if(!raw||typeof raw!=="object"||Array.isArray(raw))throw new RecordsError("无效请求");
   const b=raw as Record<string,unknown>,requestId=validRecordRequestId(b.requestId);
-  const fields=kind==='create'?['requestId','name','providerId','currency']:kind==='update'?['requestId','revision','name','currency','recordCollectionRevision']:['requestId','revision'];
+  const fields=kind==='bind_records'?['requestId','revision','recordCollectionRevision','recordIds',...('allowReassign' in b?['allowReassign']:[])]:kind==='create'?['requestId','name','providerId','currency']:kind==='update'?['requestId','revision','name','currency','recordCollectionRevision']:['requestId','revision'];
   if(Object.keys(b).some(k=>!fields.includes(k))||fields.some(k=>!(k in b)))throw new RecordsError("请求字段无效");
   if(kind!=='create'&&!integer(b.revision))throw new RecordsError("账户版本无效");
   let name='',currency='';
@@ -71,7 +71,8 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
     name=b.name.trim();currency=b.currency;
   }
   if(kind==='create'&&b.providerId!==null&&!presets.some(p=>p.id===b.providerId))throw new RecordsError("机构无效");
-  if(kind==='update'&&!integer(b.recordCollectionRevision))throw new RecordsError("记录集合版本无效");
+  if((kind==='update'||kind==='bind_records')&&!integer(b.recordCollectionRevision))throw new RecordsError("记录集合版本无效");
+  if(kind==='bind_records'&&(!Array.isArray(b.recordIds)||!b.recordIds.length||b.recordIds.length>2000||b.recordIds.some(x=>typeof x!=='string'||!/^r-[a-f0-9]{16}$/.test(x))||new Set(b.recordIds).size!==b.recordIds.length))throw new RecordsError('持仓选择无效');
   if(kind==='upload_icon'&&(!icon||icon.length>2097152))throw new RecordsError("图标无效");
   const db=getDb();
   return db.transaction(()=>{
@@ -91,12 +92,27 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
       } else if(kind==='update') {
         if(collectionRevision(userId)!==b.recordCollectionRevision)throw new RecordsError("持仓记录已变化",409,40902);
         nameAvailable(userId,name,id);
-        if(current!.name!==name)for(const r of listRecords(userId).filter(r=>r.group===current!.name)) {
+        db.prepare("UPDATE broker_accounts SET name=? WHERE user_id=? AND id=?").run(name,userId,id);
+        if(current!.name!==name)for(const r of listRecords(userId).filter(r=>r.brokerAccountId===id)) {
           if(!updateRecord(r.id,userId,{...r,group:name}))throw new Error('record update failed');
         }
         db.prepare("UPDATE broker_accounts SET name=?,currency=?,revision=revision+1,updated_at=? WHERE user_id=? AND id=?").run(name,currency,at,userId,id);
+      } else if(kind==='bind_records') {
+        if(collectionRevision(userId)!==b.recordCollectionRevision)throw new RecordsError('持仓记录已变化',409,40902);
+        const chosen=listRecords(userId).filter(r=>(b.recordIds as string[]).includes(r.id));
+        if(chosen.length!==(b.recordIds as string[]).length)throw new RecordsError('持仓不存在',404);
+        if(b.allowReassign!==undefined&&typeof b.allowReassign!=='boolean')throw new RecordsError('归属调整确认无效');
+        if(b.allowReassign!==true&&chosen.some(r=>r.brokerAccountId&&r.brokerAccountId!==id))throw new RecordsError('已关联其他账户的持仓须通过转仓处理',409,40902);
+        const keys=new Set<string>();
+        for(const r of [...listRecords(userId).filter(r=>r.brokerAccountId===id&&!chosen.some(c=>c.id===r.id)),...chosen]) {
+          const key=JSON.stringify([r.market,r.code,r.accountMarket??'']);
+          if(keys.has(key))throw new RecordsError('同一账户存在重复证券，请先处理',409,40902);keys.add(key);
+        }
+        for(const r of chosen)updateRecord(r.id,userId,{...r,brokerAccountId:id,group:current!.name});
+        db.prepare('UPDATE broker_accounts SET revision=revision+1,updated_at=? WHERE user_id=? AND id=?').run(at,userId,id);
       } else if(kind==='delete') {
-        if(db.prepare("SELECT 1 FROM records WHERE user_id=? AND group_name=?").get(userId,current!.name))throw new RecordsError("账户仍有关联记录",409,40902);
+        if(db.prepare('SELECT 1 FROM broker_statement_imports WHERE user_id=? AND account_id=?').get(userId,id))throw new RecordsError('账户含官方账单历史，不能直接删除',409,40902);
+        if(db.prepare("SELECT 1 FROM records WHERE user_id=? AND broker_account_id=?").get(userId,id))throw new RecordsError("账户仍有关联记录",409,40902);
         db.prepare("DELETE FROM broker_accounts WHERE user_id=? AND id=?").run(userId,id);
       } else db.prepare("UPDATE broker_accounts SET icon=?,revision=revision+1,updated_at=? WHERE user_id=? AND id=?").run(kind==='upload_icon'?icon!:null,at,userId,id);
       if(kind!=='delete')data=brokerAccount(userId,accountId,version);

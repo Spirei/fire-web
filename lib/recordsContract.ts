@@ -69,6 +69,10 @@ function recordInput(body: Record<string, unknown>, strict: boolean): RecordInpu
     price: toNumberOrEmpty(body.price), cost: toNumberOrEmpty(body.cost), qty: toNumberOrEmpty(body.qty),
     group: String(body.group ?? "").trim().slice(0, 100), note: String(body.note ?? "").trim().slice(0, 500), source: String(body.source ?? "").trim().slice(0, 50)
   };
+  if (body.brokerAccountId !== undefined) {
+    if(typeof body.brokerAccountId!=='string'||body.brokerAccountId!==''&&!/^ba-[a-f0-9]{24}$/.test(body.brokerAccountId))throw new RecordsError('券商账户无效');
+    input.brokerAccountId=body.brokerAccountId;
+  }
   if (body.accountMarket !== undefined) {
     const routeError = stockAccountError(input.market, body.accountMarket);
     if (routeError) throw new RecordsError(routeError);
@@ -88,7 +92,7 @@ export function mutateRecords(userId: string, kind: Kind, id: string, body: unkn
   const requestId = "requestId" in values ? validRecordRequestId(values.requestId) : undefined;
   const strict = requestId !== undefined;
   if (strict) {
-    const allowed = kind === "delete" ? ["requestId", "revision"] : ["requestId", "revision", "name", "code", "market", "price", "cost", "qty", "group", "note", "source", "watchGroupId", "accountMarket"];
+    const allowed = kind === "delete" ? ["requestId", "revision"] : ["requestId", "revision", "name", "code", "market", "price", "cost", "qty", "group", "note", "source", "watchGroupId", "accountMarket", "brokerAccountId"];
     if (Object.keys(values).some(key => !allowed.includes(key))) throw new RecordsError("请求含未知字段");
     if (kind === "create" && "revision" in values) throw new RecordsError("新建请求不接受 revision");
   }
@@ -109,6 +113,7 @@ export function mutateRecords(userId: string, kind: Kind, id: string, body: unkn
     if (kind !== "create" && !old) error = new RecordsError("记录不存在", 404);
     else if (kind !== "create" && revision !== undefined && old?.revision !== revision) error = new RecordsError("记录已变化，请重新读取后确认", 409, 40902);
     else if (kind === "delete" && db.prepare("SELECT 1 FROM trade_orders WHERE user_id=? AND record_id=? LIMIT 1").get(userId, id)) error = new RecordsError("记录含成交历史，不能删除", 409, 40903);
+    else if (input?.brokerAccountId && !db.prepare("SELECT 1 FROM broker_accounts WHERE user_id=? AND id=?").get(userId,input.brokerAccountId)) error = new RecordsError("券商账户不存在",404);
     else if (input?.watchGroupId && !db.prepare("SELECT 1 FROM watch_groups WHERE user_id=? AND id=? AND kind='custom'").get(userId, input.watchGroupId)) error = new RecordsError("自选组不存在", 404);
     let record: StockRecord | null = null;
     if (!error) {
