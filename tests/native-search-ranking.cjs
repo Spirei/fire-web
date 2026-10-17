@@ -13,7 +13,7 @@ global.fetch=async url=>{calls++;assert.equal(new URL(url).searchParams.get('fid
 const load=Module._load;let remote=0;
 Module._load=function(id,parent,...rest){
  if(id==='@/lib/assets')return {getAssetsPage:({query})=>({assets:query==='英伟达'?[{code:'NVDA',market:'US',name:'英伟达'}]:[]}), getStockAssetsByCodes:()=>[{code:'NVDA',name:'英伟达'}]};
- if(id==='@/lib/relatedEtfs')return {US_RELATED_ETFS:{NVDA:[{code:'NVDL',kind:'long',badge:'2X'}]}};
+ if(id==='@/lib/relatedEtfs')return require('../lib/relatedEtfs.ts');
  if(id==='@/lib/stockSearchCatalog')return require('../lib/stockSearchCatalog.ts');
  if(id==='@/lib/quotes')return {searchStocks:async()=>{remote++;return[];}};
  if(id==='@/lib/rateLimit')return {clientIp:()=>'',rateLimit:()=>true,rateLimitGlobal:()=>true};
@@ -23,7 +23,7 @@ Module._load=function(id,parent,...rest){
 (async()=>{
  const [a,b]=await Promise.all([volumeRanking('US'),volumeRanking('US')]);assert.equal(a,b);assert.equal(calls,1);await volumeRanking('US');assert.equal(calls,1);
  const {GET}=require('../app/api/v1/search/route.ts');
- for(const q of ['NVDL','英伟达']){const r=await GET(new Request('https://fixture.test/?q='+encodeURIComponent(q)));assert(r.results.some(x=>x.code==='NVDL'));assert.equal(remote,0);}
+ for(const q of ['NVDL','英伟达']){const r=await GET(new Request('https://fixture.test/?q='+encodeURIComponent(q)));assert(r.results.some(x=>x.code==='NVDL'));if(q==='英伟达')assert.deepEqual(r.results.map(x=>x.code),['NVDA','NVDL','NVD','NVDX','NVDU','NVDQ','NVDY','NVDS']);assert.equal(remote,0);}
  await GET(new Request('https://fixture.test/?q=unknown'));assert.equal(remote,1);
  console.log('PASS: validated volume order/date/identity, shared cache/in-flight, native catalog fast path and remote fallback');
 })().catch(e=>{console.error(e);process.exitCode=1;});
