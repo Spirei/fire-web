@@ -202,6 +202,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v1/indices",
   "/api/v1/kline",
   "/api/v1/kline-sessions",
+  "/api/v1/market-ranking",
   "/api/v1/orders",
   "/api/v1/orders/[id]",
   "/api/v1/orders/export",

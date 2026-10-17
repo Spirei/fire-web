@@ -1,3 +1,5 @@
+import { proxyFetch } from "./net";
+
 /** Public, market-wide share-volume ranking. Never rank a user's holdings or a cap shortlist. */
 export const RANKING_MARKETS = ["US", "HK", "CN"] as const;
 export type RankingMarket = typeof RANKING_MARKETS[number];
@@ -26,6 +28,38 @@ export function parseVolumeRanking(raw: unknown, market: RankingMarket, now = Da
   if (dates.size !== 1) throw new Error("Mixed trading dates");
   return { market, metric: "volume", updatedAt: new Date(now).toISOString(), tradeDate: [...dates][0], items };
 }
+const scanners: Record<RankingMarket, string> = { US: "america", HK: "hongkong", CN: "china" };
+const exchanges: Record<RankingMarket, string[]> = { US: ["AMEX", "NYSE", "NASDAQ"], HK: ["HKEX"], CN: ["SSE", "SZSE", "BSE"] };
+/** daily-bar.time is the provider's UTC calendar-day marker, not a quote timestamp. */
+export function parseScannerRanking(raw: unknown, market: RankingMarket, now = Date.now()): VolumeRanking {
+  const value = raw as { totalCount?: unknown; data?: unknown };
+  if (!Array.isArray(value?.data) || value.data.length !== 10 || typeof value.totalCount !== "number" || value.totalCount < 10) throw new Error("Incomplete scanner ranking");
+  const dates = new Set<string>(), seen = new Set<string>(); let previous = Infinity;
+  const items = value.data.map(item => {
+    const row = item as { s?: unknown; d?: unknown };
+    if (!Array.isArray(row?.d) || row.d.length !== 6) throw new Error("Invalid scanner row");
+    const [symbol, description, volume, day, type, exchange] = row.d;
+    if (typeof symbol !== "string" || !/^[A-Z0-9.\-]{1,24}$/i.test(symbol) || typeof description !== "string" || !description.trim()
+      || type !== "stock" || typeof exchange !== "string" || !exchanges[market].includes(exchange) || row.s !== `${exchange}:${symbol}`
+      || typeof volume !== "number" || !Number.isFinite(volume) || volume <= 0 || volume > previous
+      || typeof day !== "number" || !Number.isFinite(day) || day % 86400 !== 0 || day * 1000 > now + 180000 || day * 1000 < now - 10 * 86400000) throw new Error("Invalid scanner identity, volume or date");
+    const code = market === "HK" ? symbol.padStart(5, "0") : symbol.toUpperCase();
+    if ((market === "HK" && !/^\d{5}$/.test(code)) || (market === "CN" && !/^\d{6}$/.test(code)) || seen.has(code)) throw new Error("Invalid scanner code");
+    seen.add(code); previous = volume; dates.add(new Date(day * 1000).toISOString().slice(0, 10));
+    return { market, code, name: description.trim(), volume };
+  });
+  if (dates.size !== 1) throw new Error("Mixed trading dates");
+  return { market, metric: "volume", updatedAt: new Date(now).toISOString(), tradeDate: [...dates][0], items };
+}
+async function boundedJSON(response: Response): Promise<unknown> {
+  if (!response.ok || !response.body) throw new Error("Ranking unavailable");
+  const reader = response.body.getReader(), chunks: Uint8Array[] = []; let count = 0;
+  try {
+    while (true) { const { done, value } = await reader.read(); if (done) break; count += value.length; if (count > 128 * 1024) throw new Error("Ranking too large"); chunks.push(value); }
+  } finally { await reader.cancel().catch(() => undefined); }
+  const bytes = new Uint8Array(count); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
 const cache = new Map<RankingMarket, { at: number; value: VolumeRanking }>();
 const pending = new Map<RankingMarket, Promise<VolumeRanking>>();
 export async function volumeRanking(market: RankingMarket): Promise<VolumeRanking> {
@@ -33,22 +67,32 @@ export async function volumeRanking(market: RankingMarket): Promise<VolumeRankin
   if (stored && Date.now() - stored.at < 180000) return stored.value;
   const existing = pending.get(market); if (existing) return existing;
   const work = (async () => {
-    const params = new URLSearchParams({ pn: "1", pz: "10", po: "1", np: "1", fltt: "2", invt: "2", fid: "f5", fs: filters[market], fields: "f12,f14,f5,f124" });
     let failure: unknown;
-    for (const host of ["push2.eastmoney.com", "push2delay.eastmoney.com"]) {
     try {
-      const response = await fetch(`https://${host}/api/qt/clist/get?` + params, {
-        signal: AbortSignal.timeout(3000), redirect: "error", headers: { "User-Agent": "Mozilla/5.0", Referer: "https://quote.eastmoney.com/" }
+      // Public, read-only scanner sorted across the market, excluding OTC and funds.
+      // Follow the configured international-source proxy and keep the whole transfer bounded.
+      const response = await proxyFetch(`https://scanner.tradingview.com/${scanners[market]}/scan`, {
+        method: "POST", redirect: "error", signal: AbortSignal.timeout(5000),
+        headers: { "Content-Type": "application/json", Origin: "https://www.tradingview.com" },
+        body: JSON.stringify({ filter: [
+          { left: "type", operation: "equal", right: "stock" },
+          { left: "is_primary", operation: "equal", right: true },
+          { left: "exchange", operation: "in_range", right: exchanges[market] }
+        ], columns: ["name", "description", "volume", "daily-bar.time", "type", "exchange"],
+          sort: { sortBy: "volume", sortOrder: "desc" }, range: [0, 10], options: { lang: "zh" } })
       });
-      if (!response.ok || !response.body) throw new Error("Ranking unavailable");
-      const reader = response.body.getReader(), chunks: Uint8Array[] = []; let count = 0;
-      try {
-        while (true) { const { done, value } = await reader.read(); if (done) break; count += value.length; if (count > 128 * 1024) throw new Error("Ranking too large"); chunks.push(value); }
-      } finally { await reader.cancel().catch(() => undefined); }
-      const bytes = new Uint8Array(count); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-      const value = parseVolumeRanking(JSON.parse(new TextDecoder().decode(bytes)), market);
+      const value = parseScannerRanking(await boundedJSON(response), market);
       cache.set(market, { at: Date.now(), value }); return value;
     } catch (error) { failure = error; }
+    const params = new URLSearchParams({ pn: "1", pz: "10", po: "1", np: "1", fltt: "2", invt: "2", fid: "f5", fs: filters[market], fields: "f12,f14,f5,f124" });
+    for (const host of ["push2delay.eastmoney.com", "push2.eastmoney.com"]) {
+      try {
+        const response = await fetch(`https://${host}/api/qt/clist/get?` + params, {
+          signal: AbortSignal.timeout(3000), redirect: "error", headers: { "User-Agent": "Mozilla/5.0", Referer: "https://quote.eastmoney.com/" }
+        });
+        const value = parseVolumeRanking(await boundedJSON(response), market);
+        cache.set(market, { at: Date.now(), value }); return value;
+      } catch (error) { failure = error; }
     }
     throw failure ?? new Error("Ranking unavailable");
   })();
