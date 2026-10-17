@@ -4934,9 +4934,9 @@ export const V0_1_59_ENTRY: VersionEntry = {
 export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_59_ENTRY,
   version: "v0.1.60", date: "2026-10-17",
-  summary: "为原生搜索提供按真实成交量排序的市场榜单。",
+  summary: "热门股票按真实成交额排序，兼容既有搜索与榜单。",
   software: V0_1_59_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.60" } : item),
-  changes: [{ kind: "fix", title: "成交量榜数据源恢复", desc: "公开全市场成交量榜增加TradingView数据源与既有出站代理，保留东方财富备用源，按实际交易日校验完整前十；v1旧账户同样声明榜单能力，不要求切换授权。" }, { kind: "fix", title: "App搜索与Web同源提速", desc: "原生v1/v2搜索先走与Web共用的素材目录及关联ETF身份，命中即返回，不等待外部行情补价。" }, { kind: "feature", title: "美港A股成交量前十", desc: "v2发现协议声明公开成交量榜，按东方财富各市场证券池的成交量排序取前十，返回实际交易日期；缓存合并并发请求，拒绝不完整、重复、乱序及混合日期数据，不以持仓或市值榜冒充。" }]
+  changes: [{ kind: "fix", title: "热门股票改按成交额", desc: "按用户纠正增加独立成交额能力和查询参数，保留旧成交量合约；全市场日线范围筛选后核对实际成交额、交易日及币种，确认完整前十，不使用现价乘量估算，A股万元转为CNY。" }, { kind: "fix", title: "成交量榜数据源恢复", desc: "公开全市场成交量榜增加TradingView数据源与既有出站代理，保留东方财富备用源，按实际交易日校验完整前十；v1旧账户同样声明榜单能力，不要求切换授权。" }, { kind: "fix", title: "App搜索与Web同源提速", desc: "原生v1/v2搜索先走与Web共用的素材目录及关联ETF身份，命中即返回，不等待外部行情补价。" }, { kind: "feature", title: "美港A股成交量前十", desc: "v2发现协议声明公开成交量榜，按东方财富各市场证券池的成交量排序取前十，返回实际交易日期；缓存合并并发请求，拒绝不完整、重复、乱序及混合日期数据，不以持仓或市值榜冒充。" }]
 };
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 

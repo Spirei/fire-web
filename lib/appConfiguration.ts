@@ -16,6 +16,7 @@ export function appConfiguration(request:Request,version:1|2=1) {
   const base=`/api/v${version}`;
   return ok({version,api_versions_supported:[1,2],app_api_version:2,app_api_base_path:"/api/v2",
     market_ranking: { version: 1, path: `${base}/market-ranking`, metric: "volume", markets: ["US", "HK", "CN"] },
+    market_amount_ranking: { version: 1, path: `${base}/market-ranking`, metric: "amount", markets: ["US", "HK", "CN"] },
     asset_allocation: allocationDiscovery(version),
     account_trading: tradingDiscovery(version),
     quote_subscriptions_contract:quoteSubscriptionsDiscovery(),
