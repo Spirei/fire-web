@@ -1097,3 +1097,20 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 
 
 </details>
+
+## 个人券商记账账户
+
+沿当前本人App授权独立保存账户、私有图标及操作回执；与共享 `/brokers` 目录分离，无法借此获得管理员权限。能力、CAS、持仓group关联、改名及图标限制见[冻结合约](native-broker-accounts-contract.md)。
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/broker-accounts/presets` | portfolio.read |
+| GET | `/api/v2/broker-accounts` | portfolio.read |
+| POST | `/api/v2/broker-accounts` | portfolio.write |
+| GET | `/api/v2/broker-accounts/{accountId}` | portfolio.read |
+| PUT | `/api/v2/broker-accounts/{accountId}` | portfolio.write |
+| DELETE | `/api/v2/broker-accounts/{accountId}` | portfolio.write |
+| GET | `/api/v2/broker-accounts/{accountId}/icon` | portfolio.read |
+| POST | `/api/v2/broker-accounts/{accountId}/icon` | portfolio.write |
+| DELETE | `/api/v2/broker-accounts/{accountId}/icon` | portfolio.write |
+| GET | `/api/v2/broker-accounts/operations/{requestId}` | portfolio.read |

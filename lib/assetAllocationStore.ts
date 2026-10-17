@@ -1,9 +1,9 @@
+import { ownedBrokerGroups } from "./brokerAccountLinks";
 import { randomUUID } from "node:crypto";
 import { getDb } from "./db";
 import { RecordsError } from "./recordsContract";
 import { ALLOCATION_CATEGORIES, type AllocationInput, type AllocationAccount } from "./assetAllocationTypes";
 import { captureAllocationBasis } from "./allocationReconciliation";
-import { getSiteSettings } from "./settings";
 import { readRecord } from "./store";
 
 export interface AllocationRow { source_id: string; name: string; currency: string; amount: number; category: AllocationInput["category"]; excluded: number; amount_mode: "automatic" | "statement"; statement_basis: string; revision: number; updated_at: string; }
@@ -63,7 +63,7 @@ function assignBroker(userId: string, raw: unknown) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new RecordsError("关联参数无效");
   const b = raw as { brokerId?: unknown; records?: unknown };
   if (Object.keys(b).some(k => !["brokerId", "records"].includes(k)) || typeof b.brokerId !== "string" || !Array.isArray(b.records) || !b.records.length || b.records.length > 200) throw new RecordsError("请选择券商和持仓");
-  const broker = getSiteSettings().groups.find(g => g.id === b.brokerId);
+  const broker = ownedBrokerGroups(userId).find(g => g.id === b.brokerId);
   if (!broker) throw new RecordsError("券商不存在", 404);
   const seen = new Set<string>();
   for (const value of b.records) {

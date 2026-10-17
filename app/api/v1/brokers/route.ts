@@ -4,7 +4,7 @@ import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getBrokers, saveBrokers, type Broker } from "@/lib/brokers";
 import { deleteAsset, getAssets } from "@/lib/assets";
 import { fail, ok } from "@/lib/api";
-import { getSiteSettings } from "@/lib/settings";
+import { BrokerGroupNameConflict, getSiteSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
       name: g.name.trim() || "未命名券商",
       alias: typeof g.alias === "string" && g.alias.trim() ? g.alias.trim() : undefined
     }));
-  const brokers: Broker[] = saveBrokers(groups);
-  return ok(brokers);
+  try { return ok(saveBrokers(groups)); }
+  catch(error) { if(error instanceof BrokerGroupNameConflict) return fail(40902,error.message,409); throw error; }
 }
 
 /** 删除券商（仅管理员；DELETE /api/v1/brokers?id=xxx，同时清空对应持仓记录的券商并删除图标素材） */

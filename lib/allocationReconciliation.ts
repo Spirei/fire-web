@@ -1,3 +1,4 @@
+import { ownedBrokerGroups } from "./brokerAccountLinks";
 import { createHash } from "node:crypto";
 import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
@@ -18,7 +19,7 @@ export function allocationBrokerId(record: StockRecord, groups: GroupConfig[] = 
 }
 /** Native cash totals remain native. Only changes since reconciliation enter its valuation. */
 export function allocationTradeCash(userId: string, sourceId: string): Record<string, number> {
-  const groups = getSiteSettings().groups;
+  const groups = ownedBrokerGroups(userId);
   const ids = new Set(listRecords(userId).filter(r => allocationBrokerId(r, groups) === sourceId).map(r => r.id));
   const rows = getDb().prepare("SELECT record_id,market,side,qty,price,fees,amount,settlement_currency,settlement_amount FROM trade_orders WHERE user_id=? AND status='filled'").all(userId) as {
     record_id: string; market: string; side: "buy" | "sell" | "dividend"; qty: number; price: number; fees: number; amount: number;

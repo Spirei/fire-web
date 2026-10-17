@@ -1,0 +1,134 @@
+[
+  {
+    "id": "longbridge",
+    "appId": 1470042146,
+    "seller": "Longport Technology HK Limited",
+    "page": "https://apps.apple.com/hk/app/longbridge-%E6%B8%AF%E8%82%A1-%E7%BE%8E%E8%82%A1-%E6%9C%9F%E6%AC%8A-etf-%E4%BA%A4%E6%98%93/id1470042146?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/d1/57/47/d157479c-ae31-dcef-568c-fbe0a789dadc/AppIcon-0-0-1x_U007epad-0-11-0-85-220.png/512x512bb.jpg",
+    "sha256": "d3f36e89d37c822a77e845947dddcf435e877d9cb8537e65a560709642abd34b",
+    "bytes": 15659,
+    "retrieved": "2026-10-17",
+    "usage": "Broker identity only; no account connection implied."
+  },
+  {
+    "id": "ibkr",
+    "appId": 454558592,
+    "seller": "Interactive Brokers LLC",
+    "page": "https://apps.apple.com/us/app/ibkr-mobile-invest-worldwide/id454558592?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/f2/26/67/f226671c-1b8f-2ec0-a22b-86878d69eecd/AppIcon-0-0-1x_U007emarketing-0-8-0-0-85-220.png/512x512bb.jpg",
+    "sha256": "b57e6622041919bd0a5d2c8a0789994cd5863a1fa5e1fef2f50b82e145e6638d",
+    "bytes": 17472,
+    "retrieved": "2026-10-17",
+    "usage": "Broker identity only; no account connection implied."
+  },
+  {
+    "id": "futu",
+    "appId": 592031984,
+    "seller": "Shenzhen Futu Network Technology Company Limited",
+    "page": "https://apps.apple.com/hk/app/%E5%AF%8C%E9%80%94%E7%89%9B%E7%89%9B-%E6%B8%AF%E8%82%A1%E7%BE%8E%E8%82%A1-crypto-%E6%9C%9F%E6%AC%8A-etf-%E5%AF%A6%E6%99%82%E5%A0%B1%E5%83%B9/id592031984?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/b7/d7/43/b7d743c6-a743-4fd4-6c41-3bbfa39460f9/AppIcon-NiuNiu-0-0-1x_U007epad-0-1-sRGB-85-220.png/512x512bb.jpg",
+    "sha256": "a1fe5efb44a7990092c55da5207b8a82c5aa91bf575847628ea9e8dbfb5e12f4",
+    "bytes": 27335,
+    "retrieved": "2026-10-17",
+    "usage": "Broker identity only; no account connection implied."
+  },
+  {
+    "id": "tiger",
+    "appId": 1023600494,
+    "seller": "Tiger Trade Technology Pte Ltd",
+    "page": "https://apps.apple.com/hk/app/tiger-trade-%E6%B8%AF%E7%BE%8E%E8%82%A1-%E6%9C%9F%E6%AC%8A-etf-%E4%BA%A4%E6%98%93/id1023600494?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/19/23/34/1923346c-0be0-1436-18d5-1249c5ef7b6b/AppIcon-0-0-1x_U007ephone-0-1-85-220.png/512x512bb.jpg",
+    "sha256": "75e8af9743f6e007eeb5653751a949da4840351dc4a3a578f5f10ccf53533779",
+    "bytes": 37419,
+    "retrieved": "2026-10-17",
+    "usage": "Broker identity only; no account connection implied."
+  },
+  {
+    "id": "trading212",
+    "appId": 566325832,
+    "seller": "Avus Capital LLC",
+    "page": "https://apps.apple.com/gb/app/trading-212/id566325832?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/68/6a/03/686a03cf-e98e-12e5-dc18-66f49357caca/AppIcon-0-0-1x_U007epad-0-1-85-220.png/512x512bb.jpg",
+    "sha256": "638fbdb5394beebcc74e6ac77cccfaa9e8ff94d2c3214d5cd5e7bfef6aefc266",
+    "bytes": 13623,
+    "retrieved": "2026-10-17",
+    "usage": "Broker identity only; no account connection implied."
+  },
+  {
+    "id": "moomoo",
+    "appId": 1440255819,
+    "seller": "Moomoo Technologies Inc.",
+    "page": "https://apps.apple.com/us/app/moomoo-investing-trading/id1440255819?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/81/80/ff/8180ff72-3666-d020-3956-4763ed49eff3/AppIcon-MooMoo-0-0-1x_U007epad-0-1-sRGB-85-220.png/512x512bb.jpg",
+    "sha256": "e96a95d793cbd52ca8d864fce900e6f2ac2df8e95f1c9f80467e1902bf4d7044",
+    "bytes": 28392,
+    "retrieved": "2026-10-17",
+    "usage": "Broker identity only; no account connection implied."
+  },
+  {
+    "id": "robinhood",
+    "appId": 938003185,
+    "seller": "Robinhood Markets Inc",
+    "page": "https://apps.apple.com/us/app/robinhood-trading-investing/id938003185?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/20/63/7c/20637c27-1803-1bd8-4a74-939dce068cc7/AppIcon-0-0-1x_U007ephone-0-1-0-sRGB-85-220.png/512x512bb.jpg",
+    "sha256": "0afb86f16c5ee1fbdb1d347744c88da313b0a3e0373515d7517e0576ba29495f",
+    "bytes": 19765,
+    "retrieved": "2026-10-17",
+    "usage": "Broker identity only; no account connection implied."
+  },
+  {
+    "id": "huatai",
+    "appId": 379594830,
+    "seller": "Huatai Securities",
+    "page": "https://apps.apple.com/cn/app/%E6%B6%A8%E4%B9%90%E8%B4%A2%E5%AF%8C%E9%80%9A-%E7%82%92%E8%82%A1%E7%A5%A8%E7%90%86%E8%B4%A2%E5%B0%B1%E9%80%89%E5%8D%8E%E6%B3%B0/id379594830?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/f4/e6/fd/f4e6fd14-2639-79cb-fe4b-95ac5a8f74da/AppIcon-0-0-1x_U007emarketing-0-8-0-85-220.png/512x512bb.jpg",
+    "sha256": "c6715e721330f8f0b5149f29a36a32d2ff21eea5eda2787ba03fc61dda5d27c4",
+    "bytes": 38601,
+    "retrieved": "2026-10-17",
+    "usage": "User-selected account identity only; no broker connection implied."
+  },
+  {
+    "id": "schwab",
+    "appId": 407358186,
+    "seller": "The Charles Schwab Corporation",
+    "page": "https://apps.apple.com/us/app/schwab-mobile/id407358186?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/99/73/6d/99736db2-ade5-4cdf-84a3-b2cd3762c452/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg",
+    "sha256": "6c1cd74916d970a8b4251731cb46dd2d649b7994b4a6597f986854596e3ef3a7",
+    "bytes": 36276,
+    "retrieved": "2026-10-17",
+    "usage": "User-selected account identity only; no broker connection implied."
+  },
+  {
+    "id": "usmart",
+    "appId": 1463024118,
+    "seller": "uSmart Securities Limited",
+    "page": "https://apps.apple.com/hk/app/%E9%A6%99%E6%B8%AF%E7%9B%88%E7%AB%8B%E8%AD%89%E5%88%B8-%E6%B8%AF%E8%B3%87%E7%A7%91%E6%8A%80%E5%88%B8%E5%95%86no-1/id1463024118?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/97/3e/07/973e0700-13d9-67ae-1f7a-77ad21b4b95e/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg",
+    "sha256": "aa16be43bc3d5f80ead764924190929d41ac774ec6b085c14ce2a2af846d6668",
+    "bytes": 27253,
+    "retrieved": "2026-10-17",
+    "usage": "User-selected account identity only; no broker connection implied."
+  },
+  {
+    "id": "eastmoney",
+    "appId": 423525686,
+    "seller": "East Money Information Co.,Ltd.",
+    "page": "https://apps.apple.com/cn/app/%E4%B8%9C%E6%96%B9%E8%B4%A2%E5%AF%8C-%E8%82%A1%E7%A5%A8-%E7%82%92%E8%82%A1-%E7%90%86%E8%B4%A2/id423525686?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/e3/44/35/e34435d6-a254-7fe2-de9c-7369f7000da3/AppIcon-0-0-1x_U007ephone-0-11-0-sRGB-85-220.png/512x512bb.jpg",
+    "sha256": "ddf1ceb134010578673c4d8dc7acf9e6b566365ec4a1320c051e6e2d6bd0ace4",
+    "bytes": 24803,
+    "retrieved": "2026-10-17",
+    "usage": "User-selected account identity only; no broker connection implied."
+  },
+  {
+    "id": "ths",
+    "appId": 303191318,
+    "seller": "Zhejiang Royalflush Cloud Software Co., Ltd.",
+    "page": "https://apps.apple.com/cn/app/%E5%90%8C%E8%8A%B1%E9%A1%BA-%E7%82%92%E8%82%A1-%E8%82%A1%E7%A5%A8/id303191318?uo=4",
+    "image": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/93/5e/d2/935ed2f2-ab02-b297-2095-812a48b9b059/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/512x512bb.jpg",
+    "sha256": "073c758c3c08934a88798690029a6fb3b93d26f2fad0ffadce3100c2d9007d60",
+    "bytes": 26604,
+    "retrieved": "2026-10-17",
+    "usage": "User-selected account identity only; no broker connection implied."
+  }
+]

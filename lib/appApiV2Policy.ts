@@ -1,5 +1,10 @@
 /** App contract allowlist. Native password login never creates a Cookie/Web session. */
 export const APP_V2_ROUTES = [
+  {path:"broker-accounts/presets",methods:["GET"],access:"portfolio.read"},
+  {path:"broker-accounts/operations/[requestId]",methods:["GET"],access:"portfolio.read"},
+  {path:"broker-accounts",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"broker-accounts/[accountId]",methods:["GET","PUT","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"broker-accounts/[accountId]/icon",methods:["GET","POST","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
   {path:"auth/mail-templates",methods:["GET"],access:"public"},
   {path:"auth/config",methods:["GET"],access:"public"},
   {path:"auth/login",methods:["POST"],access:"credential"},
@@ -107,7 +112,7 @@ export const APP_V2_ROUTES = [
   {path:"feed/posts/[postId]/discussion",methods:["GET","POST"],access:"feed.read",writeAccess:"feed.write"}
 ] as const;
 type Entry = {path:string;methods:readonly string[];access:string;writeAccess?:string};
-const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[folderId]"?"rld_[a-f0-9]{32}":segment==="[fileId]"?"rlf_[a-f0-9]{32}":segment==="[orderId]"?"o-[a-f0-9]{16}":segment==="[requestId]"?"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}":segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":(segment==="[id]" || segment==="[recordId]")?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
+const routes = (APP_V2_ROUTES as readonly Entry[]).map(route=>({route,pattern:new RegExp("^/api/v2/"+route.path.split("/").map(segment=>segment==="[accountId]"?"ba-[a-f0-9]{24}":segment==="[folderId]"?"rld_[a-f0-9]{32}":segment==="[fileId]"?"rlf_[a-f0-9]{32}":segment==="[orderId]"?"o-[a-f0-9]{16}":segment==="[requestId]"?"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}":segment==="[jobId]"?"fj-[a-f0-9]{24}":segment==="[postId]"?"fp-[a-f0-9]{24}":segment==="[groupId]"?"(?:default|fg-[a-f0-9]{24})":(segment==="[id]" || segment==="[recordId]")?"[^/]+":segment.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("/")+"$")}));
 export function appV2KnownPath(path:string) { return routes.some(item=>item.pattern.test(path)); }
 export function appV2Access(path:string,method:string): string|null {
   // Literal routes must win over dynamic IDs (e.g. watch-groups/reorder).

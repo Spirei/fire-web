@@ -32,6 +32,20 @@ const deploymentFiles = new Set([
 // 四色门侧栏运行必需的 4 个素材：体积极小、缺任意一个侧栏入口会先闪再消失，
 // 已获准随公开仓库分发（其余 public/uploads、二进制素材仍然禁止入库）。
 const publicMediaAllowlist = new Set([
+  // Explicitly requested broker identity icons; sources and hashes in docs/broker-icon-sources.json.
+  "public/broker-presets/longbridge.jpg",
+  "public/broker-presets/ibkr.jpg",
+  "public/broker-presets/futu.jpg",
+  "public/broker-presets/tiger.jpg",
+  "public/broker-presets/trading212.jpg",
+  "public/broker-presets/moomoo.jpg",
+  "public/broker-presets/robinhood.jpg",
+  "public/broker-presets/huatai.jpg",
+  "public/broker-presets/schwab.jpg",
+  "public/broker-presets/usmart.jpg",
+  "public/broker-presets/eastmoney.jpg",
+  "public/broker-presets/ths.jpg",
+
   // FIRE 页面运行必需的小丑鱼图；独立随镜像发布，不放行其他部署素材。
   "public/fire-assets/clownfish-family.png",
   // 配色设置入口的内置矢量图标，属于产品源码，不是用户上传或部署私有素材。

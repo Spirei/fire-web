@@ -1,3 +1,4 @@
+import { BrokerGroupNameConflict } from "@/lib/settings";
 import { NextResponse } from "next/server";
 import fs from "node:fs";
 import { clientSettings } from "@/lib/settingsClient";
@@ -182,6 +183,7 @@ export async function PUT(request: Request) {
     emailLinkOrigin: body.emailLinkOrigin !== undefined ? String(body.emailLinkOrigin) : undefined
   }, modelServices ? before.modelServicesRevision : undefined); }
   catch (error) {
+    if (error instanceof BrokerGroupNameConflict) return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof ModelSettingsConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof SmtpDestinationError) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ error: "设置保存失败，本次修改未保存，请重试" }, { status: 500 });

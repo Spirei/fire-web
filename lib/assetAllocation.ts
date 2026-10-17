@@ -1,6 +1,6 @@
+import { ownedBrokerGroups } from "./brokerAccountLinks";
 import { holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "./stockAccount";
 import { createHash } from "node:crypto";
-import { getSiteSettings } from "./settings";
 import { getDb } from "./db";
 import { listRecords } from "./store";
 import { readAccountCash } from "./accountCashStore";
@@ -27,7 +27,7 @@ export function buildAssetAllocation(userId: string, rates: Record<string, numbe
   const records = listRecords(userId), cash = readAccountCash(userId), overview = buildOverview(records, rates, quotes, currency, cash);
   const accounts: AllocationAccount[] = [], issues: AllocationSnapshot["issues"] = [];
   const revisions = allocationRevisions(userId);
-  const groups = getSiteSettings().groups;
+  const groups = ownedBrokerGroups(userId);
   const icons = new Map((getDb().prepare("SELECT code,url FROM assets WHERE type='broker'").all() as { code: string; url: string }[]).map(a => [a.code.toLowerCase(), a.url]));
   const brokers = groups.map(g => ({ id: g.id, name: g.name, icon: icons.get(g.id.toLowerCase()) || "" }));
   const positions: AllocationSnapshot["positions"] = [];

@@ -193,11 +193,11 @@ export function clearAllRecords(userId: string): { records: number; orders: numb
 }
 
 export function renameRecordGroup(oldName: string, newName: string) {
-  getDb().prepare("UPDATE records SET group_name = ? WHERE group_name = ?").run(newName, oldName);
+  getDb().prepare("UPDATE records SET group_name = ? WHERE group_name = ? AND NOT EXISTS (SELECT 1 FROM broker_accounts b WHERE b.user_id=records.user_id AND (b.name=records.group_name OR LOWER(b.name)=LOWER(?)))").run(newName, oldName, newName);
 }
 
 export function clearRecordGroup(name: string) {
-  getDb().prepare("UPDATE records SET group_name = '' WHERE group_name = ?").run(name);
+  getDb().prepare("UPDATE records SET group_name = '' WHERE group_name = ? AND NOT EXISTS (SELECT 1 FROM broker_accounts b WHERE b.user_id=records.user_id AND b.name=records.group_name)").run(name);
 }
 
 export function parseMarket(value: string): Market {

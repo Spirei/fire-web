@@ -482,6 +482,10 @@ export function getSiteSettings(): SiteSettings {
   return result;
 }
 
+export class BrokerGroupNameConflict extends Error {
+  constructor(){super("共享券商名称与个人账户重名，请使用其他名称");}
+}
+
 export function updateSiteSettings(patch: Partial<SiteSettings> & { clearXueqiuCookie?: boolean }, expectedModelRevision?: string): SiteSettings {
   const db = getDb();
   db.transaction(() => {
@@ -550,6 +554,10 @@ export function updateSiteSettings(patch: Partial<SiteSettings> & { clearXueqiuC
         name: g.name.trim() || "未命名分组",
         alias: typeof g.alias === "string" && g.alias.trim() ? g.alias.trim() : undefined
       }));
+    const personalNames = new Set((db.prepare("SELECT DISTINCT name FROM broker_accounts").all() as {name:string}[]).map(r => r.name.toLowerCase()));
+    for (const group of valid) for (const name of [group.name, group.alias]) {
+      if (name && personalNames.has(name.toLowerCase())) throw new BrokerGroupNameConflict();
+    }
     upsert.run("groups", JSON.stringify(valid));
     // 券商改名时同步素材库 broker 素材名称（券商图标按名称映射全局生效）
     const brokerSync = db.prepare("UPDATE assets SET name = ?, updated_at = ? WHERE type = 'broker' AND UPPER(code) = ?");

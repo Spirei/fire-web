@@ -7,6 +7,7 @@ import type { RecordInput } from "./types";
 import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
+import { installBrokerAccounts } from "./brokerAccountsSchema";
 import { installAppAssets } from "./appAssetsSchema";
 import { installRecordsContract } from "./recordsSchema";
 import { installAccountChanges } from "./accountChangeSchema";
@@ -1234,6 +1235,7 @@ export function getDb(): Database.Database {
       if (!settlementColumns.includes("settlement_amount")) db.exec("ALTER TABLE trade_orders ADD COLUMN settlement_amount REAL");
       installRecordsContract(db);
       installAppAssets(db);
+      installBrokerAccounts(db);
       installQuoteSubscriptions(db);
       installAccountChanges(db);
       installAssetAllocation(db);
