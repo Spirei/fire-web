@@ -88,14 +88,57 @@ jobs:
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
     steps:
+      - name: Checkout release ancestry
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check scoped release hold
+        id: hold
+        env:
+          HOLD_ANCESTOR: ${{ vars.ALCOR_RELEASE_HOLD_ANCESTOR }}
+          CURRENT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$HOLD_ANCESTOR" ]; then
+            echo "held=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Invalid or missing commits fail closed; never silently bypass a hold.
+          if [[ ! "$HOLD_ANCESTOR" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "发布暂停 SHA 格式无效。" >&2
+            exit 1
+          fi
+          git cat-file -e "${HOLD_ANCESTOR}^{commit}"
+          if git merge-base --is-ancestor "$HOLD_ANCESTOR" "$CURRENT_SHA"; then
+            echo "held=true" >> "$GITHUB_OUTPUT"
+            echo "本提交包含尚未获准发布的功能，保留检查并暂停镜像发布。"
+          else
+            result=$?
+            [ "$result" -eq 1 ]
+            echo "held=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Decide whether image should be built
         id: gate
+        if: steps.hold.outputs.held == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           CURRENT_SHA: ${{ github.sha }}
         run: |
-          last_sha=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?status=success&per_page=30" --jq '[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].head_sha // ""')
+          set -euo pipefail
+          # A successful run with a held/skipped publish is not an available image.
+          runs=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?status=success&per_page=30" --jq '.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch") | [.id, .head_sha] | @tsv')
+          last_sha=""
+          while IFS=$'\t' read -r run_id run_sha; do
+            [ -n "$run_id" ] || continue
+            published=$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" --jq 'any(.jobs[]; .name == "Publish linux/amd64 image" and .conclusion == "success")')
+            if [ "$published" = "true" ]; then
+              last_sha="$run_sha"
+              break
+            fi
+          done <<< "$runs"
           if [ "$last_sha" = "$CURRENT_SHA" ]; then
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             echo "当前 main 提交已有可用镜像，跳过重复构建。"
