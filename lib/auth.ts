@@ -26,14 +26,17 @@ interface UserRow {
 }
 
 export function findUserByUsername(username: string): UserRow | undefined {
-  return getDb().prepare("SELECT * FROM users WHERE username = ?").get(username) as UserRow | undefined;
+  return getDb().prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?)").get(username) as UserRow | undefined;
 }
 
-/** 支持用户名或邮箱登录：邮箱大小写不敏感，用户名精确匹配 */
+/** Usernames and emails share a case-insensitive login namespace. Ambiguity fails closed. */
 export function findUserByLogin(login: string): UserRow | undefined {
-  return getDb()
-    .prepare("SELECT * FROM users WHERE username = ? OR LOWER(email) = LOWER(?)")
-    .get(login, login) as UserRow | undefined;
+  const rows = getDb().prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?) OR (email != '' AND LOWER(email) = LOWER(?)) LIMIT 2").all(login, login) as UserRow[];
+  return rows.length === 1 ? rows[0] : undefined;
+}
+
+function loginNameTaken(value: string, exceptId = "") {
+  return Boolean(value && getDb().prepare("SELECT 1 FROM users WHERE id != ? AND (LOWER(username) = LOWER(?) OR (email != '' AND LOWER(email) = LOWER(?))) LIMIT 1").get(exceptId, value, value));
 }
 
 /** 按邮箱（大小写不敏感）查用户，用于注册邮箱唯一校验 */
@@ -80,9 +83,10 @@ export function createUser(username: string, password: string, isTest = false, e
   let uid = "";
   if (isTest) {
     // 测试账号不占用 UID（uid 为 NULL），可多个并存
-    db.prepare(
-      "INSERT INTO users (id, username, password_hash, created_at, email, avatar, role, nickname, uid, is_test) VALUES (?, ?, ?, ?, '', '', 'user', '', NULL, 1)"
-    ).run(id, username, hash, now);
+    db.transaction(() => {
+      if (loginNameTaken(username)) throw new Error("duplicate username");
+      db.prepare("INSERT INTO users (id, username, password_hash, created_at, email, avatar, role, nickname, uid, is_test) VALUES (?, ?, ?, ?, '', '', 'user', '', NULL, 1)").run(id, username, hash, now);
+    }).immediate();
     return { id, username, nickname: "", uid, email: "", avatar: "", role: "user", isTest: true };
   }
   // 首个非测试注册用户自动成为管理员，后续注册均为普通用户。
@@ -91,6 +95,8 @@ export function createUser(username: string, password: string, isTest = false, e
   let role: "admin" | "user" = "user";
   // IMMEDIATE 事务让“首个用户”和 UID 分配在多进程下也只有一个赢家。
   db.transaction(() => {
+    if (loginNameTaken(username)) throw new Error("duplicate username");
+    if (loginNameTaken(normalizedEmail)) throw new Error("email already bound");
     role = needsSetup() ? "admin" : "user";
     const last = db.prepare("SELECT MAX(CAST(uid AS INTEGER)) AS uid FROM users WHERE uid GLOB '[0-9]*'").get() as { uid: number | null };
     const next = String((Number(last.uid) || 0) + 1);
@@ -299,9 +305,9 @@ export function updateProfile(
     const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
     const nickname = patch.nickname !== undefined ? patch.nickname.trim() : (row.nickname ?? "");
     if (patch.username !== undefined) {
-      const conflict = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username, userId);
-      if (conflict) return null;
+      if (loginNameTaken(username, userId)) return null;
     }
+    if (patch.email !== undefined && loginNameTaken(email, userId)) return null;
     db.prepare("UPDATE users SET username = ?, email = ?, nickname = ? WHERE id = ?").run(username, email, nickname, userId);
     if (email.toLowerCase() !== (row.email || "").toLowerCase()) invalidateEmailRecovery(userId);
     return toUser(findUserById(userId)!);
@@ -342,31 +348,31 @@ export function updateUserById(
   patch: { username?: string; email?: string; role?: string }
 ): User | null {
   const db = getDb();
-  const row = findUserById(userId);
-  if (!row) return null;
-  const username = patch.username !== undefined ? patch.username.trim() : row.username;
-  const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
-  const role = patch.role === "admin" || patch.role === "user" ? patch.role : row.role;
+  return db.transaction(() => {
+    const row = findUserById(userId);
+    if (!row) return null;
+    const username = patch.username !== undefined ? patch.username.trim() : row.username;
+    const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
+    const role = patch.role === "admin" || patch.role === "user" ? patch.role : row.role;
 
-  if (email) {
-    const conflict = findUserByEmail(email);
-    if (conflict && conflict.id !== userId) return null;
-  }
+    if (email) {
+      const conflict = findUserByEmail(email);
+      if (conflict && conflict.id !== userId) return null;
+    }
 
-  if (row.role === "admin" && role === "user") {
-    const admins = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number };
-    if (admins.n <= 1) return null;
-  }
+    if (row.role === "admin" && role === "user") {
+      const admins = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number };
+      if (admins.n <= 1) return null;
+    }
 
-  if (patch.username !== undefined) {
-    const conflict = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username, userId);
-    if (conflict) return null;
-  }
-  db.transaction(() => {
+    if (patch.username !== undefined) {
+      if (loginNameTaken(username, userId)) return null;
+    }
+    if (patch.email !== undefined && loginNameTaken(email, userId)) return null;
     db.prepare("UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?").run(username, email, role, userId);
     if (email.toLowerCase() !== (row.email || "").toLowerCase()) invalidateEmailRecovery(userId);
+    return toUser(findUserById(userId)!);
   }).immediate();
-  return toUser(findUserById(userId)!);
 }
 
 export function deleteUserById(userId: string): boolean {
