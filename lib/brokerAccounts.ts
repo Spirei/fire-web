@@ -8,7 +8,7 @@ import { collectionRevision, RecordsError, validRecordRequestId } from "./record
 import { isFundCurrency } from "./fundCurrencies";
 import { listRecords, updateRecord } from "./store";
 
-type Row = {id:string;user_id:string;name:string;provider_id:string|null;currency:string;revision:number;icon:Buffer|null;created_at:string;updated_at:string};
+type Row = {id:string;user_id:string;name:string;provider_id:string|null;currency:string;revision:number;icon:Buffer|null;created_at:string;updated_at:string;holding_source:"manual"|"official"};
 export type BrokerKind = "create"|"update"|"delete"|"upload_icon"|"reset_icon"|"bind_records";
 export function brokerPresets() {
   const icons = getDb().prepare("SELECT code,name,url,updated_at FROM assets WHERE type='broker'").all() as {code:string;name:string;url:string;updated_at:string}[];
@@ -31,7 +31,7 @@ export function brokerAccount(userId:string,id:string,version:1|2) {
   const r=row(userId,id);if(!r)throw new RecordsError("账户不存在",404);
   const preset=brokerPresets().find(p=>p.id===r.provider_id);
   const count=getDb().prepare("SELECT COUNT(*) n FROM records WHERE user_id=? AND broker_account_id=?").get(userId,r.id) as {n:number};
-  return {id:r.id,name:r.name,providerId:r.provider_id,currency:r.currency,revision:r.revision,
+  return {id:r.id,name:r.name,holdingSource:r.holding_source,providerId:r.provider_id,currency:r.currency,revision:r.revision,
     icon:r.icon?`/api/v${version}/broker-accounts/${r.id}/icon`:preset?.icon??null,
     iconSource:r.icon?"custom":preset?"preset":"none",recordGroup:r.name,recordCount:count.n,createdAt:r.created_at,updatedAt:r.updated_at};
 }
@@ -98,9 +98,11 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
         }
         db.prepare("UPDATE broker_accounts SET name=?,currency=?,revision=revision+1,updated_at=? WHERE user_id=? AND id=?").run(name,currency,at,userId,id);
       } else if(kind==='bind_records') {
+        if(current!.holding_source==='official')throw new RecordsError('官方管理账户不能手动关联持仓',409,40903);
         if(collectionRevision(userId)!==b.recordCollectionRevision)throw new RecordsError('持仓记录已变化',409,40902);
         const chosen=listRecords(userId).filter(r=>(b.recordIds as string[]).includes(r.id));
         if(chosen.length!==(b.recordIds as string[]).length)throw new RecordsError('持仓不存在',404);
+        if(chosen.some(r=>r.brokerAccountId&&row(userId,r.brokerAccountId)?.holding_source==='official'))throw new RecordsError('官方管理账户不能手动移出持仓',409,40903);
         if(b.allowReassign!==undefined&&typeof b.allowReassign!=='boolean')throw new RecordsError('归属调整确认无效');
         if(b.allowReassign!==true&&chosen.some(r=>r.brokerAccountId&&r.brokerAccountId!==id))throw new RecordsError('已关联其他账户的持仓须通过转仓处理',409,40902);
         const keys=new Set<string>();

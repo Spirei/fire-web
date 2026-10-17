@@ -29,6 +29,14 @@
     "max_dimension": 4096,
     "max_pixels": 16777216
   },
+  "holding_source": {
+    "version": 1,
+    "field": "holdingSource",
+    "manual_path": "/api/v2/broker-accounts/{accountId}/holding-source",
+    "takeover_field": "takeOverOfficial",
+    "default_source": "manual",
+    "offline_fallback": false
+  },
   "record_binding_id_field": "brokerAccountId",
   "binding_path": "/api/v2/broker-accounts/{accountId}/bindings",
   "statements": {

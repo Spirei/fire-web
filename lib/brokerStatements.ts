@@ -14,7 +14,7 @@ function account(userId:string,id:string){return brokerAccount(userId,id,2);}
 type Connection={secret:string;revision:number;reference:string|null;reference_at:string|null};
 function connection(userId:string,id:string){return getDb().prepare('SELECT secret,revision,reference,reference_at FROM broker_connections WHERE user_id=? AND account_id=?').get(userId,id) as Connection|undefined;}
 function config(c:Connection){return JSON.parse(decryptSecret(c.secret,true)) as StatementCredentials;}
-export function statementStatus(userId:string,id:string){account(userId,id);const c=connection(userId,id);const latest=getDb().prepare('SELECT to_date,cash_json,imported_at FROM broker_statement_imports WHERE user_id=? AND account_id=? ORDER BY to_date DESC LIMIT 1').get(userId,id) as {to_date:string;cash_json:string;imported_at:string}|undefined;return {configured:!!c,connectorId:c?(config(c).connectorId??'ibkr-flex'):null,latest:latest?{toDate:latest.to_date,cash:JSON.parse(latest.cash_json),importedAt:latest.imported_at}:null};}
+export function statementStatus(userId:string,id:string){account(userId,id);const c=connection(userId,id);const latest=getDb().prepare('SELECT to_date,cash_json,imported_at FROM broker_statement_imports WHERE user_id=? AND account_id=? ORDER BY to_date DESC LIMIT 1').get(userId,id) as {to_date:string;cash_json:string;imported_at:string}|undefined;return {holdingSource:account(userId,id).holdingSource,configured:!!c,connectorId:c?(config(c).connectorId??'ibkr-flex'):null,latest:latest?{toDate:latest.to_date,cash:JSON.parse(latest.cash_json),importedAt:latest.imported_at}:null};}
 function mutate(userId:string,id:string,body:Record<string,unknown>,kind:string,authorize:()=>string,run:()=>unknown){
   const requestId=validRecordRequestId(body.requestId),db=getDb();
   if(!Number.isSafeInteger(body.revision)||Number(body.revision)<1)fail('账户版本无效');
@@ -64,7 +64,7 @@ export function prepareFlexPreview(userId:string,id:string,text:string,externalA
     const diff=differences(userId,id,parsed),previewId='bsp-'+randomBytes(16).toString('hex');
     db.prepare('DELETE FROM broker_statement_previews WHERE user_id=? AND (created_at<? OR account_id=?)').run(userId,new Date(Date.now()-86400000).toISOString(),id);
     db.prepare('INSERT INTO broker_statement_previews(id,user_id,account_id,digest,payload,account_revision,record_revision,created_at) VALUES(?,?,?,?,?,?,?,?)').run(previewId,userId,id,digest,JSON.stringify(parsed),a.revision,collectionRevision(userId),now());
-    return {alreadyImported:false,previewId,digest,accountRevision:a.revision,collectionRevision:collectionRevision(userId),toDate:parsed.toDate,fromDate:parsed.fromDate,cash:parsed.cash,eventCount:parsed.events.length,warnings:parsed.warnings,...diff};
+    return {holdingSource:a.holdingSource,requiresOfficialTakeover:a.holdingSource==='manual',alreadyImported:false,previewId,digest,accountRevision:a.revision,collectionRevision:collectionRevision(userId),toDate:parsed.toDate,fromDate:parsed.fromDate,cash:parsed.cash,eventCount:parsed.events.length,warnings:parsed.warnings,...diff};
   }).immediate();
 }
 export async function fetchFlexPreview(userId:string,id:string,authorize:()=>string){
@@ -83,17 +83,35 @@ export function applyFlexPreview(userId:string,id:string,b:Record<string,unknown
   if(typeof b.previewId!=='string'||!/^bsp-[a-f0-9]{32}$/.test(b.previewId))fail('预览ID无效');
   return mutate(userId,id,b,'import_statement',authorize,()=>{
     const db=getDb(),preview=storedPreview(userId,id,b.previewId as string),statement=JSON.parse(preview.payload) as FlexStatement,a=account(userId,id);
+    if(b.takeOverOfficial!==undefined&&typeof b.takeOverOfficial!=='boolean')fail('官方接管确认无效');
+    if(a.holdingSource==='manual'&&b.takeOverOfficial!==true)throw new RecordsError('请预览并明确确认由官方接管持仓',409,40903);
     if(a.revision!==preview.account_revision||collectionRevision(userId)!==preview.record_revision)fail('预览后账户或持仓已变化，请重新预览',409);
     if(db.prepare('SELECT 1 FROM broker_statement_imports WHERE user_id=? AND account_id=? AND digest=?').get(userId,id,preview.digest))fail('账单已导入',409);
     const diff=differences(userId,id,statement);if(diff.requiresUnassignedAcknowledgement&&b.acknowledgeUnassigned!==true)fail('存在同证券未绑定持仓，请先绑定或确认分开记录',409);
     if(db.prepare("SELECT 1 FROM trade_orders o JOIN records r ON r.id=o.record_id AND r.user_id=o.user_id WHERE r.user_id=? AND r.broker_account_id=? AND o.status='pending' LIMIT 1").get(userId,id))fail('账户仍有待成交订单，请完成或取消后再核对账单',409);
     const newer=db.prepare("SELECT 1 FROM trade_orders o JOIN records r ON r.id=o.record_id AND r.user_id=o.user_id WHERE r.user_id=? AND r.broker_account_id=? AND replace(substr(o.traded_at,1,10),'-','')>? LIMIT 1").get(userId,id,statement.toDate);
     if(newer)fail('账户已有晚于账单的订单，请读取更新账单',409);
+    db.prepare("UPDATE broker_accounts SET holding_source='official' WHERE user_id=? AND id=?").run(userId,id);
+    db.prepare('INSERT INTO broker_official_write_context(user_id,account_id) VALUES(?,?)').run(userId,id);
     for(const e of statement.events){const payload=JSON.stringify(e),old=db.prepare('SELECT payload FROM broker_statement_events WHERE user_id=? AND account_id=? AND external_id=?').get(userId,id,e.id) as {payload:string}|undefined;if(old&&old.payload!==payload)fail('官方流水已更正，请核对后处理',409);db.prepare('INSERT OR IGNORE INTO broker_statement_events(user_id,account_id,external_id,payload) VALUES(?,?,?,?)').run(userId,id,e.id,payload);}
     for(const p of diff.rows){const input={name:p.name,code:p.code,market:p.market,price:p.price,cost:p.cost,qty:p.qty,group:a.name,brokerAccountId:id,note:'',source:'ibkr-flex'};if(p.recordId){const r=listRecords(userId).find(r=>r.id===p.recordId)!;updateRecord(r.id,userId,{...input,note:r.note,watchGroupId:r.watchGroupId});}else createRecord(userId,input);}
     for(const m of diff.missing){const r=listRecords(userId).find(r=>r.id===m.recordId)!;updateRecord(r.id,userId,{...r,qty:0});}
     db.prepare('INSERT INTO broker_statement_imports(user_id,account_id,digest,to_date,external_account,cash_json,imported_at) VALUES(?,?,?,?,?,?,?)').run(userId,id,preview.digest,statement.toDate,statement.externalAccount,JSON.stringify(statement.cash),now());
     db.prepare('DELETE FROM broker_statement_previews WHERE user_id=? AND account_id=?').run(userId,id);
-    return {digest:preview.digest,updated:diff.rows.filter(p=>p.recordId).length,created:diff.rows.filter(p=>!p.recordId).length,closed:diff.missing.length,eventCount:statement.events.length,collectionRevision:collectionRevision(userId)};
+    db.prepare('DELETE FROM broker_official_write_context WHERE user_id=? AND account_id=?').run(userId,id);
+    return {holdingSource:'official' as const,accountRevision:a.revision+1,digest:preview.digest,updated:diff.rows.filter(p=>p.recordId).length,created:diff.rows.filter(p=>!p.recordId).length,closed:diff.missing.length,eventCount:statement.events.length,collectionRevision:collectionRevision(userId)};
+  });
+}
+
+/** Source changes never change holdings or discard the configured official connector. */
+export function switchBrokerToManual(userId:string,id:string,b:Record<string,unknown>,authorize:()=>string){
+  if(b.source!=='manual'||!Number.isSafeInteger(b.recordCollectionRevision)||Number(b.recordCollectionRevision)<0)fail('手动来源或持仓集合版本无效');
+  return mutate(userId,id,b,'set_holding_source',authorize,()=>{
+    const db=getDb(),a=account(userId,id);
+    if(collectionRevision(userId)!==b.recordCollectionRevision)fail('持仓记录已变化，请重新读取',409);
+    db.prepare("UPDATE broker_accounts SET holding_source='manual' WHERE user_id=? AND id=?").run(userId,id);
+    db.prepare('DELETE FROM broker_statement_previews WHERE user_id=? AND account_id=?').run(userId,id);
+    db.prepare('UPDATE broker_connections SET reference=NULL,reference_at=NULL,revision=revision+1 WHERE user_id=? AND account_id=?').run(userId,id);
+    return {holdingSource:'manual' as const,accountRevision:a.revision+1,collectionRevision:collectionRevision(userId)};
   });
 }

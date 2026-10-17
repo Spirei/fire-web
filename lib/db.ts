@@ -7,6 +7,7 @@ import type { RecordInput } from "./types";
 import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
+import { registerBrokerSourceGuard } from "./brokerHoldingSourceSchema";
 import { installBrokerAccounts } from "./brokerAccountsSchema";
 import { installAppAssets } from "./appAssetsSchema";
 import { installRecordsContract } from "./recordsSchema";
@@ -1229,6 +1230,7 @@ export function getDb(): Database.Database {
     try {
       try { fs.chmodSync(DB_FILE, 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
       db.pragma("journal_mode = WAL");
+      registerBrokerSourceGuard(db);
       migrate(db);
       const settlementColumns = (db.prepare("PRAGMA table_info(trade_orders)").all() as { name: string }[]).map(c => c.name);
       if (!settlementColumns.includes("settlement_currency")) db.exec("ALTER TABLE trade_orders ADD COLUMN settlement_currency TEXT");

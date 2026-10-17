@@ -4931,17 +4931,25 @@ export const V0_1_59_ENTRY: VersionEntry = {
     { kind: "fix", title: "提交与冷却反馈", desc: "登录、注册和二次验证防止并发重复提交，按服务器冷却时间禁用按钮，到期仍须手动重试。" }
   ]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_60_ENTRY: VersionEntry = {
   ...V0_1_59_ENTRY,
   version: "v0.1.60", date: "2026-10-17",
   summary: "个人券商账户与私有图标、用户名大小写兼容及真实成交额榜单。",
   software: V0_1_59_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.60" } : item),
   changes: [{ kind: "feature", title: "券商持仓关联与IBKR官方账单", desc: "持仓新增稳定个人账户ID，支持显式批量绑定和改名保持身份。IBKR Flex支持加密读取配置、官方报表轮询及XML上传，先预览差异、版本核对后导入；持仓按快照更新，历史流水独立去重归档，现金仅保存核对，避免重复累加。暂限美港A股股票与股票类ETF汇总，其他资产拒绝自动覆盖。" }, { kind: "feature", title: "个人券商账户与私有图标", desc: "新增本人隔离的v1/v2账户目录、保存改名删除与图标上传/重置合约，12个稳定机构ID与真实素材图标，缺素材由App离线兜底。账户按本人records.group关联，改名核对账户及记录集合版本，原子更新本人记录；有引用不能直接删除。UUID持久回执、版本冲突和不重放，单帧图片校验后私有保存，不改共享目录及真实资金交易，不连接外部券商。" }, { kind: "fix", title: "用户名登录不区分大小写", desc: "Web、v1/v2及原生密码登录统一按用户名或邮箱大小写不敏感匹配，保留真实用户名显示和密码逐字校验。注册与改名在写事务内阻止大小写重复及跨用户名/邮箱冲突；存量歧义账户返回通用登录失败，不按首条或密码挑选账户、不合并改写旧账号。TOTP、挑战、权限、限流与唯一回执保持。" }, { kind: "fix", title: "热门股票改按成交额", desc: "按用户纠正增加独立成交额能力和查询参数，保留旧成交量合约；全市场日线范围筛选后核对实际成交额、交易日及币种，确认完整前十，不使用现价乘量估算，A股万元转为CNY。" }, { kind: "fix", title: "成交量榜数据源恢复", desc: "公开全市场成交量榜增加TradingView数据源与既有出站代理，保留东方财富备用源，按实际交易日校验完整前十；v1旧账户同样声明榜单能力，不要求切换授权。" }, { kind: "fix", title: "App搜索与Web同源提速", desc: "原生v1/v2搜索先走与Web共用的素材目录及关联ETF身份，命中即返回，不等待外部行情补价。" }, { kind: "feature", title: "美港A股成交量前十", desc: "v2发现协议声明公开成交量榜，按东方财富各市场证券池的成交量排序取前十，返回实际交易日期；缓存合并并发请求，拒绝不完整、重复、乱序及混合日期数据，不以持仓或市值榜冒充。" }]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_60_ENTRY,
+  version:"v0.1.61", date:"2026-10-18",
+  summary:"券商账户手动与官方持仓来源互斥，接管及切换保持确认与回执。",
+  software:V0_1_60_ENTRY.software.map(item=>item.name==='Alcor'?{...item,version:'v0.1.61'}:item),
+  changes:[{kind:"security",title:"券商持仓来源二选一",desc:"账户持久区分手动与官方。官方接管须新账单差异预览并明确确认，同事务更新持仓；切回手动核对账户及持仓版本、保留连接并使旧预览失效。数据库统一限制官方账户的手工金融修改、交易、旧导入和跨账户移出；官方离线保留旧值，不自动降级或重放。"}]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_60_ENTRY,
   V0_1_59_ENTRY,
   V0_1_58_ENTRY,
   V0_1_57_ENTRY,

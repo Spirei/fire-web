@@ -117,11 +117,13 @@ export function mutateRecords(userId: string, kind: Kind, id: string, body: unkn
     else if (input?.watchGroupId && !db.prepare("SELECT 1 FROM watch_groups WHERE user_id=? AND id=? AND kind='custom'").get(userId, input.watchGroupId)) error = new RecordsError("自选组不存在", 404);
     let record: StockRecord | null = null;
     if (!error) {
-      if (kind === "create") record = createRecord(userId, input!);
-      else if (kind === "update") record = updateRecord(id, userId, input!);
-      else deleteRecord(id, userId);
-      const activity = record ?? old!;
-      logActivity(userId, kind === "create" ? "created" : kind === "update" ? "updated" : "deleted", activity.name, activity.code, activity);
+      try { record=db.transaction(() => {
+        const saved=kind==='create'?createRecord(userId,input!):kind==='update'?updateRecord(id,userId,input!):null;
+        if(kind==='delete')deleteRecord(id,userId);
+        const activity=saved??old!;
+        logActivity(userId,kind==='create'?'created':kind==='update'?'updated':'deleted',activity.name,activity.code,activity);
+        return saved;
+      })(); } catch(e) { if(!(e instanceof RecordsError))throw e; error=e; record=null; }
     }
     const now = new Date().toISOString();
     const operation: RecordOperation = { requestId: requestId ?? "", kind, recordId: record?.id ?? id,

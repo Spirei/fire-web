@@ -4,9 +4,9 @@ import { ok,fail } from './api';
 import { readJsonBody,readFormBody,RequestBodyTooLargeError } from './requestBody';
 import { statementConnector } from './brokerConnectors';
 import { FLEX_MAX_BYTES } from './ibkrFlex';
-import { statementStatus,saveFlexConnection,deleteFlexConnection,prepareFlexPreview,fetchFlexPreview,applyFlexPreview } from './brokerStatements';
+import { statementStatus,saveFlexConnection,deleteFlexConnection,prepareFlexPreview,fetchFlexPreview,applyFlexPreview,switchBrokerToManual } from './brokerStatements';
 import { rateLimit } from './rateLimit';
-export async function brokerStatementsResponse(request:Request,action:'connection'|'preview'|'fetch'|'apply',params:Promise<{accountId:string}>){
+export async function brokerStatementsResponse(request:Request,action:'connection'|'preview'|'fetch'|'apply'|'source',params:Promise<{accountId:string}>){
   try {
     const auth=brokerRequestAuth(request),{accountId}=await params;auth.authorize();
     if(!/^ba-[a-f0-9]{24}$/.test(accountId))throw new RecordsError('账户不存在',404);
@@ -23,8 +23,9 @@ export async function brokerStatementsResponse(request:Request,action:'connectio
     if(request.headers.get('content-type')?.split(';')[0]!=='application/json')throw new RecordsError('需要JSON请求');
     const b=await readJsonBody(request,4096);auth.authorize();if(!b||typeof b!=='object'||Array.isArray(b))throw new RecordsError('请求无效');
     if(b.connectorId!==undefined&&typeof b.connectorId!=='string')throw new RecordsError('渠道ID无效');
-    const allowed=action==='apply'?['requestId','revision','previewId','acknowledgeUnassigned']:request.method==='DELETE'?['requestId','revision']:['requestId','revision','connectorId',...(statementConnector(b.connectorId??'ibkr-flex')?.fields.map(f=>f.key)??[])];
+    const allowed=action==='source'?['requestId','revision','recordCollectionRevision','source']:action==='apply'?['requestId','revision','previewId','acknowledgeUnassigned','takeOverOfficial']:request.method==='DELETE'?['requestId','revision']:['requestId','revision','connectorId',...(statementConnector(b.connectorId??'ibkr-flex')?.fields.map(f=>f.key)??[])];
     if(Object.keys(b).some(k=>!allowed.includes(k)))throw new RecordsError('含未知字段');
+    if(action==='source')return ok(switchBrokerToManual(auth.userId,accountId,b,auth.authorize));
     if(action==='apply')return ok(applyFlexPreview(auth.userId,accountId,b,auth.authorize));
     return ok(request.method==='DELETE'?deleteFlexConnection(auth.userId,accountId,b,auth.authorize):saveFlexConnection(auth.userId,accountId,b,auth.authorize));
   }catch(e){if(e instanceof RequestBodyTooLargeError)return fail(41301,'文件或请求过大',413);if(e instanceof RecordsError)return fail(e.code,e.message,e.status);return fail(50001,'账单暂时无法读取或保存',500);}

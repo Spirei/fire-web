@@ -143,3 +143,58 @@ POST preview 返回以下data；fetch HTTP200时在同一data额外带 `pending:
 ```
 
 只有用户明确确认调整原/目标账户记账归属后才传allowReassign:true。遗漏默认拒绝跨已绑定账户调整；同账户重复证券仍拒绝。
+
+## 持仓来源二选一（2026-10-18，优先于上文旧apply样例）
+
+### 持久状态与发现
+
+BrokerAccount及GET connection新增 `holdingSource:"manual"|"official"`。新建和升级的数据库默认manual；配置官方连接、上传、读取和预览都不会自动改变来源。
+旧服务缺字段时App显示unknown/未支持，不在客户端推断为manual；按发现能力决定是否显示模式操作。
+`auth/config.data.broker_accounts.holding_source`：
+
+```json
+{"version":1,"field":"holdingSource","manual_path":"/api/v2/broker-accounts/{accountId}/holding-source","takeover_field":"takeOverOfficial","default_source":"manual","offline_fallback":false}
+```
+
+v1路径同构。连接可保留于两种模式，只有当前来源可更新持仓；官方读取离线、503、Token失效或主动断开连接都不改变来源或旧持仓。
+
+### 原子官方接管
+
+新preview在原字段基础上返回 `holdingSource` 和 `requiresOfficialTakeover`。manual时后者true。
+POST原apply接口的明确接管请求：
+
+```json
+{"requestId":"12345678-1234-4234-8234-123456789abc","revision":3,"previewId":"bsp-0123456789abcdef0123456789abcdef","acknowledgeUnassigned":false,"takeOverOfficial":true}
+```
+
+manual模式没有takeOverOfficial:true时返回40903，无财务写入。官方模式可省略该字段正常确认较新账单。
+只提供独立“切到官方”参数而不带有效预览的接口不存在。
+接管、快照、官方流水归档、账户revision和成功回执同一事务；校验、存储或授权失败全部回滚，来源保持原值。
+成功import_statement.data原有计数再增加 `holdingSource:"official",accountRevision:<新账户版本>`。
+预览24小时有效；记录/账户版本变化、已导入或非更新日期报表、仍有待成交/更晚订单继续拒绝；恢复官方也必须新预览，不能重放过去已导入快照。
+
+### 切回手动
+
+PUT发现的manual_path，仅接受：
+
+```json
+{"requestId":"12345678-1234-4234-8234-123456789abd","revision":4,"recordCollectionRevision":13,"source":"manual"}
+```
+
+账户和本人记录集合均作CAS；保留Token/Query配置及现有持仓数值、订单与现金，删除该账户未确认预览，清除旧轮询reference并更新连接版本，防止已在途的读取完成后复活旧预览。
+账户revision递增，原operations路径的成功回执kind为set_holding_source，data：
+
+```json
+{"holdingSource":"manual","accountRevision":5,"collectionRevision":13}
+```
+
+来源切换使用既有UUID回执、不重放规则；set_holding_source与configure_statement/import_statement一样，明确冲突整体回滚、不保存成功回执，超时先查原requestId及账户快照，不自动换UUID提交。
+切回manual不等于删除连接；连接状态与持仓来源分别显示。
+
+### 全入口约束
+
+官方模式手动增删持仓、修改金融字段（数量/成本/价格/证券身份）、关联进入或跨账户移出返回40903。即使传allowReassign:true也不绕过来源；先明确切回manual。
+数据层限制涵盖旧Web/v1/v2记录写入、OCR、表格/备份导入、订单/股息/历史重放、直接SQL及批量DELETE/REPLACE，不依赖新版App按钮禁用。
+原生记录和交易的既有失败回执合同保持；备注/自选分组等不改变金融归属的元数据允许编辑；账户改名只同步展示标签，稳定ID及来源保持。
+同股票在其他手动账户中正常保留并可编辑，不按证券代码全局锁定。账户删除等有历史引用的限制保持。用户整账号删除正常级联清理，不被持仓来源阻止。
+官方写权限只在同步事务内部临时授予该本人账户，提交前移除，失败/重启不残留；读取和预览均无该权限。

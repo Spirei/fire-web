@@ -1274,6 +1274,7 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 | --- | --- | --- |
 | POST | `/api/v1/broker-accounts/{accountId}/bindings` | portfolio.write |
 | GET | `/api/v1/broker-accounts/{accountId}/connection` | portfolio.read |
+| PUT | `/api/v1/broker-accounts/{accountId}/holding-source` | portfolio.write |
 | PUT | `/api/v1/broker-accounts/{accountId}/connection` | portfolio.write |
 | DELETE | `/api/v1/broker-accounts/{accountId}/connection` | portfolio.write |
 | POST | `/api/v1/broker-accounts/{accountId}/statements/preview` | portfolio.write |
@@ -1291,3 +1292,5 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 | GET | `/api/v1/broker-accounts/operations/{requestId}` | portfolio.read |
 
 个人账户持仓使用稳定 `brokerAccountId`；IBKR Flex配置、上传/读取预览及确认导入详见 [官方账单合约](native-broker-statements.md)。
+
+个人券商账户显式返回 `holdingSource:manual|official`；官方接管须预览后 `takeOverOfficial:true`，切回手动为 holding-source PUT，保留配置并作废旧预览。官方离线不自动降级；所有持仓/交易入口受数据库互斥约束。

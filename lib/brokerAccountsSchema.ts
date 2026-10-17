@@ -1,3 +1,4 @@
+import { installBrokerHoldingSource } from "./brokerHoldingSourceSchema";
 import type Database from "better-sqlite3";
 export function installBrokerAccounts(db: Database.Database) {
   db.exec(`CREATE TABLE IF NOT EXISTS broker_accounts (
@@ -47,4 +48,5 @@ export function installBrokerAccounts(db: Database.Database) {
     WHEN NEW.broker_account_id!='' AND NOT EXISTS(SELECT 1 FROM broker_accounts WHERE id=NEW.broker_account_id AND user_id=NEW.user_id)
     BEGIN SELECT RAISE(ABORT,'Invalid broker account owner'); END;
   `);
+  installBrokerHoldingSource(db);
 }
