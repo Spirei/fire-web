@@ -11,6 +11,14 @@
   "cash_ledger": {
     "version": 1,
     "supported": true,
+    "account_overview": {
+      "version": 1,
+      "supported": true,
+      "path": "/api/v2/broker-accounts/cash?include=accounts",
+      "read_scope": "portfolio.read",
+      "max_accounts": 100,
+      "currency_coverage": "server_directory_and_saved_cash"
+    },
     "read_models": {
       "version": 1,
       "entry_balance_after": true,

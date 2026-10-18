@@ -10,6 +10,14 @@
 {
   "version": 1,
   "supported": true,
+  "account_overview": {
+    "version": 1,
+    "supported": true,
+    "path": "/api/v2/broker-accounts/cash?include=accounts",
+    "read_scope": "portfolio.read",
+    "max_accounts": 100,
+    "currency_coverage": "server_directory_and_saved_cash"
+  },
   "read_models": {
     "version": 1,
     "entry_balance_after": true,
@@ -132,3 +140,39 @@ entries响应附加 `balancesComplete:boolean`，表示该页所属完整账本�
 流水分页snapshotRevision只覆盖本人该账户该币种的statement，其他账户资金变化、行情价格、图标及自动订单现金缓存重建不打断翻页；本账本条目变化仍40902。globalCashRevision仍覆盖所有真实现金、成交/委托和归属变化，但不包含重复的fund-order缓存、行情或券商图标。升级后hash算法变化可能使旧预览40902，客户端重新读取并预览，不自动重放。
 
 资金转出与期初分配不再允许用1e-8容差透支最小单位；0余额不能出金0.00000001。币种开户只核对同币种历史和待成交，其他币种独立交易不会无故阻止开户。
+
+## 一次性账户归属总览（account_overview v1）
+
+实际发现 `cash_ledger.account_overview:{version:1,supported:true,path:"/api/v2/broker-accounts/cash?include=accounts",read_scope:"portfolio.read",max_accounts:100,currency_coverage:"server_directory_and_saved_cash"}` 后，GET其同源path。v1返回对应v1路径和私有图标引用。它复用summary_path，只有显式include=accounts才切换为本响应；无查询的旧summary响应保持，不能靠客户端逐账户请求拼总览。query只接受一个include=accounts，未知或重复参数400。
+
+```json
+{
+  "version":1,"userId":"owner","asOf":"同一ISO时刻","globalCashRevision":"64hex",
+  "snapshotRevision":"覆盖完整目录及现金的64hex","accountCollectionRevision":3,
+  "accountsComplete":true,"cashComplete":true,"complete":false,
+  "accounts":[{"account":"原AlcorBrokerAccount完整对象","cash":"原AlcorBrokerCashSnapshot完整对象"}],
+  "byCurrency":[{
+    "currency":"USD","totalCash":1507,"cardCash":7,"brokerCash":1200,"unallocatedCash":300,
+    "brokerAttributedCash":null,"brokerCashComplete":false,
+    "uninitializedAccountIds":["ba-未设置期初"],"incompleteAccountIds":[],
+    "complete":false,"unavailableReasons":["broker_opening_not_set"]
+  }]
+}
+```
+
+示例中的account/cash字符串仅为占位说明，实际是原模型对象。account完整保留id/name/providerId/currency/currencies/currencyUsage/revision/icon/iconSource/recordGroup/recordCount/holdingSource/createdAt/updatedAt；自定义icon按实际所选v1/v2返回本人私有图标path，预设图标沿原素材路径，不导出图像BLOB或第三方账户配置。cash.brokerAccountId和account.id严格相同，cash.brokerRevision和account.revision相同；holdingSource一致。所有cash.globalCashRevision、cash.asOf分别与根字段完全相同。
+
+完整性有意分开：
+
+- accountsComplete：成功即true，表示本人完整目录及每个账户的现金模型均已返回；最大100账户，超过上限40902整批失败，元数据损坏/存储失败也不伪造完整列表。没有账户是已知空集，不是读取失败。
+- cashComplete：原readAccountCash.sourceComplete，表示真实全局现金来源可读，不保证每家券商已开户。它与现有资产总额口径一致。
+- byCurrency.brokerCash：已经写入子账的归属金额，用于与总账分解；尚未初始化的账户没有被分配金额，旧资金仍留unallocated，因此它不是“所有券商均已核实的合计”。若某个已初始化的来源缺失，brokerCash为null，不拼部分已知值。
+- byCurrency.brokerCashComplete：服务端覆盖该币种的每个账户行均已初始化且balance来源完整；byCurrency.brokerAttributedCash只在此标志true时为完整券商合计，否则null。资产页若展示“全部券商现金合计”，使用此字段与标志，不能把brokerCash或本地已读部分冒充完整合计。
+- uninitializedAccountIds对应state=uninitialized；incompleteAccountIds对应已初始化但来源不完整。相关账户cash.currencies[].balance保持null，不补0。没有覆盖该币种的账户时，券商合计为已知空集0。
+- byCurrency.complete=cashComplete&&brokerCashComplete；根complete=cashComplete&&所有byCurrency.complete。complete=false不代表能把原已知全局totalCash清零。
+
+只要分解来源已知，totalCash=cardCash+brokerCash+unallocatedCash；这三项属于同一总额，不能把券商现金再加一次总资产。例如银行卡7、已归属1200、未归属300，总现金仍1507；若另有券商未初始化，brokerAttributedCash保持null，brokerCash仍明确表示已归属1200。已初始化来源缺失时brokerCash/unallocatedCash均null，但独立真实总账仍可能可读，因此totalCash保留原真实金额；无法分解时不硬凑等式。
+
+覆盖币种是服务端目录/实际资金币种的并集，再加全局现金币种。App本机额外选择且尚未向资金账本保存的币种，服务端不知道；客户端应补unknown显示，不能因未返回某行而推断本机该券商余额0，也不能据此宣称覆盖全部本机偏好。
+
+全部目录、图标身份、现金快照与分解在同一个SQLite读事务内、同一generation生成。并发写入发生在读取中途时，本次仍返回一致旧快照，下次才返回一致新快照；没有自动分配、补账、汇率换算或金融写入。资产页原global totalCash继续沿真实总账，卡包/旧现金保留。旧服务无此发现时禁用这个批量入口，不能虚构已联动或用N+1半读数据合计。

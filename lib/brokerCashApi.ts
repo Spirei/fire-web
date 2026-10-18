@@ -4,13 +4,14 @@ import { ok, fail } from './api';
 import { RecordsError } from './recordsContract';
 import { readJsonBody, RequestBodyTooLargeError } from './requestBody';
 import { rateLimit } from './rateLimit';
-import { brokerCashSummary,brokerCashSnapshot,brokerCashEntries,previewBrokerCash,submitBrokerCash } from './brokerCash';
-export async function brokerCashResponse(request:Request,action:'summary'|'account'|'entries'|'preview'|'submit',params?:Promise<{accountId:string}>){
+import { brokerCashOverview,brokerCashSummary,brokerCashSnapshot,brokerCashEntries,previewBrokerCash,submitBrokerCash } from './brokerCash';
+export async function brokerCashResponse(request:Request,action:'summary'|'account'|'entries'|'preview'|'submit',params?:Promise<{accountId:string}>,version:1|2=2){
   try{
     const auth=brokerRequestAuth(request),p=params?await params:undefined;auth.authorize();const query=new URL(request.url).searchParams;
-    if(action!=='entries'&&query.size)throw new RecordsError('不支持查询参数');
+    if(action==='summary'){if(query.size&&([...query.keys()].some(k=>k!=='include')||query.getAll('include').length!==1||query.get('include')!=='accounts'))throw new RecordsError('总览查询参数无效');}
+    else if(action!=='entries'&&query.size)throw new RecordsError('不支持查询参数');
     if(action==='summary'||action==='account'||action==='entries')return getDb().transaction(()=>{
-      auth.authorize();if(action==='summary')return ok(brokerCashSummary(auth.userId));if(action==='account')return ok(brokerCashSnapshot(auth.userId,p!.accountId));
+      auth.authorize();if(action==='summary')return ok(query.get('include')==='accounts'?brokerCashOverview(auth.userId,version):brokerCashSummary(auth.userId));if(action==='account')return ok(brokerCashSnapshot(auth.userId,p!.accountId));
       if([...query.keys()].some(k=>!['currency','limit','offset','snapshotRevision'].includes(k)||query.getAll(k).length!==1))throw new RecordsError('流水参数无效');
       const limit=query.get('limit')??'50',offset=query.get('offset')??'0',revision=query.get('snapshotRevision')??undefined;
       if(!/^[1-9]\d*$/.test(limit)||Number(limit)>200||!/^\d+$/.test(offset)||!Number.isSafeInteger(Number(offset))||revision!==undefined&&!/^[a-f0-9]{64}$/.test(revision))throw new RecordsError('流水分页无效');

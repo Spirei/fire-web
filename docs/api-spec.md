@@ -1316,3 +1316,5 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 买入时可按显式发现的 `account_trading.buy_target` 选择本人手动券商目标，预览只读、提交原子建仓／加仓并记账，详见 [原生交易合约](app-account-trading.md#买入时选择个人券商账户buy_target-v12026-10-18)。旧recordId、scope和UUID回执不变。
 
 个人券商cash_ledger提供按币种期初、外部入出金、只读归属总览和流水，资金预览/提交沿portfolio.read/write与原券商UUID回执；[实际资金合约及能力边界](native-broker-cash-contract.md)。
+
+现金归属总览通过cash_ledger.account_overview显式发现，在既有GET broker-accounts/cash请求include=accounts，一次返回完整本人账户/版本化图标、现金快照及总账分解；仅portfolio.read，严格100账户界限，旧summary和金融写入不变。完整字段见 [资金合约](native-broker-cash-contract.md#一次性账户归属总览account_overview-v1)。

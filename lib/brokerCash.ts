@@ -9,8 +9,8 @@ import { readBrokerCashLedger, pendingBuyCash, withdrawalCapacity, type CashRow 
 
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const conflict=(m:string)=>new RecordsError(m,409,40902);
-export function cashRevision(userId:string){
-  const db=getDb(),cash=readAccountCash(userId);
+export function cashRevision(userId:string,capturedCash?:ReturnType<typeof readAccountCash>){
+  const db=getDb(),cash=capturedCash??readAccountCash(userId);
   return hash({cash:{balances:cash.balances,cardCash:cash.cardCash,sourceComplete:cash.sourceComplete,unavailableReasons:cash.unavailableReasons},
     funds:db.prepare("SELECT id,currency,type,amount,direction,occurred_at FROM fund_transactions WHERE user_id=? AND id NOT LIKE 'fund-order-%' ORDER BY id").all(userId),
     orders:db.prepare('SELECT id,record_id,market,status,side,qty,price,fees,amount,settlement_currency,settlement_amount,traded_at FROM trade_orders WHERE user_id=? ORDER BY id').all(userId),
@@ -27,14 +27,49 @@ function totals(userId:string){
   return {userId,globalCashRevision:cashRevision(userId),asOf:new Date().toISOString(),complete:global.sourceComplete,byCurrency:currencies.map(currency=>({currency,totalCash:global.sourceComplete?global.balances[currency]??0:null,cardCash:global.sourceComplete?global.cardCash[currency]??0:null,brokerCash:owned[currency]??0,unallocatedCash:global.sourceComplete?(fund[currency as keyof typeof fund]??0)-(owned[currency]??0):null,complete:global.sourceComplete,unavailableReasons:global.unavailableReasons??[]}))};
 }
 export function brokerCashSummary(userId:string){return getDb().transaction(()=>totals(userId))();}
-function cashSnapshot(userId:string,id:string){
-  const a=brokerAccount(userId,id,2),cashRows=rows(userId,id),revision=cashRevision(userId),global=readAccountCash(userId),funds=readFundBalances(userId);
-  return {userId,brokerAccountId:id,brokerRevision:a.revision,globalCashRevision:revision,snapshotRevision:hash([revision,id,a.revision,a.holdingSource,a.currencies]),holdingSource:a.holdingSource,asOf:new Date().toISOString(),tradingCashBasis:'owner_currency_ledger',currencies:[...new Set([...a.currencies,...cashRows.map(r=>r.currency)])].sort().map(currency=>{
+type CashReadContext = {global:ReturnType<typeof readAccountCash>;funds:ReturnType<typeof readFundBalances>;revision:string;asOf:string;reservations:Map<string,number|null>};
+function cashReadContext(userId:string):CashReadContext {
+  const global=readAccountCash(userId);return {global,funds:readFundBalances(userId),revision:cashRevision(userId,global),asOf:new Date().toISOString(),reservations:new Map()};
+}
+function cashSnapshot(userId:string,id:string,context?:CashReadContext,account?:ReturnType<typeof brokerAccount>){
+  const a=account??brokerAccount(userId,id,2),cashRows=rows(userId,id),ctx=context??cashReadContext(userId),{revision,global,funds}=ctx;
+  return {userId,brokerAccountId:id,brokerRevision:a.revision,globalCashRevision:revision,snapshotRevision:hash([revision,id,a.revision,a.holdingSource,a.currencies]),holdingSource:a.holdingSource,asOf:ctx.asOf,tradingCashBasis:'owner_currency_ledger',currencies:[...new Set([...a.currencies,...cashRows.map(r=>r.currency)])].sort().map(currency=>{
     const ledger=readBrokerCashLedger(userId,id,currency),r=ledger.row,value=ledger.balance,fundCash=global.sourceComplete&&Number.isFinite(funds[currency as keyof typeof funds])?funds[currency as keyof typeof funds]:null;
-    return {currency,cashRevision:r?.revision??0,state:!r?'uninitialized':a.holdingSource==='official'?'official_readonly':value===null?'incomplete':'ready',opening:r?{amount:r.opening_amount,asOf:r.opening_at,basis:r.opening_basis}:null,balance:value,activity:ledger.activity,withdrawalCapacity:withdrawalCapacity(value,fundCash,pendingBuyCash(userId,currency),a.holdingSource==='manual'),available:null,reserved:null,complete:!!r&&value!==null,unavailableReasons:!r?['opening_not_set']:value===null?['cash_ledger_source_incomplete','broker_buying_power_not_enforced']:['broker_buying_power_not_enforced'],officialObservation:null};
+    if(!ctx.reservations.has(currency))ctx.reservations.set(currency,pendingBuyCash(userId,currency));
+    return {currency,cashRevision:r?.revision??0,state:!r?'uninitialized':a.holdingSource==='official'?'official_readonly':value===null?'incomplete':'ready',opening:r?{amount:r.opening_amount,asOf:r.opening_at,basis:r.opening_basis}:null,balance:value,activity:ledger.activity,withdrawalCapacity:withdrawalCapacity(value,fundCash,ctx.reservations.get(currency)??null,a.holdingSource==='manual'),available:null,reserved:null,complete:!!r&&value!==null,unavailableReasons:!r?['opening_not_set']:value===null?['cash_ledger_source_incomplete','broker_buying_power_not_enforced']:['broker_buying_power_not_enforced'],officialObservation:null};
   })};
 }
 export function brokerCashSnapshot(userId:string,id:string){return getDb().transaction(()=>cashSnapshot(userId,id))();}
+/** Explicit overview response: one read transaction and one cash revision for the entire catalog. */
+export function brokerCashOverview(userId:string,version:1|2){return getDb().transaction(()=>{
+  const db=getDb(),ids=db.prepare('SELECT id FROM broker_accounts WHERE user_id=? ORDER BY created_at,id LIMIT 101').all(userId) as {id:string}[];
+  if(ids.length>100)throw conflict('账户数量超过总览上限，请先核对账户目录');
+  const orphan=db.prepare(`SELECT 1 FROM broker_cash_accounts c WHERE c.user_id=? AND NOT EXISTS(SELECT 1 FROM broker_accounts a WHERE a.id=c.account_id AND a.user_id=c.user_id)
+    UNION ALL SELECT 1 FROM broker_cash_entries e WHERE e.user_id=? AND NOT EXISTS(SELECT 1 FROM broker_cash_accounts c WHERE c.user_id=e.user_id AND c.account_id=e.account_id AND c.currency=e.currency)
+    UNION ALL SELECT 1 FROM broker_cash_order_links l WHERE l.user_id=? AND NOT EXISTS(SELECT 1 FROM broker_cash_accounts c WHERE c.user_id=l.user_id AND c.account_id=l.account_id AND c.currency=l.currency) LIMIT 1`).get(userId,userId,userId);
+  if(orphan)throw conflict('资金归属目录不一致，请核对账本');
+  const ctx=cashReadContext(userId),accounts=ids.map(({id})=>{const account=brokerAccount(userId,id,version);return {account,cash:cashSnapshot(userId,id,ctx,account)};});
+  const catalog=db.prepare('SELECT revision FROM broker_account_collections WHERE user_id=?').get(userId) as {revision:number}|undefined;
+  const currencies=[...new Set([...Object.keys(ctx.funds),...Object.keys(ctx.global.balances),...accounts.flatMap(a=>a.cash.currencies.map(c=>c.currency))])].sort();
+  const byCurrency=currencies.map(currency=>{
+    const entries=accounts.flatMap(a=>{const cash=a.cash.currencies.find(c=>c.currency===currency);return cash?[{id:a.account.id,cash}]:[];});
+    const uninitializedAccountIds=entries.filter(e=>e.cash.state==='uninitialized').map(e=>e.id);
+    const incompleteAccountIds=entries.filter(e=>e.cash.state!=='uninitialized'&&(!e.cash.complete||e.cash.balance===null)).map(e=>e.id);
+    const sum=entries.reduce((n,e)=>n+(e.cash.complete&&e.cash.balance!==null?e.cash.balance:0),0);
+    const attributedKnown=incompleteAccountIds.length===0&&Number.isFinite(sum),brokerCash=attributedKnown?sum:null;
+    const brokerCashComplete=attributedKnown&&uninitializedAccountIds.length===0;
+    const reasons=[...(ctx.global.unavailableReasons??[]),...(!brokerCashComplete&&uninitializedAccountIds.length?['broker_opening_not_set']:[]),...(!attributedKnown?['broker_cash_source_incomplete']:[])];
+    const fund=ctx.funds[currency as keyof typeof ctx.funds];
+    return {currency,totalCash:ctx.global.sourceComplete?ctx.global.balances[currency]??0:null,cardCash:ctx.global.sourceComplete?ctx.global.cardCash[currency]??0:null,
+      brokerCash,unallocatedCash:ctx.global.sourceComplete&&attributedKnown&&Number.isFinite(fund)?fund-sum:null,
+      complete:ctx.global.sourceComplete&&brokerCashComplete,unavailableReasons:[...new Set(reasons)],
+      brokerAttributedCash:brokerCashComplete?sum:null,brokerCashComplete,uninitializedAccountIds,incompleteAccountIds};
+  });
+  return {version:1,userId,asOf:ctx.asOf,globalCashRevision:ctx.revision,
+    snapshotRevision:hash([version,userId,ctx.revision,catalog?.revision??0,accounts.map(a=>[a.account,a.cash.snapshotRevision])]),
+    accountCollectionRevision:catalog?.revision??0,accountsComplete:true,cashComplete:ctx.global.sourceComplete,
+    complete:ctx.global.sourceComplete&&byCurrency.every(c=>c.complete),accounts,byCurrency};
+})();}
 function cashEntries(userId:string,id:string,currency:string,limit:number,offset:number,revision?:string){
   if(!Number.isSafeInteger(limit)||limit<1||limit>200||!Number.isSafeInteger(offset)||offset<0)throw new RecordsError("流水分页无效");
   brokerAccount(userId,id,2);if(!isFundCurrency(currency))throw new RecordsError('币种无效');
