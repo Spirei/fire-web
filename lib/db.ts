@@ -7,6 +7,7 @@ import type { RecordInput } from "./types";
 import { maybeRunBackup } from "./backup";
 import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
+import { installPersonalProfile } from "./personalProfile";
 import { registerBrokerSourceGuard } from "./brokerHoldingSourceSchema";
 import { installBrokerAccounts } from "./brokerAccountsSchema";
 import { installAppAssets } from "./appAssetsSchema";
@@ -1238,6 +1239,7 @@ export function getDb(): Database.Database {
       installRecordsContract(db);
       installAppAssets(db);
       installBrokerAccounts(db);
+      installPersonalProfile(db);
       installQuoteSubscriptions(db);
       installAccountChanges(db);
       installAssetAllocation(db);

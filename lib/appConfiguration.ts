@@ -1,3 +1,4 @@
+import { personalProfileDiscovery } from "./personalProfile";
 import { brokerAccountsDiscovery } from "./brokerAccountsConfig";
 import { assetsDiscovery } from "./appAssetsConfig";
 import { mailTemplatesDiscovery } from "./mailTemplates";
@@ -21,6 +22,7 @@ export function appConfiguration(request:Request,version:1|2=1) {
     asset_allocation: allocationDiscovery(version),
     account_trading: tradingDiscovery(version),
     quote_subscriptions_contract:quoteSubscriptionsDiscovery(),
+    personal_profile:personalProfileDiscovery(version),
     broker_accounts:brokerAccountsDiscovery(version),
     account_assets:assetsDiscovery(version),mail_templates:mailTemplatesDiscovery(version),records_contract:recordsDiscovery(version),resource_library:resourceLibraryDiscovery(version),security:securityDiscovery(version),market_calendar:marketCalendarDiscovery(),native_login:nativeLoginDiscovery(),client_id:APP_CLIENT_ID,redirect_uri:APP_REDIRECT_URI,scope:APP_SCOPE,
     scopes_supported:APP_SUPPORTED_SCOPES,profile_path:`${base}/auth/profile`,upload_path:`${base}/upload`,
