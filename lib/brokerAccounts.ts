@@ -10,7 +10,7 @@ import { isFundCurrency } from "./fundCurrencies";
 import { listRecords, updateRecord } from "./store";
 
 type Row = {id:string;user_id:string;name:string;provider_id:string|null;currency:string;currencies_json:string|null;revision:number;icon:Buffer|null;created_at:string;updated_at:string;holding_source:"manual"|"official"};
-export type BrokerKind = "create"|"update"|"delete"|"upload_icon"|"reset_icon"|"bind_records";
+export type BrokerKind = "create"|"update"|"delete"|"upload_icon"|"reset_icon"|"bind_records"|"unbind_records";
 export function brokerPresets() {
   const icons = getDb().prepare("SELECT code,name,url,updated_at FROM assets WHERE type='broker'").all() as {code:string;name:string;url:string;updated_at:string}[];
   return presets.map(p => {
@@ -64,7 +64,7 @@ function nameAvailable(userId:string,name:string,id:string) {
 export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown,version:1|2,authorize:()=>string,icon?:Buffer) {
   if(!raw||typeof raw!=="object"||Array.isArray(raw))throw new RecordsError("无效请求");
   const b=raw as Record<string,unknown>,requestId=validRecordRequestId(b.requestId);
-  const fields=kind==='bind_records'?['requestId','revision','recordCollectionRevision','recordIds',...('allowReassign' in b?['allowReassign']:[])]:kind==='create'?['requestId','name','providerId','currency']:kind==='update'?['requestId','revision','name','currency','recordCollectionRevision']:['requestId','revision'];
+  const fields=kind==='unbind_records'?['requestId','revision','recordCollectionRevision','recordIds']:kind==='bind_records'?['requestId','revision','recordCollectionRevision','recordIds',...('allowReassign' in b?['allowReassign']:[])]:kind==='create'?['requestId','name','providerId','currency']:kind==='update'?['requestId','revision','name','currency','recordCollectionRevision']:['requestId','revision'];
   const allowed=[...fields,...((kind==='create'||kind==='update')?['currencies']:[])];
   if(Object.keys(b).some(k=>!allowed.includes(k))||fields.some(k=>!(k in b)))throw new RecordsError("请求字段无效");
   if(kind!=='create'&&!integer(b.revision))throw new RecordsError("账户版本无效");
@@ -75,8 +75,8 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
   }
   if('currencies' in b)parseBrokerCurrencies(b.currencies,currency);
   if(kind==='create'&&b.providerId!==null&&!presets.some(p=>p.id===b.providerId))throw new RecordsError("机构无效");
-  if((kind==='update'||kind==='bind_records')&&!integer(b.recordCollectionRevision))throw new RecordsError("记录集合版本无效");
-  if(kind==='bind_records'&&(!Array.isArray(b.recordIds)||!b.recordIds.length||b.recordIds.length>2000||b.recordIds.some(x=>typeof x!=='string'||!x.trim()||x.length>128||/[\x00-\x1f\x7f]/.test(x))||new Set(b.recordIds).size!==b.recordIds.length))throw new RecordsError('持仓选择无效');
+  if((kind==='update'||kind==='bind_records'||kind==='unbind_records')&&!integer(b.recordCollectionRevision))throw new RecordsError("记录集合版本无效");
+  if((kind==='bind_records'||kind==='unbind_records')&&(!Array.isArray(b.recordIds)||!b.recordIds.length||b.recordIds.length>2000||b.recordIds.some(x=>typeof x!=='string'||!x.trim()||x.length>128||/[\x00-\x1f\x7f]/.test(x))||new Set(b.recordIds).size!==b.recordIds.length))throw new RecordsError('持仓选择无效');
   if(kind==='upload_icon'&&(!icon||icon.length>2097152))throw new RecordsError("图标无效");
   const db=getDb();
   return db.transaction(()=>{
@@ -107,6 +107,13 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
           if(!updateRecord(r.id,userId,{...r,group:name}))throw new Error('record update failed');
         }
         db.prepare("UPDATE broker_accounts SET name=?,currency=?,currencies_json=?,revision=revision+1,updated_at=? WHERE user_id=? AND id=?").run(name,currency,JSON.stringify(currencies),at,userId,id);
+      } else if(kind==='unbind_records') {
+        if(current!.holding_source==='official')throw new RecordsError('官方管理账户不能手动移出持仓',409,40903);
+        if(collectionRevision(userId)!==b.recordCollectionRevision)throw new RecordsError('持仓记录已变化',409,40902);
+        const ids=new Set(b.recordIds as string[]),chosen=listRecords(userId).filter(r=>ids.has(r.id));
+        if(chosen.length!==ids.size||chosen.some(r=>r.brokerAccountId!==id))throw new RecordsError('所选记录不属于当前账户',404);
+        for(const r of chosen)if(!updateRecord(r.id,userId,{...r,brokerAccountId:'',group:''}))throw new Error('record unbinding failed');
+        db.prepare('UPDATE broker_accounts SET revision=revision+1,updated_at=? WHERE user_id=? AND id=?').run(at,userId,id);
       } else if(kind==='bind_records') {
         if(current!.holding_source==='official')throw new RecordsError('官方管理账户不能手动关联持仓',409,40903);
         if(collectionRevision(userId)!==b.recordCollectionRevision)throw new RecordsError('持仓记录已变化',409,40902);

@@ -27,7 +27,7 @@ async function imageUpload(request:Request) {
     return {body:{requestId:f.get('requestId'),revision:Number(revision)},icon};
   }catch{throw new RecordsError('图片无法安全解码');}
 }
-export async function brokerAccountsResponse(request:Request,action:'list'|'account'|'presets'|'operation'|'icon'|'bindings',version:1|2,params?:Promise<{accountId?:string;requestId?:string}>) {
+export async function brokerAccountsResponse(request:Request,action:'list'|'account'|'presets'|'operation'|'icon'|'bindings'|'unbindings',version:1|2,params?:Promise<{accountId?:string;requestId?:string}>) {
   try {
     const auth=brokerRequestAuth(request),initial={user_id:auth.userId},authorize=auth.authorize;
     const p=params?await params:{};authorize();
@@ -48,7 +48,7 @@ export async function brokerAccountsResponse(request:Request,action:'list'|'acco
     else {
       if(request.headers.get('content-type')?.split(';')[0].trim()!=='application/json')throw new RecordsError('需要JSON请求');
       body=await readJsonBody(request,8192);
-      kind=action==='bindings'&&request.method==='POST'?'bind_records':action==='list'&&request.method==='POST'?'create':action==='account'&&request.method==='PUT'?'update':action==='account'&&request.method==='DELETE'?'delete':action==='icon'&&request.method==='DELETE'?'reset_icon':(()=>{throw new RecordsError('不支持此方法',405);})();
+      kind=action==='unbindings'&&request.method==='POST'?'unbind_records':action==='bindings'&&request.method==='POST'?'bind_records':action==='list'&&request.method==='POST'?'create':action==='account'&&request.method==='PUT'?'update':action==='account'&&request.method==='DELETE'?'delete':action==='icon'&&request.method==='DELETE'?'reset_icon':(()=>{throw new RecordsError('不支持此方法',405);})();
     }
     const {result,error}=mutateBroker(initial.user_id,kind,p.accountId??'',body,version,authorize,icon);
     if(error)return fail(error.code,error.message,error.status);

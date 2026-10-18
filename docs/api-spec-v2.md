@@ -1104,6 +1104,7 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
+| POST | `/api/v2/broker-accounts/{accountId}/unbindings` | portfolio.write |
 | POST | `/api/v2/broker-accounts/{accountId}/bindings` | portfolio.write |
 | GET | `/api/v2/broker-accounts/{accountId}/connection` | portfolio.read |
 | PUT | `/api/v2/broker-accounts/{accountId}/holding-source` | portfolio.write |

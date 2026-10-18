@@ -62,6 +62,7 @@
   },
   "record_binding_id_field": "brokerAccountId",
   "binding_path": "/api/v2/broker-accounts/{accountId}/bindings",
+  "unbinding_path": "/api/v2/broker-accounts/{accountId}/unbindings",
   "statements": {
     "connectors": [
       {
@@ -186,3 +187,12 @@ issues当前包含unknown_currency、invalid_position、invalid_statement_cash�
 ## 历史持仓ID兼容（2026-10-18）
 
 bindings.recordIds必须原样使用records接口返回的稳定ID，不限定r-16位格式。支持历史和备份恢复ID（恢复器生成r-24位）；每项为1至128字符的非空字符串，不含控制字符，禁止重复。服务端按原文精确匹配本人完整持仓，不trim、不重写ID；不存在/跨用户404，账户/集合CAS和官方来源40903保持。
+
+## 已关联持仓批量移出（2026-10-18）
+
+auth/config的broker_accounts新增可选`unbinding_path`，值为`/api/v{1|2}/broker-accounts/{accountId}/unbindings`，POST、portfolio.write；未发现能力不得猜测DELETE或用完整RecordInput伪装解绑。
+请求严格为`{requestId,revision,recordCollectionRevision,recordIds}`，不接受allowReassign。recordIds原样使用本人records返回的稳定ID（1–128字符、非空、无控制字符、不重复；兼容16/24hex/历史ID），最多2000条。
+服务端在同一事务校验账户revision、完整记录集合版本；全部选择必须仍属于本人当前账户，否则整批404不修改。官方来源拒绝手动移出40903；版本冲突40902。
+仅清空选中记录brokerAccountId和兼容group；证券身份、价格数量成本、备注、自选分组、历史订单及现金保持。每条记录版本/集合版本和账户revision正常递增。
+回执沿原operations路径，kind:unbind_records，成功data最新BrokerAccount（recordCount更新）；业务失败state:failed/data:null，原UUID可查；重复requestId40901不重放。超时未知保留requestId查原，不自动换ID重试。前置格式/认证错误不保存回执。
+原生“已关联”页签只列当前账户本人记录，可选移出。旧服务不提供能力时保留列表且禁用批量移出，不改真实归属作测试。
