@@ -11,6 +11,13 @@
   "cash_ledger": {
     "version": 1,
     "supported": true,
+    "read_models": {
+      "version": 1,
+      "entry_balance_after": true,
+      "activity_summary": true,
+      "withdrawal_capacity": true,
+      "statement_snapshot_scope": "broker_currency"
+    },
     "summary_path": "/api/v2/broker-accounts/cash",
     "account_path": "/api/v2/broker-accounts/{accountId}/cash",
     "entries_path": "/api/v2/broker-accounts/{accountId}/cash/entries",
