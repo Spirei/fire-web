@@ -72,7 +72,7 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
   }
   if(kind==='create'&&b.providerId!==null&&!presets.some(p=>p.id===b.providerId))throw new RecordsError("机构无效");
   if((kind==='update'||kind==='bind_records')&&!integer(b.recordCollectionRevision))throw new RecordsError("记录集合版本无效");
-  if(kind==='bind_records'&&(!Array.isArray(b.recordIds)||!b.recordIds.length||b.recordIds.length>2000||b.recordIds.some(x=>typeof x!=='string'||!/^r-[a-f0-9]{16}$/.test(x))||new Set(b.recordIds).size!==b.recordIds.length))throw new RecordsError('持仓选择无效');
+  if(kind==='bind_records'&&(!Array.isArray(b.recordIds)||!b.recordIds.length||b.recordIds.length>2000||b.recordIds.some(x=>typeof x!=='string'||!x.trim()||x.length>128||/[\x00-\x1f\x7f]/.test(x))||new Set(b.recordIds).size!==b.recordIds.length))throw new RecordsError('持仓选择无效');
   if(kind==='upload_icon'&&(!icon||icon.length>2097152))throw new RecordsError("图标无效");
   const db=getDb();
   return db.transaction(()=>{

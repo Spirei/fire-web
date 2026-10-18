@@ -4943,7 +4943,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version:"v0.1.61", date:"2026-10-18",
   summary:"券商账户手动与官方持仓来源互斥，接管及切换保持确认与回执。",
   software:V0_1_60_ENTRY.software.map(item=>item.name==='Alcor'?{...item,version:'v0.1.61'}:item),
-  changes:[{kind:"security",title:"券商持仓来源二选一",desc:"账户持久区分手动与官方。官方接管须新账单差异预览并明确确认，同事务更新持仓；切回手动核对账户及持仓版本、保留连接并使旧预览失效。数据库统一限制官方账户的手工金融修改、交易、旧导入和跨账户移出；官方离线保留旧值，不自动降级或重放。"}]
+  changes:[{kind:"fix",title:"历史持仓关联券商账户兼容",desc:"关联接受服务端返回的合法历史及恢复持仓ID，保留原ID并按本人完整记录及版本核验，来源锁与防重放保持，不改数量成本资金。"},{kind:"security",title:"券商持仓来源二选一",desc:"账户持久区分手动与官方。官方接管须新账单差异预览并明确确认，同事务更新持仓；切回手动核对账户及持仓版本、保留连接并使旧预览失效。数据库统一限制官方账户的手工金融修改、交易、旧导入和跨账户移出；官方离线保留旧值，不自动降级或重放。"}]
 };
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
