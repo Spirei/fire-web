@@ -1,188 +1,62 @@
-name: Build and publish Alcor image
-
+name: Publish approved binding image without rebuilding
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    # 香港时间每天 00:07（UTC 前一日 16:07）检查；有新提交才发布，避开整点调度高峰。
-    - cron: "7 16 * * *"
   workflow_dispatch:
-
-concurrency:
-  # 保留队列中的推送，避免连续提交时互相取消并产生大量失败/取消记录。
-  group: fire-image-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: false
-
 permissions:
   contents: read
-
-env:
-  DOCKER_BUILD_RECORD_UPLOAD: "false"
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
-
+  packages: write
 jobs:
-  test:
-    name: TypeScript check
+  promote:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Use Node.js 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Check commit titles
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.sha }}
-        run: npm run check:commit-title -- "${PR_BASE_SHA:-$BEFORE_SHA}" "$HEAD_SHA"
-      - name: Install dependencies
-        run: npm ci
-      - name: Install model optimizer dependencies
-        run: npm ci --prefix tools/model-optimizer
-      - name: Public repository safety audit
-        run: npm run audit:public
-      - name: Local and GHCR deployment parity audit
-        run: npm run audit:deploy
-      - name: Security and site regression
-        run: npm run test:review
-      - name: TypeScript check
-        run: npx tsc --noEmit
-      - name: Model optimizer tests
-        run: npm test --prefix tools/model-optimizer
-      - name: Production build check
-        run: npm run build
-      - name: Start app and run public smoke
-        env:
-          NODE_ENV: production
-          STOCKLOG_FUTU: "off"
-        run: |
-          mkdir -p data
-          npx next start -H 127.0.0.1 -p 3000 &
-          echo $! > /tmp/fire-smoke.pid
-          for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:3000/api/auth/setup-status >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          bash scripts/smoke-ci.sh
-          kill "$(cat /tmp/fire-smoke.pid)" 2>/dev/null || true
-
-  scheduled-change-gate:
-    name: Check scheduled source changes
-    needs: test
-    if: always() && needs.test.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-    outputs:
-      should_publish: ${{ steps.gate.outputs.should_publish }}
-    steps:
-      - name: Decide whether image should be built
-        id: gate
+      - name: Verify immutable candidate and retain baseline before promotion
         env:
           GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          CURRENT_SHA: ${{ github.sha }}
+        shell: python
         run: |
-          last_sha=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?status=success&per_page=30" --jq '[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].head_sha // ""')
-          if [ "$last_sha" = "$CURRENT_SHA" ]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "当前 main 提交已有可用镜像，跳过重复构建。"
-          else
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "检测到 main 新提交，继续构建镜像。"
-          fi
-
-  publish:
-    name: Publish linux/amd64 image
-    needs: [test, scheduled-change-gate]
-    # 提交/PR 只检查；定时和手动任务仅在当前 main 尚无镜像时发布。
-    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && needs.scheduled-change-gate.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-
-      - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,format=short
-            type=ref,event=tag
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Model worker metadata
-        id: worker-meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ${{ env.IMAGE_NAME }}-model-worker
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,format=short
-            type=ref,event=tag
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-
-      - name: Build and push
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          provenance: false
-          sbom: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            FIRE_BUILD_SHA=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push model worker
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: ./tools/model-optimizer
-          file: ./tools/model-optimizer/Dockerfile
-          platforms: linux/amd64
-          push: true
-          provenance: false
-          sbom: false
-          tags: ${{ steps.worker-meta.outputs.tags }}
-          labels: ${{ steps.worker-meta.outputs.labels }}
-          cache-from: type=gha,scope=model-worker
-          cache-to: type=gha,scope=model-worker,mode=max
+          import os,json,base64,hashlib,urllib.request,urllib.error
+          registry='https://ghcr.io'
+          repository='spirei/fire-web'
+          expected='5fb81c5e320f39228ca6a3a2416cc60c7bfc43d2'
+          baseline='88c226a57fa2fe944427e0a8d29f27641753afe4'
+          credential=base64.b64encode(('Spirei:'+os.environ['GH_TOKEN']).encode()).decode()
+          request=urllib.request.Request(registry+'/token?service=ghcr.io&scope=repository:'+repository+':pull,push',headers={'Authorization':'Basic '+credential})
+          with urllib.request.urlopen(request,timeout=30) as response:token=json.load(response)['token']
+          headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'}
+          def read(ref):
+            with urllib.request.urlopen(urllib.request.Request(registry+'/v2/'+repository+'/manifests/'+ref,headers=headers),timeout=30) as response:
+              raw=response.read();digest='sha256:'+hashlib.sha256(raw).hexdigest()
+              assert response.headers['Docker-Content-Digest']==digest,'Registry digest mismatch'
+              return raw,response.headers['Content-Type'],digest
+          def revision(raw):
+            manifest=json.loads(raw)
+            if 'manifests' in manifest:
+              images=[m for m in manifest['manifests'] if m.get('platform',{}).get('os')=='linux' and m.get('platform',{}).get('architecture')=='amd64']
+              assert len(images)==1,'Expected exactly one linux/amd64 image'
+              manifest=json.loads(read(images[0]['digest'])[0])
+            with urllib.request.urlopen(urllib.request.Request(registry+'/v2/'+repository+'/blobs/'+manifest['config']['digest'],headers=headers),timeout=30) as response:config=json.load(response)
+            return config.get('config',{}).get('Labels',{}).get('org.opencontainers.image.revision')
+          def put(tag,raw,content_type):
+            request=urllib.request.Request(registry+'/v2/'+repository+'/manifests/'+tag,data=raw,headers={**headers,'Content-Type':content_type},method='PUT')
+            with urllib.request.urlopen(request,timeout=30) as response:assert response.status==201
+          candidate,ctype,digest=read('sha-5fb81c5')
+          assert revision(candidate)==expected,'Candidate revision mismatch'
+          previous,oldtype,olddigest=read('latest')
+          oldrevision=revision(previous)
+          assert oldrevision in [baseline,expected],'Unexpected latest: refuse to overwrite another release'
+          oldsha,_,oldshadigest=read('sha-88c226a')
+          assert revision(oldsha)==baseline,'Baseline revision mismatch'
+          if oldrevision==baseline:assert olddigest==oldshadigest,'Baseline digest mismatch'
+          rollback='rollback-88c226a-20261018'
+          try:assert read(rollback)[2]==oldshadigest,'Existing rollback tag differs'
+          except urllib.error.HTTPError as error:
+            if error.code!=404:raise
+            put(rollback,oldsha,oldtype)
+          assert read(rollback)[2]==oldshadigest
+          print('Approved candidate revision: '+expected)
+          print('Approved candidate digest: '+digest)
+          print('Retained baseline digest: '+oldshadigest)
+          put('latest',candidate,ctype)
+          assert read('latest')[2]==digest,'Promoted digest mismatch'
+          assert read('sha-5fb81c5')[2]==digest,'Immutable candidate changed'
+          assert read('sha-88c226a')[2]==oldshadigest,'Immutable baseline changed'
+          print('Verified latest is byte-identical to sha-5fb81c5; no image build performed.')
