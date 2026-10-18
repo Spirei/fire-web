@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { getDb } from "./db";
-import { listRecords, readRecord } from "./store";
+import { BuyTarget, parseBuyTarget, resolveBuyTarget } from "./appBuyTarget";
+import { ACCOUNT_MARKET_CURRENCY } from "./accountCash";
+import { createRecord, listRecords, readRecord } from "./store";
 import { buildAssets, instrumentSnapshot, assetLocalDate, assetTimeZones } from "./appAssets";
 import { assetOrderRows, assetOrderItem } from "./appAssetOrders";
 import { RecordsError, validRecordRequestId } from "./recordsContract";
@@ -13,7 +15,7 @@ import type { Quote, StockRecord } from "./types";
 type Values = Record<string, unknown>;
 type Leg = { percent: number; orderType: "limit" | "market"; limitPrice?: number; fees: number };
 type Attachment = { takeProfit?: Leg; stopLoss?: Leg; session: string; tif: "day" | "gtc" };
-type Draft = { recordId: string; recordRevision: number; snapshotRevision: string; side: "buy" | "sell" | "dividend";
+type Draft = { buyTarget?: BuyTarget; targetRevision?: string; brokerTargetId?: string; recordId: string; recordRevision: number; snapshotRevision: string; side: "buy" | "sell" | "dividend";
   mode: "record" | "order"; orderType: "limit" | "market"; qty: number; price: number; fees: number;
   tif: "day" | "gtc"; session: string; tradedAt?: string; settlementAmount?: number; attachments?: Attachment; note: string; confirmedAt?: string; triggeredAt?: string };
 type Meta = { order_id: string; parent_id: string | null; role: string; trigger_above: number | null; draft_json: string; identity_json: string };
@@ -71,8 +73,10 @@ function attachments(value: unknown): Attachment | undefined {
   return { ...(v.takeProfit ? { takeProfit: leg(v.takeProfit) } : {}), ...(v.stopLoss ? { stopLoss: leg(v.stopLoss) } : {}), session: String(v.session), tif: v.tif as Attachment["tif"] };
 }
 function draft(body: unknown, userId: string): Draft {
-  const v = object(body, ["requestId", "accountId", "recordId", "recordRevision", "snapshotRevision", "side", "mode", "orderType", "qty", "price", "fees", "tif", "session", "tradedAt", "settlementAmount", "attachments", "note", "orderRevision"]);
-  if (v.accountId !== userId || typeof v.recordId !== "string" || !v.recordId || v.recordId.length > 200 || !Number.isSafeInteger(v.recordRevision) || Number(v.recordRevision) < 1 || typeof v.snapshotRevision !== "string" || !/^[a-f0-9]{64}$/.test(v.snapshotRevision)) throw new RecordsError("须提供本人账户、证券和快照版本");
+  const v = object(body, ["requestId", "accountId", "recordId", "recordRevision", "snapshotRevision", "side", "mode", "orderType", "qty", "price", "fees", "tif", "session", "tradedAt", "settlementAmount", "attachments", "note", "orderRevision", "buyTarget", "targetRevision"]);
+  const buyTarget = v.buyTarget === undefined ? undefined : parseBuyTarget(v.buyTarget);
+  if (buyTarget && (v.side !== 'buy' || 'recordId' in v || 'recordRevision' in v || 'orderRevision' in v) || !buyTarget && v.targetRevision !== undefined || v.targetRevision !== undefined && (typeof v.targetRevision !== 'string' || !/^[a-f0-9]{64}$/.test(v.targetRevision))) throw new RecordsError('买入账户目标不能与原记录或改单混用');
+  if (v.accountId !== userId || !buyTarget && (typeof v.recordId !== "string" || !v.recordId || v.recordId.length > 200 || !Number.isSafeInteger(v.recordRevision) || Number(v.recordRevision) < 1) || typeof v.snapshotRevision !== "string" || !/^[a-f0-9]{64}$/.test(v.snapshotRevision)) throw new RecordsError("须提供本人账户、证券和快照版本");
   if (!["buy", "sell", "dividend"].includes(String(v.side)) || !["record", "order"].includes(String(v.mode)) || !["limit", "market"].includes(String(v.orderType)) || !["day", "gtc"].includes(String(v.tif)) || !["REGULAR", "EXTENDED"].includes(String(v.session))) throw new RecordsError("交易方向、类型、时段或有效期无效");
   const qty = number(v.qty), price = number(v.price), fees = number(v.fees, true);
   if (qty * price <= 0 || qty * price > 1e12 || ![qty, price, fees].every(n => Number(n.toFixed(8)) === n)) throw new RecordsError("成交金额超出上限或输入超过八位小数");
@@ -80,7 +84,7 @@ function draft(body: unknown, userId: string): Draft {
   const tradedAt = isoTime(v.tradedAt);
   if (v.mode === "record" && (tradedAt === null || tradedAt > Date.now())) throw new RecordsError("须明确提供已发生的成交时间");
   if (v.mode === "order" && v.tradedAt !== undefined || v.side === "dividend" && (v.mode !== "record" || v.attachments !== undefined)) throw new RecordsError("委托不能补造成交时间，股息仅支持实际登记");
-  return { recordId: v.recordId, recordRevision: Number(v.recordRevision), snapshotRevision: v.snapshotRevision, side: v.side as Draft["side"], mode: v.mode as Draft["mode"], orderType: v.orderType as Draft["orderType"], qty, price, fees,
+  return { buyTarget, targetRevision:v.targetRevision as string|undefined, recordId: buyTarget ? "" : v.recordId as string, recordRevision: buyTarget ? 0 : Number(v.recordRevision), snapshotRevision: v.snapshotRevision, side: v.side as Draft["side"], mode: v.mode as Draft["mode"], orderType: v.orderType as Draft["orderType"], qty, price, fees,
     tif: v.tif as Draft["tif"], session: String(v.session), tradedAt: v.tradedAt as string | undefined, settlementAmount: v.settlementAmount === undefined ? undefined : number(v.settlementAmount), attachments: attachments(v.attachments), note: String(v.note ?? "") };
 }
 function reservation(source: ReturnType<typeof tradingState>, record: StockRecord, excluded?: string) {
@@ -104,15 +108,21 @@ function reservation(source: ReturnType<typeof tradingState>, record: StockRecor
   if (!Number.isFinite(cash) || !Number.isFinite(qty)) throw conflict("待成交订单的占用金额或数量无法核对");
   return { cash, qty };
 }
-function preview(userId: string, d: Draft, excluded?: string) {
-  const source = tradingState(userId), state = source.snapshot, record = source.records.find(r => r.id === d.recordId);
+function preview(userId: string, d: Draft, excluded?: string, targetRecord?: StockRecord) {
+  const source = tradingState(userId), state = source.snapshot, record = targetRecord ?? source.records.find(r => r.id === d.recordId);
   if (!record) throw new RecordsError("本人证券不存在", 404);
   if (state.snapshotRevision !== d.snapshotRevision || record.revision !== d.recordRevision) throw conflict("账户或证券已变化，请重新预览");
+  if (d.brokerTargetId && record.brokerAccountId !== d.brokerTargetId) throw conflict('委托的券商归属已变化');
+  if (record.brokerAccountId) {
+    const account = getDb().prepare('SELECT holding_source FROM broker_accounts WHERE user_id=? AND id=?').get(userId,record.brokerAccountId) as {holding_source:string}|undefined;
+    if (!account) throw new RecordsError('券商账户不存在',404);
+    if (account.holding_source === 'official') throw new RecordsError('官方管理账户不能手动交易',409,40903);
+  }
   if (d.mode === "record") {
     const dates = source.rows.filter(o => o.record_id === record.id && o.status === "filled").map(o => Date.parse(o.traded_at));
     if (dates.some(n => !Number.isFinite(n) || n > Date.parse(d.tradedAt!))) throw conflict("已有成交历史晚于本次记录，请先核对历史顺序");
   }
-  const declared = instrumentSnapshot(userId, record.id).instrument;
+  const declared = record.id ? instrumentSnapshot(userId, record.id).instrument : {identityMatches:false,listingStatus:"unknown",kind:"unknown"};
   // Match Web order entry: an undeclared record is not a mandatory setup step.
   // Never write or infer a declaration; stale declarations do not classify a new identity.
   if (declared.identityMatches && declared.listingStatus === "delisted") throw conflict("该证券已声明退市，无法下单");
@@ -128,7 +138,7 @@ function preview(userId: string, d: Draft, excluded?: string) {
   const position = applyOrder({ qty, cost }, d);
   if (![position.qty, position.cost].every(Number.isFinite) || position.qty > 1e12) throw new RecordsError("成交后数量或成本超出上限");
   return { accountId: userId, recordId: record.id, recordRevision: record.revision, snapshotRevision: state.snapshotRevision,
-    mode: d.mode, executionModel: "internal_trade_ledger", priceCurrency: state.positions.find(p => p.recordId === record.id)!.currency, settlementCurrency: currency,
+    mode: d.mode, executionModel: "internal_trade_ledger", priceCurrency: ACCOUNT_MARKET_CURRENCY[record.market], settlementCurrency: currency,
     amount, fees: d.fees, feeSource: "owner_recorded", feeBreakdown: null, settlementAmount: total,
     cashBefore: cash!, cashAfter: cash! + (d.side === "buy" ? -total : total), qtyBefore: qty, qtyAfter: position.qty, costBefore: cost, costAfter: position.cost,
     reservedCash: reserved.cash, reservedQty: reserved.qty, attachments: d.attachments ?? null, immediateAccounting: d.mode === "record", canSubmit: true };
@@ -136,7 +146,9 @@ function preview(userId: string, d: Draft, excluded?: string) {
 export function previewTrade(userId: string, body: unknown) {
   const d = draft(body, userId);
   if ("orderRevision" in (body as Values)) throw new RecordsError("新建预览不接受订单版本，请使用改单预览");
-  return preview(userId, d);
+  if (!d.buyTarget) return preview(userId, d);
+  const resolved = resolveBuyTarget(userId,d.buyTarget);
+  return {...preview(userId,{...d,recordId:resolved.record.id,recordRevision:resolved.record.revision!},undefined,resolved.record),recordId:resolved.target.recordId,recordRevision:resolved.target.recordRevision,buyTarget:resolved.target};
 }
 function amendTarget(userId: string, id: string, d: Draft, b: Values) {
   if (!Number.isSafeInteger(b.orderRevision) || Number(b.orderRevision) < 1 || d.mode !== "order") throw new RecordsError("改单版本或模式无效");
@@ -145,6 +157,8 @@ function amendTarget(userId: string, id: string, d: Draft, b: Values) {
   const record = readRecord(userId, d.recordId);
   if (!record || row.status !== "pending" || row.revision !== b.orderRevision || row.record_id !== d.recordId || meta.parent_id ||
     row.market !== record.market || row.code !== record.code || identity(record) !== meta.identity_json) throw conflict("只能修改身份一致的最新未成交主单");
+  const original = JSON.parse(meta.draft_json) as Draft;
+  if (original.brokerTargetId) d.brokerTargetId = original.brokerTargetId;
   return row;
 }
 export function previewAmendTrade(userId: string, id: string, body: unknown) {
@@ -199,12 +213,20 @@ export function submitTrade(userId: string, body: unknown, authorize: () => stri
   const d = draft(body, userId);
   if ("orderRevision" in (body as Values)) throw new RecordsError("新建交易不接受订单版本");
   return mutation(userId, body, "submit_trade", authorize, () => {
-    const p = preview(userId, d);
+    const resolved = d.buyTarget ? resolveBuyTarget(userId,d.buyTarget) : null;
+    if (resolved && (!d.targetRevision || d.targetRevision !== resolved.target.targetRevision)) throw conflict('买入目标已变化或尚未预览');
+    const p = resolved ? {...preview(userId,{...d,recordId:resolved.record.id,recordRevision:resolved.record.revision!},undefined,resolved.record),recordId:resolved.target.recordId,recordRevision:resolved.target.recordRevision,buyTarget:resolved.target} : preview(userId,d);
+    let createdRecordId: string | null = null;
+    if (resolved) {
+      const r = resolved.target.createsRecord ? createRecord(userId,{name:resolved.record.name,code:resolved.record.code,market:resolved.record.market,accountMarket:resolved.record.accountMarket,brokerAccountId:resolved.record.brokerAccountId,group:resolved.record.group,qty:0,cost:0,price:0,note:'',source:'app'}) : resolved.record;
+      if (resolved.target.createsRecord) createdRecordId=r.id;
+      Object.assign(d,{recordId:r.id,recordRevision:r.revision,buyTarget:undefined,targetRevision:undefined,brokerTargetId:r.brokerAccountId});
+    }
     const id = d.mode === "record" ? executeOrder({ userId, ...d, triggerStatus: "API 实际成交登记" }).order.id : pending(userId, d);
     saveMeta(userId, id, d);
     if (d.mode === "record") children(userId, id, d, d.price);
     const childIds = new Set(metas(userId).filter(m => m.parent_id === id).map(m => m.order_id));
-    return { preview: p, items: assetOrderRows(userId).filter(row => row.id === id || childIds.has(row.id)).map(row => assetOrderItem(userId, row)), snapshot: committedState(userId, d.recordId) };
+    return { ...(resolved ? {buyTarget:{...resolved.target,recordId:d.recordId,recordRevision:readRecord(userId,d.recordId)!.revision,createdRecordId}} : {}), preview: p, items: assetOrderRows(userId).filter(row => row.id === id || childIds.has(row.id)).map(row => assetOrderItem(userId, row)), snapshot: committedState(userId, d.recordId) };
   });
 }
 export function amendTrade(userId: string, id: string, body: unknown, authorize: () => string) {

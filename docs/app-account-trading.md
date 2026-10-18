@@ -97,3 +97,46 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 ## 账户读取开销
 
 现金查询、预览和写入内部核对只构造所需返回数据，不生成整份订单 DTO；交易面板仍返回完整原合同。预览复用同次读取的订单、持仓和附加单占用数据。财务版本继续包含全部原始校验输入，不缓存跨请求的账户状态，也不省略任何订单或资金对版本的影响。今日订单筛选按证券市场分别计算日期，单次筛选内复用各市场当天日期。
+
+## 买入时选择个人券商账户（buy_target v1，2026-10-18）
+
+仅在 auth/config 的 `account_trading.buy_target.version === 1 && supported === true` 时启用。发现对象：
+
+```json
+{"version":1,"supported":true,"request_field":"buyTarget","confirmation_field":"targetRevision","sides":["buy"],"resolution":"owned_manual_broker_canonical_security","creation":"atomic_on_submission","preview_creates_record":false}
+```
+
+沿现有 `preview_path` 和 `submit_path`，仅买入可用 `buyTarget` 替代根 `recordId` / `recordRevision`，两字段必须省略（不能传null），不允许用于卖出、股息或改单。所有原费用、成交时间、session/tif、attachments、真实净结算额和现金校验保持。
+
+预览请求示例（requestId继续使用每次明确提交意图的UUID；预览不消耗回执）：
+
+```json
+{
+  "requestId":"00000000-0000-4000-8000-000000000001",
+  "accountId":"当前用户ID",
+  "snapshotRevision":"从trading快照取得的64位十六进制hash",
+  "buyTarget":{"brokerAccountId":"ba-0123456789abcdef01234567","brokerRevision":1,"market":"US","code":"AAPL","name":"Apple","accountMarket":""},
+  "side":"buy","mode":"record","orderType":"limit","qty":2,"price":10,"fees":1,
+  "tif":"gtc","session":"REGULAR","tradedAt":"2026-10-18T01:00:00Z","note":""
+}
+```
+
+`buyTarget` 仅接受上述六个字段；accountMarket可省略。market必须是当前规范市场，code沿importIdentity规范化，name非空且最多100字符。brokerRevision是本人券商目录中的账户revision。accountId仍是用户ID，不能拿它代替brokerAccountId。现金来源仍为本人按币种的独立账本，不代表券商实际可用资金或券商分账户现金，不调用外部交易API。
+
+预览只读：目标本人手动账户内，以market、规范code和有效账户市场匹配唯一记录时加仓；无记录时以内存零仓预演，绝不创建记录。旧重复拒绝40902；未关联或其他券商同股不自动移动。HK直持与HK/CN港股通分别匹配，港股通仍仅支持实际成交登记和实际人民币净额。
+
+预览原有金额／费用／现金／成本字段保持；新目标根recordId、recordRevision为null，已有目标为真实ID/版本；新增 `buyTarget`：
+
+| 字段 | 类型与含义 |
+| --- | --- |
+| brokerAccountId / brokerRevision | string / integer，本人稳定账户及预览版本 |
+| market / code / name | string，规范行情市场／代码／真实记录名称（新仓为请求名） |
+| accountMarket | string，仅HK港股通为CN，其余为空字符串；此处是持久化路由表示，HK直持的有效账户市场仍为HK |
+| brokerName | string，账户当前显示名称 |
+| recordId / recordRevision | string或null / integer或null；新仓均null |
+| createsRecord | boolean，本次是否需新建记录 |
+| targetRevision | string，64hex，目标身份、账户版本及匹配记录的确认hash |
+
+提交原请求并增加顶层 `targetRevision`（取自这次预览的buyTarget）。最终IMMEDIATE事务重核snapshotRevision、账户存在/本人/手动来源、brokerRevision和目标hash；必要时在同一事务内创建零仓底稿并立即登记真实成交或生成委托，失败回滚底稿、订单、持仓、现金、集合版本等。条件委托未成交前零仓是已确认委托的关联记录，不预先记成交或扣现金；后续仅沿原行情观察规则成交。新目标委托保存稳定券商目标，移出／转账户后禁止继续执行；改单仍只能用原recordId，不支持切账户或搬持仓。
+
+成功原UUID回执 `data.buyTarget` 使用上表字段，recordId必为最终实际记录ID、recordRevision为提交完成后真实版本，并额外含 `createdRecordId: string | null`（新建为实际ID，加仓为null）。createsRecord及targetRevision仍描述本次确认；`data.preview`是提交前预演，内部新目标ID仍null。核对最终记录同时检查data.buyTarget、items[].recordId及snapshot.position.recordId。失败回执data=null；40902包括版本变化、目标hash缺失或不匹配、重复证券；404为账户不存在／外人账户；40903为官方管理账户。格式错误为400。未知结果仅查询原operation_path及原UUID，不自动重放，不先创建记录再补交易。旧recordId路径和授权scope保持；旧服务无此发现能力时禁用新目标。

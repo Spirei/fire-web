@@ -202,3 +202,5 @@ auth/config的broker_accounts新增可选`unbinding_path`，值为`/api/v{1|2}/b
 沿 records 原有 POST/PUT 与 requestId/revision/operations 合约传 brokerAccountId，一次事务保存记录和账户归属，无需再调用 bindings。只能指定本人仍存在的手动账户；最新账户名称由服务端回填 group。编辑省略 ID 保留原关联，显式空字符串才移出。官方账户返回40903，外人或删除账户返回404。
 
 本人同账户下，按 market、importIdentity 规范代码、有效账户市场防重；HK直持与HK/CN港股通隔离，空accountMarket与行情市场相同均视为直持。新增或编辑身份／账户形成重复返回40902，不合并数量成本；不同账户同股独立。检查与写入位于同一个IMMEDIATE事务，多连接竞争最多一条成功。旧重复不迁移删除，身份不变的编辑仍允许。失败requestId原回执可查，重复UUID不重放。
+
+买入入口应优先使用显式发现的 account_trading.buy_target，协议与完整字段见 [原生交易合约](app-account-trading.md)。records直接关联仍作为补录入口，禁止先创建零仓再发交易请求。
