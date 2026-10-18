@@ -160,16 +160,15 @@ export function executeOrder(input: {
     const orderNo = nextOrderNo();
     db.prepare(`
       INSERT INTO trade_orders
-      (id,order_no,user_id,record_id,market,code,name,side,status,qty,price,fees,amount,realized_pnl,position_qty_before,position_cost_before,position_qty_after,position_cost_after,broker,note,order_type,trigger_price,tif,expires_at,session,trigger_status,traded_at,created_at)
-      VALUES (?,?,?,?,?,?,?,?,'filled',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      (id,order_no,user_id,record_id,market,code,name,side,status,qty,price,fees,amount,realized_pnl,position_qty_before,position_cost_before,position_qty_after,position_cost_after,broker,note,order_type,trigger_price,tif,expires_at,session,trigger_status,traded_at,created_at,settlement_currency,settlement_amount)
+      VALUES (?,?,?,?,?,?,?,?,'filled',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       id, orderNo, input.userId, input.recordId, String(record.market), String(record.code), String(record.name), input.side,
       input.qty, input.price, input.fees, input.qty * input.price, realizedPnl, oldQty, oldCost, nextQty, nextCost,
       String(record.group_name || ""), String(input.note || "").slice(0, 500),
       orderType, triggerPrice, tif, expiresAt, session, triggerStatus,
-      tradedAt, now
+      tradedAt, now, connect ? "CNY" : null, connect ? input.settlementAmount! : null
     );
-    if (connect) db.prepare("UPDATE trade_orders SET settlement_currency='CNY', settlement_amount=? WHERE id=?").run(input.settlementAmount!, id);
     db.prepare("UPDATE records SET qty = ?, cost = ?, updated_at = ? WHERE id = ? AND user_id = ?")
       .run(nextQty, nextCost, now, input.recordId, input.userId);
     refreshEconomicRealizedPnl(input.userId, input.recordId);

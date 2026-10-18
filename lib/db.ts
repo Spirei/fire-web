@@ -9,6 +9,7 @@ import { applyFilledTrade } from "./tradeAccounting";
 import { generateOrderNo } from "./orderNo";
 import { installPersonalProfile } from "./personalProfile";
 import { registerBrokerSourceGuard } from "./brokerHoldingSourceSchema";
+import { installBrokerCash, registerBrokerCashGuard } from "./brokerCashSchema";
 import { installBrokerAccounts } from "./brokerAccountsSchema";
 import { installAppAssets } from "./appAssetsSchema";
 import { installRecordsContract } from "./recordsSchema";
@@ -1232,6 +1233,7 @@ export function getDb(): Database.Database {
       try { fs.chmodSync(DB_FILE, 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
       db.pragma("journal_mode = WAL");
       registerBrokerSourceGuard(db);
+      registerBrokerCashGuard(db);
       migrate(db);
       const settlementColumns = (db.prepare("PRAGMA table_info(trade_orders)").all() as { name: string }[]).map(c => c.name);
       if (!settlementColumns.includes("settlement_currency")) db.exec("ALTER TABLE trade_orders ADD COLUMN settlement_currency TEXT");
@@ -1239,6 +1241,7 @@ export function getDb(): Database.Database {
       installRecordsContract(db);
       installAppAssets(db);
       installBrokerAccounts(db);
+      installBrokerCash(db);
       installPersonalProfile(db);
       installQuoteSubscriptions(db);
       installAccountChanges(db);

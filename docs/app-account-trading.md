@@ -140,3 +140,5 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 提交原请求并增加顶层 `targetRevision`（取自这次预览的buyTarget）。最终IMMEDIATE事务重核snapshotRevision、账户存在/本人/手动来源、brokerRevision和目标hash；必要时在同一事务内创建零仓底稿并立即登记真实成交或生成委托，失败回滚底稿、订单、持仓、现金、集合版本等。条件委托未成交前零仓是已确认委托的关联记录，不预先记成交或扣现金；后续仅沿原行情观察规则成交。新目标委托保存稳定券商目标，移出／转账户后禁止继续执行；改单仍只能用原recordId，不支持切账户或搬持仓。
 
 成功原UUID回执 `data.buyTarget` 使用上表字段，recordId必为最终实际记录ID、recordRevision为提交完成后真实版本，并额外含 `createdRecordId: string | null`（新建为实际ID，加仓为null）。createsRecord及targetRevision仍描述本次确认；`data.preview`是提交前预演，内部新目标ID仍null。核对最终记录同时检查data.buyTarget、items[].recordId及snapshot.position.recordId。失败回执data=null；40902包括版本变化、目标hash缺失或不匹配、重复证券；404为账户不存在／外人账户；40903为官方管理账户。格式错误为400。未知结果仅查询原operation_path及原UUID，不自动重放，不先创建记录再补交易。旧recordId路径和授权scope保持；旧服务无此发现能力时禁用新目标。
+
+券商资金最小账本见 [资金合约](native-broker-cash-contract.md)。cash_ledger.trading_enforced=false时，当前交易仍校验本人总币种现金，新成交可记录稳定券商归属但不保证券商内购买力；客户端不得把account现金balance用作available。

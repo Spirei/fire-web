@@ -8,6 +8,52 @@
 
 ```json
 {
+  "cash_ledger": {
+    "version": 1,
+    "supported": true,
+    "summary_path": "/api/v2/broker-accounts/cash",
+    "account_path": "/api/v2/broker-accounts/{accountId}/cash",
+    "entries_path": "/api/v2/broker-accounts/{accountId}/cash/entries",
+    "preview_path": "/api/v2/broker-accounts/cash/preview",
+    "submit_path": "/api/v2/broker-accounts/cash/submissions",
+    "operation_path": "/api/v2/broker-accounts/operations/{requestId}",
+    "read_scope": "portfolio.read",
+    "write_scope": "portfolio.write",
+    "actions": [
+      "opening",
+      "external_deposit",
+      "external_withdrawal"
+    ],
+    "transfer_counterparties": [],
+    "opening_bases": [
+      "allocate_verified_unallocated_checkpoint",
+      "new_external_opening"
+    ],
+    "cash_basis": "single_global_ledger_attribution",
+    "currency_policy": "explicit_supported_currency",
+    "supported_currencies": [
+      "USD",
+      "EUR",
+      "HKD",
+      "CNY",
+      "JPY",
+      "KRW",
+      "SGD",
+      "GBP",
+      "AUD",
+      "CAD",
+      "TWD",
+      "MOP",
+      "INR",
+      "BRL"
+    ],
+    "trading_cash_basis": "owner_currency_ledger",
+    "trading_enforced": false,
+    "preview_required": true,
+    "automatic_mutation_replay": false,
+    "cross_currency_transfer": false,
+    "official_cash_auto_post": false
+  },
   "version": 1,
   "presets_path": "/api/v2/broker-accounts/presets",
   "accounts_path": "/api/v2/broker-accounts",
@@ -204,3 +250,5 @@ auth/config的broker_accounts新增可选`unbinding_path`，值为`/api/v{1|2}/b
 本人同账户下，按 market、importIdentity 规范代码、有效账户市场防重；HK直持与HK/CN港股通隔离，空accountMarket与行情市场相同均视为直持。新增或编辑身份／账户形成重复返回40902，不合并数量成本；不同账户同股独立。检查与写入位于同一个IMMEDIATE事务，多连接竞争最多一条成功。旧重复不迁移删除，身份不变的编辑仍允许。失败requestId原回执可查，重复UUID不重放。
 
 买入入口应优先使用显式发现的 account_trading.buy_target，协议与完整字段见 [原生交易合约](app-account-trading.md)。records直接关联仍作为补录入口，禁止先创建零仓再发交易请求。
+
+券商初始现金及外部入出金的[最小资金账本](native-broker-cash-contract.md)已有显式cash_ledger发现、预览/CAS/UUID回执及唯一总账归属。当前交易仍使用本人总币种现金，不得把余额宣传为分账户购买力；卡包及券商间划转尚不支持。

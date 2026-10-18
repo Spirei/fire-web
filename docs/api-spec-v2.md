@@ -1104,6 +1104,11 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 
 | 方法 | 路径 | 权限 |
 | --- | --- | --- |
+| GET | `/api/v2/broker-accounts/cash` | portfolio.read |
+| GET | `/api/v2/broker-accounts/{accountId}/cash` | portfolio.read |
+| GET | `/api/v2/broker-accounts/{accountId}/cash/entries` | portfolio.read |
+| POST | `/api/v2/broker-accounts/cash/preview` | portfolio.write |
+| POST | `/api/v2/broker-accounts/cash/submissions` | portfolio.write |
 | POST | `/api/v2/broker-accounts/{accountId}/unbindings` | portfolio.write |
 | POST | `/api/v2/broker-accounts/{accountId}/bindings` | portfolio.write |
 | GET | `/api/v2/broker-accounts/{accountId}/connection` | portfolio.read |
@@ -1141,3 +1146,5 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 仅本人App连接，私有背景/简介/性别，字段PATCH、revision及UUID回执与首次迁移详见native-personal-profile.md。
 
 买入时可按显式发现的 `account_trading.buy_target` 选择本人手动券商目标，预览只读、提交原子建仓／加仓并记账，详见 [原生交易合约](app-account-trading.md#买入时选择个人券商账户buy_target-v12026-10-18)。旧recordId、scope和UUID回执不变。
+
+个人券商cash_ledger提供按币种期初、外部入出金、只读归属总览和流水，资金预览/提交沿portfolio.read/write与原券商UUID回执；[实际资金合约及能力边界](native-broker-cash-contract.md)。

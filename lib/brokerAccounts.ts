@@ -130,6 +130,7 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
         for(const r of chosen)updateRecord(r.id,userId,{...r,brokerAccountId:id,group:current!.name});
         db.prepare('UPDATE broker_accounts SET revision=revision+1,updated_at=? WHERE user_id=? AND id=?').run(at,userId,id);
       } else if(kind==='delete') {
+        if(db.prepare('SELECT 1 FROM broker_cash_accounts WHERE user_id=? AND account_id=?').get(userId,id))throw new RecordsError('账户已有资金账本，不能删除',409,40902);
         if(db.prepare('SELECT 1 FROM broker_statement_imports WHERE user_id=? AND account_id=?').get(userId,id))throw new RecordsError('账户含官方账单历史，不能直接删除',409,40902);
         if(db.prepare("SELECT 1 FROM records WHERE user_id=? AND broker_account_id=?").get(userId,id))throw new RecordsError("账户仍有关联记录",409,40902);
         db.prepare("DELETE FROM broker_accounts WHERE user_id=? AND id=?").run(userId,id);
