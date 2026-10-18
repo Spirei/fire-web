@@ -1126,3 +1126,15 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 个人账户持仓使用稳定 `brokerAccountId`；IBKR Flex配置、上传/读取预览及确认导入详见 [官方账单合约](native-broker-statements.md)。
 
 个人券商账户显式返回 `holdingSource:manual|official`；官方接管须预览后 `takeOverOfficial:true`，切回手动为 holding-source PUT，保留配置并作废旧预览。官方离线不自动降级；所有持仓/交易入口受数据库互斥约束。
+
+## 原生个人主页账户同步
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/personal-profile` | portfolio.read |
+| PATCH | `/api/v2/personal-profile` | profile.write |
+| GET | `/api/v2/personal-profile/background` | portfolio.read |
+| POST | `/api/v2/personal-profile/background` | profile.write |
+| GET | `/api/v2/personal-profile/operations/{requestId}` | portfolio.read |
+
+仅本人App连接，私有背景/简介/性别，字段PATCH、revision及UUID回执与首次迁移详见native-personal-profile.md。
