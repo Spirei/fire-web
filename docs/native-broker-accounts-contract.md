@@ -196,3 +196,9 @@ auth/config的broker_accounts新增可选`unbinding_path`，值为`/api/v{1|2}/b
 仅清空选中记录brokerAccountId和兼容group；证券身份、价格数量成本、备注、自选分组、历史订单及现金保持。每条记录版本/集合版本和账户revision正常递增。
 回执沿原operations路径，kind:unbind_records，成功data最新BrokerAccount（recordCount更新）；业务失败state:failed/data:null，原UUID可查；重复requestId40901不重放。超时未知保留requestId查原，不自动换ID重试。前置格式/认证错误不保存回执。
 原生“已关联”页签只列当前账户本人记录，可选移出。旧服务不提供能力时保留列表且禁用批量移出，不改真实归属作测试。
+
+### 新建与编辑持仓直接关联（2026-10-18）
+
+沿 records 原有 POST/PUT 与 requestId/revision/operations 合约传 brokerAccountId，一次事务保存记录和账户归属，无需再调用 bindings。只能指定本人仍存在的手动账户；最新账户名称由服务端回填 group。编辑省略 ID 保留原关联，显式空字符串才移出。官方账户返回40903，外人或删除账户返回404。
+
+本人同账户下，按 market、importIdentity 规范代码、有效账户市场防重；HK直持与HK/CN港股通隔离，空accountMarket与行情市场相同均视为直持。新增或编辑身份／账户形成重复返回40902，不合并数量成本；不同账户同股独立。检查与写入位于同一个IMMEDIATE事务，多连接竞争最多一条成功。旧重复不迁移删除，身份不变的编辑仍允许。失败requestId原回执可查，重复UUID不重放。

@@ -1,4 +1,5 @@
-import { stockAccountError } from "./stockAccount";
+import { importIdentity } from "./importIdentity";
+import { holdingAccountMarket, stockAccountError } from "./stockAccount";
 import { createHash } from "node:crypto";
 import { getDb } from "./db";
 import { createRecord, deleteRecord, listRecords, logActivity, parseMarket, readRecord, toNumberOrEmpty, updateRecord } from "./store";
@@ -118,6 +119,23 @@ export function mutateRecords(userId: string, kind: Kind, id: string, body: unkn
     let record: StockRecord | null = null;
     if (!error) {
       try { record=db.transaction(() => {
+        if (input) {
+          // Stable ownership survives a stale display name; only an explicit empty ID unlinks.
+          if (kind === 'update' && input.brokerAccountId === undefined && old?.brokerAccountId) input.brokerAccountId = old.brokerAccountId;
+          const accountId = input.brokerAccountId;
+          if (accountId) {
+            const account = db.prepare("SELECT name,holding_source FROM broker_accounts WHERE user_id=? AND id=?").get(userId,accountId) as {name:string;holding_source:string}|undefined;
+            if (!account) throw new RecordsError("券商账户不存在",404);
+            if (account.holding_source === 'official') throw new RecordsError("官方管理账户不能手动修改持仓",409,40903);
+            input.group = account.name;
+            const key = (r: Pick<RecordInput,'market'|'code'|'accountMarket'>) => JSON.stringify([r.market,importIdentity(r.code,r.market).code || r.code.trim().toUpperCase(),holdingAccountMarket(r)]);
+            const next = {...input,accountMarket:input.market==='HK' ? input.accountMarket ?? old?.accountMarket ?? '' : ''};
+            // Legacy duplicates remain intact; metadata/financial edits do not create another identity.
+            if ((!old || old.brokerAccountId !== accountId || key(old) !== key(next)) && listRecords(userId).some(r => r.id !== id && r.brokerAccountId === accountId && key(r) === key(next))) {
+              throw new RecordsError("同一账户已存在该证券，请编辑原持仓",409,40902);
+            }
+          }
+        }
         const saved=kind==='create'?createRecord(userId,input!):kind==='update'?updateRecord(id,userId,input!):null;
         if(kind==='delete')deleteRecord(id,userId);
         const activity=saved??old!;
