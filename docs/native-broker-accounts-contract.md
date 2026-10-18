@@ -182,3 +182,7 @@ update示例：`{requestId,revision,recordCollectionRevision,name,currency:"HKD"
 issues当前包含unknown_currency、invalid_position、invalid_statement_cash、invalid_statement_event、unscoped_legacy_funds；App宜显示无法完整核对并禁删减，不自造完整集合。
 旧全局fund_transactions没有个人券商ID；非零且无法按官方订单ID归属的资金不按名称猜归属，而令完整性false。添加币种、集合内更改默认不受此缺失限制。
 真实新持仓/官方报告仍按其证券及结算币种记账；不受显示默认币种重解释。后续出现新的使用币种时读取安全合入支持集合；该集合不作为拒收真实账单的币种白名单。
+
+## 历史持仓ID兼容（2026-10-18）
+
+bindings.recordIds必须原样使用records接口返回的稳定ID，不限定r-16位格式。支持历史和备份恢复ID（恢复器生成r-24位）；每项为1至128字符的非空字符串，不含控制字符，禁止重复。服务端按原文精确匹配本人完整持仓，不trim、不重写ID；不存在/跨用户404，账户/集合CAS和官方来源40903保持。
