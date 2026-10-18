@@ -1,3 +1,4 @@
+import { brokerCurrencyUsage,parseBrokerCurrencies,storedBrokerCurrencies } from "./brokerCurrencies";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
@@ -8,7 +9,7 @@ import { collectionRevision, RecordsError, validRecordRequestId } from "./record
 import { isFundCurrency } from "./fundCurrencies";
 import { listRecords, updateRecord } from "./store";
 
-type Row = {id:string;user_id:string;name:string;provider_id:string|null;currency:string;revision:number;icon:Buffer|null;created_at:string;updated_at:string;holding_source:"manual"|"official"};
+type Row = {id:string;user_id:string;name:string;provider_id:string|null;currency:string;currencies_json:string|null;revision:number;icon:Buffer|null;created_at:string;updated_at:string;holding_source:"manual"|"official"};
 export type BrokerKind = "create"|"update"|"delete"|"upload_icon"|"reset_icon"|"bind_records";
 export function brokerPresets() {
   const icons = getDb().prepare("SELECT code,name,url,updated_at FROM assets WHERE type='broker'").all() as {code:string;name:string;url:string;updated_at:string}[];
@@ -31,7 +32,8 @@ export function brokerAccount(userId:string,id:string,version:1|2) {
   const r=row(userId,id);if(!r)throw new RecordsError("账户不存在",404);
   const preset=brokerPresets().find(p=>p.id===r.provider_id);
   const count=getDb().prepare("SELECT COUNT(*) n FROM records WHERE user_id=? AND broker_account_id=?").get(userId,r.id) as {n:number};
-  return {id:r.id,name:r.name,holdingSource:r.holding_source,providerId:r.provider_id,currency:r.currency,revision:r.revision,
+  const usage=brokerCurrencyUsage(userId,id),currencies=parseBrokerCurrencies([...new Set([...storedBrokerCurrencies(r.currencies_json,r.currency),...usage.usedCurrencies.filter(isFundCurrency)])],r.currency);
+  return {id:r.id,name:r.name,holdingSource:r.holding_source,providerId:r.provider_id,currency:r.currency,currencies,currencyUsage:usage,revision:r.revision,
     icon:r.icon?`/api/v${version}/broker-accounts/${r.id}/icon`:preset?.icon??null,
     iconSource:r.icon?"custom":preset?"preset":"none",recordGroup:r.name,recordCount:count.n,createdAt:r.created_at,updatedAt:r.updated_at};
 }
@@ -63,13 +65,15 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
   if(!raw||typeof raw!=="object"||Array.isArray(raw))throw new RecordsError("无效请求");
   const b=raw as Record<string,unknown>,requestId=validRecordRequestId(b.requestId);
   const fields=kind==='bind_records'?['requestId','revision','recordCollectionRevision','recordIds',...('allowReassign' in b?['allowReassign']:[])]:kind==='create'?['requestId','name','providerId','currency']:kind==='update'?['requestId','revision','name','currency','recordCollectionRevision']:['requestId','revision'];
-  if(Object.keys(b).some(k=>!fields.includes(k))||fields.some(k=>!(k in b)))throw new RecordsError("请求字段无效");
+  const allowed=[...fields,...((kind==='create'||kind==='update')?['currencies']:[])];
+  if(Object.keys(b).some(k=>!allowed.includes(k))||fields.some(k=>!(k in b)))throw new RecordsError("请求字段无效");
   if(kind!=='create'&&!integer(b.revision))throw new RecordsError("账户版本无效");
   let name='',currency='';
   if(kind==='create'||kind==='update') {
     if(typeof b.name!=='string'||!b.name.trim()||b.name.trim().length>60||/[\x00-\x1f\x7f]/.test(b.name)||typeof b.currency!=='string'||!isFundCurrency(b.currency))throw new RecordsError("名称或币种无效");
     name=b.name.trim();currency=b.currency;
   }
+  if('currencies' in b)parseBrokerCurrencies(b.currencies,currency);
   if(kind==='create'&&b.providerId!==null&&!presets.some(p=>p.id===b.providerId))throw new RecordsError("机构无效");
   if((kind==='update'||kind==='bind_records')&&!integer(b.recordCollectionRevision))throw new RecordsError("记录集合版本无效");
   if(kind==='bind_records'&&(!Array.isArray(b.recordIds)||!b.recordIds.length||b.recordIds.length>2000||b.recordIds.some(x=>typeof x!=='string'||!/^r-[a-f0-9]{16}$/.test(x))||new Set(b.recordIds).size!==b.recordIds.length))throw new RecordsError('持仓选择无效');
@@ -85,18 +89,24 @@ export function mutateBroker(userId:string,kind:BrokerKind,id:string,raw:unknown
       if(current&&current.revision!==b.revision)throw new RecordsError("账户已变化",409,40902);
       const at=new Date().toISOString();
       if(kind==='create') {
+        const currencies=parseBrokerCurrencies(b.currencies??[currency],currency);
         const count=db.prepare("SELECT COUNT(*) n FROM broker_accounts WHERE user_id=?").get(userId) as {n:number};
         if(count.n>=100)throw new RecordsError("账户数已达上限",409,40902);
         nameAvailable(userId,name,'');accountId='ba-'+randomBytes(12).toString('hex');
-        db.prepare("INSERT INTO broker_accounts(id,user_id,name,provider_id,currency,revision,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)").run(accountId,userId,name,b.providerId,currency,at,at);
+        db.prepare("INSERT INTO broker_accounts(id,user_id,name,provider_id,currency,currencies_json,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,1,?,?)").run(accountId,userId,name,b.providerId,currency,JSON.stringify(currencies),at,at);
       } else if(kind==='update') {
         if(collectionRevision(userId)!==b.recordCollectionRevision)throw new RecordsError("持仓记录已变化",409,40902);
+        const previous=storedBrokerCurrencies(current!.currencies_json,current!.currency),usage=brokerCurrencyUsage(userId,id);
+        const effective=[...new Set([...previous,...usage.usedCurrencies.filter(isFundCurrency)])];
+        const currencies=parseBrokerCurrencies(b.currencies??[...new Set([...effective,currency])],currency);
+        const removed=effective.filter(c=>!currencies.includes(c));
+        if(removed.length&&(!usage.complete||usage.usedCurrencies.some(c=>!currencies.includes(c))))throw new RecordsError('币种正在使用或读取不完整，不能移除',409,40902);
         nameAvailable(userId,name,id);
         db.prepare("UPDATE broker_accounts SET name=? WHERE user_id=? AND id=?").run(name,userId,id);
         if(current!.name!==name)for(const r of listRecords(userId).filter(r=>r.brokerAccountId===id)) {
           if(!updateRecord(r.id,userId,{...r,group:name}))throw new Error('record update failed');
         }
-        db.prepare("UPDATE broker_accounts SET name=?,currency=?,revision=revision+1,updated_at=? WHERE user_id=? AND id=?").run(name,currency,at,userId,id);
+        db.prepare("UPDATE broker_accounts SET name=?,currency=?,currencies_json=?,revision=revision+1,updated_at=? WHERE user_id=? AND id=?").run(name,currency,JSON.stringify(currencies),at,userId,id);
       } else if(kind==='bind_records') {
         if(current!.holding_source==='official')throw new RecordsError('官方管理账户不能手动关联持仓',409,40903);
         if(collectionRevision(userId)!==b.recordCollectionRevision)throw new RecordsError('持仓记录已变化',409,40902);

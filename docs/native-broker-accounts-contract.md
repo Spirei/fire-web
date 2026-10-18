@@ -29,6 +29,29 @@
     "max_dimension": 4096,
     "max_pixels": 16777216
   },
+  "currency_selection": {
+    "version": 1,
+    "field": "currencies",
+    "default_field": "currency",
+    "supported": [
+      "USD",
+      "EUR",
+      "HKD",
+      "CNY",
+      "JPY",
+      "KRW",
+      "SGD",
+      "GBP",
+      "AUD",
+      "CAD",
+      "TWD",
+      "MOP",
+      "INR",
+      "BRL"
+    ],
+    "usage_field": "currencyUsage",
+    "removal_requires_complete": true
+  },
   "holding_source": {
     "version": 1,
     "field": "holdingSource",
@@ -136,3 +159,26 @@ DELETE icon_path JSON `{requestId,revision}`，返回reset_icon回执；清除�
 
 401失效授权、403缺scope/来源、404本人资源不存在、40901重复请求、40902版本/名称/引用冲突、40001参数/图片不合法、413文件/请求超限、50001存储失败。一般错误信封`{code,message}`；已保存failed回执可经operation查询。无用户枚举或跨账号资源查询。
 部署前必须临时库/私有文件回归：双版本、只读/读写授权、Cookie不能提升、跨用户隔离、改名记录版本与回滚、旧共享目录不变、CAS/重复/超时原回执、图标真实性/尺寸/字节/动画限制、上传失败旧图保留、恢复默认与引用删除拒绝。
+
+## 多币种选择能力（2026-10-18）
+
+发现 `currency_selection.version=1` 后，App才能向原create/update发送可选`currencies`数组；缺能力不猜传未知字段。
+服务端支持币种以发现supported为准，至少一种、无重复，`currency`仍是默认币种且必须属于集合；这是账户配置，不是余额、兑换或分拆账户。
+create示例：`{requestId,name,providerId:null,currency:"USD",currencies:["USD","HKD"]}`。
+update示例：`{requestId,revision,recordCollectionRevision,name,currency:"HKD",currencies:["USD","HKD"]}`。
+原UUID/账户与完整持仓集合CAS/成功失败回执保持。集合以服务端标准顺序返回。
+旧create省略集合时默认为[currency]；旧update省略时保留全部已有币种并合入新默认，不因旧App编辑删减。
+旧账户无集合时以原默认兼容；服务端读取完整在用币种并安全合入支持的币种，不能因旧配置遗漏实际持仓而把它隐藏。
+
+账户GET、list及新成功回执额外返回：
+
+```json
+{"currency":"USD","currencies":["USD","HKD"],"currencyUsage":{"complete":true,"usedCurrencies":["HKD","USD"],"recordCollectionRevision":42,"issues":[]}}
+```
+
+客户端据此获得完整使用集合，**不依赖分页持仓/第一屏/当前筛选**。读数据和删减检查均为服务端本人账户全量查询：所有关联记录（含零数量）、历史订单报价/结算币种、已导入官方现金报告及归档流水币种。
+港股通同时保护HKD报价与CNY结算。其他账户同股/同币种不误归入本人当前账户。
+已有使用币种不可移除；删减时若complete=false，同样40902并保留原配置、原失败回执可查。
+issues当前包含unknown_currency、invalid_position、invalid_statement_cash、invalid_statement_event、unscoped_legacy_funds；App宜显示无法完整核对并禁删减，不自造完整集合。
+旧全局fund_transactions没有个人券商ID；非零且无法按官方订单ID归属的资金不按名称猜归属，而令完整性false。添加币种、集合内更改默认不受此缺失限制。
+真实新持仓/官方报告仍按其证券及结算币种记账；不受显示默认币种重解释。后续出现新的使用币种时读取安全合入支持集合；该集合不作为拒收真实账单的币种白名单。

@@ -48,5 +48,7 @@ export function installBrokerAccounts(db: Database.Database) {
     WHEN NEW.broker_account_id!='' AND NOT EXISTS(SELECT 1 FROM broker_accounts WHERE id=NEW.broker_account_id AND user_id=NEW.user_id)
     BEGIN SELECT RAISE(ABORT,'Invalid broker account owner'); END;
   `);
+  const accountColumns=(db.prepare('PRAGMA table_info(broker_accounts)').all() as {name:string}[]).map(c=>c.name);
+  if(!accountColumns.includes('currencies_json'))db.exec('ALTER TABLE broker_accounts ADD COLUMN currencies_json TEXT');
   installBrokerHoldingSource(db);
 }
