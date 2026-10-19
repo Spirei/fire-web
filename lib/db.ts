@@ -16,6 +16,7 @@ import { installRecordsContract } from "./recordsSchema";
 import { installAccountChanges } from "./accountChangeSchema";
 import { installQuoteSubscriptions } from "./quoteSubscriptionsSchema";
 import { installAssetAllocation } from "./assetAllocationSchema";
+import { installHistoricalFees } from "./historicalFeeSchema";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "fire.db");
@@ -1242,6 +1243,7 @@ export function getDb(): Database.Database {
       installAppAssets(db);
       installBrokerAccounts(db);
       installBrokerCash(db);
+      installHistoricalFees(db);
       installPersonalProfile(db);
       installQuoteSubscriptions(db);
       installAccountChanges(db);

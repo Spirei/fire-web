@@ -13,6 +13,9 @@
 | GET | `/api/v2/account-assets/orders` | portfolio.read |
 | POST | `/api/v2/account-assets/orders/cancellations` | orders.cancel |
 | GET | `/api/v2/account-assets/trading` | orders.read |
+| GET | `/api/v2/account-assets/fee-repairs` | orders.read |
+| POST | `/api/v2/account-assets/fee-repairs/preview` | orders.write |
+| POST | `/api/v2/account-assets/fee-repairs/submissions` | orders.write |
 | POST | `/api/v2/account-assets/trading/preview` | orders.write |
 | POST | `/api/v2/account-assets/trading/submissions` | orders.write |
 | POST | `/api/v2/account-assets/trading/orders/{orderId}/preview` | orders.write |

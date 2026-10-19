@@ -7,6 +7,7 @@ export function assetsDiscovery(version: 1 | 2) {
     orders_version: 1, orders_path: `${base}/orders`, cancel_orders_path: `${base}/orders/cancellations`,
     order_revision_field: "revision", order_filters: ["all", "pending", "filled", "cancelled", "rejected", "expired"],
     cancel_scope: "orders.cancel",
+    order_fee_read_model: {version:1,applies_to:"orders_path",broker_account_id:"recorded_history_or_null",fee_currency:"listing_market",fee_source:true,fee_breakdown:"owner_reconstructed_or_null"},
     request_id_field: "requestId", idempotency: "reject-duplicate-query-original", automatic_mutation_replay: false,
     features: { cash_by_currency: true, cash_price_independent: true, cash_valuation: "recorded_cash_ledger_price_independent", imported_equity_requires_opening_cash: false, cash_by_market: false, today_orders: true, order_reads_settle: false,
       instrument_declarations: ["cash_equity", "etf", "unknown"], derivatives: false, underlying_merge: false,

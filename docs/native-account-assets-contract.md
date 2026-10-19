@@ -150,7 +150,15 @@ requestId 小写 UUID，每次新确认新 ID；revision 为 instrument.revision
     "rejected",
     "expired"
   ],
-  "cancel_scope": "orders.cancel"
+  "cancel_scope": "orders.cancel",
+  "order_fee_read_model": {
+    "version": 1,
+    "applies_to": "orders_path",
+    "broker_account_id": "recorded_history_or_null",
+    "fee_currency": "listing_market",
+    "fee_source": true,
+    "fee_breakdown": "owner_reconstructed_or_null"
+  }
 }
 ```
 
@@ -172,6 +180,8 @@ positions.weightPct 分母为**全账户所有 active 持仓的完整显示币�
 | side | "buy" / "sell" / "dividend" |
 | status | "filled" / "pending" / "cancelled" / "expired" |
 | qty/price/fees/amount | number；原币、原记录单位。期权不支持，不自动乘100 |
+| brokerAccountId/brokerAccountIdSource/currentRecordBrokerAccountId | 可选历史稳定账户与来源、独立当前记录归属；缺证据为null，不能用broker字段或当前记录推断历史账户。见[历史费用及常规明细合同](native-historical-fees-contract.md) |
+| feeSource/feeCurrency/feeBreakdown/feeBreakdownSource | 可选来源、上市原币及已保存组成；本版组成仅owner_reconstructed，其他null，不是券商实际账单分项。港股通fees仍HKD，不能从CNY结算净额另造费用 |
 | realizedPnl | number|null；原币台账已实现收益，不是日内资产盈亏 |
 | positionQtyBefore/positionQtyAfter | number|null；未知历史快照不当0 |
 | positionCostBefore/positionCostAfter | number|null；原币摊薄单位成本 |

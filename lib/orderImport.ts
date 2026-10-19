@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import type { Market } from "./types";
 import { refreshEconomicRealizedPnl } from "./orders";
 import { syncOrderCashTransactions } from "./funds";
+import { feeInputFingerprint } from "./historicalFeeSchema";
 
 /**
  * 券商订单导入：把「订单状态=已成交」的券商订单接入 trade_orders。
@@ -63,10 +64,13 @@ function isOption(code: string): boolean {
 export function parseTradedAt(raw: string, market: string): string {
   const text = raw.trim();
   const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})( ET)?$/.exec(text);
-  if (!m) return new Date().toISOString();
+  if (!m) throw new Error('委托时间格式无效，不能用当前时间代替历史成交');
   const [, y, mo, d, h, mi, s] = m.map(Number);
   const target = Date.UTC(y, mo - 1, d, h, mi, s);
+  if (h>23||mi>59||s>59||new Date(target).toISOString().slice(0,19)!==text.slice(0,19).replace(' ','T')) throw new Error('委托时间日期无效');
   const hasEt = !!m[7];
+  if (market==='US'&&!hasEt) throw new Error('美股历史成交须明确美东时间 ET');
+  if (market!=='US'&&hasEt) throw new Error('成交市场与美东时间标记不符');
   let guess = target;
   if (hasEt) {
     // 用 Intl 反推美东偏移（含 DST），迭代 2~3 次收敛
@@ -82,7 +86,9 @@ export function parseTradedAt(raw: string, market: string): string {
       if (delta === 0) break;
       guess += delta;
     }
-  } else if (market === "HK") {
+    const finalParts=fmt.formatToParts(new Date(guess)),part=(type:string)=>Number(finalParts.find(p=>p.type===type)?.value);
+    if(Date.UTC(part('year'),part('month')-1,part('day'),part('hour')%24,part('minute'),part('second'))!==target)throw new Error('美东成交时间不存在，请核对夏令时切换日期');
+  } else if (market === "HK" || market === "CN") {
     guess = target - 8 * 3600 * 1000; // 北京时间 = UTC+8
   }
   return new Date(guess).toISOString();
@@ -287,6 +293,9 @@ export function importBrokerOrders(userId: string, rawRows: ImportOrderInput[], 
             beforeQty, beforeCost, qAfter, costAfter,
             field(row, "币种", "J") || market, tradedAt, now
           );
+          const inserted = db.prepare('SELECT * FROM trade_orders WHERE id=? AND user_id=?').get(orderId,userId) as Record<string,unknown>;
+          const owner = db.prepare('SELECT broker_account_id FROM records WHERE id=? AND user_id=?').get(rec!.id,userId) as {broker_account_id:string};
+          db.prepare('UPDATE trade_fee_evidence SET source=?,input_hash=?,detail_json=? WHERE order_id=? AND user_id=?').run('legacy_import_zero',feeInputFingerprint(inserted),JSON.stringify({importer:'broker_orders_v1',rawTime:field(row,'委托时间','K'),brokerAccountId:owner.broker_account_id||null}),orderId,userId);
         }
         refreshEconomicRealizedPnl(userId, rec!.id);
       }

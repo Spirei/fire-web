@@ -1,10 +1,18 @@
 import type Database from 'better-sqlite3';
 import { RecordsError } from './recordsContract';
+const feeCorrections = new WeakMap<Database.Database, ReadonlySet<string>>();
+/** Connection-local and synchronous; never opens a general financial-write exemption. */
+export function withBrokerFeeCorrection<T>(db:Database.Database,ids:ReadonlySet<string>,run:()=>T):T {
+  const previous=feeCorrections.get(db);feeCorrections.set(db,ids);
+  try{return run();}finally{if(previous)feeCorrections.set(db,previous);else feeCorrections.delete(db);}
+}
 export function registerBrokerCashGuard(db: Database.Database) {
   db.function('broker_cash_conflict',()=>{throw new RecordsError('券商资金已有覆盖记录，请核对资金账本后操作',409,40902);});
+  db.function('broker_cash_fee_correction',(id:unknown)=>feeCorrections.get(db)?.has(String(id))?1:0);
 }
 export function installBrokerCash(db: Database.Database) {
   registerBrokerCashGuard(db);
+  db.transaction(()=>{
   db.exec(`CREATE TABLE IF NOT EXISTS broker_cash_accounts (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     account_id TEXT NOT NULL REFERENCES broker_accounts(id) ON DELETE CASCADE,
@@ -71,10 +79,11 @@ export function installBrokerCash(db: Database.Database) {
       WHERE r.id=NEW.record_id AND r.user_id=NEW.user_id AND c.currency=${currency};
       UPDATE broker_cash_accounts SET revision=revision+1 WHERE (user_id,account_id,currency) IN(SELECT user_id,account_id,currency FROM broker_cash_order_links WHERE order_id=NEW.id);
     END;
-    CREATE TRIGGER IF NOT EXISTS broker_cash_filled_update BEFORE UPDATE ON trade_orders
+    DROP TRIGGER IF EXISTS broker_cash_filled_update;
+    CREATE TRIGGER broker_cash_filled_update BEFORE UPDATE ON trade_orders
     WHEN OLD.status='filled' AND EXISTS(SELECT 1 FROM broker_cash_order_links WHERE order_id=OLD.id)
       AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
-      AND (NEW.status IS NOT OLD.status OR NEW.qty IS NOT OLD.qty OR NEW.price IS NOT OLD.price OR NEW.fees IS NOT OLD.fees OR NEW.amount IS NOT OLD.amount OR NEW.side IS NOT OLD.side OR NEW.market IS NOT OLD.market OR NEW.record_id IS NOT OLD.record_id OR NEW.settlement_currency IS NOT OLD.settlement_currency OR NEW.settlement_amount IS NOT OLD.settlement_amount OR NEW.traded_at IS NOT OLD.traded_at)
+      AND (NEW.status IS NOT OLD.status OR NEW.qty IS NOT OLD.qty OR NEW.price IS NOT OLD.price OR (NEW.fees IS NOT OLD.fees AND broker_cash_fee_correction(OLD.id)=0) OR NEW.amount IS NOT OLD.amount OR NEW.side IS NOT OLD.side OR NEW.market IS NOT OLD.market OR NEW.record_id IS NOT OLD.record_id OR NEW.settlement_currency IS NOT OLD.settlement_currency OR NEW.settlement_amount IS NOT OLD.settlement_amount OR NEW.traded_at IS NOT OLD.traded_at)
     BEGIN SELECT broker_cash_conflict(); END;
     CREATE TRIGGER IF NOT EXISTS broker_cash_order_update AFTER UPDATE ON trade_orders BEGIN
       UPDATE broker_cash_accounts SET revision=revision+1 WHERE (user_id,account_id,currency) IN(SELECT user_id,account_id,currency FROM broker_cash_order_links WHERE order_id=NEW.id);
@@ -92,4 +101,5 @@ export function installBrokerCash(db: Database.Database) {
     WHEN EXISTS(SELECT 1 FROM broker_cash_entries WHERE fund_id=OLD.id) AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
     BEGIN SELECT broker_cash_conflict(); END;
   `);
+  }).immediate();
 }
