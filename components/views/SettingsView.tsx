@@ -589,7 +589,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   wechatAesKey: "",
   wechatAdminIds: "",
   wechatWebhook: "",
-  telegramEnabled: true,
+  telegramEnabled: false,
   telegramName: "电报",
   telegramTypes: "",
   telegramBotUsername: "",

@@ -139,7 +139,7 @@ const DEFAULTS: SiteSettings = {
   wechatAesKey: "",
   wechatAdminIds: "",
   wechatWebhook: "",
-  telegramEnabled: true,
+  telegramEnabled: false,
   telegramName: "电报",
   telegramTypes: "",
   telegramBotUsername: "",
@@ -526,7 +526,9 @@ export function getSiteSettings(): SiteSettings {
   result.smtpSecure = map.smtpSecure === "1";
   result.wechatEnabled = map.wechatEnabled === "1";
   result.wechatSmartRobot = map.wechatSmartRobot === "1";
-  result.telegramEnabled = map.telegramEnabled !== "0";
+  result.telegramEnabled = map.telegramEnabled == null || map.telegramEnabled === ""
+    ? /^\d+:[A-Za-z0-9_-]{20,}$/.test(process.env.ALCOR_TELEGRAM_BOT_TOKEN || "")
+    : map.telegramEnabled === "1";
   result.feishuEnabled = map.feishuEnabled === "1";
   result.qqEnabled = map.qqEnabled === "1";
   result.discordEnabled = map.discordEnabled === "1";
