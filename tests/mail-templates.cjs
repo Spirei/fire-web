@@ -69,7 +69,7 @@ function web(f,body,method='PUT',source=origin){return new Request(origin+'/api/
  });
  await test('template slots escape values, preserve code and link contracts, and public App read never exposes SMTP',async()=>{
   for(const template of model.DEFAULT_MAIL_TEMPLATES){
-   const output=templates.renderMailTemplate({...template,greeting:'<script>alert(1)</script>'},{email:'client@example.com',siteName:'Alcor',minutes:30,code:'012345',url:'https://safe.example/verify-email?token=fixture',nativeToken:template.kind==='link'?'fixture-token':undefined});
+   const output=templates.renderMailTemplate({...template,title:'<script>alert(1)</script>',greeting:'<script>alert(1)</script>'},{email:'client@example.com',siteName:'Alcor',minutes:30,code:'012345',url:'https://safe.example/verify-email?token=fixture',nativeToken:template.kind==='link'?'fixture-token':undefined});
    assert(!output.html.includes('<script>'));assert(output.html.includes('&lt;script&gt;'));
    if(template.kind==='code'){assert(output.html.includes('012345'));assert(!output.html.includes('/verify-email'));}
    if(template.kind==='link'){assert(output.html.includes('https://safe.example'));assert(output.text.includes('fixture-token'));}

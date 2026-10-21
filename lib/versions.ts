@@ -4956,7 +4956,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_62_ENTRY, version: "v0.1.63", date: "2026-10-21",
   summary: "股价提醒监控及通知接入。",
   software: V0_1_62_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.63"} : item),
-  changes: [{kind:"feature",title:"股价提醒与通知",desc:"新增本人股价规则、真实新鲜报价及交易时段监控、App内收件箱、已验证邮箱及Telegram私聊绑定。CAS和唯一UUID回执保护修改，发送超时不自动重发；微信暂缓，不改订单和资金。"},{kind:"feature",title:"股价提醒邮件模板",desc:"模板管理新增股价提醒，支持股票、触发价与目标价、报价时段及时间变量；实际发送读取本人验证邮箱和已保存模板，默认中性样式并保留原验证邮件配置。"}]
+  changes: [{kind:"feature",title:"股价提醒与通知",desc:"新增本人股价规则、真实新鲜报价及交易时段监控、App内收件箱、已验证邮箱及Telegram私聊绑定。CAS和唯一UUID回执保护修改，发送超时不自动重发；微信暂缓，不改订单和资金。"},{kind:"feature",title:"股价提醒邮件模板",desc:"模板管理新增股价提醒，支持股票、触发价与目标价、报价时段及时间变量；实际发送读取本人验证邮箱和已保存模板，沿用统一品牌版式，精简为触发价、提醒价和一行时段时间，保留原验证邮件配置。"}]
 };
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 

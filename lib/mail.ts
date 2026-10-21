@@ -120,7 +120,7 @@ export async function sendPriceAlertEmail(to: string, event: Record<string, unkn
     currentPrice:isTest ? "" : new Intl.NumberFormat("en-US", {useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:6}).format(Number(event.price)),
     targetPrice:String(event.target ?? ""), currency:String(event.currency ?? ""), direction:event.direction === "above" ? "涨至" : "跌至",
     session:sessions[String(event.session)] || "", quoteTime:String(event.quoteTime ?? ""),
-    triggerTime:isTest ? "" : new Intl.DateTimeFormat("zh-CN", {timeZone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23",timeZoneName:"short"}).format(new Date(Number(event.createdAt)))
+    triggerTime:isTest ? "" : new Intl.DateTimeFormat("zh-CN", {timeZone,month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(Number(event.createdAt))) + " " + (event.market === "US" ? "美东" : event.market === "HK" ? "香港" : "北京时间")
   });
   consumeMailPermit(to, "price_alert");
   const result = await createMailTransport(config).sendMail({from:{name:config.fromName || "Alcor",address:config.fromEmail},to,...rendered,attachments:[await mailBannerAttachment()]});
