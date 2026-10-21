@@ -1,11 +1,15 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import AppSelect from "./AppSelect";
-import { DEFAULT_MAIL_TEMPLATES, mailTemplateVariables, MAIL_TEMPLATE_FIELDS, type MailTemplate, type MailTemplateId, type MailTemplateTextField } from "@/lib/mailTemplateModel";
+import { DEFAULT_MAIL_TEMPLATES, MAIL_TEMPLATE_IDS, mailTemplateVariables, MAIL_TEMPLATE_FIELDS, type MailTemplate, type MailTemplateId, type MailTemplateTextField } from "@/lib/mailTemplateModel";
+import { usePersistedState } from "@/lib/usePersistedState";
 const labels:Record<MailTemplateTextField,string>={subject:"邮件主题",title:"标题",greeting:"称呼",body:"正文",valueLabel:"验证码 / 操作名称",closing:"结束语",signature:"落款"};
+const templateId = (value: unknown): MailTemplateId => typeof value === "string" && (MAIL_TEMPLATE_IDS as readonly string[]).includes(value) ? value as MailTemplateId : "email_change";
+const previewSlots = [".mail-title", ".mail-copy", ".mail-value-label", ".mail-code", ".mail-alert-price", ".mail-signature", ".mail-token", ".mail-meta"];
 export default function MailTemplatesSettings(){
-  const [templates,setTemplates]=useState<MailTemplate[]>(DEFAULT_MAIL_TEMPLATES),[selected,setSelected]=useState<MailTemplateId>("email_change"),[drafts,setDrafts]=useState<Record<string,MailTemplate>>({}),[preview,setPreview]=useState(""),[subject,setSubject]=useState(""),[mobile,setMobile]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
-  const previewSequence=useRef(0), mounted=useRef(true),canvasRef=useRef<HTMLDivElement>(null);
+  const [templates,setTemplates]=useState<MailTemplate[]>(DEFAULT_MAIL_TEMPLATES),[storedTemplate,setStoredTemplate]=usePersistedState("fire:mail-template","email_change"),[drafts,setDrafts]=useState<Record<string,MailTemplate>>({}),[preview,setPreview]=useState(""),[subject,setSubject]=useState(""),[mobile,setMobile]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
+  const selected = templateId(storedTemplate);
+  const previewSequence=useRef(0), mounted=useRef(true),canvasRef=useRef<HTMLDivElement>(null),frameRef=useRef<HTMLIFrameElement>(null),replaceFrame=useRef(true);
   const [canvasWidth,setCanvasWidth]=useState(0);
   const [brandingRevision,setBrandingRevision]=useState(0);
   const [darkPreview,setDarkPreview]=useState(false);
@@ -28,6 +32,26 @@ export default function MailTemplatesSettings(){
   const themedPreview=preview ? preview.replace("<html lang=\"zh-CN\">", `<html lang="zh-CN" ${darkPreview ? "class=\"dark\" data-theme=\"dark\"" : "data-theme=\"light\""}>`) : preview;
   const frameWidth=mobile?Math.min(390,canvasWidth || 390):640;
   const previewScale=mobile?1:Math.min(1,(canvasWidth || 640)/640);
+  useEffect(()=>{
+    const frame=frameRef.current;
+    if(!frame || !themedPreview) return;
+    const live=frame.contentDocument;
+    const incoming=new DOMParser().parseFromString(themedPreview,"text/html");
+    const sameShape=Boolean(live && !replaceFrame.current && live.querySelector(".mail-title") && previewSlots.every(selector=>live.querySelectorAll(selector).length===incoming.querySelectorAll(selector).length));
+    if(!live || !sameShape){
+      replaceFrame.current=true;
+      frame.addEventListener("load",()=>{replaceFrame.current=false;},{once:true});
+      frame.srcdoc=themedPreview;
+      if(frame.contentDocument?.querySelector(".mail-title")) replaceFrame.current=false;
+      return;
+    }
+    live.documentElement.classList.toggle("dark",incoming.documentElement.classList.contains("dark"));
+    live.documentElement.setAttribute("data-theme",incoming.documentElement.getAttribute("data-theme") || "light");
+    for(const selector of previewSlots){
+      const current=[...live.querySelectorAll(selector)], next=[...incoming.querySelectorAll(selector)];
+      current.forEach((node,index)=>{ if(next[index] && node.innerHTML!==next[index].innerHTML) node.innerHTML=next[index].innerHTML; });
+    }
+  },[themedPreview]);
   useEffect(()=>{mounted.current=true;const abort=new AbortController();fetch("/api/settings/mail-templates",{cache:"no-store",signal:abort.signal}).then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error || "读取失败");if(mounted.current)setTemplates(data.templates);}).catch(e=>{if(e.name!=="AbortError"&&mounted.current)setError(e.message);});return()=>{mounted.current=false;abort.abort();};},[]);
   useEffect(()=>{
     if(!template)return;
@@ -43,8 +67,8 @@ export default function MailTemplatesSettings(){
     catch(e){if(mounted.current)setError(e instanceof Error?e.message:"保存失败");}finally{if(mounted.current)setBusy(false);}
   }
   return <div className="mail-template-settings" data-preview={mobile?"mobile":"desktop"}>
-    <div className="mail-template-toolbar"><div className="mail-template-preview-switch" role="group" aria-label="预览尺寸"><button type="button" aria-pressed={mobile} onClick={()=>setMobile(true)}>手机</button><button type="button" aria-pressed={!mobile} onClick={()=>setMobile(false)}>桌面</button></div><AppSelect ariaLabel="邮件模板" value={selected} options={DEFAULT_MAIL_TEMPLATES.map(t=>({value:t.id,label:t.name}))} onChange={v=>{setSelected(v as MailTemplateId);setMessage("");}} className="btn btn-line" disabled={busy}/></div>
+    <div className="mail-template-toolbar"><div className="mail-template-preview-switch" role="group" aria-label="预览尺寸"><button type="button" aria-pressed={mobile} onClick={()=>setMobile(true)}>手机</button><button type="button" aria-pressed={!mobile} onClick={()=>setMobile(false)}>桌面</button></div><AppSelect ariaLabel="邮件模板" value={selected} options={DEFAULT_MAIL_TEMPLATES.map(t=>({value:t.id,label:t.name}))} onChange={v=>{replaceFrame.current=true;setStoredTemplate(templateId(v));setMessage("");}} className="btn btn-line" disabled={busy}/></div>
     {error&&<p className="settings-form-feedback is-err" role="alert">{error}</p>}{message&&<p className="settings-form-feedback is-ok" role="status">{message}</p>}
-    {template&&<div className="mail-template-grid"><div className="mail-template-editor"><fieldset disabled={busy}>{MAIL_TEMPLATE_FIELDS.filter(field=>selected!=="price_alert" || (field!=="greeting" && field!=="closing")).map(field=><label key={field}><span>{field==="valueLabel" && selected==="price_alert" ? "价格区标题" : labels[field]}</span>{field==="body"?<textarea rows={5} maxLength={1600} value={template[field]} onChange={e=>change(field,e.target.value)}/>:<input maxLength={160} value={template[field]} onChange={e=>change(field,e.target.value)}/>}</label>)}</fieldset><p className="mail-template-variables">变量：{mailTemplateVariables(selected).map(v=>`{{${v}}}`).join("、")}</p><div className="mt-4 flex flex-wrap gap-3"><button type="button" className="btn btn-line" disabled={busy} onClick={()=>{const preset=DEFAULT_MAIL_TEMPLATES.find(t=>t.id===selected)!;setDrafts(prev=>({...prev,[selected]:{...preset}}));setMessage("");}}>恢复默认</button><button type="button" className="btn btn-line" disabled={busy||!drafts[selected]} onClick={()=>void save()}>{busy?"保存中…":"保存模板"}</button></div></div><div className="mail-template-preview"><p className="mail-template-subject">{subject || "正在生成预览…"}</p><div className="mail-template-canvas" ref={canvasRef}><div className="mail-template-frame" style={{width:frameWidth*previewScale,height:780*previewScale}}><iframe title={`${template.name}邮件预览`} sandbox="allow-same-origin" srcDoc={themedPreview} style={{width:frameWidth,transform:`scale(${previewScale})`}}/></div></div></div></div>}
+    {template&&<div className="mail-template-grid"><div className="mail-template-editor"><fieldset disabled={busy}>{MAIL_TEMPLATE_FIELDS.filter(field=>selected!=="price_alert" || (field!=="greeting" && field!=="closing")).map(field=><label key={field}><span>{field==="valueLabel" && selected==="price_alert" ? "价格区标题" : labels[field]}</span>{field==="body"?<textarea rows={5} maxLength={1600} value={template[field]} onChange={e=>change(field,e.target.value)}/>:<input maxLength={160} value={template[field]} onChange={e=>change(field,e.target.value)}/>}</label>)}</fieldset><p className="mail-template-variables">变量：{mailTemplateVariables(selected).map(v=>`{{${v}}}`).join("、")}</p><div className="mt-4 flex flex-wrap gap-3"><button type="button" className="btn btn-line" disabled={busy} onClick={()=>{const preset=DEFAULT_MAIL_TEMPLATES.find(t=>t.id===selected)!;setDrafts(prev=>({...prev,[selected]:{...preset}}));setMessage("");}}>恢复默认</button><button type="button" className="btn btn-line" disabled={busy||!drafts[selected]} onClick={()=>void save()}>{busy?"保存中…":"保存模板"}</button></div></div><div className="mail-template-preview"><p className="mail-template-subject">{subject || "正在生成预览…"}</p><div className="mail-template-canvas" ref={canvasRef}><div className="mail-template-frame" style={{width:frameWidth*previewScale,height:780*previewScale}}><iframe ref={frameRef} title={`${template.name}邮件预览`} sandbox="allow-same-origin" style={{width:frameWidth,transform:`scale(${previewScale})`}}/></div></div></div></div>}
   </div>;
 }
