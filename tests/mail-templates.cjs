@@ -136,7 +136,7 @@ function web(f,body,method='PUT',source=origin){return new Request(origin+'/api/
   const latest=await branding.mailBrandBanner();assert(!first.equals(latest),'saved new upload cannot reuse the old banner');
   const image=await route.GET();assert.equal(image.headers.get('Cache-Control'),'no-store');assert(Buffer.from(await image.arrayBuffer()).equals(latest));
   const admin=fixture(false,true), rendered=await (await previewRoute.POST(web(admin,model.DEFAULT_MAIL_TEMPLATES[0],'POST'))).json();
-  assert(rendered.html.includes(`data:image/png;base64,${latest.toString('base64')}`),'preview must use the same current brand snapshot');
+  assert(rendered.html.includes('/api/system-assets/mail-banner'),'preview uses the current banner address instead of waiting to embed the image');
   const sharp=load('node_modules/sharp'), pixels=await sharp(latest).raw().toBuffer({resolveWithObject:true});
   const pixel=(x,y)=>{const i=(y*pixels.info.width+x)*pixels.info.channels;return Array.from(pixels.data.subarray(i,i+3));};
   assert.deepEqual(pixel(100,140),[0,0,255]);assert.notDeepEqual(pixel(100,80),[0,0,255],'wide logo keeps its aspect ratio');

@@ -3860,7 +3860,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <label><span>企业微信 Webhook</span><PasswordInput type="password" value={site.wechatWebhook} onChange={(event) => setSite({ ...site, wechatWebhook: event.target.value })} autoComplete="new-password" placeholder={site.wechatWebhookConfigured ? "已保存 · 留空不修改" : "https://"} /></label>
                     </div>
                     {blockMsg.wechat && <p className={`settings-form-feedback is-${blockMsg.wechat.type}`} role={blockMsg.wechat.type === "err" ? "alert" : "status"}><span>{blockMsg.wechat.text}</span></p>}
-                    <div className="mt-4"><button type="button" disabled={!!blockSaving.wechat} onClick={() => void saveBlock("wechat", { wechatEnabled: site.wechatEnabled, wechatWebhook: site.wechatWebhook }, "微信配置已保存")} className="mail-settings-save">{blockSaving.wechat ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.wechat} onClick={() => void saveBlock("wechat", { wechatEnabled: site.wechatEnabled, wechatWebhook: site.wechatWebhook }, "微信配置已保存")} className="mail-settings-save">{blockSaving.wechat ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="telegram" icon="telegram" title="Telegram">
@@ -3876,7 +3876,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     </div>
                     {blockMsg.telegram && <p className={`settings-form-feedback is-${blockMsg.telegram.type}`} role={blockMsg.telegram.type === "err" ? "alert" : "status"}><span>{blockMsg.telegram.text}</span></p>}
-                    <div className="mt-4"><button type="button" disabled={!!blockSaving.telegram} onClick={() => void saveBlock("telegram", { telegramEnabled: site.telegramEnabled, telegramBotUsername: site.telegramBotUsername, telegramBotToken: site.telegramBotToken }, "Telegram 配置已保存")} className="mail-settings-save">{blockSaving.telegram ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.telegram} onClick={() => void saveBlock("telegram", { telegramEnabled: site.telegramEnabled, telegramBotUsername: site.telegramBotUsername, telegramBotToken: site.telegramBotToken }, "Telegram 配置已保存")} className="mail-settings-save">{blockSaving.telegram ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="feishu" icon="feishu" title="飞书">
@@ -3889,7 +3889,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <label><span>飞书自定义机器人 Webhook</span><PasswordInput type="password" value={site.feishuWebhook} onChange={(event) => setSite({ ...site, feishuWebhook: event.target.value })} autoComplete="new-password" placeholder={site.feishuWebhookConfigured ? "已保存 · 留空不修改" : "https://"} /></label>
                     </div>
                     {blockMsg.feishu && <p className={`settings-form-feedback is-${blockMsg.feishu.type}`} role={blockMsg.feishu.type === "err" ? "alert" : "status"}><span>{blockMsg.feishu.text}</span></p>}
-                    <div className="mt-4"><button type="button" disabled={!!blockSaving.feishu} onClick={() => void saveBlock("feishu", { feishuEnabled: site.feishuEnabled, feishuWebhook: site.feishuWebhook }, "飞书配置已保存")} className="mail-settings-save">{blockSaving.feishu ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.feishu} onClick={() => void saveBlock("feishu", { feishuEnabled: site.feishuEnabled, feishuWebhook: site.feishuWebhook }, "飞书配置已保存")} className="mail-settings-save">{blockSaving.feishu ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="mail" icon="mail" title="邮件服务" desc="用于找回密码。测试邮件收到后再保存。">
