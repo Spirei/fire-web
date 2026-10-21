@@ -24,7 +24,8 @@ export function validateMailTemplate(input:unknown):MailTemplate {
   const result={...preset};
   for(const field of MAIL_TEMPLATE_FIELDS){
     const value=body[field];
-    if(typeof value!=="string" || !value.trim() || value.length>(field==="body"?1600:160) || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value))throw new Error("请填写完整模板，正文最多1600字，其他字段最多160字");
+    const optional=field==="signature";
+    if(typeof value!=="string" || (!optional && !value.trim()) || value.length>(field==="body"?1600:160) || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value))throw new Error("请填写完整模板，正文最多1600字，其他字段最多160字");
     if([...value.matchAll(/\{\{([^{}]+)\}\}/g)].some(match=>!mailTemplateVariables(preset.id).includes(match[1])))throw new Error("模板包含不支持的变量");
     result[field]=value.trim();
   }

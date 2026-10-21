@@ -175,11 +175,11 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
-  { sub: "social", anchor: "wechat", label: "微信", groupLabel: "社交", keywords: "微信 企业微信 webhook 通知", adminOnly: true },
-  { sub: "social", anchor: "telegram", label: "Telegram", groupLabel: "社交", keywords: "telegram 电报 机器人 bot 通知", adminOnly: true },
-  { sub: "social", anchor: "feishu", label: "飞书", groupLabel: "社交", keywords: "飞书 Lark webhook 通知", adminOnly: true },
-  { sub: "social", anchor: "mail", label: "邮件服务", groupLabel: "社交", keywords: "SMTP 邮件 密码 找回 重置 邮箱", adminOnly: true },
-  { sub: "social", anchor: "mail-templates", label: "邮件模板", groupLabel: "社交", keywords: "邮件 模板 预览 验证码 密码 找回 邮箱", adminOnly: true },
+  { sub: "social", anchor: "wechat", label: "微信", groupLabel: "通知", keywords: "微信 企业微信 webhook 通知", adminOnly: true },
+  { sub: "social", anchor: "telegram", label: "Telegram", groupLabel: "通知", keywords: "telegram 电报 机器人 bot 通知", adminOnly: true },
+  { sub: "social", anchor: "feishu", label: "飞书", groupLabel: "通知", keywords: "飞书 Lark webhook 通知", adminOnly: true },
+  { sub: "social", anchor: "mail", label: "邮件服务", groupLabel: "通知", keywords: "SMTP 邮件 密码 找回 重置 邮箱", adminOnly: true },
+  { sub: "social", anchor: "mail-templates", label: "邮件模板", groupLabel: "通知", keywords: "邮件 模板 预览 验证码 密码 找回 邮箱", adminOnly: true },
   { sub: "cron", anchor: "backups", label: "自动备份", groupLabel: "系统", keywords: "数据库 定时 备份 保留 立即备份" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
   { sub: "about", anchor: "about", label: "关于", groupLabel: "系统", keywords: "关于 版本 技术栈 数据源 更新" }
@@ -194,7 +194,7 @@ const SETTINGS_CATEGORIES = [
   { key: "website", label: "外观与网站", icon: "website", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav", "mobile-nav"] },
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
-  { key: "social", label: "社交与配置", icon: "social", desc: "配置微信、Telegram、飞书和邮件。", anchors: ["wechat", "telegram", "feishu", "mail", "mail-templates"] },
+  { key: "social", label: "通知与配置", icon: "social", desc: "配置微信、Telegram、飞书和邮件。", anchors: ["wechat", "telegram", "feishu", "mail", "mail-templates"] },
   { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];

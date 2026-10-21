@@ -99,6 +99,9 @@ function web(f,body,method='PUT',source=origin){return new Request(origin+'/api/
   db.prepare("INSERT INTO site_settings(key,value) VALUES('mailTemplates.v1',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(legacy));
   assert.equal(templates.readMailTemplates().length,model.MAIL_TEMPLATE_IDS.length);assert.equal(templates.readMailTemplates()[0].title,legacy[0].title);
   assert.throws(()=>model.validateMailTemplate({...legacy[0],body:'{{stockName}}'}));
+  const blankSignature=model.validateMailTemplate({...legacy[0],signature:'  '});
+  assert.equal(blankSignature.signature,'');
+  assert(!templates.renderMailTemplate(blankSignature,{email:'a@b.c',siteName:'Alcor',name:'客户',minutes:30,code:'593255'}).html.includes('>Alcor</p>'));
   assert.throws(()=>model.validateMailTemplate({...preset,body:'{{credential}}'}));
   const preview=await previewRoute.POST(web(admin,preset,'POST'));assert.equal(preview.status,200);const sample=await preview.json();
   assert(sample.html.includes('AAPL')&&sample.html.includes('340.35')&&sample.html.includes('盘后'));assert(!sample.html.includes('{{'));assert(sample.html.includes('#f5f5f5'));

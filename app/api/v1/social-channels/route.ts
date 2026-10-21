@@ -15,6 +15,6 @@ export function GET(request: Request) {
     return response;
   } catch (error) {
     const status = error instanceof RecordsError ? error.status : 500;
-    return fail(status * 100 + 1, error instanceof RecordsError ? error.message : "社交配置读取失败", status);
+    return fail(status * 100 + 1, error instanceof RecordsError ? error.message : "通知配置读取失败", status);
   }
 }

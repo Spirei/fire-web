@@ -28,7 +28,11 @@ export function renderMailTemplate(template: MailTemplate, values: MailTemplateV
   const token = values.nativeToken ? `<p class="mail-token" style="font-size:13px;line-height:1.8;word-break:break-all;margin-top:24px;color:${tones.hint}">也可在 Alcor App 的邮箱验证页粘贴一次性凭证：<br>${escape(values.nativeToken)}</p>` : "";
   const greeting = priceAlert ? "" : `<p class="mail-copy" style="overflow-wrap:anywhere;font-size:17px;line-height:1.85;margin:0 0 18px">${textField(template.greeting)}</p>`;
   const metadata = priceAlert ? `<p class="mail-meta" style="font-size:13px;line-height:1.7;color:${tones.muted};margin:18px 0 0;text-align:center">${escape([values.session,values.triggerTime].filter(Boolean).join(" · "))}</p>` : "";
-  const signature = priceAlert ? `<div class="mail-signature" style="font-size:14px;line-height:1.8;margin-top:30px;padding-top:20px;border-top:1px solid ${tones.divider};color:${tones.signature}">${textField(template.signature)}</div>` : `<div class="mail-signature" style="font-size:15px;line-height:1.8;margin-top:38px;padding-top:24px;border-top:1px solid ${tones.divider};color:${tones.signature}"><p style="margin:0 0 8px">${textField(template.closing)}</p><p style="margin:0;font-weight:600;color:${tones.signatureInk}">${textField(template.signature)}</p></div>`;
+  const closingText = priceAlert ? "" : textField(template.closing).trim();
+  const signatureText = textField(template.signature).trim();
+  const signature = !closingText && !signatureText ? "" : priceAlert
+    ? `<div class="mail-signature" style="font-size:14px;line-height:1.8;margin-top:30px;padding-top:20px;border-top:1px solid ${tones.divider};color:${tones.signature}">${signatureText}</div>`
+    : `<div class="mail-signature" style="font-size:15px;line-height:1.8;margin-top:38px;padding-top:24px;border-top:1px solid ${tones.divider};color:${tones.signature}">${closingText ? `<p style="margin:0${signatureText ? " 0 8px" : ""}">${closingText}</p>` : ""}<p class="mail-signature-name" style="margin:0;font-weight:600;color:${tones.signatureInk}${signatureText ? "" : ";display:none"}">${signatureText}</p></div>`;
   const dark = (selector: string, css: string) => {
     const parts = selector.split(",").map((item) => item.trim());
     const scope = (prefix: string) => parts.map((item) => `${prefix} ${item}`).join(",");

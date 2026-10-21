@@ -1319,7 +1319,7 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 
 现金归属总览通过cash_ledger.account_overview显式发现，在既有GET broker-accounts/cash请求include=accounts，一次返回完整本人账户/版本化图标、现金快照及总账分解；仅portfolio.read，严格100账户界限，旧summary和金融写入不变。完整字段见 [资金合约](native-broker-cash-contract.md#一次性账户归属总览account_overview-v1)。
 
-## 社交渠道
+## 通知渠道
 
 能力由 `auth/config.social_channels` 声明。只返回渠道是否启用、是否已配置，以及 Telegram 机器人用户名。Webhook 和令牌不下发。
 
