@@ -135,14 +135,14 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
   return mounted ? createPortal(content, document.body) : content;
 }
 
-const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "authorizations", "database", "cron", "about"] as const;
+const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "authorizations", "database", "cron", "social", "about"] as const;
 type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
 function isSettingsSub(value: string | undefined | null): value is SubKey {
   return Boolean(value && (SETTINGS_SUB_KEYS as readonly string[]).includes(value));
 }
 
 // 仅管理员可见的设置子项
-const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database", "cron"]);
+const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database", "cron", "social"]);
 
 /** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
 type SettingsSearchItem = { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string; adminOnly?: boolean };
@@ -175,8 +175,11 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
-  { sub: "cron", anchor: "mail-templates", label: "邮件模板", groupLabel: "系统", keywords: "邮件 模板 预览 验证码 密码 找回 邮箱", adminOnly: true },
-  { sub: "cron", anchor: "mail", label: "邮件服务", groupLabel: "系统", keywords: "SMTP 邮件 密码 找回 重置 邮箱" },
+  { sub: "social", anchor: "wechat", label: "微信", groupLabel: "社交", keywords: "微信 企业微信 webhook 通知", adminOnly: true },
+  { sub: "social", anchor: "telegram", label: "Telegram", groupLabel: "社交", keywords: "telegram 电报 机器人 bot 通知", adminOnly: true },
+  { sub: "social", anchor: "feishu", label: "飞书", groupLabel: "社交", keywords: "飞书 Lark webhook 通知", adminOnly: true },
+  { sub: "social", anchor: "mail", label: "邮件服务", groupLabel: "社交", keywords: "SMTP 邮件 密码 找回 重置 邮箱", adminOnly: true },
+  { sub: "social", anchor: "mail-templates", label: "邮件模板", groupLabel: "社交", keywords: "邮件 模板 预览 验证码 密码 找回 邮箱", adminOnly: true },
   { sub: "cron", anchor: "backups", label: "自动备份", groupLabel: "系统", keywords: "数据库 定时 备份 保留 立即备份" },
   { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
   { sub: "about", anchor: "about", label: "关于", groupLabel: "系统", keywords: "关于 版本 技术栈 数据源 更新" }
@@ -191,7 +194,8 @@ const SETTINGS_CATEGORIES = [
   { key: "website", label: "外观与网站", icon: "website", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav", "mobile-nav"] },
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
-  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "mail", "mail-templates", "backups", "danger", "delete-account"] },
+  { key: "social", label: "社交与配置", icon: "social", desc: "配置微信、Telegram、飞书和邮件。", anchors: ["wechat", "telegram", "feishu", "mail", "mail-templates"] },
+  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
@@ -233,6 +237,9 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   cron: "cron",
   mail: "mail",
   "mail-templates": "mail-templates",
+  wechat: "wechat",
+  telegram: "telegram",
+  feishu: "feishu",
   backups: "backups",
   api: "api",
   about: "about"
@@ -564,6 +571,13 @@ const DEFAULT_SETTINGS: SiteSettings = {
   smtpFromName: "Alcor",
   smtpFromEmail: "",
   emailLinkOrigin: "",
+  wechatEnabled: false,
+  wechatWebhook: "",
+  telegramEnabled: true,
+  telegramBotUsername: "",
+  telegramBotToken: "",
+  feishuEnabled: false,
+  feishuWebhook: "",
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
   ticker: DEFAULT_TICKER
 };
@@ -3834,9 +3848,50 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </div>
             )}
 
-            {/* ===== 定时任务 ===== */}
-            {sub === "cron" && isAdminUser && (
+            {sub === "social" && isAdminUser && (
               <div className="flex flex-col gap-6">
+                <SettingsSection id="wechat" icon="wechat" title="微信">
+                  <div className="mail-settings">
+                    <div className="mail-settings-group">
+                      <button type="button" role="switch" aria-checked={site.wechatEnabled} onClick={() => setSite({ ...site, wechatEnabled: !site.wechatEnabled })} className="mail-settings-switch-row">
+                        <span><b>启用微信通知</b></span>
+                        <i className={site.wechatEnabled ? "is-on" : ""} aria-hidden="true"><em style={{ backgroundColor: "#fff" }} /></i>
+                      </button>
+                      <label><span>企业微信 Webhook</span><PasswordInput type="password" value={site.wechatWebhook} onChange={(event) => setSite({ ...site, wechatWebhook: event.target.value })} autoComplete="new-password" placeholder={site.wechatWebhookConfigured ? "已保存 · 留空不修改" : "https://"} /></label>
+                    </div>
+                    {blockMsg.wechat && <p className={`settings-form-feedback is-${blockMsg.wechat.type}`} role={blockMsg.wechat.type === "err" ? "alert" : "status"}><span>{blockMsg.wechat.text}</span></p>}
+                    <div className="mt-4"><button type="button" disabled={!!blockSaving.wechat} onClick={() => void saveBlock("wechat", { wechatEnabled: site.wechatEnabled, wechatWebhook: site.wechatWebhook }, "微信配置已保存")} className="mail-settings-save">{blockSaving.wechat ? "保存中…" : "保存"}</button></div>
+                  </div>
+                </SettingsSection>
+                <SettingsSection id="telegram" icon="telegram" title="Telegram">
+                  <div className="mail-settings">
+                    <div className="mail-settings-group">
+                      <button type="button" role="switch" aria-checked={site.telegramEnabled} onClick={() => setSite({ ...site, telegramEnabled: !site.telegramEnabled })} className="mail-settings-switch-row">
+                        <span><b>启用 Telegram 通知</b></span>
+                        <i className={site.telegramEnabled ? "is-on" : ""} aria-hidden="true"><em style={{ backgroundColor: "#fff" }} /></i>
+                      </button>
+                      <div className="mail-settings-two-col">
+                        <label><span>机器人用户名</span><input type="text" value={site.telegramBotUsername} onChange={(event) => setSite({ ...site, telegramBotUsername: event.target.value })} placeholder="alcor_bot" autoComplete="off" /></label>
+                        <label><span>机器人令牌</span><PasswordInput type="password" value={site.telegramBotToken} onChange={(event) => setSite({ ...site, telegramBotToken: event.target.value })} autoComplete="new-password" placeholder={site.telegramBotTokenConfigured ? "已保存 · 留空不修改" : "123456:ABC"} /></label>
+                      </div>
+                    </div>
+                    {blockMsg.telegram && <p className={`settings-form-feedback is-${blockMsg.telegram.type}`} role={blockMsg.telegram.type === "err" ? "alert" : "status"}><span>{blockMsg.telegram.text}</span></p>}
+                    <div className="mt-4"><button type="button" disabled={!!blockSaving.telegram} onClick={() => void saveBlock("telegram", { telegramEnabled: site.telegramEnabled, telegramBotUsername: site.telegramBotUsername, telegramBotToken: site.telegramBotToken }, "Telegram 配置已保存")} className="mail-settings-save">{blockSaving.telegram ? "保存中…" : "保存"}</button></div>
+                  </div>
+                </SettingsSection>
+                <SettingsSection id="feishu" icon="feishu" title="飞书">
+                  <div className="mail-settings">
+                    <div className="mail-settings-group">
+                      <button type="button" role="switch" aria-checked={site.feishuEnabled} onClick={() => setSite({ ...site, feishuEnabled: !site.feishuEnabled })} className="mail-settings-switch-row">
+                        <span><b>启用飞书通知</b></span>
+                        <i className={site.feishuEnabled ? "is-on" : ""} aria-hidden="true"><em style={{ backgroundColor: "#fff" }} /></i>
+                      </button>
+                      <label><span>飞书自定义机器人 Webhook</span><PasswordInput type="password" value={site.feishuWebhook} onChange={(event) => setSite({ ...site, feishuWebhook: event.target.value })} autoComplete="new-password" placeholder={site.feishuWebhookConfigured ? "已保存 · 留空不修改" : "https://"} /></label>
+                    </div>
+                    {blockMsg.feishu && <p className={`settings-form-feedback is-${blockMsg.feishu.type}`} role={blockMsg.feishu.type === "err" ? "alert" : "status"}><span>{blockMsg.feishu.text}</span></p>}
+                    <div className="mt-4"><button type="button" disabled={!!blockSaving.feishu} onClick={() => void saveBlock("feishu", { feishuEnabled: site.feishuEnabled, feishuWebhook: site.feishuWebhook }, "飞书配置已保存")} className="mail-settings-save">{blockSaving.feishu ? "保存中…" : "保存"}</button></div>
+                  </div>
+                </SettingsSection>
                 <SettingsSection id="mail" icon="mail" title="邮件服务" desc="用于找回密码。测试邮件收到后再保存。">
                   <div className="mail-settings">
                     <fieldset className="mail-settings-fields" disabled={mailTesting || blockSaving.mail}>
@@ -3876,6 +3931,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                 </SettingsSection>
                 <SettingsSection id="mail-templates" icon="mail-templates" title="邮件模板"><MailTemplatesSettings /></SettingsSection>
+              </div>
+            )}
+
+            {sub === "cron" && isAdminUser && (
+              <div className="flex flex-col gap-6">
                 <SettingsSection id="cron" icon="cron" title="定时任务" desc="查看刷新与缓存规则。汇率仅手动刷新。">
                 <div className="settings-task-list">
                   {[

@@ -7548,7 +7548,7 @@ html { scrollbar-gutter:stable; }
 .feed-theme{--feed-windmill:#4e91d6}
 .dark .feed-theme{--feed-windmill:#79ade5}
 
-/* Mail editor follows the settings theme; the message preview retains email's light paper. */
+/* Mail editor and the opened message follow the site theme. Sent mail also follows the reader's color scheme. */
 .mail-template-settings{container-type:inline-size;min-width:0}
 .mail-template-toolbar{position:sticky;top:0;z-index:2;background:var(--sc-dialog-bg,#fff);padding-top:4px;padding-bottom:8px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px}
 .mail-template-preview-switch{display:flex;flex:none;border:1px solid var(--edge,#dedfe3);border-radius:999px;padding:3px;background:var(--bg-gray,#f5f5f5)}
@@ -7565,12 +7565,14 @@ html { scrollbar-gutter:stable; }
 .mail-template-subject{font-size:13px;line-height:1.6;margin-bottom:12px;overflow-wrap:anywhere}
 .mail-template-canvas{display:flex;justify-content:center;overflow:hidden;padding:12px;border:1px solid #e5e5e5;border-radius:16px;background:#eee}
 .mail-template-frame{position:relative;flex:none}
-.mail-template-canvas iframe{position:absolute;left:0;top:0;display:block;height:780px;transform-origin:top left;border:0;border-radius:4px;background:white;color-scheme:light}
+.mail-template-canvas iframe{position:absolute;left:0;top:0;display:block;height:780px;transform-origin:top left;border:0;border-radius:4px;background:#fff;color-scheme:light}
 .dark .mail-template-toolbar{background:var(--sc-dialog-bg,#1c2024)}
 .dark .mail-template-preview-switch{border-color:#414141;background:#242424}
 .dark .mail-template-preview-switch button[aria-pressed=true]{background:#414141;color:#f3f3f3}
 .dark .mail-template-editor input,.dark .mail-template-editor textarea{border-color:#414141;background:#242424;color:#f3f3f3}
 .dark .mail-template-canvas{border-color:#414141;background:#1b1b1b}
+.dark .mail-template-canvas iframe{background:#171a19;color-scheme:dark}
+.dark .mail-template-subject{color:#f3f3f3}
 .dark .mail-template-variables{color:#a0a0a0}
 @media(max-width:900px){.mail-template-grid,.mail-template-settings[data-preview="desktop"] .mail-template-grid{grid-template-columns:1fr}.mail-template-canvas{padding:8px}.mail-template-settings{container-type:inline-size;min-width:0}
 .mail-template-toolbar{position:sticky;top:0;z-index:2;background:var(--sc-dialog-bg,#fff);padding-top:4px;padding-bottom:8px;gap:12px}}

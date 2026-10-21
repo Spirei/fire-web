@@ -7,6 +7,10 @@ export const SettingsSectionSelection = createContext<{ active: string; anchors:
 const ICON_PATHS: Record<string, React.ReactNode> = {
   "quote-pool": (<><path d="M3 9 7 4h10l4 5v11H3Z"/><path d="M3 9h5l2 4h4l2-4h5M9 6h6"/></>),
   mail: (<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></>),
+  social: (<><circle cx="6" cy="12" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="18" cy="17" r="2"/><path d="M8 11.2 16 8M8 12.8 16 16"/></>),
+  wechat: (<><path d="M8 16c-3.2 0-5.5-2-5.5-4.6S4.8 6.8 8 6.8s5.5 2 5.5 4.6c0 .7-.2 1.3-.5 1.9L14 16l-2.4-.8A6 6 0 0 1 8 16Z"/><path d="M14.2 9.2c2 .4 3.5 1.8 3.5 3.5 0 1.3-.8 2.4-2 3.1L17 17.5l-1.4-.6"/></>),
+  telegram: (<><path d="m21 4-9 17-3-7-7-3Z"/><path d="m21 4-10 10"/></>),
+  feishu: (<><path d="M12 3 4 8.5 12 14l8-5.5Z"/><path d="M4 8.5V16L12 21l8-5V8.5"/><path d="M12 14v7"/></>),
   "mail-templates": (<><path d="M4 3h11l5 5v13H4Z"/><path d="M15 3v5h5M8 12h8M8 16h4"/></>),
   typography: (<><path d="m3 17 4-11 4 11M4.5 13h5M14 10c3-2 6 0 6 3v4m0-4h-3a2 2 0 1 0 3 2M3 21h18"/></>),
   website: (<><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M6 6.5h.01M9 6.5h.01M6 13h2M6 16h2"/><path d="m15 11 .9 2.1L18 14l-2.1.9L15 17l-.9-2.1L12 14l2.1-.9Z"/></>),

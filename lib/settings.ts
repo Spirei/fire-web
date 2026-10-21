@@ -128,13 +128,21 @@ const DEFAULTS: SiteSettings = {
   smtpFromName: "Alcor",
   smtpFromEmail: "",
   emailLinkOrigin: "",
+  wechatEnabled: false,
+  wechatWebhook: "",
+  telegramEnabled: true,
+  telegramBotUsername: "",
+  telegramBotToken: "",
+  feishuEnabled: false,
+  feishuWebhook: "",
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "appDisplayName" | "appDisplayIcon" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFromName" | "smtpFromEmail" | "emailLinkOrigin" | "xueqiuCookie")[] = [
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "appDisplayName" | "appDisplayIcon" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFromName" | "smtpFromEmail" | "emailLinkOrigin" | "xueqiuCookie" | "wechatWebhook" | "telegramBotUsername" | "telegramBotToken" | "feishuWebhook")[] = [
   "domain", "title", "ico", "pwaIcon", "homepageBg", "loginSideImage", "siteLogo", "appDisplayName", "appDisplayIcon", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
   "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
-  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFromName", "smtpFromEmail", "emailLinkOrigin", "xueqiuCookie"
+  "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFromName", "smtpFromEmail", "emailLinkOrigin", "xueqiuCookie",
+  "wechatWebhook", "telegramBotUsername", "telegramBotToken", "feishuWebhook"
 ];
 
 export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "assistant", "celebs", "users", "attachments", "library", "cards", "activities", "settings"] as const;
@@ -278,7 +286,7 @@ export function getSiteSettings(): SiteSettings {
   SIMPLE_KEYS.forEach((k) => {
     if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = normalizeBrandSetting(k, map[k]);
   });
-  (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"] as const).forEach((key) => {
+  (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatWebhook", "telegramBotToken", "feishuWebhook"] as const).forEach((key) => {
     const modelKey = key === "llmApiKey" || key === "deepseekApiKey";
     try { result[key] = decryptSecret(result[key], modelKey); }
     catch {
@@ -473,6 +481,9 @@ export function getSiteSettings(): SiteSettings {
   result.stockIconCdn = map.stockIconCdn === "1";
   result.marketBadgesVisible = map.marketBadgesVisible !== "0";
   result.smtpSecure = map.smtpSecure === "1";
+  result.wechatEnabled = map.wechatEnabled === "1";
+  result.telegramEnabled = map.telegramEnabled !== "0";
+  result.feishuEnabled = map.feishuEnabled === "1";
   result.tradingSquareTrumpRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareTrumpRefreshMinutes) || 5)));
   result.tradingSquareDuanRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareDuanRefreshMinutes) || 5)));
   result.modelServicesInitialized = typeof map.modelServices === "string";
@@ -501,11 +512,14 @@ export function updateSiteSettings(patch: Partial<SiteSettings> & { clearXueqiuC
     if (typeof v !== "string") return;
     const trimmed = v.trim();
     // Empty redacted values must not erase saved credentials.
-    if (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"].includes(k) && (!trimmed || trimmed === "********")) return;
-    upsert.run(k, ["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey"].includes(k) ? encryptSecret(trimmed) : trimmed);
+    if (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatWebhook", "telegramBotToken", "feishuWebhook"].includes(k) && (!trimmed || trimmed === "********")) return;
+    upsert.run(k, ["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatWebhook", "telegramBotToken", "feishuWebhook"].includes(k) ? encryptSecret(trimmed) : trimmed);
   });
   if (patch.clearXueqiuCookie === true) upsert.run("xueqiuCookie", "");
   if (typeof patch.smtpSecure === "boolean") upsert.run("smtpSecure", patch.smtpSecure ? "1" : "0");
+  if (typeof patch.wechatEnabled === "boolean") upsert.run("wechatEnabled", patch.wechatEnabled ? "1" : "0");
+  if (typeof patch.telegramEnabled === "boolean") upsert.run("telegramEnabled", patch.telegramEnabled ? "1" : "0");
+  if (typeof patch.feishuEnabled === "boolean") upsert.run("feishuEnabled", patch.feishuEnabled ? "1" : "0");
   if (Array.isArray(patch.modelServices)) {
     upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices).map(service => ({
       ...service, apiKey: encryptSecret(service.apiKey),

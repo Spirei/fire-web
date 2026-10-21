@@ -24,6 +24,7 @@ export const APP_V2_ROUTES = [
   {path:"broker-accounts/[accountId]",methods:["GET","PUT","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
   {path:"broker-accounts/[accountId]/icon",methods:["GET","POST","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
   {path:"auth/mail-templates",methods:["GET"],access:"public"},
+  {path:"social-channels",methods:["GET"],access:"portfolio.read"},
   {path:"auth/config",methods:["GET"],access:"public"},
   {path:"auth/login",methods:["POST"],access:"credential"},
   {path:"auth/login/totp",methods:["POST"],access:"credential"},

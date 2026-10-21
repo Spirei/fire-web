@@ -4,6 +4,7 @@ import { installPriceAlerts } from './priceAlertsSchema';
 import { appSecurityStamp } from './appAuth';
 import { emailVerified } from './emailVerification';
 import { mailConfigured } from './mail';
+import { telegramReady } from './socialChannels';
 import { encryptSecret, decryptSecret } from './secretStorage';
 import { RecordsError } from './recordsContract';
 import { tradingQuoteTime } from './appTrading';
@@ -20,7 +21,7 @@ const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}
 const bad = (message: string, status = 400): never => { throw new RecordsError(message, status); };
 export function alertDb() { const db=getDb(); installPriceAlerts(db); return db; }
 export function touchAlertOwner(userId:string) { alertDb().prepare('INSERT INTO price_alert_collections VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET revision=revision+1').run(userId); }
-export function telegramConfigured() { return /^\d+:[A-Za-z0-9_-]{20,}$/.test(process.env.ALCOR_TELEGRAM_BOT_TOKEN || '') && /^[A-Za-z0-9_]{5,32}$/.test(process.env.ALCOR_TELEGRAM_BOT_USERNAME || ''); }
+export function telegramConfigured() { return telegramReady(); }
 export function alertsAvailable() { return process.env.ALCOR_PRICE_ALERTS_ENABLED !== 'false'; }
 export function priceAlertsDiscovery(version:1|2) {
   const base=`/api/v${version}/price-alerts`;

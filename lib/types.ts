@@ -331,6 +331,16 @@ export interface SiteSettings {
   smtpFromEmail: string;
   /** Public HTTPS origin used only in email confirmation links; empty follows the site domain. */
   emailLinkOrigin: string;
+  wechatEnabled: boolean;
+  wechatWebhook: string;
+  wechatWebhookConfigured?: boolean;
+  telegramEnabled: boolean;
+  telegramBotUsername: string;
+  telegramBotToken: string;
+  telegramBotTokenConfigured?: boolean;
+  feishuEnabled: boolean;
+  feishuWebhook: string;
+  feishuWebhookConfigured?: boolean;
   ticker: TickerConfig;
 }
 

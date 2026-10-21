@@ -14,6 +14,7 @@ import { publicVerificationOrigin } from "@/lib/emailVerification";
 import { isConnectionIconUrl } from "@/lib/appConnectionBrand";
 import { normalizeAppConnectionOrigin } from "@/lib/appConnectionChecks";
 import { SmtpDestinationError } from "@/lib/smtpConfig";
+import { assertSocialPatch, SocialConfigError } from "@/lib/socialChannels";
 
 export async function GET(request: Request) {
   const user = getAuthUser(request);
@@ -104,7 +105,7 @@ export async function PUT(request: Request) {
   if (body.appDisplayIcon !== undefined && (typeof body.appDisplayIcon !== "string" || !isConnectionIconUrl(body.appDisplayIcon.trim()))) return NextResponse.json({ error: "App 图标请使用站内路径或 http(s) 图片地址" }, { status: 400 });
   if (body.pwaIcon !== undefined && (typeof body.pwaIcon !== "string" || (body.pwaIcon && !/^\/uploads\/ico\/[^/\\]+$/.test(body.pwaIcon)))) return NextResponse.json({ error: "PWA 图标请使用上传的图片" }, { status: 400 });
   let settings;
-  try { settings = updateSiteSettings({
+  const patch = {
     domain: body.domain !== undefined ? String(body.domain) : undefined,
     title: body.title !== undefined ? String(body.title) : undefined,
     ico: body.ico !== undefined ? String(body.ico) : undefined,
@@ -180,12 +181,23 @@ export async function PUT(request: Request) {
     smtpPassword: body.smtpPassword !== undefined ? String(body.smtpPassword) : undefined,
     smtpFromName: body.smtpFromName !== undefined ? String(body.smtpFromName) : undefined,
     smtpFromEmail: body.smtpFromEmail !== undefined ? String(body.smtpFromEmail) : undefined,
-    emailLinkOrigin: body.emailLinkOrigin !== undefined ? String(body.emailLinkOrigin) : undefined
-  }, modelServices ? before.modelServicesRevision : undefined); }
+    emailLinkOrigin: body.emailLinkOrigin !== undefined ? String(body.emailLinkOrigin) : undefined,
+    wechatEnabled: typeof body.wechatEnabled === "boolean" ? body.wechatEnabled : undefined,
+    wechatWebhook: body.wechatWebhook !== undefined ? String(body.wechatWebhook) : undefined,
+    telegramEnabled: typeof body.telegramEnabled === "boolean" ? body.telegramEnabled : undefined,
+    telegramBotUsername: body.telegramBotUsername !== undefined ? String(body.telegramBotUsername) : undefined,
+    telegramBotToken: body.telegramBotToken !== undefined ? String(body.telegramBotToken) : undefined,
+    feishuEnabled: typeof body.feishuEnabled === "boolean" ? body.feishuEnabled : undefined,
+    feishuWebhook: body.feishuWebhook !== undefined ? String(body.feishuWebhook) : undefined
+  };
+  try {
+    assertSocialPatch(before, patch);
+    settings = updateSiteSettings(patch, modelServices ? before.modelServicesRevision : undefined);
+  }
   catch (error) {
     if (error instanceof BrokerGroupNameConflict) return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof ModelSettingsConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
-    if (error instanceof SmtpDestinationError) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error instanceof SmtpDestinationError || error instanceof SocialConfigError) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ error: "设置保存失败，本次修改未保存，请重试" }, { status: 500 });
   }
   if (Array.isArray(body.groups)) {

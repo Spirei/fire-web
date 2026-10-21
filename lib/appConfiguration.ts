@@ -3,6 +3,7 @@ import { personalProfileDiscovery } from "./personalProfile";
 import { brokerAccountsDiscovery } from "./brokerAccountsConfig";
 import { assetsDiscovery } from "./appAssetsConfig";
 import { mailTemplatesDiscovery } from "./mailTemplates";
+import { socialChannelsDiscovery } from "./socialChannels";
 import { resourceLibraryDiscovery } from "./resourceLibraryConfig";
 import { APP_CLIENT_ID, APP_REDIRECT_URI, APP_SCOPE, APP_SUPPORTED_SCOPES, assertAppOrigin } from "./appAuth";
 import { securityDiscovery } from "./appSecurityConfig";
@@ -26,7 +27,7 @@ export function appConfiguration(request:Request,version:1|2=1) {
     quote_subscriptions_contract:quoteSubscriptionsDiscovery(),
     personal_profile:personalProfileDiscovery(version),
     broker_accounts:brokerAccountsDiscovery(version),
-    account_assets:assetsDiscovery(version),mail_templates:mailTemplatesDiscovery(version),records_contract:recordsDiscovery(version),resource_library:resourceLibraryDiscovery(version),security:securityDiscovery(version),market_calendar:marketCalendarDiscovery(),native_login:nativeLoginDiscovery(),client_id:APP_CLIENT_ID,redirect_uri:APP_REDIRECT_URI,scope:APP_SCOPE,
+    account_assets:assetsDiscovery(version),mail_templates:mailTemplatesDiscovery(version),social_channels:socialChannelsDiscovery(version),records_contract:recordsDiscovery(version),resource_library:resourceLibraryDiscovery(version),security:securityDiscovery(version),market_calendar:marketCalendarDiscovery(),native_login:nativeLoginDiscovery(),client_id:APP_CLIENT_ID,redirect_uri:APP_REDIRECT_URI,scope:APP_SCOPE,
     scopes_supported:APP_SUPPORTED_SCOPES,profile_path:`${base}/auth/profile`,upload_path:`${base}/upload`,
     email_path:`${base}/auth/email`,password_path:`${base}/auth/password`,feed_path:`${base}/feed`,feed_scopes:["feed.read","feed.write"],
     feed_contract:{version:1,groups_path:`${base}/feed/groups`,subscriptions_test_path:`${base}/feed/subscriptions/test`},
