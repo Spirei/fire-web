@@ -1,12 +1,13 @@
 import { getSiteSettings } from "./settings";
 import type { SiteSettings } from "./types";
 import { mailConfigured } from "./mail";
+import { TELEGRAM_CHANNEL_TYPES } from "./notifyChannelTypes";
 
+export { TELEGRAM_CHANNEL_TYPES };
 export class SocialConfigError extends Error {}
 
 const TOKEN = /^\d+:[A-Za-z0-9_-]{20,}$/;
 const USERNAME = /^[A-Za-z0-9_]{5,32}$/;
-export const TELEGRAM_CHANNEL_TYPES = ["资源下载", "整理入库", "订阅", "站点", "媒体服务器", "手动处理", "插件", "其它"] as const;
 
 export function httpsWebhook(value: string) {
   if (!value || value.length > 500) return false;

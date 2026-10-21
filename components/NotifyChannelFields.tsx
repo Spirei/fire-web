@@ -1,7 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
 import PasswordInput from "./PasswordInput";
-import { TELEGRAM_CHANNEL_TYPES } from "@/lib/socialChannels";
+import { TELEGRAM_CHANNEL_TYPES } from "@/lib/notifyChannelTypes";
 import type { SiteSettings } from "@/lib/types";
 
 type Props = {
