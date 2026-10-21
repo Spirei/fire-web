@@ -34,12 +34,12 @@ const code = native.issueAppCode(native.parseAppAuthorization(values), user.id, 
 const token = native.exchangeAppCode({ ...values, code, code_verifier: verifier }).access_token;
 
 assert.throws(() => social.assertSocialPatch(settings.getSiteSettings(), { webPushEnabled: true, webPushUsername: "" }), /登录用户名/);
-settings.updateSiteSettings({ wechatEnabled: true, wechatCorpId: "ww123456", wechatAgentId: "1000002", wechatSecret: "corp-secret-value", telegramEnabled: false, webPushEnabled: true, webPushUsername: "Spire" });
+settings.updateSiteSettings({ wechatEnabled: true, wechatCorpId: "ww123456", wechatAgentId: "1000002", wechatSecret: "corp-secret-value", telegramEnabled: false, webPushEnabled: true, webPushUsername: "notify-user" });
 const client = load("lib/settingsClient.ts").clientSettings(settings.getSiteSettings(), true);
 assert.equal(client.wechatEnabled, true);
 assert.equal(client.wechatSecret, "");
 assert.equal(client.wechatSecretConfigured, true);
-assert.equal(client.webPushUsername, "Spire");
+assert.equal(client.webPushUsername, "notify-user");
 assert.equal(JSON.stringify(client).includes("corp-secret-value"), false);
 (async () => {
   const response = await route.GET(new Request(process.env.FIRE_APP_ORIGIN + "/api/v1/social-channels", { headers: { authorization: "Bearer " + token, origin: process.env.FIRE_APP_ORIGIN } }));
