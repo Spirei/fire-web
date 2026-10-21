@@ -278,7 +278,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
         {(!emailRegistration || registrationEmail) && <>
         <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
           密码
-          <div className="relative">
+          <span className="password-input">
             <input
               type={showPwd ? "text" : "password"}
               value={password}
@@ -287,25 +287,27 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
               maxLength={128}
               autoComplete={mode === "register" ? "new-password" : "current-password"}
               required
-              className={`${inputCls} pr-11`}
+              className={inputCls}
             />
             <button
               type="button"
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => setShowPwd((v) => !v)}
               title={showPwd ? "隐藏密码" : "查看密码"}
               aria-label={showPwd ? "隐藏密码" : "查看密码"}
-              className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink"
+              aria-pressed={showPwd}
+              className="password-visibility-toggle"
             >
               <VisibilityIcon hidden={showPwd} className="h-[18px] w-[18px]" />
             </button>
-          </div>
+          </span>
           {mode === "register" && <PasswordStrength password={password} userInputs={[username]} />}
         </label>
 
         {mode === "register" && (
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
             确认密码
-            <div className="relative">
+            <span className="password-input">
               <input
                 type={showConfirm ? "text" : "password"}
                 value={confirm}
@@ -314,18 +316,20 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
                 maxLength={128}
                 autoComplete="new-password"
                 required
-                className={`${inputCls} pr-11`}
+                className={inputCls}
               />
               <button
                 type="button"
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => setShowConfirm((v) => !v)}
                 title={showConfirm ? "隐藏密码" : "查看密码"}
                 aria-label={showConfirm ? "隐藏密码" : "查看密码"}
-                className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-faint transition-colors hover:bg-brand-hover hover:text-ink"
+                aria-pressed={showConfirm}
+                className="password-visibility-toggle"
               >
                 <VisibilityIcon hidden={showConfirm} className="h-[18px] w-[18px]" />
               </button>
-            </div>
+            </span>
           </label>
         )}
         </>}

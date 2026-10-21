@@ -17,6 +17,9 @@ html:root.dark[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
   --site-action:#1793ff;--site-action-text:#000;--site-action-icon-filter:brightness(0);
   --site-action-hover:color-mix(in srgb,#1793ff 90%,#fff);
 }
+/* Mail template picker sits on the bright Muse action blue. Label and chevron stay white together. */
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .mail-template-toolbar .btn,
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .mail-template-toolbar .btn .text-muted{color:#fff!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.app-shell-root,.app-shell-main,.app-shell-header,.site-header,.records-app,.records-content,.rq-page){background:var(--muse-bg)!important;color:var(--muse-ink)}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.card,.bg-white,.appearance-card,.rq-card){background:var(--muse-surface)!important;border-color:var(--muse-edge)!important;box-shadow:none!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.text-ink,.text-ink-2){color:var(--muse-ink)!important}

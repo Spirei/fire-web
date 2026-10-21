@@ -4956,7 +4956,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_62_ENTRY, version: "v0.1.63", date: "2026-10-21",
   summary: "股价提醒监控及通知接入。",
   software: V0_1_62_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.63"} : item),
-  changes: [{kind:"feature",title:"股价提醒与通知",desc:"新增本人股价规则、真实新鲜报价及交易时段监控、App内收件箱、已验证邮箱及Telegram私聊绑定。CAS和唯一UUID回执保护修改，发送超时不自动重发；微信暂缓，不改订单和资金。"},{kind:"feature",title:"股价提醒邮件模板",desc:"模板管理新增股价提醒，支持股票、触发价与目标价、报价时段及时间变量；实际发送读取本人验证邮箱和已保存模板，沿用统一品牌版式，精简为触发价、提醒价和一行时段时间，保留原验证邮件配置。"}]
+  changes: [{kind:"feature",title:"股价提醒与通知",desc:"新增本人股价规则、真实新鲜报价及交易时段监控、App内收件箱、已验证邮箱及Telegram私聊绑定。CAS和唯一UUID回执保护修改，发送超时不自动重发；微信暂缓，不改订单和资金。"},{kind:"feature",title:"股价提醒邮件模板",desc:"模板管理新增股价提醒，支持股票、触发价与目标价、报价时段及时间变量；实际发送读取本人验证邮箱和已保存模板，沿用统一品牌版式，精简为触发价、提醒价和一行时段时间，保留原验证邮件配置。"},{kind:"fix",title:"Muse 邮件模板按钮改为白字",desc:"Muse 深色把主按钮文字设成黑色，邮件模板选择按钮的名称和箭头不统一。该按钮的文字与箭头改为白色。"},{kind:"fix",title:"登录密码眼睛点击后保持居中",desc:"登录和注册的密码眼睛不再套用圆形胶囊。悬停和按下不会改掉垂直居中。"}]
 };
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
