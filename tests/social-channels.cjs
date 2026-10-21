@@ -33,13 +33,14 @@ const values = { client_id: native.APP_CLIENT_ID, redirect_uri: native.APP_REDIR
 const code = native.issueAppCode(native.parseAppAuthorization(values), user.id, auth.createSession(user.id));
 const token = native.exchangeAppCode({ ...values, code, code_verifier: verifier }).access_token;
 
-assert.throws(() => social.assertSocialPatch(settings.getSiteSettings(), { wechatEnabled: true, wechatWebhook: "http://insecure.example/hook" }), /https/);
-settings.updateSiteSettings({ wechatEnabled: true, wechatWebhook: webhook, telegramEnabled: false });
+assert.throws(() => social.assertSocialPatch(settings.getSiteSettings(), { webPushEnabled: true, webPushUsername: "" }), /登录用户名/);
+settings.updateSiteSettings({ wechatEnabled: true, wechatCorpId: "ww123456", wechatAgentId: "1000002", wechatSecret: "corp-secret-value", telegramEnabled: false, webPushEnabled: true, webPushUsername: "Spire" });
 const client = load("lib/settingsClient.ts").clientSettings(settings.getSiteSettings(), true);
 assert.equal(client.wechatEnabled, true);
-assert.equal(client.wechatWebhook, "");
-assert.equal(client.wechatWebhookConfigured, true);
-assert.equal(JSON.stringify(client).includes("qyapi"), false);
+assert.equal(client.wechatSecret, "");
+assert.equal(client.wechatSecretConfigured, true);
+assert.equal(client.webPushUsername, "Spire");
+assert.equal(JSON.stringify(client).includes("corp-secret-value"), false);
 (async () => {
   const response = await route.GET(new Request(process.env.FIRE_APP_ORIGIN + "/api/v1/social-channels", { headers: { authorization: "Bearer " + token, origin: process.env.FIRE_APP_ORIGIN } }));
   const body = await response.json();
@@ -48,7 +49,8 @@ assert.equal(JSON.stringify(client).includes("qyapi"), false);
   const wechat = payload.channels.find((item) => item.id === "wechat");
   assert.equal(wechat.configured, true);
   assert.equal(wechat.bindable, false);
-  assert.equal(JSON.stringify(body).includes("qyapi"), false);
+  assert.equal(payload.channels.some((item) => item.id === "webpush" && item.configured), true);
+  assert.equal(JSON.stringify(body).includes("corp-secret-value"), false);
   const anonymous = await route.GET(new Request(process.env.FIRE_APP_ORIGIN + "/api/v1/social-channels"));
   assert.equal(anonymous.status, 401);
   console.log("PASS social channels");

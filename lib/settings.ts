@@ -129,20 +129,63 @@ const DEFAULTS: SiteSettings = {
   smtpFromEmail: "",
   emailLinkOrigin: "",
   wechatEnabled: false,
+  wechatName: "企业微信",
+  wechatSmartRobot: false,
+  wechatCorpId: "",
+  wechatAgentId: "",
+  wechatSecret: "",
+  wechatProxyUrl: "",
+  wechatToken: "",
+  wechatAesKey: "",
+  wechatAdminIds: "",
   wechatWebhook: "",
   telegramEnabled: true,
+  telegramName: "电报",
+  telegramTypes: "",
   telegramBotUsername: "",
   telegramBotToken: "",
+  telegramChatId: "",
+  telegramUserIds: "",
+  telegramAdminIds: "",
+  telegramApiBase: "https://api.telegram.org",
   feishuEnabled: false,
+  feishuName: "飞书",
+  feishuTypes: "",
+  feishuAppId: "",
+  feishuAppSecret: "",
+  feishuOpenId: "",
+  feishuChatId: "",
+  feishuAdminIds: "",
+  feishuVerificationToken: "",
+  feishuEncryptKey: "",
   feishuWebhook: "",
+  qqEnabled: false,
+  qqName: "QQ",
+  qqTypes: "",
+  qqAppId: "",
+  qqAppSecret: "",
+  qqUserOpenId: "",
+  qqGroupOpenId: "",
+  qqAdminIds: "",
+  discordEnabled: false,
+  discordName: "Discord",
+  discordTypes: "",
+  discordBotToken: "",
+  discordGuildId: "",
+  discordChannelId: "",
+  discordAdminIds: "",
+  webPushEnabled: false,
+  webPushName: "WebPush",
+  webPushTypes: "",
+  webPushUsername: "",
   ticker: DEFAULT_TICKER
 };
 
-const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "appDisplayName" | "appDisplayIcon" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFromName" | "smtpFromEmail" | "emailLinkOrigin" | "xueqiuCookie" | "wechatWebhook" | "telegramBotUsername" | "telegramBotToken" | "feishuWebhook")[] = [
+const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "loginSideImage" | "siteLogo" | "appDisplayName" | "appDisplayIcon" | "logoText" | "logoFont" | "quoteSource" | "futuHost" | "futuPort" | "footerDesc" | "quoteApiUrl" | "searchApiUrl" | "chartApiUrl" | "currencyApiUrl" | "currencyRefreshPattern" | "earningsApiUrl" | "cnEarningsApiUrl" | "hkEarningsApiUrl" | "usLogoApiUrl" | "cnLogoApiUrl" | "trumpArchiveApiUrl" | "translationApiUrl" | "translationProvider" | "deepseekApiUrl" | "deepseekModel" | "deepseekApiKey" | "llmProvider" | "llmApiUrl" | "llmModel" | "llmApiKey" | "pgHost" | "pgPort" | "pgDatabase" | "pgUser" | "pgPassword" | "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFromName" | "smtpFromEmail" | "emailLinkOrigin" | "xueqiuCookie" | "wechatName" | "wechatCorpId" | "wechatAgentId" | "wechatSecret" | "wechatProxyUrl" | "wechatToken" | "wechatAesKey" | "wechatAdminIds" | "wechatWebhook" | "telegramName" | "telegramTypes" | "telegramBotUsername" | "telegramBotToken" | "telegramChatId" | "telegramUserIds" | "telegramAdminIds" | "telegramApiBase" | "feishuName" | "feishuTypes" | "feishuAppId" | "feishuAppSecret" | "feishuOpenId" | "feishuChatId" | "feishuAdminIds" | "feishuVerificationToken" | "feishuEncryptKey" | "feishuWebhook" | "qqName" | "qqTypes" | "qqAppId" | "qqAppSecret" | "qqUserOpenId" | "qqGroupOpenId" | "qqAdminIds" | "discordName" | "discordTypes" | "discordBotToken" | "discordGuildId" | "discordChannelId" | "discordAdminIds" | "webPushName" | "webPushTypes" | "webPushUsername")[] = [
   "domain", "title", "ico", "pwaIcon", "homepageBg", "loginSideImage", "siteLogo", "appDisplayName", "appDisplayIcon", "logoText", "logoFont", "quoteSource", "futuHost", "futuPort", "footerDesc",
   "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl", "currencyRefreshPattern", "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl", "translationProvider", "deepseekApiUrl", "deepseekModel", "deepseekApiKey", "llmProvider", "llmApiUrl", "llmModel", "llmApiKey",
   "pgHost", "pgPort", "pgDatabase", "pgUser", "pgPassword", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFromName", "smtpFromEmail", "emailLinkOrigin", "xueqiuCookie",
-  "wechatWebhook", "telegramBotUsername", "telegramBotToken", "feishuWebhook"
+  "wechatName", "wechatCorpId", "wechatAgentId", "wechatSecret", "wechatProxyUrl", "wechatToken", "wechatAesKey", "wechatAdminIds", "wechatWebhook", "telegramName", "telegramTypes", "telegramBotUsername", "telegramBotToken", "telegramChatId", "telegramUserIds", "telegramAdminIds", "telegramApiBase", "feishuName", "feishuTypes", "feishuAppId", "feishuAppSecret", "feishuOpenId", "feishuChatId", "feishuAdminIds", "feishuVerificationToken", "feishuEncryptKey", "feishuWebhook", "qqName", "qqTypes", "qqAppId", "qqAppSecret", "qqUserOpenId", "qqGroupOpenId", "qqAdminIds", "discordName", "discordTypes", "discordBotToken", "discordGuildId", "discordChannelId", "discordAdminIds", "webPushName", "webPushTypes", "webPushUsername"
 ];
 
 export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "assistant", "celebs", "users", "attachments", "library", "cards", "activities", "settings"] as const;
@@ -286,7 +329,7 @@ export function getSiteSettings(): SiteSettings {
   SIMPLE_KEYS.forEach((k) => {
     if (typeof map[k] === "string" && map[k] !== "") (result as unknown as Record<string, string>)[k] = normalizeBrandSetting(k, map[k]);
   });
-  (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatWebhook", "telegramBotToken", "feishuWebhook"] as const).forEach((key) => {
+  (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatSecret", "wechatToken", "wechatAesKey", "wechatWebhook", "telegramBotToken", "feishuAppSecret", "feishuVerificationToken", "feishuEncryptKey", "feishuWebhook", "qqAppSecret", "discordBotToken"] as const).forEach((key) => {
     const modelKey = key === "llmApiKey" || key === "deepseekApiKey";
     try { result[key] = decryptSecret(result[key], modelKey); }
     catch {
@@ -482,8 +525,12 @@ export function getSiteSettings(): SiteSettings {
   result.marketBadgesVisible = map.marketBadgesVisible !== "0";
   result.smtpSecure = map.smtpSecure === "1";
   result.wechatEnabled = map.wechatEnabled === "1";
+  result.wechatSmartRobot = map.wechatSmartRobot === "1";
   result.telegramEnabled = map.telegramEnabled !== "0";
   result.feishuEnabled = map.feishuEnabled === "1";
+  result.qqEnabled = map.qqEnabled === "1";
+  result.discordEnabled = map.discordEnabled === "1";
+  result.webPushEnabled = map.webPushEnabled === "1";
   result.tradingSquareTrumpRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareTrumpRefreshMinutes) || 5)));
   result.tradingSquareDuanRefreshMinutes = Math.min(1440, Math.max(1, Math.round(Number(map.tradingSquareDuanRefreshMinutes) || 5)));
   result.modelServicesInitialized = typeof map.modelServices === "string";
@@ -512,14 +559,18 @@ export function updateSiteSettings(patch: Partial<SiteSettings> & { clearXueqiuC
     if (typeof v !== "string") return;
     const trimmed = v.trim();
     // Empty redacted values must not erase saved credentials.
-    if (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatWebhook", "telegramBotToken", "feishuWebhook"].includes(k) && (!trimmed || trimmed === "********")) return;
-    upsert.run(k, ["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatWebhook", "telegramBotToken", "feishuWebhook"].includes(k) ? encryptSecret(trimmed) : trimmed);
+    if (["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatSecret", "wechatToken", "wechatAesKey", "wechatWebhook", "telegramBotToken", "feishuAppSecret", "feishuVerificationToken", "feishuEncryptKey", "feishuWebhook", "qqAppSecret", "discordBotToken"].includes(k) && (!trimmed || trimmed === "********")) return;
+    upsert.run(k, ["xueqiuCookie", "pgPassword", "smtpPassword", "llmApiKey", "deepseekApiKey", "wechatSecret", "wechatToken", "wechatAesKey", "wechatWebhook", "telegramBotToken", "feishuAppSecret", "feishuVerificationToken", "feishuEncryptKey", "feishuWebhook", "qqAppSecret", "discordBotToken"].includes(k) ? encryptSecret(trimmed) : trimmed);
   });
   if (patch.clearXueqiuCookie === true) upsert.run("xueqiuCookie", "");
   if (typeof patch.smtpSecure === "boolean") upsert.run("smtpSecure", patch.smtpSecure ? "1" : "0");
   if (typeof patch.wechatEnabled === "boolean") upsert.run("wechatEnabled", patch.wechatEnabled ? "1" : "0");
+  if (typeof patch.wechatSmartRobot === "boolean") upsert.run("wechatSmartRobot", patch.wechatSmartRobot ? "1" : "0");
   if (typeof patch.telegramEnabled === "boolean") upsert.run("telegramEnabled", patch.telegramEnabled ? "1" : "0");
   if (typeof patch.feishuEnabled === "boolean") upsert.run("feishuEnabled", patch.feishuEnabled ? "1" : "0");
+  if (typeof patch.qqEnabled === "boolean") upsert.run("qqEnabled", patch.qqEnabled ? "1" : "0");
+  if (typeof patch.discordEnabled === "boolean") upsert.run("discordEnabled", patch.discordEnabled ? "1" : "0");
+  if (typeof patch.webPushEnabled === "boolean") upsert.run("webPushEnabled", patch.webPushEnabled ? "1" : "0");
   if (Array.isArray(patch.modelServices)) {
     upsert.run("modelServices", JSON.stringify(normalizeModelServices(patch.modelServices).map(service => ({
       ...service, apiKey: encryptSecret(service.apiKey),

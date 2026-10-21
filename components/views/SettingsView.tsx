@@ -1,5 +1,6 @@
 "use client";
 import MailTemplatesSettings from "@/components/MailTemplatesSettings";
+import { DiscordFields, FeishuFields, QqFields, TelegramFields, WebPushFields, WecomFields } from "@/components/NotifyChannelFields";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
@@ -175,9 +176,12 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
   { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
-  { sub: "social", anchor: "wechat", label: "微信", groupLabel: "通知", keywords: "微信 企业微信 webhook 通知", adminOnly: true },
+  { sub: "social", anchor: "wechat", label: "企业微信", groupLabel: "通知", keywords: "微信 企业微信 AgentId Secret Token 通知", adminOnly: true },
   { sub: "social", anchor: "telegram", label: "Telegram", groupLabel: "通知", keywords: "telegram 电报 机器人 bot 通知", adminOnly: true },
-  { sub: "social", anchor: "feishu", label: "飞书", groupLabel: "通知", keywords: "飞书 Lark webhook 通知", adminOnly: true },
+  { sub: "social", anchor: "feishu", label: "飞书", groupLabel: "通知", keywords: "飞书 Lark App ID Secret Open ID 通知", adminOnly: true },
+  { sub: "social", anchor: "qq", label: "QQ", groupLabel: "通知", keywords: "QQ 机器人 AppID AppSecret OpenID 通知", adminOnly: true },
+  { sub: "social", anchor: "discord", label: "Discord", groupLabel: "通知", keywords: "Discord Bot Token 服务器 频道 通知", adminOnly: true },
+  { sub: "social", anchor: "webpush", label: "WebPush", groupLabel: "通知", keywords: "WebPush 网页推送 登录用户 通知", adminOnly: true },
   { sub: "social", anchor: "mail", label: "邮件服务", groupLabel: "通知", keywords: "SMTP 邮件 密码 找回 重置 邮箱", adminOnly: true },
   { sub: "social", anchor: "mail-templates", label: "邮件模板", groupLabel: "通知", keywords: "邮件 模板 预览 验证码 密码 找回 邮箱", adminOnly: true },
   { sub: "cron", anchor: "backups", label: "自动备份", groupLabel: "系统", keywords: "数据库 定时 备份 保留 立即备份" },
@@ -194,7 +198,7 @@ const SETTINGS_CATEGORIES = [
   { key: "website", label: "外观与网站", icon: "website", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav", "mobile-nav"] },
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
-  { key: "social", label: "通知与配置", icon: "social", desc: "配置微信、Telegram、飞书和邮件。", anchors: ["wechat", "telegram", "feishu", "mail", "mail-templates"] },
+  { key: "social", label: "通知与配置", icon: "social", desc: "配置企业微信、Telegram、飞书、QQ、Discord、WebPush 和邮件。", anchors: ["wechat", "telegram", "feishu", "qq", "discord", "webpush", "mail", "mail-templates"] },
   { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
@@ -240,6 +244,9 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   wechat: "wechat",
   telegram: "telegram",
   feishu: "feishu",
+  qq: "qq",
+  discord: "discord",
+  webpush: "webpush",
   backups: "backups",
   api: "api",
   about: "about"
@@ -572,12 +579,55 @@ const DEFAULT_SETTINGS: SiteSettings = {
   smtpFromEmail: "",
   emailLinkOrigin: "",
   wechatEnabled: false,
+  wechatName: "企业微信",
+  wechatSmartRobot: false,
+  wechatCorpId: "",
+  wechatAgentId: "",
+  wechatSecret: "",
+  wechatProxyUrl: "",
+  wechatToken: "",
+  wechatAesKey: "",
+  wechatAdminIds: "",
   wechatWebhook: "",
   telegramEnabled: true,
+  telegramName: "电报",
+  telegramTypes: "",
   telegramBotUsername: "",
   telegramBotToken: "",
+  telegramChatId: "",
+  telegramUserIds: "",
+  telegramAdminIds: "",
+  telegramApiBase: "https://api.telegram.org",
   feishuEnabled: false,
+  feishuName: "飞书",
+  feishuTypes: "",
+  feishuAppId: "",
+  feishuAppSecret: "",
+  feishuOpenId: "",
+  feishuChatId: "",
+  feishuAdminIds: "",
+  feishuVerificationToken: "",
+  feishuEncryptKey: "",
   feishuWebhook: "",
+  qqEnabled: false,
+  qqName: "QQ",
+  qqTypes: "",
+  qqAppId: "",
+  qqAppSecret: "",
+  qqUserOpenId: "",
+  qqGroupOpenId: "",
+  qqAdminIds: "",
+  discordEnabled: false,
+  discordName: "Discord",
+  discordTypes: "",
+  discordBotToken: "",
+  discordGuildId: "",
+  discordChannelId: "",
+  discordAdminIds: "",
+  webPushEnabled: false,
+  webPushName: "WebPush",
+  webPushTypes: "",
+  webPushUsername: "",
   holdingColumns: DEFAULT_HOLDING_COLUMNS,
   ticker: DEFAULT_TICKER
 };
@@ -3850,46 +3900,46 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
             {sub === "social" && isAdminUser && (
               <div className="flex flex-col gap-6">
-                <SettingsSection id="wechat" icon="wechat" title="微信">
+                <SettingsSection id="wechat" icon="wechat" title="企业微信">
                   <div className="mail-settings">
-                    <div className="mail-settings-group">
-                      <button type="button" role="switch" aria-checked={site.wechatEnabled} onClick={() => setSite({ ...site, wechatEnabled: !site.wechatEnabled })} className="mail-settings-switch-row">
-                        <span><b>启用微信通知</b></span>
-                        <i className={site.wechatEnabled ? "is-on" : ""} aria-hidden="true"><em style={{ backgroundColor: "#fff" }} /></i>
-                      </button>
-                      <label><span>企业微信 Webhook</span><PasswordInput type="password" value={site.wechatWebhook} onChange={(event) => setSite({ ...site, wechatWebhook: event.target.value })} autoComplete="new-password" placeholder={site.wechatWebhookConfigured ? "已保存 · 留空不修改" : "https://"} /></label>
-                    </div>
+                    <WecomFields site={site} setSite={setSite} />
                     {blockMsg.wechat && <p className={`settings-form-feedback is-${blockMsg.wechat.type}`} role={blockMsg.wechat.type === "err" ? "alert" : "status"}><span>{blockMsg.wechat.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.wechat} onClick={() => void saveBlock("wechat", { wechatEnabled: site.wechatEnabled, wechatWebhook: site.wechatWebhook }, "微信配置已保存")} className="mail-settings-save">{blockSaving.wechat ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.wechat} onClick={() => void saveBlock("wechat", { wechatEnabled: site.wechatEnabled, wechatName: site.wechatName, wechatSmartRobot: site.wechatSmartRobot, wechatCorpId: site.wechatCorpId, wechatAgentId: site.wechatAgentId, wechatSecret: site.wechatSecret, wechatProxyUrl: site.wechatProxyUrl, wechatToken: site.wechatToken, wechatAesKey: site.wechatAesKey, wechatAdminIds: site.wechatAdminIds }, "企业微信配置已保存")} className="mail-settings-save">{blockSaving.wechat ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="telegram" icon="telegram" title="Telegram">
                   <div className="mail-settings">
-                    <div className="mail-settings-group">
-                      <button type="button" role="switch" aria-checked={site.telegramEnabled} onClick={() => setSite({ ...site, telegramEnabled: !site.telegramEnabled })} className="mail-settings-switch-row">
-                        <span><b>启用 Telegram 通知</b></span>
-                        <i className={site.telegramEnabled ? "is-on" : ""} aria-hidden="true"><em style={{ backgroundColor: "#fff" }} /></i>
-                      </button>
-                      <div className="mail-settings-two-col">
-                        <label><span>机器人用户名</span><input type="text" value={site.telegramBotUsername} onChange={(event) => setSite({ ...site, telegramBotUsername: event.target.value })} placeholder="alcor_bot" autoComplete="off" /></label>
-                        <label><span>机器人令牌</span><PasswordInput type="password" value={site.telegramBotToken} onChange={(event) => setSite({ ...site, telegramBotToken: event.target.value })} autoComplete="new-password" placeholder={site.telegramBotTokenConfigured ? "已保存 · 留空不修改" : "123456:ABC"} /></label>
-                      </div>
-                    </div>
+                    <TelegramFields site={site} setSite={setSite} />
                     {blockMsg.telegram && <p className={`settings-form-feedback is-${blockMsg.telegram.type}`} role={blockMsg.telegram.type === "err" ? "alert" : "status"}><span>{blockMsg.telegram.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.telegram} onClick={() => void saveBlock("telegram", { telegramEnabled: site.telegramEnabled, telegramBotUsername: site.telegramBotUsername, telegramBotToken: site.telegramBotToken }, "Telegram 配置已保存")} className="mail-settings-save">{blockSaving.telegram ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.telegram} onClick={() => void saveBlock("telegram", { telegramEnabled: site.telegramEnabled, telegramName: site.telegramName, telegramTypes: site.telegramTypes, telegramBotToken: site.telegramBotToken, telegramChatId: site.telegramChatId, telegramUserIds: site.telegramUserIds, telegramAdminIds: site.telegramAdminIds, telegramApiBase: site.telegramApiBase }, "Telegram 配置已保存")} className="mail-settings-save">{blockSaving.telegram ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="feishu" icon="feishu" title="飞书">
                   <div className="mail-settings">
-                    <div className="mail-settings-group">
-                      <button type="button" role="switch" aria-checked={site.feishuEnabled} onClick={() => setSite({ ...site, feishuEnabled: !site.feishuEnabled })} className="mail-settings-switch-row">
-                        <span><b>启用飞书通知</b></span>
-                        <i className={site.feishuEnabled ? "is-on" : ""} aria-hidden="true"><em style={{ backgroundColor: "#fff" }} /></i>
-                      </button>
-                      <label><span>飞书自定义机器人 Webhook</span><PasswordInput type="password" value={site.feishuWebhook} onChange={(event) => setSite({ ...site, feishuWebhook: event.target.value })} autoComplete="new-password" placeholder={site.feishuWebhookConfigured ? "已保存 · 留空不修改" : "https://"} /></label>
-                    </div>
+                    <FeishuFields site={site} setSite={setSite} />
                     {blockMsg.feishu && <p className={`settings-form-feedback is-${blockMsg.feishu.type}`} role={blockMsg.feishu.type === "err" ? "alert" : "status"}><span>{blockMsg.feishu.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.feishu} onClick={() => void saveBlock("feishu", { feishuEnabled: site.feishuEnabled, feishuWebhook: site.feishuWebhook }, "飞书配置已保存")} className="mail-settings-save">{blockSaving.feishu ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.feishu} onClick={() => void saveBlock("feishu", { feishuEnabled: site.feishuEnabled, feishuName: site.feishuName, feishuTypes: site.feishuTypes, feishuAppId: site.feishuAppId, feishuAppSecret: site.feishuAppSecret, feishuOpenId: site.feishuOpenId, feishuChatId: site.feishuChatId, feishuAdminIds: site.feishuAdminIds, feishuVerificationToken: site.feishuVerificationToken, feishuEncryptKey: site.feishuEncryptKey }, "飞书配置已保存")} className="mail-settings-save">{blockSaving.feishu ? "保存中…" : "保存"}</button></div>
+                  </div>
+                </SettingsSection>
+                <SettingsSection id="qq" icon="qq" title="QQ">
+                  <div className="mail-settings">
+                    <QqFields site={site} setSite={setSite} />
+                    {blockMsg.qq && <p className={`settings-form-feedback is-${blockMsg.qq.type}`} role={blockMsg.qq.type === "err" ? "alert" : "status"}><span>{blockMsg.qq.text}</span></p>}
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.qq} onClick={() => void saveBlock("qq", { qqEnabled: site.qqEnabled, qqName: site.qqName, qqTypes: site.qqTypes, qqAppId: site.qqAppId, qqAppSecret: site.qqAppSecret, qqUserOpenId: site.qqUserOpenId, qqGroupOpenId: site.qqGroupOpenId, qqAdminIds: site.qqAdminIds }, "QQ 配置已保存")} className="mail-settings-save">{blockSaving.qq ? "保存中…" : "保存"}</button></div>
+                  </div>
+                </SettingsSection>
+                <SettingsSection id="discord" icon="discord" title="Discord">
+                  <div className="mail-settings">
+                    <DiscordFields site={site} setSite={setSite} />
+                    {blockMsg.discord && <p className={`settings-form-feedback is-${blockMsg.discord.type}`} role={blockMsg.discord.type === "err" ? "alert" : "status"}><span>{blockMsg.discord.text}</span></p>}
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.discord} onClick={() => void saveBlock("discord", { discordEnabled: site.discordEnabled, discordName: site.discordName, discordTypes: site.discordTypes, discordBotToken: site.discordBotToken, discordGuildId: site.discordGuildId, discordChannelId: site.discordChannelId, discordAdminIds: site.discordAdminIds }, "Discord 配置已保存")} className="mail-settings-save">{blockSaving.discord ? "保存中…" : "保存"}</button></div>
+                  </div>
+                </SettingsSection>
+                <SettingsSection id="webpush" icon="webpush" title="WebPush">
+                  <div className="mail-settings">
+                    <WebPushFields site={site} setSite={setSite} />
+                    {blockMsg.webpush && <p className={`settings-form-feedback is-${blockMsg.webpush.type}`} role={blockMsg.webpush.type === "err" ? "alert" : "status"}><span>{blockMsg.webpush.text}</span></p>}
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.webpush} onClick={() => void saveBlock("webpush", { webPushEnabled: site.webPushEnabled, webPushName: site.webPushName, webPushTypes: site.webPushTypes, webPushUsername: site.webPushUsername }, "WebPush 配置已保存")} className="mail-settings-save">{blockSaving.webpush ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="mail" icon="mail" title="邮件服务" desc="用于找回密码。测试邮件收到后再保存。">
