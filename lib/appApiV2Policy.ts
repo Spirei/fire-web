@@ -1,5 +1,8 @@
 /** App contract allowlist. Native password login never creates a Cookie/Web session. */
 export const APP_V2_ROUTES = [
+  {path:"price-alerts",methods:["GET"],access:"portfolio.read"},
+  {path:"price-alerts/operations/[requestId]",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"price-alerts/telegram-link",methods:["POST"],access:"portfolio.write"},
   {path:"personal-profile",methods:["GET","PATCH"],access:"portfolio.read",writeAccess:"profile.write"},
   {path:"personal-profile/background",methods:["GET","POST"],access:"portfolio.read",writeAccess:"profile.write"},
   {path:"personal-profile/operations/[requestId]",methods:["GET"],access:"portfolio.read"},

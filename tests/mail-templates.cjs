@@ -76,7 +76,7 @@ function web(f,body,method='PUT',source=origin){return new Request(origin+'/api/
   }
   assert.throws(()=>templates.renderMailTemplate(model.DEFAULT_MAIL_TEMPLATES[2],{email:'a@example.com',siteName:'Alcor',minutes:30,url:'javascript:evil()'}));
   const response=await load('app/api/v2/auth/mail-templates/route.ts').GET(new Request(origin+'/api/v2/auth/mail-templates'));
-  const data=(await response.json()).data;assert.equal(response.status,200);assert.equal(data.templates.length,5);assert(!JSON.stringify(data).includes('smtpPassword'));
+  const data=(await response.json()).data;assert.equal(response.status,200);assert.equal(data.templates.length,model.MAIL_TEMPLATE_IDS.length);assert(!JSON.stringify(data).includes('smtpPassword'));
  });
  await test('all real senders use the saved renderer and embed banner without remote fetching',async()=>{
   const mailer=load('node_modules/nodemailer').default || load('node_modules/nodemailer'), original=mailer.createTransport, sent=[];
@@ -92,6 +92,30 @@ function web(f,body,method='PUT',source=origin){return new Request(origin+'/api/
    assert.equal(sent.length,5);for(const message of sent){assert(message.html.includes('cid:alcor-mail-banner'));assert(message.attachments[0].content.length>1000);assert(!message.html.includes('https://fire.'));}
    assert(sent[0].text.includes('30 分钟'));assert(sent[2].text.includes('30 分钟'));
   }finally{mailer.createTransport=original;}
+ });
+ await test('price alerts merge into legacy templates, preview all slots, and actual SMTP uses the saved neutral template',async()=>{
+  const admin=fixture(false,true), preset=model.DEFAULT_MAIL_TEMPLATES.find(t=>t.id==='price_alert');assert(preset);
+  const legacy=templates.readMailTemplates().filter(t=>t.id!=='price_alert');
+  db.prepare("INSERT INTO site_settings(key,value) VALUES('mailTemplates.v1',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(legacy));
+  assert.equal(templates.readMailTemplates().length,model.MAIL_TEMPLATE_IDS.length);assert.equal(templates.readMailTemplates()[0].title,legacy[0].title);
+  assert.throws(()=>model.validateMailTemplate({...legacy[0],body:'{{stockName}}'}));
+  assert.throws(()=>model.validateMailTemplate({...preset,body:'{{credential}}'}));
+  const preview=await previewRoute.POST(web(admin,preset,'POST'));assert.equal(preview.status,200);const sample=await preview.json();
+  assert(sample.html.includes('AAPL')&&sample.html.includes('340.35')&&sample.html.includes('盘后'));assert(!sample.html.includes('{{'));assert(sample.html.includes('#f5f5f5'));
+  if(process.env.ALCOR_MAIL_TEMPLATE_QA_DIR){fs.mkdirSync(process.env.ALCOR_MAIL_TEMPLATE_QA_DIR,{recursive:true});fs.writeFileSync(path.join(process.env.ALCOR_MAIL_TEMPLATE_QA_DIR,'price-alert-preview.html'),sample.html);}
+  const edited={...preset,subject:'{{siteName}} {{stockName}} 提醒',body:'自定义 {{stockCode}} / {{currentPrice}} {{currency}} / {{session}} / {{quoteTime}} / {{triggerTime}}'};
+  assert.equal((await settingsRoute.PUT(web(admin,edited))).status,200);
+  const mailer=load('node_modules/nodemailer').default||load('node_modules/nodemailer'), original=mailer.createTransport, sent=[];
+  process.env.SMTP_HOST='smtp.example.test';process.env.SMTP_FROM_EMAIL='sender@example.test';
+  mailer.createTransport=()=>({sendMail:async message=>{sent.push(message);return {accepted:[message.to],rejected:[]};}});
+  delete require.cache[require.resolve(path.join(root,'lib/mail.ts'))];const sender=load('lib/mail.ts');
+  try {
+   await sender.sendPriceAlertEmail('alert@example.test',{name:'苹果<script>bad</script>',code:'AAPL',market:'US',currency:'USD',direction:'above',target:'340.000001',price:340.35,session:'AFTER',quoteTime:'2026-10-21T20:05:00Z',createdAt:Date.parse('2026-10-21T20:05:01Z')});
+   assert.equal(sent.length,1);assert(sent[0].text.includes('自定义 AAPL / 340.35 USD / 盘后'));assert(sent[0].html.includes('&lt;script&gt;'));assert(!sent[0].html.includes('<script>'));assert(sent[0].html.includes('340.000001'));
+   assert(sent[0].attachments[0].content.length>1000);assert(!sent[0].html.includes('#163b33'));assert(!sent[0].subject.includes('\n'));
+   await assert.rejects(sender.sendPriceAlertEmail('alert@example.test',{name:'bad',price:NaN}));assert.equal(sent.length,1);
+   await sender.sendPriceAlertEmail('alert-test@example.test',{kind:'test'});assert.equal(sent.length,2);assert(sent[1].subject.includes('邮件服务测试'));assert(!sent[1].text.includes('自定义 AAPL'));
+  } finally {mailer.createTransport=original;}
  });
  await test('email code remains valid at minute 29, expires at minute 30, and resulting proof lasts five minutes',async()=>{
   const f=fixture();db.prepare('INSERT INTO verified_emails VALUES(?,?,?)').run(f.user.id,row(f.user.id).email,Date.now());

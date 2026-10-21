@@ -105,3 +105,24 @@ export async function sendRegistrationCode(to: string, code: string, permit: Mai
   const rendered = configuredMailTemplate("registration", {email: to, siteName: config.fromName || "Alcor", minutes: 30, code});
   await createMailTransport(config).sendMail({from: {name: config.fromName || "Alcor", address: config.fromEmail}, to, ...rendered, attachments: [await mailBannerAttachment()]});
 }
+
+/** Recipient has already been checked against the owner's verified email by the worker. */
+export async function sendPriceAlertEmail(to: string, event: Record<string, unknown>) {
+  const config = getMailConfig();
+  if (!config.host || !config.fromEmail) throw new Error("邮件服务未配置");
+  const isTest = event.kind === "test";
+  const sessions: Record<string, string> = {PRE:"盘前",REGULAR:"盘中",AFTER:"盘后",OVERNIGHT:"夜盘"};
+  if (!isTest && (typeof event.name !== "string" || typeof event.code !== "string" || !["US","HK","CN"].includes(String(event.market)) || !["above","below"].includes(String(event.direction)) || !sessions[String(event.session)] || typeof event.target !== "string" || typeof event.price !== "number" || !Number.isFinite(event.price) || event.price <= 0 || !Number.isSafeInteger(event.createdAt) || Number(event.createdAt) <= 0)) throw new Error("股价提醒事件无效");
+  const timeZone = event.market === "US" ? "America/New_York" : event.market === "HK" ? "Asia/Hong_Kong" : "Asia/Shanghai";
+  const rendered = configuredMailTemplate(isTest ? "test" : "price_alert", {
+    email:to, siteName:config.fromName || "Alcor", minutes:0,
+    stockName:String(event.name ?? ""), stockCode:String(event.code ?? ""), market:String(event.market ?? ""),
+    currentPrice:isTest ? "" : new Intl.NumberFormat("en-US", {useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:6}).format(Number(event.price)),
+    targetPrice:String(event.target ?? ""), currency:String(event.currency ?? ""), direction:event.direction === "above" ? "涨至" : "跌至",
+    session:sessions[String(event.session)] || "", quoteTime:String(event.quoteTime ?? ""),
+    triggerTime:isTest ? "" : new Intl.DateTimeFormat("zh-CN", {timeZone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23",timeZoneName:"short"}).format(new Date(Number(event.createdAt)))
+  });
+  consumeMailPermit(to, "price_alert");
+  const result = await createMailTransport(config).sendMail({from:{name:config.fromName || "Alcor",address:config.fromEmail},to,...rendered,attachments:[await mailBannerAttachment()]});
+  if (!result.accepted?.length || result.rejected?.length) throw new Error("邮件服务未确认接收");
+}

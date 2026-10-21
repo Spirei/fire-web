@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { getDb } from "./db";
 
-export type MailPurpose = "reset" | "verification" | "test";
+export type MailPurpose = "reset" | "verification" | "test" | "price_alert";
 export type MailPermit = Readonly<{ recipient: string; purpose: MailPurpose }>;
 const permits = new WeakSet<MailPermit>();
 export class MailBudgetError extends Error {
