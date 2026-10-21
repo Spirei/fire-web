@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { alertDb, alertsAvailable, triggerAlert, touchAlertOwner, grantAlive, telegramConfigured, telegramRecipient, receiveTelegram, channelState, type AlertRow } from './priceAlerts';
-import { telegramBotToken } from './socialChannels';
+import { telegramApiBase, telegramBotToken } from './socialChannels';
 import { fetchOverviewQuotes } from './quotes';
 import { sendPriceAlertEmail } from './mail';
 import { MailBudgetError } from './mailBudget';
@@ -12,7 +12,7 @@ let working=false;
 async function telegram(method:'getUpdates'|'sendMessage',body:unknown) {
   const token=telegramBotToken();
   if(!telegramConfigured())throw new Error('Telegram未配置');
-  const response=await fetch(`https://api.telegram.org/bot${token}/${method}`,{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000),cache:'no-store'});
+  const response=await fetch(`${telegramApiBase()}/bot${token}/${method}`,{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000),cache:'no-store'});
   if(!response.ok)throw new Error('Telegram未确认请求');
   const data=await response.json() as {ok?:boolean;result?:unknown};
   if(data.ok!==true)throw new Error('Telegram未确认请求');return data.result;
