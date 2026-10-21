@@ -1,3 +1,4 @@
+import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
 import type { SiteSettings } from "./types";
 import { mailConfigured } from "./mail";
@@ -140,7 +141,10 @@ export function telegramApiBase() {
   return (getSiteSettings().telegramApiBase || "https://api.telegram.org").replace(/\/$/, "");
 }
 export function telegramReady() {
-  return getSiteSettings().telegramEnabled && TOKEN.test(telegramBotToken());
+  if (!TOKEN.test(telegramBotToken())) return false;
+  const row = getDb().prepare("SELECT value FROM site_settings WHERE key='telegramEnabled'").get() as { value: string } | undefined;
+  if (row && row.value !== "") return row.value === "1";
+  return USERNAME.test(telegramBotUsername());
 }
 export function wechatReady() {
   const settings = getSiteSettings();
