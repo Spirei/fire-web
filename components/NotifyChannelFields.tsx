@@ -1,7 +1,6 @@
 "use client";
 import type { ReactNode } from "react";
 import PasswordInput from "./PasswordInput";
-import { TELEGRAM_CHANNEL_TYPES } from "@/lib/notifyChannelTypes";
 import type { SiteSettings } from "@/lib/types";
 
 type Props = {
@@ -11,21 +10,6 @@ type Props = {
 
 function Field({ label, hint, wide, children }: { label: string; hint: string; wide?: boolean; children: ReactNode }) {
   return <label className={wide ? "notify-field notify-span" : "notify-field"}><span>{label}</span>{children}<small>{hint}</small></label>;
-}
-
-function ChannelTypes({ value, onChange }: { value: string; onChange: (next: string) => void }) {
-  const selected = new Set(value.split(",").filter(Boolean));
-  function toggle(type: string) {
-    selected.has(type) ? selected.delete(type) : selected.add(type);
-    onChange(TELEGRAM_CHANNEL_TYPES.filter(item => selected.has(item)).join(","));
-  }
-  return <div className="notify-field notify-span">
-    <span>类型</span>
-    <div className="notify-chips" role="group" aria-label="通知渠道类型">
-      {TELEGRAM_CHANNEL_TYPES.map(type => <button key={type} type="button" data-capsule="off" aria-pressed={selected.has(type)} onClick={() => toggle(type)}>{type}</button>)}
-    </div>
-    <small>通知渠道类型</small>
-  </div>;
 }
 
 function Switch({ on, label, hint, onClick }: { on: boolean; label: string; hint?: string; onClick: () => void }) {
@@ -55,7 +39,6 @@ export function TelegramFields({ site, setSite }: Props) {
   return <div className="notify-sheet">
     <Switch on={site.telegramEnabled} label="启用" onClick={() => set({ telegramEnabled: !site.telegramEnabled })} />
     <div className="notify-grid">
-      <ChannelTypes value={site.telegramTypes} onChange={telegramTypes => set({ telegramTypes })} />
       <Field label="名称" hint="通知渠道名称"><input value={site.telegramName} onChange={event => set({ telegramName: event.target.value })} autoComplete="off" /></Field>
       <Field label="Bot Token" hint="Telegram 机器人 token，格式 123456:ABC"><PasswordInput type="password" value={site.telegramBotToken} onChange={event => set({ telegramBotToken: event.target.value })} autoComplete="new-password" placeholder={site.telegramBotTokenConfigured ? "已保存 · 留空不修改" : ""} /></Field>
       <Field label="Chat ID" hint="接收消息的用户、群组或频道 Chat ID，多个用逗号分隔"><input value={site.telegramChatId} onChange={event => set({ telegramChatId: event.target.value })} autoComplete="off" /></Field>
@@ -71,7 +54,6 @@ export function FeishuFields({ site, setSite }: Props) {
   return <div className="notify-sheet">
     <Switch on={site.feishuEnabled} label="启用" onClick={() => set({ feishuEnabled: !site.feishuEnabled })} />
     <div className="notify-grid">
-      <ChannelTypes value={site.feishuTypes} onChange={feishuTypes => set({ feishuTypes })} />
       <Field label="名称" hint="通知渠道名称"><input value={site.feishuName} onChange={event => set({ feishuName: event.target.value })} autoComplete="off" /></Field>
       <Field label="App ID" hint="飞书开放平台应用的 App ID"><input value={site.feishuAppId} onChange={event => set({ feishuAppId: event.target.value })} autoComplete="off" /></Field>
       <Field label="App Secret" hint="飞书开放平台应用的 App Secret"><PasswordInput type="password" value={site.feishuAppSecret} onChange={event => set({ feishuAppSecret: event.target.value })} autoComplete="new-password" placeholder={site.feishuAppSecretConfigured ? "已保存 · 留空不修改" : ""} /></Field>
@@ -89,7 +71,6 @@ export function QqFields({ site, setSite }: Props) {
   return <div className="notify-sheet">
     <Switch on={site.qqEnabled} label="启用" onClick={() => set({ qqEnabled: !site.qqEnabled })} />
     <div className="notify-grid">
-      <ChannelTypes value={site.qqTypes} onChange={qqTypes => set({ qqTypes })} />
       <Field label="名称" hint="通知渠道名称"><input value={site.qqName} onChange={event => set({ qqName: event.target.value })} autoComplete="off" /></Field>
       <Field label="AppID" hint="QQ 开放平台机器人 AppID"><input value={site.qqAppId} onChange={event => set({ qqAppId: event.target.value.replace(/\D/g, "").slice(0, 20) })} inputMode="numeric" autoComplete="off" /></Field>
       <Field label="AppSecret" hint="QQ 开放平台机器人 AppSecret"><PasswordInput type="password" value={site.qqAppSecret} onChange={event => set({ qqAppSecret: event.target.value })} autoComplete="new-password" placeholder={site.qqAppSecretConfigured ? "已保存 · 留空不修改" : ""} /></Field>
@@ -105,7 +86,6 @@ export function DiscordFields({ site, setSite }: Props) {
   return <div className="notify-sheet">
     <Switch on={site.discordEnabled} label="启用" onClick={() => set({ discordEnabled: !site.discordEnabled })} />
     <div className="notify-grid">
-      <ChannelTypes value={site.discordTypes} onChange={discordTypes => set({ discordTypes })} />
       <Field label="名称" hint="通知渠道名称"><input value={site.discordName} onChange={event => set({ discordName: event.target.value })} autoComplete="off" /></Field>
       <Field label="Bot Token" hint="Discord Bot Token，需在开发者后台开启 Message Content Intent"><PasswordInput type="password" value={site.discordBotToken} onChange={event => set({ discordBotToken: event.target.value })} autoComplete="new-password" placeholder={site.discordBotTokenConfigured ? "已保存 · 留空不修改" : ""} /></Field>
       <Field label="服务器 ID" hint="可选。限制使用的服务器；为空则使用已加入的任意服务器"><input value={site.discordGuildId} onChange={event => set({ discordGuildId: event.target.value.replace(/\D/g, "").slice(0, 22) })} inputMode="numeric" autoComplete="off" /></Field>
@@ -120,7 +100,6 @@ export function WebPushFields({ site, setSite }: Props) {
   return <div className="notify-sheet">
     <Switch on={site.webPushEnabled} label="启用" onClick={() => set({ webPushEnabled: !site.webPushEnabled })} />
     <div className="notify-grid">
-      <ChannelTypes value={site.webPushTypes} onChange={webPushTypes => set({ webPushTypes })} />
       <Field label="名称" hint="通知渠道名称"><input value={site.webPushName} onChange={event => set({ webPushName: event.target.value })} autoComplete="off" /></Field>
       <Field label="登录用户名" hint="只有对应的用户登录后才会推送消息"><input value={site.webPushUsername} onChange={event => set({ webPushUsername: event.target.value })} autoComplete="off" /></Field>
     </div>

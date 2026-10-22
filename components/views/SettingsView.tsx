@@ -3911,35 +3911,35 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="mail-settings">
                     <TelegramFields site={site} setSite={setSite} />
                     {blockMsg.telegram && <p className={`settings-form-feedback is-${blockMsg.telegram.type}`} role={blockMsg.telegram.type === "err" ? "alert" : "status"}><span>{blockMsg.telegram.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.telegram} onClick={() => void saveBlock("telegram", { telegramEnabled: site.telegramEnabled, telegramName: site.telegramName, telegramTypes: site.telegramTypes, telegramBotToken: site.telegramBotToken, telegramChatId: site.telegramChatId, telegramUserIds: site.telegramUserIds, telegramAdminIds: site.telegramAdminIds, telegramApiBase: site.telegramApiBase }, "Telegram 配置已保存")} className="mail-settings-save">{blockSaving.telegram ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.telegram} onClick={() => void saveBlock("telegram", { telegramEnabled: site.telegramEnabled, telegramName: site.telegramName, telegramTypes: "", telegramBotToken: site.telegramBotToken, telegramChatId: site.telegramChatId, telegramUserIds: site.telegramUserIds, telegramAdminIds: site.telegramAdminIds, telegramApiBase: site.telegramApiBase }, "Telegram 配置已保存")} className="mail-settings-save">{blockSaving.telegram ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="feishu" icon="feishu" title="飞书">
                   <div className="mail-settings">
                     <FeishuFields site={site} setSite={setSite} />
                     {blockMsg.feishu && <p className={`settings-form-feedback is-${blockMsg.feishu.type}`} role={blockMsg.feishu.type === "err" ? "alert" : "status"}><span>{blockMsg.feishu.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.feishu} onClick={() => void saveBlock("feishu", { feishuEnabled: site.feishuEnabled, feishuName: site.feishuName, feishuTypes: site.feishuTypes, feishuAppId: site.feishuAppId, feishuAppSecret: site.feishuAppSecret, feishuOpenId: site.feishuOpenId, feishuChatId: site.feishuChatId, feishuAdminIds: site.feishuAdminIds, feishuVerificationToken: site.feishuVerificationToken, feishuEncryptKey: site.feishuEncryptKey }, "飞书配置已保存")} className="mail-settings-save">{blockSaving.feishu ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.feishu} onClick={() => void saveBlock("feishu", { feishuEnabled: site.feishuEnabled, feishuName: site.feishuName, feishuTypes: "", feishuAppId: site.feishuAppId, feishuAppSecret: site.feishuAppSecret, feishuOpenId: site.feishuOpenId, feishuChatId: site.feishuChatId, feishuAdminIds: site.feishuAdminIds, feishuVerificationToken: site.feishuVerificationToken, feishuEncryptKey: site.feishuEncryptKey }, "飞书配置已保存")} className="mail-settings-save">{blockSaving.feishu ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="qq" icon="qq" title="QQ">
                   <div className="mail-settings">
                     <QqFields site={site} setSite={setSite} />
                     {blockMsg.qq && <p className={`settings-form-feedback is-${blockMsg.qq.type}`} role={blockMsg.qq.type === "err" ? "alert" : "status"}><span>{blockMsg.qq.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.qq} onClick={() => void saveBlock("qq", { qqEnabled: site.qqEnabled, qqName: site.qqName, qqTypes: site.qqTypes, qqAppId: site.qqAppId, qqAppSecret: site.qqAppSecret, qqUserOpenId: site.qqUserOpenId, qqGroupOpenId: site.qqGroupOpenId, qqAdminIds: site.qqAdminIds }, "QQ 配置已保存")} className="mail-settings-save">{blockSaving.qq ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.qq} onClick={() => void saveBlock("qq", { qqEnabled: site.qqEnabled, qqName: site.qqName, qqTypes: "", qqAppId: site.qqAppId, qqAppSecret: site.qqAppSecret, qqUserOpenId: site.qqUserOpenId, qqGroupOpenId: site.qqGroupOpenId, qqAdminIds: site.qqAdminIds }, "QQ 配置已保存")} className="mail-settings-save">{blockSaving.qq ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="discord" icon="discord" title="Discord">
                   <div className="mail-settings">
                     <DiscordFields site={site} setSite={setSite} />
                     {blockMsg.discord && <p className={`settings-form-feedback is-${blockMsg.discord.type}`} role={blockMsg.discord.type === "err" ? "alert" : "status"}><span>{blockMsg.discord.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.discord} onClick={() => void saveBlock("discord", { discordEnabled: site.discordEnabled, discordName: site.discordName, discordTypes: site.discordTypes, discordBotToken: site.discordBotToken, discordGuildId: site.discordGuildId, discordChannelId: site.discordChannelId, discordAdminIds: site.discordAdminIds }, "Discord 配置已保存")} className="mail-settings-save">{blockSaving.discord ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.discord} onClick={() => void saveBlock("discord", { discordEnabled: site.discordEnabled, discordName: site.discordName, discordTypes: "", discordBotToken: site.discordBotToken, discordGuildId: site.discordGuildId, discordChannelId: site.discordChannelId, discordAdminIds: site.discordAdminIds }, "Discord 配置已保存")} className="mail-settings-save">{blockSaving.discord ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="webpush" icon="webpush" title="WebPush">
                   <div className="mail-settings">
                     <WebPushFields site={site} setSite={setSite} />
                     {blockMsg.webpush && <p className={`settings-form-feedback is-${blockMsg.webpush.type}`} role={blockMsg.webpush.type === "err" ? "alert" : "status"}><span>{blockMsg.webpush.text}</span></p>}
-                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.webpush} onClick={() => void saveBlock("webpush", { webPushEnabled: site.webPushEnabled, webPushName: site.webPushName, webPushTypes: site.webPushTypes, webPushUsername: site.webPushUsername }, "WebPush 配置已保存")} className="mail-settings-save">{blockSaving.webpush ? "保存中…" : "保存"}</button></div>
+                    <div className="mail-settings-actions"><button type="button" disabled={!!blockSaving.webpush} onClick={() => void saveBlock("webpush", { webPushEnabled: site.webPushEnabled, webPushName: site.webPushName, webPushTypes: "", webPushUsername: site.webPushUsername }, "WebPush 配置已保存")} className="mail-settings-save">{blockSaving.webpush ? "保存中…" : "保存"}</button></div>
                   </div>
                 </SettingsSection>
                 <SettingsSection id="mail" icon="mail" title="邮件服务" desc="用于找回密码。测试邮件收到后再保存。">

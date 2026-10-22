@@ -4968,7 +4968,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_64_ENTRY, version: "v0.1.65", date: "2026-10-23",
   summary: "飞书、Discord 与 QQ 个人股价提醒。",
   software: V0_1_64_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.65"} : item),
-  changes: [{kind:"feature",title:"飞书、Discord 与 QQ 个人提醒",desc:"股价提醒可分别向本人已验证的飞书 open_id 或邮箱、Discord 用户和 QQ openid 发送验证码，确认后启用到价通知。密钥留在服务端，旧版 App 仍只看到原来的渠道。"},{kind:"security",title:"个人消息通道限制",desc:"飞书、Discord 和 QQ 只接受单个收件人，验证码 5 分钟且最多 6 次错误，发送限流持久保存。超时或结果不明时不自动重发。"}]
+  changes: [{kind:"feature",title:"飞书、Discord 与 QQ 个人提醒",desc:"股价提醒可分别向本人已验证的飞书 open_id 或邮箱、Discord 用户和 QQ openid 发送验证码，确认后启用到价通知。密钥留在服务端，旧版 App 仍只看到原来的渠道。"},{kind:"security",title:"个人消息通道限制",desc:"飞书、Discord 和 QQ 只接受单个收件人，验证码 5 分钟且最多 6 次错误，发送限流持久保存。超时或结果不明时不自动重发。"},{kind:"fix",title:"去掉通知渠道里的外部类型",desc:"飞书、Telegram、QQ、Discord 和 WebPush 不再显示资源下载、媒体服务器等分类。这些选项来自参考图，不属于 Alcor。"}]
 };
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 

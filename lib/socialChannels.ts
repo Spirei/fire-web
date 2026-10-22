@@ -2,9 +2,6 @@ import { getDb } from "./db";
 import { getSiteSettings } from "./settings";
 import type { SiteSettings } from "./types";
 import { mailConfigured } from "./mail";
-import { TELEGRAM_CHANNEL_TYPES } from "./notifyChannelTypes";
-
-export { TELEGRAM_CHANNEL_TYPES };
 export class SocialConfigError extends Error {}
 
 const TOKEN = /^\d+:[A-Za-z0-9_-]{20,}$/;
@@ -52,11 +49,6 @@ export function assertSocialPatch(current: SiteSettings, patch: Partial<SiteSett
     if (ids.some(id => !/^-?\d{1,20}$/.test(id))) throw new SocialConfigError("Chat ID 须为数字，多个用逗号分隔");
     patch.telegramChatId = ids.join(",");
   }
-  if (typeof patch.telegramTypes === "string") {
-    const types = patch.telegramTypes.split(",").map(item => item.trim()).filter(Boolean);
-    if (types.some(type => !(TELEGRAM_CHANNEL_TYPES as readonly string[]).includes(type))) throw new SocialConfigError("通知渠道类型无效");
-    patch.telegramTypes = types.join(",");
-  }
   if (typeof patch.telegramApiBase === "string") {
     const base = patch.telegramApiBase.trim().replace(/\/$/, "");
     patch.telegramApiBase = base;
@@ -86,14 +78,6 @@ export function assertSocialPatch(current: SiteSettings, patch: Partial<SiteSett
     const enabled = typeof patch.telegramEnabled === "boolean" ? patch.telegramEnabled : current.telegramEnabled;
     const token = keptSecret(current.telegramBotToken, patch.telegramBotToken) || process.env.ALCOR_TELEGRAM_BOT_TOKEN || "";
     if (enabled && !TOKEN.test(token)) throw new SocialConfigError("启用 Telegram 前请填写 Bot Token");
-  }
-  if (typeof patch.feishuTypes === "string" || typeof patch.qqTypes === "string" || typeof patch.discordTypes === "string" || typeof patch.webPushTypes === "string") {
-    for (const key of ["feishuTypes", "qqTypes", "discordTypes", "webPushTypes"] as const) {
-      if (typeof patch[key] !== "string") continue;
-      const types = patch[key].split(",").map(item => item.trim()).filter(Boolean);
-      if (types.some(type => !(TELEGRAM_CHANNEL_TYPES as readonly string[]).includes(type))) throw new SocialConfigError("通知渠道类型无效");
-      patch[key] = types.join(",");
-    }
   }
   for (const key of ["feishuAdminIds", "qqAdminIds", "discordAdminIds"] as const) {
     const value = patch[key];
@@ -170,11 +154,11 @@ export function socialChannelsSnapshot() {
     version: 2,
     channels: [
       { id: "wechat", name: settings.wechatName || "企业微信", kind: "wecom", enabled: settings.wechatEnabled, configured: wechatReady(), smart_robot: settings.wechatSmartRobot, bindable: true, binding: "verification-code" },
-      { id: "telegram", name: settings.telegramName || "电报", enabled: settings.telegramEnabled, configured: telegramReady(), bindable: true, bot_username: telegramBotUsername(), types: settings.telegramTypes.split(",").filter(Boolean), api_base: telegramApiBase() },
-      { id: "feishu", name: settings.feishuName || "飞书", enabled: settings.feishuEnabled, configured: feishuReady(), types: settings.feishuTypes.split(",").filter(Boolean), bindable: true, binding: "verification-code" },
-      { id: "qq", name: settings.qqName || "QQ", enabled: settings.qqEnabled, configured: qqReady(), types: settings.qqTypes.split(",").filter(Boolean), bindable: true, binding: "verification-code" },
-      { id: "discord", name: settings.discordName || "Discord", enabled: settings.discordEnabled, configured: discordReady(), types: settings.discordTypes.split(",").filter(Boolean), bindable: true, binding: "verification-code" },
-      { id: "webpush", name: settings.webPushName || "WebPush", enabled: settings.webPushEnabled, configured: settings.webPushEnabled && Boolean(settings.webPushUsername), types: settings.webPushTypes.split(",").filter(Boolean), bindable: false },
+      { id: "telegram", name: settings.telegramName || "电报", enabled: settings.telegramEnabled, configured: telegramReady(), bindable: true, bot_username: telegramBotUsername(), api_base: telegramApiBase() },
+      { id: "feishu", name: settings.feishuName || "飞书", enabled: settings.feishuEnabled, configured: feishuReady(), bindable: true, binding: "verification-code" },
+      { id: "qq", name: settings.qqName || "QQ", enabled: settings.qqEnabled, configured: qqReady(), bindable: true, binding: "verification-code" },
+      { id: "discord", name: settings.discordName || "Discord", enabled: settings.discordEnabled, configured: discordReady(), bindable: true, binding: "verification-code" },
+      { id: "webpush", name: settings.webPushName || "WebPush", enabled: settings.webPushEnabled, configured: settings.webPushEnabled && Boolean(settings.webPushUsername), bindable: false },
       { id: "email", name: "邮件", enabled: mailConfigured(), configured: mailConfigured(), bindable: false }
     ]
   };
