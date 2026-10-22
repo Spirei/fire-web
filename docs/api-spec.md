@@ -1341,3 +1341,7 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 ### 企业微信个人提醒扩展
 
 沿 `price_alerts.wechat` 显式发现，客户端使用 `X-Alcor-Price-Alerts: wechat-v1` 协商第四渠道。原 operations/{requestId} 支持 wechat_start（单成员 recipient）、wechat_confirm（challengeId/verificationCode/enabled）及 wechat_disconnect，均核对 channelRevision；旧三渠道回执兼容。验证码5分钟、最多6次错误，服务端密钥不下发。详情见 [股价提醒通知](native-price-alert-notifications.md)。
+
+### 飞书、Discord 与 QQ 个人提醒扩展
+
+沿 `price_alerts.messengers` 显式发现。客户端使用 `X-Alcor-Price-Alerts: messengers-v1` 才看到 feishu、discord、qq，并保留 wechat；`wechat-v1` 仍只有四渠道，无此请求头仍只有三渠道。操作名为 `feishu_start|confirm|disconnect`、`discord_*`、`qq_*`，收件人分别是单个 open_id 或邮箱、Discord 用户 ID、QQ openid。验证码、次数、限流和密钥规则与企业微信个人提醒相同。详情见 [股价提醒通知](native-price-alert-notifications.md)。

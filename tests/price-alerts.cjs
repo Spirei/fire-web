@@ -199,6 +199,101 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
   const after=sends;await worker.priceAlertTick();assert.equal(sends,after);
   global.fetch=async()=>{throw Error('All external transport disabled in isolated test');};
  });
+ await test('messengers-v1 adds Feishu, Discord and QQ without exposing them to older clients',async()=>{
+  const settings=load('lib/settings.ts');
+  settings.updateSiteSettings({feishuEnabled:true,feishuAppId:'cli_fixture',feishuAppSecret:'fixture-feishu-secret',discordEnabled:true,discordBotToken:'fixture-discord-token-value',qqEnabled:true,qqAppId:'102000111',qqAppSecret:'fixture-qq-secret'});
+  const discovery=service.priceAlertsDiscovery(2);
+  assert.deepEqual(discovery.channels,['app','email','telegram']);
+  assert.deepEqual(discovery.messengers,{version:1,binding:'verification-code',channels:['feishu','discord','qq']});
+  const f=fixture();
+  const read=header=>new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/price-alerts',{headers:{authorization:'Bearer '+f.tokens.access_token,...(header?{'X-Alcor-Price-Alerts':header}:{})}});
+  assert.equal((await (await api.priceAlertsResponse(read(),'snapshot')).json()).data.channels.length,3);
+  assert.equal((await (await api.priceAlertsResponse(read('wechat-v1'),'snapshot')).json()).data.channels.length,4);
+  const expanded=(await (await api.priceAlertsResponse(read('messengers-v1'),'snapshot')).json()).data;
+  assert.deepEqual(expanded.channels.map(item=>item.channel),['app','email','telegram','wechat','feishu','discord','qq']);
+  assert.equal(expanded.channels.find(item=>item.channel==='discord').configured,true);
+  assert.equal(expanded.channels.find(item=>item.channel==='qq').ready,false);
+  for(const secret of ['fixture-feishu-secret','fixture-discord-token-value','fixture-qq-secret'])assert.equal(JSON.stringify(expanded).includes(secret),false);
+  const post=async(header,body)=>{const id=crypto.randomUUID();return api.priceAlertsResponse(new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/price-alerts/operations/'+id,{method:'POST',headers:{authorization:'Bearer '+f.tokens.access_token,'content-type':'application/json',...(header?{'X-Alcor-Price-Alerts':header}:{})},body:JSON.stringify(body)}),'operation',id);};
+  const start={action:'feishu_start',revision:0,recipient:'ou_FixtureOpenIdValue0001'};
+  assert.equal((await post('wechat-v1',start)).status,400);
+  assert.equal((await post('',{action:'test',channel:'qq'})).status,400);
+  const accepted=await (await post('messengers-v1',start)).json();
+  assert.equal(accepted.data.snapshot.channels.find(item=>item.channel==='feishu').pendingConfirmation,true);
+  assert.equal(JSON.stringify(accepted).includes('ou_FixtureOpenIdValue0001'),false);
+  const wecom=await (await post('messengers-v1',{action:'wechat_start',revision:1,recipient:'wire_member'})).json();
+  assert.equal(wecom.data.snapshot.channels.find(item=>item.channel==='wechat').pendingConfirmation,true);
+  mutate(f,{action:'feishu_disconnect',revision:2});mutate(f,{action:'wechat_disconnect',revision:3});
+ });
+ await test('Feishu, Discord and QQ verify one encrypted recipient and do not retry an uncertain send',async()=>{
+  const settings=load('lib/settings.ts'),messengers=load('lib/priceAlertMessengers.ts'),f=fixture();
+  for(const [channel,recipient] of [['feishu','one,two'],['feishu','ou_short'],['feishu','@all'],['discord','123'],['discord','@everyone'],['qq','short'],['qq','one,two']])assert.throws(()=>mutate(f,{action:channel+'_start',revision:0,recipient}));
+  const feishuId='ou_FixtureOpenIdValue0001',discordId='424242424242424242',qqId='FixtureQQOpenId0000000000000001';
+  const codes={},sends={feishu:0,discord:0,qq:0};let mode='ok',lastFeishuType='';
+  global.fetch=async(url,options)=>{
+    const u=new URL(url);
+    if(u.host==='api.telegram.org'&&u.pathname.endsWith('/getUpdates'))return Response.json({ok:true,result:[]});
+    assert.equal(options.redirect,'error');
+    if(u.host==='open.feishu.cn'){
+      if(u.pathname.endsWith('/tenant_access_token/internal'))return Response.json({code:0,tenant_access_token:'fixture-feishu-token',expire:7200});
+      sends.feishu++;const body=JSON.parse(options.body),text=JSON.parse(body.content).text;lastFeishuType=u.searchParams.get('receive_id_type');
+      assert.equal(options.headers.Authorization,'Bearer fixture-feishu-token');
+      if(text.includes('绑定验证码'))codes.feishu=text.match(/\d{6}/)[0];
+      if(mode==='feishu-down')throw Error('timeout after Feishu may accept');
+      return Response.json({code:0,data:{message_id:'om_'+sends.feishu}});
+    }
+    if(u.host==='discord.com'){
+      assert.equal(options.headers.Authorization,'Bot fixture-discord-token-value');assert.equal(String(url).includes('fixture-discord-token-value'),false);
+      if(u.pathname==='/api/v10/users/@me/channels'){assert.equal(JSON.parse(options.body).recipient_id,discordId);return Response.json({id:'333333333333333333'});}
+      sends.discord++;const content=JSON.parse(options.body).content;if(content.includes('绑定验证码'))codes.discord=content.match(/\d{6}/)[0];
+      if(mode==='discord-unknown')throw Error('timeout after Discord may accept');
+      return Response.json({id:'444444444444444444'});
+    }
+    if(u.host==='bots.qq.com')return Response.json({access_token:'fixture-qq-token',expires_in:'7200'});
+    if(u.host==='api.sgroup.qq.com'){
+      sends.qq++;assert.equal(u.pathname,'/v2/users/'+qqId+'/messages');assert.equal(options.headers.Authorization,'QQBot fixture-qq-token');assert.equal(options.headers['X-Union-Appid'],'102000111');
+      const content=JSON.parse(options.body).content;if(content.includes('绑定验证码'))codes.qq=content.match(/\d{6}/)[0];
+      if(mode==='qq-reject')return new Response(JSON.stringify({code:304003,message:'rejected'}),{status:400,headers:{'content-type':'application/json'}});
+      return Response.json({id:'qq-msg-'+sends.qq});
+    }
+    throw Error('Unrelated transport blocked '+u.host);
+  };
+  mutate(f,{action:'feishu_start',revision:0,recipient:feishuId});await worker.priceAlertTick();
+  const binding=()=>db.prepare('SELECT * FROM price_alert_messengers WHERE user_id=? AND channel=?').get(f.user.id,'feishu');
+  assert.match(codes.feishu,/^\d{6}$/);assert.equal(sends.feishu,1);assert.equal(lastFeishuType,'open_id');assert.ok(binding().pending_recipient_secret.startsWith('enc:v1:'));assert.equal(binding().code_secret,'');
+  assert.equal(JSON.stringify(service.channelState(f.user.id)).includes(feishuId),false);
+  const other=fixture();assert.throws(()=>mutate(other,{action:'feishu_confirm',revision:0,challengeId:binding().challenge_id,verificationCode:codes.feishu,enabled:true}),e=>e.status===409);
+  assert.throws(()=>mutate(f,{action:'feishu_confirm',revision:1,challengeId:binding().challenge_id,verificationCode:'000000',enabled:true}),e=>e.status===400);
+  assert.equal(binding().attempts,1);assert.equal(binding().confirmed,0);
+  mutate(f,{action:'feishu_confirm',revision:1,challengeId:binding().challenge_id,verificationCode:codes.feishu,enabled:true});
+  assert.equal(service.channelState(f.user.id).find(item=>item.channel==='feishu').ready,true);
+  assert.equal(messengers.messengerRecipient(db,f.user.id,'feishu'),feishuId);
+  const alert={...rule(),price:'100'};mutate(f,{action:'upsert',revision:0,ruleId:alert.id,rule:alert});now+=1000;
+  assert.equal(service.triggerAlert(rows(f)[0],quote()),true);await worker.priceAlertTick();
+  assert.equal(service.alertSnapshot(f.user.id).events[0].deliveries.find(item=>item.channel==='feishu').state,'accepted');assert.equal(sends.feishu,2);
+  const mailed=fixture();mutate(mailed,{action:'feishu_start',revision:0,recipient:'price.alert@example.test'});await worker.priceAlertTick();
+  assert.equal(lastFeishuType,'email');assert.equal(JSON.stringify(service.channelState(mailed.user.id)).includes('price.alert@example.test'),false);
+  const beforePreflight=sends.feishu;await assert.rejects(()=>messengers.sendMessenger('feishu',feishuId,'Not sent',()=>false),error=>error instanceof messengers.MessengerRejected);assert.equal(sends.feishu,beforePreflight);
+  const person=fixture();mutate(person,{action:'discord_start',revision:0,recipient:discordId});await worker.priceAlertTick();
+  const discordRow=db.prepare('SELECT * FROM price_alert_messengers WHERE user_id=? AND channel=?').get(person.user.id,'discord');
+  mutate(person,{action:'discord_confirm',revision:1,challengeId:discordRow.challenge_id,verificationCode:codes.discord,enabled:true});
+  mode='discord-unknown';now+=1000;mutate(person,{action:'test',channel:'discord'});await worker.priceAlertTick();const discordSends=sends.discord;await worker.priceAlertTick();
+  assert.equal(sends.discord,discordSends);assert.equal(service.alertSnapshot(person.user.id).events[0].deliveries[0].state,'unknown');
+  assert.equal(JSON.stringify(service.channelState(person.user.id)).includes(discordId),false);
+  const qqUser=fixture();mutate(qqUser,{action:'qq_start',revision:0,recipient:qqId});await worker.priceAlertTick();
+  const qqRow=db.prepare('SELECT * FROM price_alert_messengers WHERE user_id=? AND channel=?').get(qqUser.user.id,'qq');
+  mutate(qqUser,{action:'qq_confirm',revision:1,challengeId:qqRow.challenge_id,verificationCode:codes.qq,enabled:true});
+  mode='qq-reject';now+=1000;mutate(qqUser,{action:'test',channel:'qq'});await worker.priceAlertTick();
+  assert.equal(service.alertSnapshot(qqUser.user.id).events[0].deliveries[0].state,'failed');
+  mode='ok';mutate(f,{action:'feishu_start',revision:2,recipient:feishuId});settings.updateSiteSettings({feishuAppSecret:'rotated-feishu-secret'});const beforeRotation=sends.feishu;await worker.priceAlertTick();
+  assert.equal(sends.feishu,beforeRotation);assert.equal(messengers.messengerRecipient(db,f.user.id,'feishu'),null);
+  assert.equal(db.prepare("SELECT verification_state FROM price_alert_messengers WHERE user_id=? AND channel='feishu'").get(f.user.id).verification_state,'cancelled');
+  settings.updateSiteSettings({feishuAppSecret:'fixture-feishu-secret'});
+  const limited=fixture(),limitedId='FixtureQQOpenId0000000000000002';for(let i=0;i<5;i++)mutate(limited,{action:'qq_start',revision:i,recipient:limitedId});
+  assert.throws(()=>mutate(limited,{action:'qq_start',revision:5,recipient:limitedId}),error=>error.status===429);
+  mutate(limited,{action:'qq_disconnect',revision:5});
+  global.fetch=async()=>{throw Error('All external transport disabled in isolated test');};
+ });
  await test('revocation and expiry stop monitoring; no inferred green state or background financial writes',async()=>{
   const f=fixture(),r=rule();mutate(f,{action:'upsert',ruleId:r.id,revision:0,rule:r});db.prepare('UPDATE app_grants SET revoked_at=? WHERE id=?').run(now,f.grant.id);now+=1000;
   assert.equal(service.triggerAlert(rows(f)[0],quote()),false);await worker.priceAlertTick();assert.equal(rows(f)[0].state,'paused');

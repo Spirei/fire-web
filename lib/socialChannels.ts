@@ -150,6 +150,18 @@ export function wechatReady() {
   const settings = getSiteSettings();
   return settings.wechatEnabled && Boolean(settings.wechatCorpId && settings.wechatAgentId && settings.wechatSecret);
 }
+export function feishuReady() {
+  const settings = getSiteSettings();
+  return settings.feishuEnabled && Boolean(settings.feishuAppId.trim() && settings.feishuAppSecret);
+}
+export function discordReady() {
+  const settings = getSiteSettings();
+  return settings.discordEnabled && settings.discordBotToken.length >= 20 && settings.discordBotToken.length <= 200 && !/[\s\x00-\x1f]/.test(settings.discordBotToken);
+}
+export function qqReady() {
+  const settings = getSiteSettings();
+  return settings.qqEnabled && /^\d{4,20}$/.test(settings.qqAppId.trim()) && Boolean(settings.qqAppSecret);
+}
 
 /** App-visible channel status. Secrets stay on the server. */
 export function socialChannelsSnapshot() {
@@ -159,9 +171,9 @@ export function socialChannelsSnapshot() {
     channels: [
       { id: "wechat", name: settings.wechatName || "企业微信", kind: "wecom", enabled: settings.wechatEnabled, configured: wechatReady(), smart_robot: settings.wechatSmartRobot, bindable: true, binding: "verification-code" },
       { id: "telegram", name: settings.telegramName || "电报", enabled: settings.telegramEnabled, configured: telegramReady(), bindable: true, bot_username: telegramBotUsername(), types: settings.telegramTypes.split(",").filter(Boolean), api_base: telegramApiBase() },
-      { id: "feishu", name: settings.feishuName || "飞书", enabled: settings.feishuEnabled, configured: settings.feishuEnabled && Boolean(settings.feishuAppId && settings.feishuAppSecret), types: settings.feishuTypes.split(",").filter(Boolean), bindable: false },
-      { id: "qq", name: settings.qqName || "QQ", enabled: settings.qqEnabled, configured: settings.qqEnabled && Boolean(settings.qqAppId && settings.qqAppSecret), types: settings.qqTypes.split(",").filter(Boolean), bindable: false },
-      { id: "discord", name: settings.discordName || "Discord", enabled: settings.discordEnabled, configured: settings.discordEnabled && settings.discordBotToken.length >= 20, types: settings.discordTypes.split(",").filter(Boolean), bindable: false },
+      { id: "feishu", name: settings.feishuName || "飞书", enabled: settings.feishuEnabled, configured: feishuReady(), types: settings.feishuTypes.split(",").filter(Boolean), bindable: true, binding: "verification-code" },
+      { id: "qq", name: settings.qqName || "QQ", enabled: settings.qqEnabled, configured: qqReady(), types: settings.qqTypes.split(",").filter(Boolean), bindable: true, binding: "verification-code" },
+      { id: "discord", name: settings.discordName || "Discord", enabled: settings.discordEnabled, configured: discordReady(), types: settings.discordTypes.split(",").filter(Boolean), bindable: true, binding: "verification-code" },
       { id: "webpush", name: settings.webPushName || "WebPush", enabled: settings.webPushEnabled, configured: settings.webPushEnabled && Boolean(settings.webPushUsername), types: settings.webPushTypes.split(",").filter(Boolean), bindable: false },
       { id: "email", name: "邮件", enabled: mailConfigured(), configured: mailConfigured(), bindable: false }
     ]

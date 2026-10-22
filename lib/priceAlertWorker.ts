@@ -1,4 +1,5 @@
 import { deliverWecomChallenges,sendWecomText,wecomRecipient,WecomRejected } from './priceAlertWecom';
+import { deliverMessengerChallenges,sendMessenger,messengerRecipient,MessengerRejected,isMessengerChannel } from './priceAlertMessengers';
 import { randomUUID } from 'node:crypto';
 import { alertDb, alertsAvailable, triggerAlert, touchAlertOwner, grantAlive, telegramConfigured, telegramRecipient, receiveTelegram, channelState, type AlertRow } from './priceAlerts';
 import { telegramApiBase, telegramBotToken } from './socialChannels';
@@ -62,10 +63,20 @@ async function dispatch(delivery:Delivery) {
         const rule=db.prepare('SELECT * FROM price_alert_rules WHERE user_id=? AND id=?').get(delivery.user_id,event.ruleId) as AlertRow|undefined;
         return current.enabled&&!!rule&&rule.revision===delivery.rule_revision&&['enabled','completed'].includes(rule.state);
       });
+    } else if(isMessengerChannel(delivery.channel)) {
+      const channel=delivery.channel,recipient=messengerRecipient(db,delivery.user_id,channel);if(!recipient)throw new MessengerRejected('个人通知绑定已失效');
+      await sendMessenger(channel,recipient,eventText(event),()=>{
+        if(!grantAlive(delivery.user_id,String(event.grantId))||messengerRecipient(db,delivery.user_id,channel)!==recipient)return false;
+        const current=channelState(delivery.user_id).find(c=>c.channel===channel);
+        if(!current?.ready)return false;
+        if(event.kind==='test')return true;
+        const rule=db.prepare('SELECT * FROM price_alert_rules WHERE user_id=? AND id=?').get(delivery.user_id,event.ruleId) as AlertRow|undefined;
+        return current.enabled&&!!rule&&rule.revision===delivery.rule_revision&&['enabled','completed'].includes(rule.state);
+      });
     } else throw new Error('不支持的通知方式');
     db.prepare("UPDATE price_alert_deliveries SET state='accepted',updated_at=? WHERE id=? AND state='sending'").run(Date.now(),delivery.id);touchAlertOwner(delivery.user_id);
   } catch(error) {
-    db.prepare("UPDATE price_alert_deliveries SET state=?,updated_at=? WHERE id=? AND state='sending'").run(error instanceof MailBudgetError || error instanceof WecomRejected ? 'failed' : 'unknown',Date.now(),delivery.id);touchAlertOwner(delivery.user_id);
+    db.prepare("UPDATE price_alert_deliveries SET state=?,updated_at=? WHERE id=? AND state='sending'").run(error instanceof MailBudgetError || error instanceof WecomRejected || error instanceof MessengerRejected ? 'failed' : 'unknown',Date.now(),delivery.id);touchAlertOwner(delivery.user_id);
   }
 }
 export async function priceAlertTick() {
@@ -78,6 +89,7 @@ export async function priceAlertTick() {
   if(!acquired)return;working=true;
   try {
     await deliverWecomChallenges(db,(user,grant)=>grantAlive(user,grant),touchAlertOwner);
+    await deliverMessengerChallenges(db,(user,grant)=>grantAlive(user,grant),touchAlertOwner);
     try { await pollTelegram(); } catch { /* Binding remains pending; no credential details enter logs. */ }
     const rows=db.prepare("SELECT * FROM price_alert_rules WHERE state='enabled' ORDER BY last_scan_at,id LIMIT 100").all() as AlertRow[];
     const current:AlertRow[]=[];

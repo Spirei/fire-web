@@ -5,6 +5,7 @@ import { appSecurityStamp } from './appAuth';
 import { emailVerified } from './emailVerification';
 import { mailConfigured } from './mail';
 import { wecomState,startWecom,confirmWecom,disconnectWecom } from './priceAlertWecom';
+import { messengerState,startMessenger,confirmMessenger,disconnectMessenger,isMessengerChannel,type MessengerChannel } from './priceAlertMessengers';
 import { telegramReady, telegramBotUsername } from './socialChannels';
 import { encryptSecret, decryptSecret } from './secretStorage';
 import { RecordsError } from './recordsContract';
@@ -12,12 +13,13 @@ import { tradingQuoteTime } from './appTrading';
 import { marketSessionState } from './marketSessions';
 import { normalizeMarketCode } from './marketCode';
 import type { Quote } from './quotes';
-export type AlertChannel = 'app' | 'email' | 'telegram' | 'wechat';
+export type AlertChannel = 'app' | 'email' | 'telegram' | 'wechat' | 'feishu' | 'discord' | 'qq';
 export type AlertConfig = { id: string; name: string; code: string; market: 'US'|'HK'|'CN'; direction: 'above'|'below'; price: string; extended: boolean; frequency: 'once'|'daily'; expiresAt: number|null };
 export type AlertRow = { user_id: string; id: string; grant_id: string; revision: number; config: string; state: string; activated_at: number; last_quote_at: number };
 type GrantIdentity = { id: string; user_id: string };
 type Telegram = { user_id:string; chat_secret:string; label:string; confirmed:number; challenge_hash:string|null; challenge_expires:number };
-export const channels: AlertChannel[] = ['app','email','telegram','wechat'];
+export const channels: AlertChannel[] = ['app','email','telegram','wechat','feishu','discord','qq'];
+const preferenceColumn: Record<AlertChannel,string> = {app:'app',email:'email',telegram:'telegram',wechat:'wechat',feishu:'feishu',discord:'discord',qq:'qq'};
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const bad = (message: string, status = 400): never => { throw new RecordsError(message, status); };
 export function alertDb() { const db=getDb(); installPriceAlerts(db); return db; }
@@ -27,7 +29,7 @@ export function alertsAvailable() { return process.env.ALCOR_PRICE_ALERTS_ENABLE
 export function priceAlertsDiscovery(version:1|2) {
   const base=`/api/v${version}/price-alerts`;
   return { version:1, snapshot_path:base, operation_path:`${base}/operations/{requestId}`, read_scope:'portfolio.read', write_scope:'portfolio.write',
-    channels:['app','email','telegram'], wechat:{version:1,binding:'verification-code'}, worker:'server', interval_seconds:5, idempotency:'query-original-no-replay', monitoring_available:alertsAvailable() };
+    channels:['app','email','telegram'], wechat:{version:1,binding:'verification-code'}, messengers:{version:1,binding:'verification-code',channels:['feishu','discord','qq']}, worker:'server', interval_seconds:5, idempotency:'query-original-no-replay', monitoring_available:alertsAvailable() };
 }
 export function decimalMicros(value:unknown): bigint|null {
   if(typeof value!=='string' || !/^\d{1,10}(?:\.\d{1,6})?$/.test(value))return null;
@@ -46,7 +48,7 @@ export function parseAlert(value:unknown):AlertConfig {
 }
 function preferences(userId:string) {
   const db=alertDb();db.prepare('INSERT OR IGNORE INTO price_alert_preferences(user_id) VALUES(?)').run(userId);
-  return db.prepare('SELECT * FROM price_alert_preferences WHERE user_id=?').get(userId) as {revision:number;app:number;email:number;telegram:number;wechat:number};
+  return db.prepare('SELECT * FROM price_alert_preferences WHERE user_id=?').get(userId) as {revision:number;app:number;email:number;telegram:number;wechat:number;feishu:number;discord:number;qq:number};
 }
 export function channelState(userId:string) {
   const db=alertDb(),pref=preferences(userId);
@@ -57,7 +59,10 @@ export function channelState(userId:string) {
     {channel:'app',enabled:!!pref.app,ready:true,configured:true,destination:'App 内',pendingConfirmation:false},
     {channel:'email',enabled:!!pref.email,ready:emailReady,configured:mailConfigured(),destination:user?.email ? user.email.slice(0,2)+'***@'+user.email.split('@')[1] : '',pendingConfirmation:false},
     {channel:'telegram',enabled:!!pref.telegram,ready:telegramConfigured()&&!!tg?.confirmed,configured:telegramConfigured(),destination:tg?.chat_secret?tg.label:'',pendingConfirmation:!!tg?.chat_secret&&!tg.confirmed},
-    {...wecomState(db,userId),enabled:!!pref.wechat}
+    {...wecomState(db,userId),enabled:!!pref.wechat},
+    {...messengerState(db,userId,'feishu'),enabled:!!pref.feishu},
+    {...messengerState(db,userId,'discord'),enabled:!!pref.discord},
+    {...messengerState(db,userId,'qq'),enabled:!!pref.qq}
   ];
 }
 export function grantAlive(userId:string,grantId:string,now=Date.now()) {
@@ -103,7 +108,7 @@ export function mutateAlert(grant:GrantIdentity,requestId:string,body:unknown,au
       if(!channels.includes(b.channel as AlertChannel)||typeof b.enabled!=='boolean')bad('通知方式无效');
       const pref=preferences(userId);if(pref.revision!==b.revision)bad('通知设置已变化，请刷新后重试',409);
       if(b.enabled&&!channelState(userId).find(c=>c.channel===b.channel)?.ready)bad('请先完成此通知方式的绑定',409);
-      db.prepare(`UPDATE price_alert_preferences SET ${String(b.channel)}=?,revision=revision+1 WHERE user_id=?`).run(b.enabled?1:0,userId);
+      db.prepare(`UPDATE price_alert_preferences SET ${preferenceColumn[b.channel as AlertChannel]}=?,revision=revision+1 WHERE user_id=?`).run(b.enabled?1:0,userId);
      } else if(action==='test') {
       if(!channels.includes(b.channel as AlertChannel)||!channelState(userId).find(c=>c.channel===b.channel)?.ready)bad('此通知方式尚未完成配置',409);
       const id=randomUUID(),now=Date.now(),data={id,ruleId:'',kind:'test',grantId:grant.id,name:'Alcor',code:'',market:'',currency:'',direction:'above',target:'0',price:0,session:'',quoteTime:'',createdAt:now};
@@ -124,6 +129,17 @@ export function mutateAlert(grant:GrantIdentity,requestId:string,body:unknown,au
         if(!confirmWecom(db,userId,b.challengeId,b.verificationCode,grantAlive)){touchAlertOwner(userId);return {bindingError:true as const};}
         if(b.enabled!==undefined&&typeof b.enabled!=='boolean')bad('启用状态无效');
         db.prepare('UPDATE price_alert_preferences SET wechat=? WHERE user_id=?').run(b.enabled===true?1:0,userId);
+      }
+      db.prepare('UPDATE price_alert_preferences SET revision=revision+1 WHERE user_id=?').run(userId);
+    } else if(isMessengerChannel(String(action).split('_')[0])&&/^(feishu|discord|qq)_(start|confirm|disconnect)$/.test(String(action))) {
+      const channel=String(action).split('_')[0] as MessengerChannel,op=String(action).split('_')[1];
+      const pref=preferences(userId);if(pref.revision!==b.revision)bad('通知设置已变化，请刷新后重试',409);
+      if(op==='start')startMessenger(db,userId,grant.id,channel,b.recipient);
+      else if(op==='disconnect'){disconnectMessenger(db,userId,channel);db.prepare(`UPDATE price_alert_preferences SET ${preferenceColumn[channel]}=0 WHERE user_id=?`).run(userId);}
+      else {
+        if(!confirmMessenger(db,userId,channel,b.challengeId,b.verificationCode,grantAlive)){touchAlertOwner(userId);return {bindingError:true as const};}
+        if(b.enabled!==undefined&&typeof b.enabled!=='boolean')bad('启用状态无效');
+        db.prepare(`UPDATE price_alert_preferences SET ${preferenceColumn[channel]}=? WHERE user_id=?`).run(b.enabled===true?1:0,userId);
       }
       db.prepare('UPDATE price_alert_preferences SET revision=revision+1 WHERE user_id=?').run(userId);
     } else if(action==='telegram_confirm') {

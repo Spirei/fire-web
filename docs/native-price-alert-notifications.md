@@ -1,6 +1,6 @@
 # 股价提醒通知接入 · 2026-10-21
 
-原生 0.2.377，服务端 v0.1.64。用户确认补齐企业微信个人绑定及股价提醒；保留 App 内、邮件及 Telegram。
+原生 0.2.378，服务端 v0.1.65。用户确认在 Telegram、企业微信之外，接入飞书、Discord 与 QQ 的个人绑定及股价提醒。基础发现仍是 app、email、telegram，version 保持 1；`wechat-v1` 仍只增加企业微信。
 
 ## 发布及配置
 
@@ -52,3 +52,19 @@ Web 保存并开启企业 ID、AgentId、应用 Secret。App 只读取 social-ch
 正式触发仅向本人已验证的单个成员发企业应用文本消息；不使用群机器人 Webhook、管理员列表或全员广播。接收账号加密保存，企业应用改变后重新绑定。provider 明确拒绝为 failed，带 msgid 的成功为 accepted；HTTP异常、超时或崩溃遗留为 unknown，不自动重发。服务器 access_token 仅内存缓存、按应用/密钥/代理隔离，响应限定64KiB且不跟随重定向。
 
 本轮验证仅使用临时数据库和拦截传输；实际企业微信收件、线上部署及手机安装需另行完成，不将模拟传输回执冒充真实收件。
+
+## 飞书、Discord 与 QQ 个人绑定（0.2.378 / v0.1.65）
+
+Web 已保存的飞书应用、Discord 机器人令牌和 QQ 机器人凭据仍只留在服务端。App 从 social-channels 读取脱敏状态：这三项 `bindable: true`、`binding: "verification-code"`。配置完成不等于本人已绑定，也不使用管理端的群、频道或默认 openid。
+
+`auth/config.price_alerts.messengers = {version:1,binding:"verification-code",channels:["feishu","discord","qq"]}`。支持的客户端在发现该对象后，对 price-alerts 快照及操作发送 `X-Alcor-Price-Alerts: messengers-v1`，返回 app、email、telegram、wechat、feishu、discord、qq。未发现时继续发送 `wechat-v1`，避免旧服务端藏起企业微信。无请求头的旧客户端仍是三渠道。
+
+沿已有 POST operations/{UUID}，均核对 channelRevision：
+
+- `feishu_start`：单个 `ou_` 开头的 open_id，或单个邮箱。`discord_start`：17–20 位用户 ID。`qq_start`：16–64 位 openid。拒绝列表、`@all` 和 `@everyone`。只排队发送 6 位验证码，不启用通知。每本人及每目标每小时最多 5 次。
+- `*_confirm` 需要 `challengeId`、`verificationCode` 和显式 `enabled:true`。验证码 5 分钟，最多 6 次错误；错误次数随事务提交。`*_disconnect` 删除本人该渠道的加密收件人并关闭开关。
+- 应用密钥或机器人令牌变化后，待确认绑定取消，已保存收件人不再可用。正式触发和手动测试都再次核对授权、收件人、渠道就绪和规则版本。
+
+飞书走开放平台 tenant token 与 im/v1/messages，Discord 先建立私信再发消息，QQ 走官方机器人主动单聊。固定官方主机，不跟随重定向，响应上限 64KiB，令牌只在内存缓存。明确拒绝为 failed；消息已经发出但超时或没有回执为 unknown，不自动重发。验证码尚未发出时的认证失败可以重新获取。
+
+本机直连不保存这三项密钥，开关不可用，入口改为授权 API。真实收件、镜像发布和群晖更新未做。

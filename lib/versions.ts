@@ -4958,16 +4958,23 @@ const V0_1_63_ENTRY: VersionEntry = {
   software: V0_1_62_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.63"} : item),
   changes: [{kind:"feature",title:"股价提醒与通知",desc:"新增本人股价规则、真实新鲜报价及交易时段监控、App内收件箱、已验证邮箱及Telegram私聊绑定。CAS和唯一UUID回执保护修改，发送超时不自动重发；微信暂缓，不改订单和资金。"},{kind:"feature",title:"股价提醒邮件模板",desc:"模板管理新增股价提醒，支持股票、触发价与目标价、报价时段及时间变量；实际发送读取本人验证邮箱和已保存模板，沿用统一品牌版式，精简为触发价、提醒价和一行时段时间，保留原验证邮件配置。"},{kind:"fix",title:"Muse 邮件模板按钮改为白字",desc:"Muse 深色把主按钮文字设成黑色，邮件模板选择按钮的名称和箭头不统一。该按钮的文字与箭头改为白色。"},{kind:"fix",title:"登录密码眼睛点击后保持居中",desc:"登录和注册的密码眼睛不再套用圆形胶囊。悬停和按下不会改掉垂直居中。"},{kind:"feature",title:"通知与配置",desc:"设置新增通知与配置，可填写微信、Telegram、飞书的启用状态和机器人凭据，邮件服务与邮件模板移入该分类。App 通过 v1/v2 social-channels 读取渠道是否可用，不返回 Webhook 或令牌。"},{kind:"fix",title:"邮件预览跟随深浅色",desc:"站点开启深色时，邮件预览使用中性深灰和白字，不再套绿色。编辑区立即出现，横幅图片单独加载。"},{kind:"fix",title:"通知配置保存按钮改为胶囊",desc:"微信、Telegram、飞书的保存按钮与邮件服务一致，靠右的圆角胶囊，不再是方块按钮。"},{kind:"fix",title:"邮件模板记住选择且预览不跳动",desc:"当前邮件模板写入本机偏好，刷新后仍停留在上次选择。编辑左侧文案时只替换预览里变化的文字，横幅和版面不再整页重绘。"},{kind:"fix",title:"邮件落款可以留空",desc:"落款清空后预览和发出的邮件不再保留站点名。其他必填项仍需填写。"},{kind:"feature",title:"补齐飞书、QQ、Discord 和 WebPush",desc:"通知与配置新增飞书开放平台、QQ 机器人、Discord 和 WebPush。各渠道含启用、通知类型和对应凭据，密钥不下发。App 的 social-channels 会返回这些渠道是否已配置。"},{kind:"fix",title:"通知配置表收进同一张卡片",desc:"企业微信、Telegram、飞书、QQ、Discord 和 WebPush 的启用开关、类型和字段收进同一张圆角卡片。类型改为框内胶囊，单独一行的字段拉满宽度。"},{kind:"fix",title:"通知配置不再把数据库打进页面",desc:"通知渠道类型改由浏览器可加载的模块提供，设置页不再引用 better-sqlite3，刷新后不再出现找不到 fs 的编译错误。"},{kind:"fix",title:"通知配置去掉内层框并加大文字",desc:"企业微信等通知表不再套一层边框。栏目标题 15 像素，输入文字 16 像素，说明 13 像素，输入框高度 56 像素。"},{kind:"fix",title:"未配置 Telegram 时不再拦住其他设置保存",desc:"Telegram 只有在已保存开启，或环境里已有机器人令牌时才视为启用。保存其他设置不再因为空令牌返回失败。环境变量在进程启动后写入仍然生效。测试用户名改为占位符，公开仓库审计可以通过。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_64_ENTRY: VersionEntry = {
   ...V0_1_63_ENTRY, version: "v0.1.64", date: "2026-10-22",
   summary: "App 通知配置与企业微信个人股价提醒。",
   software: V0_1_63_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.64"} : item),
   changes: [{kind:"feature",title:"企业微信个人绑定与提醒",desc:"沿用 Web 企业应用配置，向单个成员发送限时验证码，本人确认后启用股价提醒。密钥与成员账号加密保留服务端，错误尝试及发送限流持久化，未知投递不重试；旧三渠道 App 协议兼容。"},{kind:"fix",title:"Telegram 绑定沿用 Web 机器人",desc:"修复绑定链接仍读取环境变量用户名的问题，统一 Web 已保存的机器人配置，支持 App 显式确认绑定并启用。"}]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_64_ENTRY, version: "v0.1.65", date: "2026-10-23",
+  summary: "飞书、Discord 与 QQ 个人股价提醒。",
+  software: V0_1_64_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.65"} : item),
+  changes: [{kind:"feature",title:"飞书、Discord 与 QQ 个人提醒",desc:"股价提醒可分别向本人已验证的飞书 open_id 或邮箱、Discord 用户和 QQ openid 发送验证码，确认后启用到价通知。密钥留在服务端，旧版 App 仍只看到原来的渠道。"},{kind:"security",title:"个人消息通道限制",desc:"飞书、Discord 和 QQ 只接受单个收件人，验证码 5 分钟且最多 6 次错误，发送限流持久保存。超时或结果不明时不自动重发。"}]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_64_ENTRY,
   V0_1_63_ENTRY,
   V0_1_62_ENTRY,
   V0_1_61_ENTRY,
