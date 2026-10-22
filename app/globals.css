@@ -3966,9 +3966,7 @@ html.dark .watch-import-target {
 .dark .style-remove-mark:focus-visible { color: #ff7277; background: rgba(255,89,95,.12); }
 .dark .style-menu button.style-add-option { color: #707a88; }
 .dark .style-menu button.style-add-option:hover { color: #aeb7c3; background: rgba(255,255,255,.05); }
-.stock-chart-toast { position: fixed; left: 50%; top: max(24px, calc(env(safe-area-inset-top) + 14px)); z-index: 10000; display: flex; align-items: center; gap: 7px; transform: translateX(-50%); border: 1px solid rgba(201,206,216,.8); border-radius: 999px; padding: 9px 15px; color: #303741; background: rgba(255,255,255,.96); box-shadow: 0 12px 32px rgba(18,25,38,.16); font-size: 12px; font-weight: 700; backdrop-filter: blur(16px); animation: stock-toast-in 180ms ease-out both; }
-.stock-chart-toast span { display: grid; width: 17px; height: 17px; place-items: center; border-radius: 50%; color: #fff; background: #13a778; font-size: 10px; }
-.dark .stock-chart-toast { border-color: rgba(255,255,255,.12); color: #edf1f6; background: rgba(28,33,42,.96); box-shadow: 0 14px 36px rgba(0,0,0,.38); }
+
 @keyframes stock-toast-in { from { opacity: 0; transform: translate(-50%,-8px) scale(.97); } to { opacity: 1; transform: translate(-50%,0) scale(1); } }
 .dark .stock-chart-menu { border-color: rgba(255,255,255,.12); background: rgba(28,33,42,.96); box-shadow: 0 18px 42px rgba(0,0,0,.35); }
 .dark .stock-chart-menu button { color: #a3adba; }
@@ -7293,18 +7291,18 @@ button.PhotoView-Slider__toolbarIcon {
 .dark .settings-managed-entry:hover, .dark .settings-managed-back:hover { background: var(--sc-dialog-hover, #2b3038); }
 @keyframes settings-managed-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .settings-managed-content:not([hidden]) { animation: none; } }
-.fire-toast { display:flex; align-items:center; gap:9px; max-width:min(560px,100%); padding:12px 18px; border:1px solid #dee1e6; border-radius:16px; background:#fff; color:#1c1e21; box-shadow:0 8px 28px rgba(0,0,0,.14); font-size:14px; line-height:20px; font-weight:500; overflow-wrap:anywhere; animation:fire-toast-enter 220ms cubic-bezier(.2,.8,.2,1) both; }
-.fire-toast-icon { width:22px; height:22px; flex:none; transform-origin:center; animation:fire-toast-icon-enter 240ms cubic-bezier(.16,1,.3,1) both; }
-.fire-toast.is-ok .fire-toast-icon { color:#168a45; }
-.fire-toast.is-err .fire-toast-icon { color:#d92d20; }
+.fire-toast { display:flex; align-items:center; gap:10px; max-width:min(560px,100%); padding:14px 18px; border:1px solid #e6e8ec; border-radius:20px; background:#fff; color:#1c1e21; box-shadow:0 10px 28px rgba(18,25,38,.16); font-size:16px; line-height:22px; font-weight:650; overflow-wrap:anywhere; animation:fire-toast-enter 220ms cubic-bezier(.2,.8,.2,1) both; }
+.fire-toast-icon { width:24px; height:24px; flex:none; transform-origin:center; animation:fire-toast-icon-enter 240ms cubic-bezier(.16,1,.3,1) both; }
+.fire-toast.is-ok .fire-toast-icon { color:#22c55e; }
+.fire-toast.is-err .fire-toast-icon { color:#ef4444; }
 .fire-toast.is-cancel .fire-toast-icon { color:#667781; }
 .fire-toast-symbol { animation:fire-toast-symbol-enter 160ms ease-out 60ms both; }
 .fire-toast-mark { stroke-dasharray:1; stroke-dashoffset:1; animation:fire-toast-check 220ms cubic-bezier(.16,1,.3,1) 90ms forwards; }
 .fire-toast.is-leaving { animation:fire-toast-exit 180ms ease-in both; }
-.dark .fire-toast { border-color:#41464e; background:#24282f; color:#f1f3f5; box-shadow:0 8px 28px rgba(0,0,0,.3); }
-.dark .fire-toast.is-ok .fire-toast-icon { color:#238b50; }
-.dark .fire-toast.is-err .fire-toast-icon { color:#d94343; }
-.dark .fire-toast.is-cancel .fire-toast-icon { color:#6b7885; }
+.dark .fire-toast { border-color:#e6e8ec; background:#fff; color:#1c1e21; box-shadow:0 10px 28px rgba(0,0,0,.28); }
+.dark .fire-toast.is-ok .fire-toast-icon { color:#22c55e; }
+.dark .fire-toast.is-err .fire-toast-icon { color:#ef4444; }
+.dark .fire-toast.is-cancel .fire-toast-icon { color:#667781; }
 @keyframes fire-toast-enter { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
 @keyframes fire-toast-exit { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(-4px); } }
 @keyframes fire-toast-check { to { stroke-dashoffset:0; } }

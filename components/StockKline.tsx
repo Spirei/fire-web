@@ -3,6 +3,7 @@
 import VisibilityIcon from "@/components/VisibilityIcon";
 
 import { usePersistedState } from "@/lib/usePersistedState";
+import { showToast } from "@/lib/toast";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
@@ -406,7 +407,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const [styleOpen, setStyleOpen] = useState(false);
   const [basicStyleOrder, setBasicStyleOrder] = useState<ChartStyle[]>(BASIC_STYLES);
   const [draggedStyle, setDraggedStyle] = useState<ChartStyle | null>(null);
-  const [styleNotice, setStyleNotice] = useState("");
+
   const [styleMenuPosition, setStyleMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInst = useRef<EChartsInstance | null>(null);
@@ -462,12 +463,6 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     // 样式由上方设置持久化负责，这里只恢复菜单顺序，避免把用户上次选的样式覆盖回第一个基础样式
     setStyle(readKlineSettings()?.style ?? initialSettings?.style ?? readBasicStyleOrder()[0] ?? "area");
   }, []);
-
-  useEffect(() => {
-    if (!styleNotice) return;
-    const timer = window.setTimeout(() => setStyleNotice(""), 1800);
-    return () => window.clearTimeout(timer);
-  }, [styleNotice]);
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -552,7 +547,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       next.splice(next.indexOf(target), 0, draggedStyle);
       localStorage.setItem(STYLE_ORDER_KEY, JSON.stringify(next));
       setStyle(next[0] || "area");
-      setStyleNotice("拖动成功，排序已自动保存");
+      showToast("拖动成功，排序已自动保存");
       return next;
     });
     setDraggedStyle(null);
@@ -569,14 +564,14 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   const removeStyleFromFavorites = (item: ChartStyle) => {
     setBasicStyleOrder((current) => {
       if (current.length <= 1) {
-        setStyleNotice("至少保留一种常用图形");
+        showToast("至少保留一种常用图形", "err");
         return current;
       }
       const index = current.indexOf(item);
       const next = current.filter((value) => value !== item);
       localStorage.setItem(STYLE_ORDER_KEY, JSON.stringify(next));
       if (style === item) setStyle(next[Math.min(index, next.length - 1)] || "area");
-      setStyleNotice("已移出常用区并自动保存");
+      showToast("已移出常用区并自动保存");
       return next;
     });
   };
@@ -589,7 +584,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       return next;
     });
     setStyle(item);
-    setStyleNotice("已加入常用区并自动保存");
+    showToast("已加入常用区并自动保存");
   };
 
   useLayoutEffect(() => {
@@ -1521,6 +1516,6 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       </div>
     </div>
     {maSettingsOpen && <div className="ma-settings-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMaSettingsOpen(false); }}><section className="ma-settings-dialog" role="dialog" aria-modal="true" aria-label="MA 设置"><header><button type="button" aria-label="关闭" onClick={() => setMaSettingsOpen(false)}>×</button><div><b>MA</b><span title="移动平均线周期设置">ⓘ</span></div><button type="button" className="ma-settings-done" onClick={() => setMaSettingsOpen(false)}>完成</button></header><h3>移动平均周期</h3><div className="ma-settings-list">{maConfigs.map((item, index) => <div className="ma-settings-row" key={index}><label><input type="checkbox" checked={item.enabled} onChange={(event) => updateMA(index, { enabled: event.target.checked })} /><span>MA{index + 1}</span></label><label className="ma-color-input" style={{ backgroundColor: item.color }}><input type="text" value={item.color} aria-label={`MA${index + 1} 颜色`} onChange={(event) => updateMA(index, { color: event.target.value })} /></label><div className="ma-period-stepper"><button type="button" onClick={() => updateMA(index, { period: Math.max(1, item.period - 1) })}>−</button><RainbowNumberInput allowDecimal={false} grouping={false} min={1} max={1000} value={item.period} onChange={(event) => updateMA(index, { period: Math.max(1, Math.min(1000, Number(event.target.value) || 1)) })} /><button type="button" onClick={() => updateMA(index, { period: Math.min(1000, item.period + 1) })}>＋</button></div></div>)}</div></section></div>}
-    {styleNotice && <div className="stock-chart-toast" role="status"><span>✓</span>{styleNotice}</div>}
+
   </div>;
 }
