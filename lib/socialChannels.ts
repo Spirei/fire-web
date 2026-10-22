@@ -157,7 +157,7 @@ export function socialChannelsSnapshot() {
   return {
     version: 2,
     channels: [
-      { id: "wechat", name: settings.wechatName || "企业微信", kind: "wecom", enabled: settings.wechatEnabled, configured: wechatReady(), smart_robot: settings.wechatSmartRobot, bindable: false },
+      { id: "wechat", name: settings.wechatName || "企业微信", kind: "wecom", enabled: settings.wechatEnabled, configured: wechatReady(), smart_robot: settings.wechatSmartRobot, bindable: true, binding: "verification-code" },
       { id: "telegram", name: settings.telegramName || "电报", enabled: settings.telegramEnabled, configured: telegramReady(), bindable: true, bot_username: telegramBotUsername(), types: settings.telegramTypes.split(",").filter(Boolean), api_base: telegramApiBase() },
       { id: "feishu", name: settings.feishuName || "飞书", enabled: settings.feishuEnabled, configured: settings.feishuEnabled && Boolean(settings.feishuAppId && settings.feishuAppSecret), types: settings.feishuTypes.split(",").filter(Boolean), bindable: false },
       { id: "qq", name: settings.qqName || "QQ", enabled: settings.qqEnabled, configured: settings.qqEnabled && Boolean(settings.qqAppId && settings.qqAppSecret), types: settings.qqTypes.split(",").filter(Boolean), bindable: false },

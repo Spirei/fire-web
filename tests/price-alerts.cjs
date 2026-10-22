@@ -98,6 +98,107 @@ async function test(name,run){db.prepare('DELETE FROM rate_limit').run();await r
   await worker.priceAlertTick();assert.equal(service.alertSnapshot(f.user.id).rules[0].status,'completed');assert.equal(service.alertSnapshot(f.user.id).events[0].session,'REGULAR');
   quotes.fetchOverviewQuotes=previous;
  });
+ await test('Web-configured Telegram link and opt-in WeCom snapshot preserve legacy clients',async()=>{
+  const settings=load('lib/settings.ts');
+  settings.updateSiteSettings({telegramEnabled:true,telegramBotToken:'123456:'+('z'.repeat(30)),telegramBotUsername:'WebConfiguredBot',wechatEnabled:true,wechatCorpId:'wwFixture',wechatAgentId:'1000002',wechatSecret:'fixture-server-only-secret'});
+  const f=fixture();assert.equal(new URL(service.beginTelegram(f.user.id).url).pathname,'/WebConfiguredBot');
+  const get=expanded=>new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/price-alerts',{headers:{authorization:'Bearer '+f.tokens.access_token,...(expanded?{'X-Alcor-Price-Alerts':'wechat-v1'}:{})}});
+  assert.equal((await (await api.priceAlertsResponse(get(false),'snapshot')).json()).data.channels.length,3);
+  const expanded=(await (await api.priceAlertsResponse(get(true),'snapshot')).json()).data;
+  assert.equal(expanded.channels.length,4);assert.equal(expanded.channels.find(c=>c.channel==='wechat').configured,true);
+  assert.equal(expanded.channels.find(c=>c.channel==='wechat').ready,false);
+  assert.equal(JSON.stringify(expanded).includes('fixture-server-only-secret'),false);
+  const id=crypto.randomUUID();mutate(f,{action:'read',allThrough:now},id);
+  assert.equal((await (await api.priceAlertsResponse(get(false),'operation',id)).json()).data.snapshot.channels.length,3);
+  const request=(token,expanded,body)=>new Request(process.env.FIRE_APP_ORIGIN+'/api/v2/price-alerts/operations/'+id,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',...(expanded?{'X-Alcor-Price-Alerts':'wechat-v1'}:{})},body:JSON.stringify(body)});
+  const body={action:'wechat_start',revision:0,recipient:'wire_member'},operation=crypto.randomUUID();
+  assert.equal((await api.priceAlertsResponse(request(f.tokens.access_token,false,body),'operation',operation)).status,400);
+  const write=(await (await api.priceAlertsResponse(request(f.tokens.access_token,true,body),'operation',operation)).json()).data;
+  assert.equal(write.snapshot.channels.length,4);assert.equal(write.snapshot.channels.find(c=>c.channel==='wechat').pendingConfirmation,true);
+  assert.equal(JSON.stringify(write).includes('code_secret'),false);assert.equal(JSON.stringify(write).includes('wire_member'),false);
+  assert.equal((await api.priceAlertsResponse(request(f.tokens.access_token,true,body),'operation',operation)).status,409);
+  const read=fixture('portfolio.read');assert.equal((await api.priceAlertsResponse(request(read.tokens.access_token,true,body),'operation',crypto.randomUUID())).status,403);
+  mutate(f,{action:'wechat_disconnect',revision:1});
+
+ });
+ await test('WeCom verifies one encrypted recipient, persists wrong-code attempts, enables and delivers true alert',async()=>{
+  const f=fixture(),other=fixture(),wecom=load('lib/priceAlertWecom.ts');
+  for(const recipient of ['@all','@ALL','one|two','one,two',''])assert.throws(()=>mutate(f,{action:'wechat_start',revision:0,recipient}));
+  const id=crypto.randomUUID();mutate(f,{action:'wechat_start',revision:0,recipient:'fixture_member'},id);
+  assert.throws(()=>mutate(f,{action:'wechat_start',revision:0,recipient:'fixture_member'},id),e=>e.status===409);
+  const binding=()=>db.prepare('SELECT * FROM price_alert_wecom WHERE user_id=?').get(f.user.id);
+  assert.ok(binding().pending_recipient_secret.startsWith('enc:v1:'));assert.ok(binding().code_secret.startsWith('enc:v1:'));
+  assert.equal(wecom.wecomState(db,f.user.id).ready,false);
+  let code='',calls=0,tokenCalls=0;const messages=[];
+  global.fetch=async(url,options)=>{
+   const u=new URL(url);
+   if(u.host==='api.telegram.org'&&u.pathname.endsWith('/getUpdates'))return Response.json({ok:true,result:[]});
+   if(u.host!=='qyapi.weixin.qq.com')throw Error('Unrelated transport blocked');
+   if(u.pathname==='/cgi-bin/gettoken'){tokenCalls++;return Response.json({errcode:0,access_token:'fixture-token',expires_in:7200});}
+   assert.equal(options.redirect,'error');const body=JSON.parse(options.body);assert.equal(body.touser,'fixture_member');assert.equal(body.toparty,undefined);assert.equal(body.totag,undefined);assert.equal(body.agentid,1000002);messages.push(body.text.content);calls++;
+   if(body.text.content.includes('绑定验证码'))code=body.text.content.match(/\d{6}/)[0];
+   return Response.json({errcode:0,msgid:'fixture-msg-'+calls});
+  };
+  await worker.priceAlertTick();assert.match(code,/^\d{6}$/);assert.equal(calls,1);assert.equal(binding().code_secret,'');
+  const challengeId=binding().challenge_id;
+  assert.throws(()=>mutate(other,{action:'wechat_confirm',revision:0,challengeId,verificationCode:code,enabled:true}),e=>e.status===409);
+  assert.throws(()=>mutate(f,{action:'wechat_confirm',revision:1,challengeId,verificationCode:'000000',enabled:true}),e=>e.status===400);
+  assert.equal(binding().attempts,1);assert.equal(binding().confirmed,0);
+  assert.throws(()=>mutate(f,{action:'wechat_confirm',revision:0,challengeId,verificationCode:code,enabled:true}),e=>e.status===409);
+  mutate(f,{action:'wechat_confirm',revision:1,challengeId,verificationCode:code,enabled:true});
+  const state=service.channelState(f.user.id).find(c=>c.channel==='wechat');assert.equal(state.ready,true);assert.equal(state.enabled,true);assert.equal(binding().code_hash,'');assert.equal(binding().pending_recipient_secret,'');
+  const r={...rule(),price:'100'};mutate(f,{action:'upsert',revision:0,ruleId:r.id,rule:r});now+=1000;
+  assert.equal(service.triggerAlert(rows(f)[0],quote()),true);await worker.priceAlertTick();
+  assert.equal(service.alertSnapshot(f.user.id).events[0].deliveries.find(c=>c.channel==='wechat').state,'accepted');assert.equal(calls,2);assert.equal(tokenCalls,1);
+  assert.match(messages.at(-1),/触达价格 340.000001 · 盘中/);
+  now+=1000;mutate(f,{action:'test',channel:'wechat'});mutate(f,{action:'wechat_disconnect',revision:2});await worker.priceAlertTick();
+  assert.equal(binding(),undefined);assert.equal(calls,2);assert.equal(service.alertSnapshot(f.user.id).events[0].deliveries.find(c=>c.channel==='wechat').state,'cancelled');
+ });
+ await test('WeCom unknown sends are not retried; expiry, attempt lock and revoked grant block binding',async()=>{
+  const f=fixture();let code='',sends=0;
+  global.fetch=async(url,options)=>{
+   const u=new URL(url);if(u.host==='api.telegram.org'&&u.pathname.endsWith('/getUpdates'))return Response.json({ok:true,result:[]});
+   if(u.host!=='qyapi.weixin.qq.com')throw Error('Unrelated transport blocked');
+   if(u.pathname.endsWith('gettoken'))return Response.json({errcode:0,access_token:'fixture-token',expires_in:7200});
+   sends++;code=JSON.parse(options.body).text.content.match(/\d{6}/)?.[0]||'';throw Error('Timeout after provider may accept');
+  };
+  mutate(f,{action:'wechat_start',revision:0,recipient:'unknown_member'});await worker.priceAlertTick();await worker.priceAlertTick();assert.equal(sends,1);
+  let state=service.channelState(f.user.id).find(c=>c.channel==='wechat');assert.equal(state.verificationState,'unknown');
+  for(let i=0;i<6;i++)assert.throws(()=>mutate(f,{action:'wechat_confirm',revision:1,challengeId:state.challengeId,verificationCode:'000000',enabled:true}),e=>e.status===400);
+  assert.equal(db.prepare('SELECT attempts FROM price_alert_wecom WHERE user_id=?').get(f.user.id).attempts,6);
+  assert.throws(()=>mutate(f,{action:'wechat_confirm',revision:1,challengeId:state.challengeId,verificationCode:code,enabled:true}),e=>e.status===409);
+  mutate(f,{action:'wechat_start',revision:1,recipient:'unknown_member'});now+=300001;await worker.priceAlertTick();assert.equal(sends,1);
+  assert.equal(service.channelState(f.user.id).find(c=>c.channel==='wechat').pendingConfirmation,false);
+  mutate(f,{action:'wechat_start',revision:2,recipient:'unknown_member'});db.prepare('UPDATE app_grants SET revoked_at=? WHERE id=?').run(now,f.grant.id);await worker.priceAlertTick();assert.equal(sends,1);
+  assert.equal(db.prepare('SELECT verification_state FROM price_alert_wecom WHERE user_id=?').get(f.user.id).verification_state,'cancelled');
+  const g=fixture();for(let i=0;i<5;i++)mutate(g,{action:'wechat_start',revision:i,recipient:'limited_member'});
+  assert.throws(()=>mutate(g,{action:'wechat_start',revision:5,recipient:'limited_member'}),e=>e.status===429);
+  global.fetch=async()=>{throw Error('All external transport disabled in isolated test');};
+ });
+ await test('WeCom rejects invalid members, cancels changed enterprise identity and never retries unknown alert delivery',async()=>{
+  const settings=load('lib/settings.ts'),wecom=load('lib/priceAlertWecom.ts'),f=fixture();let code='',sends=0,mode='success';
+  global.fetch=async(url,options)=>{
+   const u=new URL(url);if(u.host==='api.telegram.org'&&u.pathname.endsWith('/getUpdates'))return Response.json({ok:true,result:[]});
+   if(u.host!=='qyapi.weixin.qq.com')throw Error('Unrelated transport blocked');
+   if(u.pathname.endsWith('gettoken'))return Response.json({errcode:0,access_token:'fixture-token',expires_in:7200});
+   sends++;if(mode==='unknown')throw Error('Uncertain acceptance');
+   if(mode==='reject')return Response.json({errcode:0,invaliduser:'fixture_member'});
+   code=JSON.parse(options.body).text.content.match(/\d{6}/)?.[0]||code;return Response.json({errcode:0,msgid:'fixture-'+sends});
+  };
+  mutate(f,{action:'wechat_start',revision:0,recipient:'fixture_member'});await worker.priceAlertTick();
+  const state=()=>service.channelState(f.user.id).find(c=>c.channel==='wechat');
+  mutate(f,{action:'wechat_confirm',revision:1,challengeId:state().challengeId,verificationCode:code,enabled:true});
+  now+=1000;mode='unknown';mutate(f,{action:'test',channel:'wechat'});await worker.priceAlertTick();const first=sends;await worker.priceAlertTick();assert.equal(sends,first);assert.equal(service.alertSnapshot(f.user.id).events[0].deliveries[0].state,'unknown');
+  now+=1000;mode='reject';mutate(f,{action:'test',channel:'wechat'});await worker.priceAlertTick();assert.equal(service.alertSnapshot(f.user.id).events[0].deliveries[0].state,'failed');
+  mutate(f,{action:'wechat_start',revision:2,recipient:'fixture_member'});settings.updateSiteSettings({wechatCorpId:'wwDifferentEnterprise'});const before=sends;await worker.priceAlertTick();assert.equal(sends,before);assert.equal(state().ready,false);assert.equal(wecom.wecomRecipient(db,f.user.id),null);
+  assert.equal(db.prepare('SELECT verification_state FROM price_alert_wecom WHERE user_id=?').get(f.user.id).verification_state,'cancelled');
+  settings.updateSiteSettings({wechatCorpId:'wwFixture'});
+  const beforePreflight=sends;await assert.rejects(()=>wecom.sendWecomText('fixture_member','Not sent',()=>false),e=>e instanceof wecom.WecomRejected);assert.equal(sends,beforePreflight);
+  mode='reject';mutate(f,{action:'wechat_start',revision:3,recipient:'bad_member'});await worker.priceAlertTick();assert.equal(state().pendingConfirmation,false);assert.equal(state().verificationState,'failed');
+  const g=fixture();mutate(g,{action:'wechat_start',revision:0,recipient:'crash_member'});db.prepare("UPDATE price_alert_wecom SET verification_state='sending',created_at=? WHERE user_id=?").run(now-61000,g.user.id);await worker.priceAlertTick();assert.equal(service.channelState(g.user.id).find(c=>c.channel==='wechat').verificationState,'unknown');
+  const after=sends;await worker.priceAlertTick();assert.equal(sends,after);
+  global.fetch=async()=>{throw Error('All external transport disabled in isolated test');};
+ });
  await test('revocation and expiry stop monitoring; no inferred green state or background financial writes',async()=>{
   const f=fixture(),r=rule();mutate(f,{action:'upsert',ruleId:r.id,revision:0,rule:r});db.prepare('UPDATE app_grants SET revoked_at=? WHERE id=?').run(now,f.grant.id);now+=1000;
   assert.equal(service.triggerAlert(rows(f)[0],quote()),false);await worker.priceAlertTick();assert.equal(rows(f)[0].state,'paused');

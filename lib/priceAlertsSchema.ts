@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 const installed = new WeakSet<Database.Database>();
 export function installPriceAlerts(db: Database.Database) {
   if (installed.has(db)) return;
+  db.transaction(()=>{
   db.exec(`
     CREATE TABLE IF NOT EXISTS price_alert_collections (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,revision INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS price_alert_rules (
@@ -43,5 +44,15 @@ export function installPriceAlerts(db: Database.Database) {
       id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, until_at INTEGER NOT NULL
     );
   `);
+  const columns=db.prepare('PRAGMA table_info(price_alert_preferences)').all() as {name:string}[];
+  if(!columns.some(column=>column.name==='wechat'))db.exec('ALTER TABLE price_alert_preferences ADD COLUMN wechat INTEGER NOT NULL DEFAULT 0');
+  db.exec(`CREATE TABLE IF NOT EXISTS price_alert_wecom (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    recipient_secret TEXT NOT NULL DEFAULT '',confirmed INTEGER NOT NULL DEFAULT 0,config_stamp TEXT NOT NULL DEFAULT '',
+    pending_recipient_secret TEXT NOT NULL DEFAULT '',pending_config_stamp TEXT NOT NULL DEFAULT '',challenge_id TEXT NOT NULL DEFAULT '',
+    code_secret TEXT NOT NULL DEFAULT '',code_hash TEXT NOT NULL DEFAULT '',challenge_expires INTEGER NOT NULL DEFAULT 0,attempts INTEGER NOT NULL DEFAULT 0,
+    verification_state TEXT NOT NULL DEFAULT '',grant_id TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL DEFAULT 0
+  )`);
+  }).immediate();
   installed.add(db);
 }

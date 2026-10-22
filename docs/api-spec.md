@@ -1337,3 +1337,7 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 | GET | `/api/v1/price-alerts/operations/{requestId}` | portfolio.read |
 | POST | `/api/v1/price-alerts/operations/{requestId}` | portfolio.write |
 | POST | `/api/v1/price-alerts/telegram-link` | portfolio.write |
+
+### 企业微信个人提醒扩展
+
+沿 `price_alerts.wechat` 显式发现，客户端使用 `X-Alcor-Price-Alerts: wechat-v1` 协商第四渠道。原 operations/{requestId} 支持 wechat_start（单成员 recipient）、wechat_confirm（challengeId/verificationCode/enabled）及 wechat_disconnect，均核对 channelRevision；旧三渠道回执兼容。验证码5分钟、最多6次错误，服务端密钥不下发。详情见 [股价提醒通知](native-price-alert-notifications.md)。

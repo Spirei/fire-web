@@ -4,29 +4,30 @@ import { installPriceAlerts } from './priceAlertsSchema';
 import { appSecurityStamp } from './appAuth';
 import { emailVerified } from './emailVerification';
 import { mailConfigured } from './mail';
-import { telegramReady } from './socialChannels';
+import { wecomState,startWecom,confirmWecom,disconnectWecom } from './priceAlertWecom';
+import { telegramReady, telegramBotUsername } from './socialChannels';
 import { encryptSecret, decryptSecret } from './secretStorage';
 import { RecordsError } from './recordsContract';
 import { tradingQuoteTime } from './appTrading';
 import { marketSessionState } from './marketSessions';
 import { normalizeMarketCode } from './marketCode';
 import type { Quote } from './quotes';
-export type AlertChannel = 'app' | 'email' | 'telegram';
+export type AlertChannel = 'app' | 'email' | 'telegram' | 'wechat';
 export type AlertConfig = { id: string; name: string; code: string; market: 'US'|'HK'|'CN'; direction: 'above'|'below'; price: string; extended: boolean; frequency: 'once'|'daily'; expiresAt: number|null };
 export type AlertRow = { user_id: string; id: string; grant_id: string; revision: number; config: string; state: string; activated_at: number; last_quote_at: number };
 type GrantIdentity = { id: string; user_id: string };
 type Telegram = { user_id:string; chat_secret:string; label:string; confirmed:number; challenge_hash:string|null; challenge_expires:number };
-export const channels: AlertChannel[] = ['app','email','telegram'];
+export const channels: AlertChannel[] = ['app','email','telegram','wechat'];
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const bad = (message: string, status = 400): never => { throw new RecordsError(message, status); };
 export function alertDb() { const db=getDb(); installPriceAlerts(db); return db; }
 export function touchAlertOwner(userId:string) { alertDb().prepare('INSERT INTO price_alert_collections VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET revision=revision+1').run(userId); }
-export function telegramConfigured() { return telegramReady(); }
+export function telegramConfigured() { return telegramReady() && /^[A-Za-z0-9_]{5,32}$/.test(telegramBotUsername()); }
 export function alertsAvailable() { return process.env.ALCOR_PRICE_ALERTS_ENABLED !== 'false'; }
 export function priceAlertsDiscovery(version:1|2) {
   const base=`/api/v${version}/price-alerts`;
   return { version:1, snapshot_path:base, operation_path:`${base}/operations/{requestId}`, read_scope:'portfolio.read', write_scope:'portfolio.write',
-    channels, worker:'server', interval_seconds:5, idempotency:'query-original-no-replay', monitoring_available:alertsAvailable() };
+    channels:['app','email','telegram'], wechat:{version:1,binding:'verification-code'}, worker:'server', interval_seconds:5, idempotency:'query-original-no-replay', monitoring_available:alertsAvailable() };
 }
 export function decimalMicros(value:unknown): bigint|null {
   if(typeof value!=='string' || !/^\d{1,10}(?:\.\d{1,6})?$/.test(value))return null;
@@ -45,7 +46,7 @@ export function parseAlert(value:unknown):AlertConfig {
 }
 function preferences(userId:string) {
   const db=alertDb();db.prepare('INSERT OR IGNORE INTO price_alert_preferences(user_id) VALUES(?)').run(userId);
-  return db.prepare('SELECT * FROM price_alert_preferences WHERE user_id=?').get(userId) as {revision:number;app:number;email:number;telegram:number};
+  return db.prepare('SELECT * FROM price_alert_preferences WHERE user_id=?').get(userId) as {revision:number;app:number;email:number;telegram:number;wechat:number};
 }
 export function channelState(userId:string) {
   const db=alertDb(),pref=preferences(userId);
@@ -55,7 +56,8 @@ export function channelState(userId:string) {
   return [
     {channel:'app',enabled:!!pref.app,ready:true,configured:true,destination:'App 内',pendingConfirmation:false},
     {channel:'email',enabled:!!pref.email,ready:emailReady,configured:mailConfigured(),destination:user?.email ? user.email.slice(0,2)+'***@'+user.email.split('@')[1] : '',pendingConfirmation:false},
-    {channel:'telegram',enabled:!!pref.telegram,ready:telegramConfigured()&&!!tg?.confirmed,configured:telegramConfigured(),destination:tg?.chat_secret?tg.label:'',pendingConfirmation:!!tg?.chat_secret&&!tg.confirmed}
+    {channel:'telegram',enabled:!!pref.telegram,ready:telegramConfigured()&&!!tg?.confirmed,configured:telegramConfigured(),destination:tg?.chat_secret?tg.label:'',pendingConfirmation:!!tg?.chat_secret&&!tg.confirmed},
+    {...wecomState(db,userId),enabled:!!pref.wechat}
   ];
 }
 export function grantAlive(userId:string,grantId:string,now=Date.now()) {
@@ -79,7 +81,7 @@ export function mutateAlert(grant:GrantIdentity,requestId:string,body:unknown,au
   if(!uuid(requestId))return bad('请求编号无效');
   if(!body||typeof body!=='object'||Array.isArray(body))return bad('请求无效');
   const b=body as Record<string,unknown>,db=alertDb(),userId=grant.user_id;
-  return db.transaction(()=>{
+  const outcome=db.transaction(()=>{
     authorize();if(!alertsAvailable())bad('股价监控尚未启用',503);
     if(db.prepare('SELECT 1 FROM price_alert_operations WHERE user_id=? AND request_id=?').get(userId,requestId.toLowerCase()))bad('重复请求，请查询原回执',409);
     const action=b.action;
@@ -114,11 +116,22 @@ export function mutateAlert(grant:GrantIdentity,requestId:string,body:unknown,au
       if(!Array.isArray(b.eventIds)||b.eventIds.length>200||!b.eventIds.every(uuid))bad('通知编号无效');
       for(const id of b.eventIds as string[])db.prepare('UPDATE price_alert_events SET read_at=? WHERE user_id=? AND id=?').run(Date.now(),userId,id);
       }
+    } else if(action==='wechat_start'||action==='wechat_confirm'||action==='wechat_disconnect') {
+      const pref=preferences(userId);if(pref.revision!==b.revision)bad('通知设置已变化，请刷新后重试',409);
+      if(action==='wechat_start')startWecom(db,userId,grant.id,b.recipient);
+      else if(action==='wechat_disconnect') { disconnectWecom(db,userId);db.prepare('UPDATE price_alert_preferences SET wechat=0 WHERE user_id=?').run(userId); }
+      else {
+        if(!confirmWecom(db,userId,b.challengeId,b.verificationCode,grantAlive)){touchAlertOwner(userId);return {bindingError:true as const};}
+        if(b.enabled!==undefined&&typeof b.enabled!=='boolean')bad('启用状态无效');
+        db.prepare('UPDATE price_alert_preferences SET wechat=? WHERE user_id=?').run(b.enabled===true?1:0,userId);
+      }
+      db.prepare('UPDATE price_alert_preferences SET revision=revision+1 WHERE user_id=?').run(userId);
     } else if(action==='telegram_confirm') {
       if(b.revision!==preferences(userId).revision)bad('绑定已变化，请刷新后确认',409);
       const tg=db.prepare('SELECT * FROM price_alert_telegram WHERE user_id=?').get(userId) as Telegram|undefined;
       if(!tg?.chat_secret||tg.confirmed||!telegramConfigured())bad('没有待确认的Telegram绑定',409);
       db.prepare('UPDATE price_alert_telegram SET confirmed=1 WHERE user_id=?').run(userId);
+      if(b.enabled===true)db.prepare('UPDATE price_alert_preferences SET telegram=1,revision=revision+1 WHERE user_id=?').run(userId);
     } else if(action==='telegram_disconnect') {
       if(b.revision!==preferences(userId).revision)bad('绑定已变化，请刷新后重试',409);
       db.prepare('DELETE FROM price_alert_telegram WHERE user_id=?').run(userId);
@@ -128,12 +141,14 @@ export function mutateAlert(grant:GrantIdentity,requestId:string,body:unknown,au
     const result={requestId:requestId.toLowerCase(),state:'completed',snapshot:alertSnapshot(userId)};
     db.prepare('INSERT INTO price_alert_operations VALUES(?,?,?)').run(userId,requestId.toLowerCase(),JSON.stringify(result));return result;
   }).immediate();
+  if('bindingError' in outcome)bad('验证码不正确',400);
+  return outcome;
 }
 export function beginTelegram(userId:string) {
   if(!telegramConfigured())bad('服务器尚未配置Telegram机器人',503);
   const token=randomBytes(32).toString('base64url'),hash=createHash('sha256').update(token).digest('hex');
   alertDb().prepare(`INSERT INTO price_alert_telegram(user_id,chat_secret,label,challenge_hash,challenge_expires) VALUES(?,'','',?,?) ON CONFLICT(user_id) DO UPDATE SET challenge_hash=excluded.challenge_hash,challenge_expires=excluded.challenge_expires`).run(userId,hash,Date.now()+300000);
-  return {url:`https://t.me/${process.env.ALCOR_TELEGRAM_BOT_USERNAME}?start=${token}`,expiresAt:Date.now()+300000};
+  return {url:`https://t.me/${telegramBotUsername()}?start=${token}`,expiresAt:Date.now()+300000};
 }
 export function receiveTelegram(value:unknown) {
   const v=value as {message?:{text?:string;from?:{id?:number;username?:string;first_name?:string};chat?:{id?:number;type?:string}}};
