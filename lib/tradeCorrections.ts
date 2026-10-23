@@ -84,7 +84,7 @@ function calculate(userId:string,b:Request){
   const currency=record.market==='US'?'USD':record.market==='CN'?'CNY':'HKD',replacementId=b.replacement?'o-correction-'+b.requestId:null;
   const links=selected.map(o=>db.prepare('SELECT * FROM broker_cash_order_links WHERE order_id=? AND user_id=?').get(o.id,userId) as {account_id:string;currency:string}|undefined);
   if(links.some(l=>l&&(l.account_id!==account.id||l.currency!==currency))||links.some(Boolean)&&!links.every(Boolean))throw conflict('原成交现金归属不同，不能合并或搬移');
-  let replacement:Row|undefined,detail:ReturnType<typeof calculateTradeFees>|undefined;
+  let replacement:Row|undefined,detail:ReturnType<typeof calculateTradeFees>|undefined,feeInput:FeeInput|undefined;
   if(b.replacement){const p=b.replacement,source=selected.find(o=>o.id===(b.timeSourceOrderId??selected[0].id))!;
     if(b.action==='merge'){
       if(p.tradedAt!==source.traded_at)throw conflict('合并时间须与所选原单严格相同');
@@ -92,7 +92,10 @@ function calculate(userId:string,b:Request){
     }
     if(time(p.tradedAt)<time(first.traded_at)&&baseQty>0)throw conflict('替换时间跨越未核实的期初边界');
     replacement={...source,id:replacementId!,status:'filled',qty:p.qty,price:p.price,fees:p.fees,amount:D(p.qty).mul(D(p.price)).number(),traded_at:p.tradedAt,created_at:String(source.created_at),api_id:null,role:null,parent_id:null};
-    if(p.feeInput)detail=calculateTradeFees(userId,record,{...p,side:String(source.side),mode:'record'},p.feeInput);
+    // A signed correction confirms these fees and the independently verified historical account,
+    // even when an older App sends no feeInput. Do not inherit the original fee rules or cash link.
+    feeInput=p.feeInput??{source:'owner_recorded',brokerAccountId:account.id,providerId:account.provider_id,confirmed:true};
+    detail=calculateTradeFees(userId,record,{...p,side:String(source.side),mode:'record'},feeInput);
   }
   const afterRows=[...history.filter(o=>!selected.some(s=>s.id===o.id)),...(replacement?[replacement]:[])],after=replay(record,afterRows,{qty:baseQty,cost:baseCost});
   const checkpoints=db.prepare("SELECT opening_at,opening_basis FROM broker_cash_accounts WHERE user_id=? AND currency=?").all(userId,currency) as {opening_at:string;opening_basis:string}[];
@@ -105,7 +108,7 @@ function calculate(userId:string,b:Request){
   if(links.every(Boolean)){const ledger=brokerCashSnapshot(userId,account.id).currencies.find(c=>c.currency===currency);if(!ledger?.complete||ledger.balance===null||D(ledger.balance).add(cashDelta).cmp(D(0))<0)throw conflict('券商现金来源不完整或更正后不足');}
   const feeBefore=feeSum(selected.map(o=>D(num(o.fees)))).number(),feeAfter=replacement?num(replacement.fees):0;
   const fundsRevision=cashRevision(userId);
-  return {record,account,selected,replacement,after,links,detail,proof:hash([account,fundsRevision,rows]),public:{request:canonical(b),currency,cashBefore,cashAfter,cashDelta:cashDelta.number(),quantityBefore:before.qty,quantityAfter:after.qty,costBefore:before.cost,costAfter:after.cost,realizedBefore:before.realized,realizedAfter:after.realized,feeBefore,feeAfter,feeSource:detail?.source??'owner_recorded',feeDetail:detail??null,affectedOrderCount:new Set([...selected.map(o=>o.id),...after.updates.map(o=>o.id)]).size,canSubmit:true,brokerAccountId:account.id,preservesOriginals:true}};
+  return {record,account,selected,replacement,after,links,detail,feeInput,proof:hash([account,fundsRevision,rows]),public:{request:canonical(b),currency,cashBefore,cashAfter,cashDelta:cashDelta.number(),quantityBefore:before.qty,quantityAfter:after.qty,costBefore:before.cost,costAfter:after.cost,realizedBefore:before.realized,realizedAfter:after.realized,feeBefore,feeAfter,feeSource:detail?.source??'owner_recorded',feeDetail:detail??null,affectedOrderCount:new Set([...selected.map(o=>o.id),...after.updates.map(o=>o.id)]).size,canSubmit:true,brokerAccountId:account.id,preservesOriginals:true}};
 }
 function signature(userId:string,b:Request,p:ReturnType<typeof calculate>,expires:number){const key=getDb().prepare('SELECT secret FROM trade_fee_preview_key WHERE id=1').get() as {secret:Buffer};return createHmac('sha256',key.secret).update(hash([userId,canonical(b),p.proof,p.public,expires])).digest('hex');}
 export function previewTradeCorrection(userId:string,raw:unknown){const b=parse(raw);return getDb().transaction(()=>{const p=calculate(userId,b),expires=Date.now()+ttl;return {...p.public,previewRevision:`${expires}.${signature(userId,b,p,expires)}`,expiresAt:new Date(expires).toISOString()};})();}
@@ -131,7 +134,7 @@ export function submitTradeCorrection(userId:string,raw:unknown,authorize:()=>st
         const columns=Object.keys(insert);db.prepare(`INSERT INTO trade_orders (${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...Object.values(insert));
         db.prepare('INSERT INTO trade_correction_replacements VALUES(?,?,?,?)').run(replacement.id,userId,b.requestId,now);
         if(p.links.every(Boolean)){db.prepare('INSERT INTO broker_cash_order_links VALUES(?,?,?,?)').run(replacement.id,userId,p.account.id,p.public.currency);db.prepare('UPDATE broker_cash_accounts SET revision=revision+1 WHERE user_id=? AND account_id=? AND currency=?').run(userId,p.account.id,p.public.currency);}
-        if(b.replacement?.feeInput&&p.detail)saveTradeFee(userId,replacement.id,b.replacement.feeInput,p.detail);
+        if(p.feeInput&&p.detail)saveTradeFee(userId,replacement.id,p.feeInput,p.detail);
       }
       for(const u of p.after.updates)db.prepare('UPDATE trade_orders SET position_qty_before=?,position_cost_before=?,position_qty_after=?,position_cost_after=?,realized_pnl=? WHERE id=? AND user_id=?').run(u.beforeQty,u.beforeCost,u.qty,u.cost,u.realized,u.id,userId);
       db.prepare('UPDATE records SET qty=?,cost=?,updated_at=? WHERE id=? AND user_id=?').run(p.after.qty,p.after.qty>0?p.after.cost:null,now,b.recordId,userId);
