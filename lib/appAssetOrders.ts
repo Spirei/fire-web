@@ -9,7 +9,7 @@ export const ASSET_ORDER_FILTERS = ["all", "pending", "filled", "cancelled", "re
 type Row = Record<string, unknown> & { id: string; record_id: string; market: string; code: string; revision: number; status: string; traded_at: string };
 const num = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
 export function assetOrderRows(userId: string) {
-  return getDb().prepare("SELECT o.*,v.revision,m.parent_id,m.role,m.trigger_above,m.draft_json AS submission_draft,json_extract(m.draft_json,'$.mode') AS submission_mode,f.source fee_source,f.request_id fee_operation_id,f.detail_json fee_detail,e.source fee_evidence_source,e.detail_json fee_evidence_detail,l.account_id cash_broker_account_id FROM trade_orders o JOIN app_asset_order_versions v ON v.order_id=o.id LEFT JOIN app_trade_metadata m ON m.order_id=o.id LEFT JOIN trade_fee_corrections f ON f.order_id=o.id AND f.user_id=o.user_id LEFT JOIN trade_fee_evidence e ON e.order_id=o.id AND e.user_id=o.user_id LEFT JOIN broker_cash_order_links l ON l.order_id=o.id AND l.user_id=o.user_id WHERE o.user_id=? ORDER BY o.traded_at DESC,o.created_at DESC,o.id DESC").all(userId) as Row[];
+  return getDb().prepare("SELECT o.*,v.revision,m.parent_id,m.role,m.trigger_above,m.draft_json AS submission_draft,json_extract(m.draft_json,'$.mode') AS submission_mode,f.source fee_source,f.request_id fee_operation_id,f.detail_json fee_detail,e.source fee_evidence_source,e.detail_json fee_evidence_detail,l.account_id cash_broker_account_id,d.detail_json saved_fee_detail,c.request_id correction_operation,c.replacement_id correction_replacement,n.request_id replacement_operation FROM trade_orders o JOIN app_asset_order_versions v ON v.order_id=o.id LEFT JOIN app_trade_metadata m ON m.order_id=o.id LEFT JOIN trade_fee_corrections f ON f.order_id=o.id AND f.user_id=o.user_id LEFT JOIN trade_fee_evidence e ON e.order_id=o.id AND e.user_id=o.user_id LEFT JOIN broker_cash_order_links l ON l.order_id=o.id AND l.user_id=o.user_id LEFT JOIN trade_fee_details d ON d.order_id=o.id AND d.user_id=o.user_id LEFT JOIN trade_correction_originals c ON c.order_id=o.id AND c.user_id=o.user_id LEFT JOIN trade_correction_replacements n ON n.order_id=o.id AND n.user_id=o.user_id WHERE o.user_id=? ORDER BY o.traded_at DESC,o.created_at DESC,o.id DESC").all(userId) as Row[];
 }
 export function selectAssetOrders(rows: Row[], scope: string, status: string, recordId: string | null, now: number) {
   const todayByMarket = new Map<string, string | null>();
@@ -58,6 +58,7 @@ export function assetOrderItem(userId: string, row: Row, quote?: Quote, cachedRe
     tradedAt: row.traded_at, createdAt: row.created_at, broker: row.broker, note: row.note,
     currentPrice, currentPriceSource: currentPrice === null ? "unavailable" : quote!.cached ? "quote_cache" : "quote",
     currentPriceAt: currentPrice === null ? null : quote!.time || null,
+    ...(row.correction_operation?{correction:{state:"superseded",operationId:row.correction_operation,replacementId:row.correction_replacement??null}}:row.replacement_operation?{correction:{state:"replacement",operationId:row.replacement_operation}}:{}),
     cancellable: row.status === "pending" && identityMatches
   };
 }

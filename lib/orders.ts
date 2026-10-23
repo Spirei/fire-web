@@ -413,6 +413,7 @@ export function updateOrder(input: {
     const targetRow = db.prepare("SELECT * FROM trade_orders WHERE id = ? AND user_id = ?").get(input.orderId, input.userId) as OrderRow | undefined;
     if (!targetRow) throw new Error("订单不存在");
     if (db.prepare("SELECT 1 FROM app_trade_metadata WHERE order_id=?").get(input.orderId)) throw new Error("API 交易须使用带版本和回执的改单接口");
+    if(db.prepare("SELECT 1 FROM trade_correction_originals c JOIN trade_orders o ON o.id=c.order_id WHERE c.user_id=? AND o.record_id=? UNION ALL SELECT 1 FROM trade_correction_replacements c JOIN trade_orders o ON o.id=c.order_id WHERE c.user_id=? AND o.record_id=? LIMIT 1").get(input.userId,targetRow.record_id,input.userId,targetRow.record_id))throw new Error("同证券包含成交更正凭证，请使用带预览和回执的更正接口");
     const target = rowToOrder(targetRow);
     if (db.prepare("SELECT 1 FROM app_trade_metadata m JOIN trade_orders o ON o.id=m.order_id WHERE o.user_id=? AND o.record_id=? AND o.status='filled' LIMIT 1").get(input.userId, target.recordId)) throw new Error("同证券包含 API 成交回执，旧接口不能重放历史");
     const record = db.prepare("SELECT market,account_market FROM records WHERE id=? AND user_id=?").get(target.recordId, input.userId) as OrderRow | undefined;
@@ -470,6 +471,7 @@ export function deleteOrder(input: {
     const targetRow = db.prepare("SELECT * FROM trade_orders WHERE id = ? AND user_id = ?").get(input.orderId, input.userId) as OrderRow | undefined;
     if (!targetRow) throw new Error("订单不存在");
     if (db.prepare("SELECT 1 FROM app_trade_metadata WHERE order_id=?").get(input.orderId)) throw new Error("API 交易保留历史回执，不能通过旧接口删除");
+    if(db.prepare("SELECT 1 FROM trade_correction_originals c JOIN trade_orders o ON o.id=c.order_id WHERE c.user_id=? AND o.record_id=? UNION ALL SELECT 1 FROM trade_correction_replacements c JOIN trade_orders o ON o.id=c.order_id WHERE c.user_id=? AND o.record_id=? LIMIT 1").get(input.userId,targetRow.record_id,input.userId,targetRow.record_id))throw new Error("同证券包含成交更正凭证，请使用带预览和回执的更正接口");
     const target = rowToOrder(targetRow);
     if (db.prepare("SELECT 1 FROM app_trade_metadata m JOIN trade_orders o ON o.id=m.order_id WHERE o.user_id=? AND o.record_id=? AND o.status='filled' LIMIT 1").get(input.userId, target.recordId)) throw new Error("同证券包含 API 成交回执，旧接口不能重放历史");
     const rows = db.prepare("SELECT * FROM trade_orders WHERE user_id = ? AND record_id = ? AND status = 'filled' ORDER BY traded_at ASC, created_at ASC")

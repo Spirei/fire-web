@@ -73,7 +73,8 @@ export function installBrokerCash(db: Database.Database) {
     WHEN EXISTS(SELECT 1 FROM records r JOIN broker_cash_accounts c ON c.user_id=r.user_id AND c.account_id=r.broker_account_id
       WHERE r.id=NEW.record_id AND r.user_id=NEW.user_id AND c.currency=${currency} AND julianday(NEW.traded_at)<julianday(c.opening_at))
     BEGIN SELECT broker_cash_conflict(); END;
-    CREATE TRIGGER IF NOT EXISTS broker_cash_order_link AFTER INSERT ON trade_orders BEGIN
+    DROP TRIGGER IF EXISTS broker_cash_order_link;
+    CREATE TRIGGER broker_cash_order_link AFTER INSERT ON trade_orders WHEN trade_correction_allowed(NEW.id)=0 BEGIN
       INSERT INTO broker_cash_order_links(order_id,user_id,account_id,currency)
       SELECT NEW.id,NEW.user_id,c.account_id,c.currency FROM records r JOIN broker_cash_accounts c ON c.user_id=r.user_id AND c.account_id=r.broker_account_id
       WHERE r.id=NEW.record_id AND r.user_id=NEW.user_id AND c.currency=${currency};
@@ -83,7 +84,7 @@ export function installBrokerCash(db: Database.Database) {
     CREATE TRIGGER broker_cash_filled_update BEFORE UPDATE ON trade_orders
     WHEN OLD.status='filled' AND EXISTS(SELECT 1 FROM broker_cash_order_links WHERE order_id=OLD.id)
       AND EXISTS(SELECT 1 FROM users WHERE id=OLD.user_id)
-      AND (NEW.status IS NOT OLD.status OR NEW.qty IS NOT OLD.qty OR NEW.price IS NOT OLD.price OR (NEW.fees IS NOT OLD.fees AND broker_cash_fee_correction(OLD.id)=0) OR NEW.amount IS NOT OLD.amount OR NEW.side IS NOT OLD.side OR NEW.market IS NOT OLD.market OR NEW.record_id IS NOT OLD.record_id OR NEW.settlement_currency IS NOT OLD.settlement_currency OR NEW.settlement_amount IS NOT OLD.settlement_amount OR NEW.traded_at IS NOT OLD.traded_at)
+      AND ((NEW.status IS NOT OLD.status AND NOT (trade_correction_allowed(OLD.id)=1 AND NEW.status='cancelled')) OR NEW.qty IS NOT OLD.qty OR NEW.price IS NOT OLD.price OR (NEW.fees IS NOT OLD.fees AND broker_cash_fee_correction(OLD.id)=0) OR NEW.amount IS NOT OLD.amount OR NEW.side IS NOT OLD.side OR NEW.market IS NOT OLD.market OR NEW.record_id IS NOT OLD.record_id OR NEW.settlement_currency IS NOT OLD.settlement_currency OR NEW.settlement_amount IS NOT OLD.settlement_amount OR NEW.traded_at IS NOT OLD.traded_at)
     BEGIN SELECT broker_cash_conflict(); END;
     CREATE TRIGGER IF NOT EXISTS broker_cash_order_update AFTER UPDATE ON trade_orders BEGIN
       UPDATE broker_cash_accounts SET revision=revision+1 WHERE (user_id,account_id,currency) IN(SELECT user_id,account_id,currency FROM broker_cash_order_links WHERE order_id=NEW.id);

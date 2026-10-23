@@ -63,6 +63,8 @@ export const APP_V2_ROUTES = [
   {path:"account-assets/fee-repairs/preview",methods:["POST"],access:"orders.write"},
   {path:"account-assets/fee-repairs/submissions",methods:["POST"],access:"orders.write"},
   {path:"account-assets/trading",methods:["GET"],access:"orders.read"},
+  {path:"account-assets/trading/corrections",methods:["POST"],access:"orders.write"},
+  {path:"account-assets/trading/corrections/preview",methods:["POST"],access:"orders.write"},
   {path:"account-assets/trading/preview",methods:["POST"],access:"orders.write"},
   {path:"account-assets/trading/submissions",methods:["POST"],access:"orders.write"},
   {path:"account-assets/trading/orders/[orderId]",methods:["PUT"],access:"orders.write"},

@@ -32,7 +32,7 @@ export function installHistoricalFees(db: Database.Database) {
       ON CONFLICT(order_id) DO UPDATE SET source='explicit_fee_confirmation';
     END;
     CREATE TRIGGER IF NOT EXISTS trade_fee_corrected_preserve BEFORE UPDATE ON trade_orders
-    WHEN EXISTS(SELECT 1 FROM trade_fee_corrections WHERE order_id=OLD.id) AND
+    WHEN trade_correction_allowed(OLD.id)=0 AND EXISTS(SELECT 1 FROM trade_fee_corrections WHERE order_id=OLD.id) AND
       (NEW.user_id IS NOT OLD.user_id OR NEW.record_id IS NOT OLD.record_id OR NEW.market IS NOT OLD.market OR NEW.code IS NOT OLD.code OR
        NEW.side IS NOT OLD.side OR NEW.status IS NOT OLD.status OR NEW.qty IS NOT OLD.qty OR NEW.price IS NOT OLD.price OR
        NEW.fees IS NOT OLD.fees OR NEW.amount IS NOT OLD.amount OR NEW.traded_at IS NOT OLD.traded_at OR NEW.created_at IS NOT OLD.created_at OR

@@ -1,3 +1,4 @@
+import {tradeFeeOk,detailedTradeFees} from "./tradeFeeTransport";
 import { authenticateAppAccess, assertAppOrigin } from "./appAuth";
 import { getDb } from "./db";
 import { findUserById } from "./auth";
@@ -23,6 +24,7 @@ export function assetGrant(request: Request, requiredScope?: string) {
 export async function assetsResponse(request: Request, action: "snapshot" | "instrument" | "operation" | "orders" | "cancel_orders", params?: Promise<{ recordId?: string; requestId?: string }>) {
   try {
     const requiredScope = action === "cancel_orders" ? "orders.cancel" : undefined;
+    detailedTradeFees(request);
     const initial = assetGrant(request, requiredScope), authorize = () => {
       const current = assetGrant(request, requiredScope);
       if (current.id !== initial.id || current.user_id !== initial.user_id || current.security_stamp !== initial.security_stamp) throw new RecordsError("连接已变化，请重新读取", 401);
@@ -35,7 +37,7 @@ export async function assetsResponse(request: Request, action: "snapshot" | "ins
       if (new URL(request.url).searchParams.size) throw new RecordsError("不支持查询参数");
       const body = await readJsonBody(request, 65_536);
       const { result, error } = cancelAssetOrders(initial.user_id, body, authorize);
-      return error ? fail(error.code, error.message, error.status) : ok(result);
+      return error ? fail(error.code, error.message, error.status) : tradeFeeOk(request,result);
     }
     if (action === "orders") {
       const query = new URL(request.url).searchParams;
@@ -49,16 +51,16 @@ export async function assetsResponse(request: Request, action: "snapshot" | "ins
         const current = assetOrderRows(initial.user_id), old = new Map(original.map(row => [row.id, row]));
         const cached = new Set(snapshot.cached);
         const quotes = Object.fromEntries(current.filter(row => old.get(row.id)?.revision === row.revision && old.get(row.id)?.market === row.market && old.get(row.id)?.code === row.code && snapshot.quotes[row.id]).map(row => [row.id, { ...snapshot.quotes[row.id], cached: cached.has(row.id) || !!snapshot.quotes[row.id].cached }]));
-        return ok(assetOrdersResult(initial.user_id, current, scope, status, recordId, Date.now(), quotes));
+        return tradeFeeOk(request,assetOrdersResult(initial.user_id, current, scope, status, recordId, Date.now(), quotes));
       })();
     }
-    if (action === "operation") return ok(assetOperation(initial.user_id, args.requestId ?? ""));
+    if (action === "operation") return tradeFeeOk(request,assetOperation(initial.user_id, args.requestId ?? ""));
     if (action === "instrument") {
-      if (request.method === "GET") return ok(instrumentSnapshot(initial.user_id, args.recordId ?? ""));
+      if (request.method === "GET") return tradeFeeOk(request,instrumentSnapshot(initial.user_id, args.recordId ?? ""));
       if (!rateLimit(`asset-declare:${initial.user_id}`, 120, 60_000)) throw new RecordsError("提交过于频繁", 429);
       const body = await readJsonBody(request, 16_384);
       const { result, error } = declareInstrument(initial.user_id, args.recordId ?? "", body, authorize);
-      return error ? fail(error.code, error.message, error.status) : ok(result);
+      return error ? fail(error.code, error.message, error.status) : tradeFeeOk(request,result);
     }
     const query = new URL(request.url).searchParams;
     if ([...query.keys()].some(k => !["currency", "costMethod", "usPrice"].includes(k)) || [...query.keys()].some(k => query.getAll(k).length !== 1)) throw new RecordsError("查询参数无效");
@@ -83,7 +85,7 @@ export async function assetsResponse(request: Request, action: "snapshot" | "ins
       const original = new Map(records.map(r => [r.id, `${r.market}:${r.code}:${r.revision}`]));
       const cached = new Set(snapshot.cached);
       const quotes = Object.fromEntries(current.filter(r => original.get(r.id) === `${r.market}:${r.code}:${r.revision}` && snapshot.quotes[r.id]).map(r => [r.id, { ...snapshot.quotes[r.id], cached: cached.has(r.id) || !!snapshot.quotes[r.id].cached }]));
-      return ok(buildAssets(initial.user_id, { username: user.username, nickname: user.nickname ?? "", uid: user.uid ?? "", avatar: user.avatar ?? "" }, rates, quotes, options));
+      return tradeFeeOk(request,buildAssets(initial.user_id, { username: user.username, nickname: user.nickname ?? "", uid: user.uid ?? "", avatar: user.avatar ?? "" }, rates, quotes, options));
     })();
   } catch (error) {
     const status = error instanceof RecordsError ? error.status : error instanceof RequestBodyTooLargeError ? 413 : 500;

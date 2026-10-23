@@ -4964,16 +4964,23 @@ const V0_1_64_ENTRY: VersionEntry = {
   software: V0_1_63_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.64"} : item),
   changes: [{kind:"feature",title:"企业微信个人绑定与提醒",desc:"沿用 Web 企业应用配置，向单个成员发送限时验证码，本人确认后启用股价提醒。密钥与成员账号加密保留服务端，错误尝试及发送限流持久化，未知投递不重试；旧三渠道 App 协议兼容。"},{kind:"fix",title:"Telegram 绑定沿用 Web 机器人",desc:"修复绑定链接仍读取环境变量用户名的问题，统一 Web 已保存的机器人配置，支持 App 显式确认绑定并启用。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_65_ENTRY: VersionEntry = {
   ...V0_1_64_ENTRY, version: "v0.1.65", date: "2026-10-23",
   summary: "飞书、Discord 与 QQ 个人股价提醒。",
   software: V0_1_64_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.65"} : item),
   changes: [{kind:"feature",title:"飞书、Discord 与 QQ 个人提醒",desc:"股价提醒可分别向本人已验证的飞书 open_id 或邮箱、Discord 用户和 QQ openid 发送验证码，确认后启用到价通知。密钥留在服务端，旧版 App 仍只看到原来的渠道。"},{kind:"security",title:"个人消息通道限制",desc:"飞书、Discord 和 QQ 只接受单个收件人，验证码 5 分钟且最多 6 次错误，发送限流持久保存。超时或结果不明时不自动重发。"},{kind:"fix",title:"去掉通知渠道里的外部类型",desc:"飞书、Telegram、QQ、Discord 和 WebPush 不再显示资源下载、媒体服务器等分类。这些选项来自参考图，不属于 Alcor。"},{kind:"fix",title:"全站提示统一为白底绿勾",desc:"操作提示固定为白底圆角、绿勾和深色文字，深色页面也不再改成深底。保存邮件模板会弹出同样的提示。"},{kind:"fix",title:"提示框再贴近参考",desc:"操作提示去掉灰边，阴影减轻，圆角收到 12 像素。文字改为 14 像素、中等字重，绿勾略加粗。深色页面仍是白底。"}]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_65_ENTRY, version:"v0.1.66", date:"2026-10-24",
+  summary:"费用分项独立核验与成交修改合并删除。",
+  software:V0_1_65_ENTRY.software.map(item=>item.name==='Alcor'?{...item,version:'v0.1.66'}:item),
+  changes:[{kind:"feature",title:"交易费用来源与历史规则",desc:"实际成交可附本人手填分项或个人费率快照，后端用精确十进制独立核验总费并保存原币分项、来源和生效规则。明确零保留，旧协议继续可用；自动费用不冒充券商实收，未知品种、月阶梯和待成交自动费用暂不启用。"},{kind:"feature",title:"成交修改合并与删除",desc:"新增本人带签名预览和完整版本核对的成交更正，原子保留原单及墓碑、生成替换单并重放后续成本与盈亏，现金只计净差额。合并本金和数量守恒、时间取选定原单；官方来源、附加单、港股通净结算和已覆盖期初保护保持，原UUID结果可恢复。"}]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_65_ENTRY,
   V0_1_64_ENTRY,
   V0_1_63_ENTRY,
   V0_1_62_ENTRY,

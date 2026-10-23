@@ -74,6 +74,7 @@ function assertKnownColumns(row: Record<string, unknown>, table: TableName) {
 
 export class UnsupportedPortableLedgerError extends Error {}
 function requirePortableLedger(userId: string) {
+  if (getDb().prepare('SELECT 1 FROM trade_correction_operations WHERE user_id=? LIMIT 1').get(userId)||getDb().prepare('SELECT 1 FROM trade_fee_details WHERE user_id=? LIMIT 1').get(userId)) throw new UnsupportedPortableLedgerError('账户含成交更正链或费用历史快照，请使用完整数据库备份恢复');
   if (getDb().prepare("SELECT 1 FROM trade_fee_corrections WHERE user_id=? LIMIT 1").get(userId)) throw new UnsupportedPortableLedgerError("此账户包含历史费用更正及溯源，请使用完整数据库备份恢复；旧版JSON迁移不能保留费用凭证");
   if (getDb().prepare("SELECT 1 FROM broker_cash_accounts WHERE user_id=? LIMIT 1").get(userId)) throw new UnsupportedPortableLedgerError("此账户包含券商资金归属和期初覆盖，请使用完整数据库备份恢复；旧版JSON迁移不能保留资金账本");
   if (getDb().prepare("SELECT 1 FROM app_trade_metadata m JOIN trade_orders o ON o.id=m.order_id WHERE o.user_id=? LIMIT 1").get(userId)) throw new UnsupportedPortableLedgerError("此账户包含 App 交易回执和条件单，请使用完整数据库备份恢复；旧版 JSON 迁移不能保留执行状态");

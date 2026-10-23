@@ -6,6 +6,7 @@ const object=(value:unknown):Record<string,unknown>=>{
 const brokerId=(value:unknown)=>typeof value==='string'&&/^ba-[a-f0-9]{24}$/.test(value)?value:null;
 /** Recorded history only; today's record association is deliberately a separate field. */
 export function orderFeeRead(row:Record<string,unknown>){
+  const saved=object(row.saved_fee_detail);
   const detail=object(row.fee_detail),evidence=object(row.fee_evidence_detail),draft=object(row.submission_draft);
   const repaired=row.fee_source==='owner_reconstructed',cashBroker=brokerId(row.cash_broker_account_id),repairBroker=repaired?brokerId(detail.brokerAccountId):null;
   const recordedBroker=row.fee_evidence_source==='explicit_order_entry'?brokerId(evidence.brokerAccountId):null,targetBroker=brokerId(draft.brokerTargetId);
@@ -20,6 +21,11 @@ export function orderFeeRead(row:Record<string,unknown>){
     feeSource:repaired?'owner_reconstructed':row.role||['explicit_order_entry','explicit_fee_confirmation'].includes(String(row.fee_evidence_source))?'owner_recorded':row.fee_evidence_source==='legacy_import_zero'?'legacy_import_placeholder':'unverified_legacy',
     feeBreakdown:knownComponents?components!.map(c=>({...c,currency})):null,
     feeBreakdownSource:knownComponents?'owner_reconstructed':'unavailable',
-    ...(repaired?{feeProvenance:{source:'owner_reconstructed',operationId:row.fee_operation_id,detail}}:{})
+    ...(repaired?{feeProvenance:{source:'owner_reconstructed',operationId:row.fee_operation_id,detail}}:{}),
+    ...(['owner_recorded','rule_calculated'].includes(String(saved.source))&&Number(saved.total)===row.fees?{
+      feeSource:saved.source,feeBreakdown:saved.components??null,feeBreakdownSource:saved.components?saved.source:'unavailable',feeRuleVersion:saved.ruleVersion??null,feeRuleSnapshot:saved.ruleSnapshot??null,
+      feeProvenance:{source:saved.source,detail:saved},
+      ...(!cashBroker&&!repairBroker&&brokerId(saved.brokerAccountId)?{brokerAccountId:saved.brokerAccountId,brokerAccountIdSource:'recorded_fee_snapshot'}:{})
+    }:{})
   };
 }

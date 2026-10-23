@@ -17,6 +17,7 @@ import { installAccountChanges } from "./accountChangeSchema";
 import { installQuoteSubscriptions } from "./quoteSubscriptionsSchema";
 import { installAssetAllocation } from "./assetAllocationSchema";
 import { installHistoricalFees } from "./historicalFeeSchema";
+import { installTradeCorrections,registerTradeCorrection } from './tradeCorrectionSchema';
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "fire.db");
@@ -1235,6 +1236,7 @@ export function getDb(): Database.Database {
       db.pragma("journal_mode = WAL");
       registerBrokerSourceGuard(db);
       registerBrokerCashGuard(db);
+      registerTradeCorrection(db);
       migrate(db);
       const settlementColumns = (db.prepare("PRAGMA table_info(trade_orders)").all() as { name: string }[]).map(c => c.name);
       if (!settlementColumns.includes("settlement_currency")) db.exec("ALTER TABLE trade_orders ADD COLUMN settlement_currency TEXT");
@@ -1244,6 +1246,7 @@ export function getDb(): Database.Database {
       installBrokerAccounts(db);
       installBrokerCash(db);
       installHistoricalFees(db);
+      installTradeCorrections(db);
       installPersonalProfile(db);
       installQuoteSubscriptions(db);
       installAccountChanges(db);

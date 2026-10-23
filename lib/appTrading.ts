@@ -11,11 +11,12 @@ import { applyOrder } from "./tradeAccounting";
 import { executeOrder, placeOrder, fillPendingRow } from "./orders";
 import { holdingAccountCurrency, isStockConnect } from "./stockAccount";
 import type { Quote, StockRecord } from "./types";
+import { parseFeeInput,calculateTradeFees,saveTradeFee,clearTradeFee,type FeeInput } from "./tradeFees";
 
 type Values = Record<string, unknown>;
 type Leg = { percent: number; orderType: "limit" | "market"; limitPrice?: number; fees: number };
 type Attachment = { takeProfit?: Leg; stopLoss?: Leg; session: string; tif: "day" | "gtc" };
-type Draft = { buyTarget?: BuyTarget; targetRevision?: string; brokerTargetId?: string; recordId: string; recordRevision: number; snapshotRevision: string; side: "buy" | "sell" | "dividend";
+type Draft = { feeInput?:FeeInput; buyTarget?: BuyTarget; targetRevision?: string; brokerTargetId?: string; recordId: string; recordRevision: number; snapshotRevision: string; side: "buy" | "sell" | "dividend";
   mode: "record" | "order"; orderType: "limit" | "market"; qty: number; price: number; fees: number;
   tif: "day" | "gtc"; session: string; tradedAt?: string; settlementAmount?: number; attachments?: Attachment; note: string; confirmedAt?: string; triggeredAt?: string };
 type Meta = { order_id: string; parent_id: string | null; role: string; trigger_above: number | null; draft_json: string; identity_json: string };
@@ -73,7 +74,7 @@ function attachments(value: unknown): Attachment | undefined {
   return { ...(v.takeProfit ? { takeProfit: leg(v.takeProfit) } : {}), ...(v.stopLoss ? { stopLoss: leg(v.stopLoss) } : {}), session: String(v.session), tif: v.tif as Attachment["tif"] };
 }
 function draft(body: unknown, userId: string): Draft {
-  const v = object(body, ["requestId", "accountId", "recordId", "recordRevision", "snapshotRevision", "side", "mode", "orderType", "qty", "price", "fees", "tif", "session", "tradedAt", "settlementAmount", "attachments", "note", "orderRevision", "buyTarget", "targetRevision"]);
+  const v = object(body, ["requestId", "accountId", "recordId", "recordRevision", "snapshotRevision", "side", "mode", "orderType", "qty", "price", "fees", "tif", "session", "tradedAt", "settlementAmount", "attachments", "note", "orderRevision", "buyTarget", "targetRevision", "feeInput"]);
   const buyTarget = v.buyTarget === undefined ? undefined : parseBuyTarget(v.buyTarget);
   if (buyTarget && (v.side !== 'buy' || 'recordId' in v || 'recordRevision' in v || 'orderRevision' in v) || !buyTarget && v.targetRevision !== undefined || v.targetRevision !== undefined && (typeof v.targetRevision !== 'string' || !/^[a-f0-9]{64}$/.test(v.targetRevision))) throw new RecordsError('买入账户目标不能与原记录或改单混用');
   if (v.accountId !== userId || !buyTarget && (typeof v.recordId !== "string" || !v.recordId || v.recordId.length > 200 || !Number.isSafeInteger(v.recordRevision) || Number(v.recordRevision) < 1) || typeof v.snapshotRevision !== "string" || !/^[a-f0-9]{64}$/.test(v.snapshotRevision)) throw new RecordsError("须提供本人账户、证券和快照版本");
@@ -84,7 +85,7 @@ function draft(body: unknown, userId: string): Draft {
   const tradedAt = isoTime(v.tradedAt);
   if (v.mode === "record" && (tradedAt === null || tradedAt > Date.now())) throw new RecordsError("须明确提供已发生的成交时间");
   if (v.mode === "order" && v.tradedAt !== undefined || v.side === "dividend" && (v.mode !== "record" || v.attachments !== undefined)) throw new RecordsError("委托不能补造成交时间，股息仅支持实际登记");
-  return { buyTarget, targetRevision:v.targetRevision as string|undefined, recordId: buyTarget ? "" : v.recordId as string, recordRevision: buyTarget ? 0 : Number(v.recordRevision), snapshotRevision: v.snapshotRevision, side: v.side as Draft["side"], mode: v.mode as Draft["mode"], orderType: v.orderType as Draft["orderType"], qty, price, fees,
+  return { feeInput:parseFeeInput(v.feeInput), buyTarget, targetRevision:v.targetRevision as string|undefined, recordId: buyTarget ? "" : v.recordId as string, recordRevision: buyTarget ? 0 : Number(v.recordRevision), snapshotRevision: v.snapshotRevision, side: v.side as Draft["side"], mode: v.mode as Draft["mode"], orderType: v.orderType as Draft["orderType"], qty, price, fees,
     tif: v.tif as Draft["tif"], session: String(v.session), tradedAt: v.tradedAt as string | undefined, settlementAmount: v.settlementAmount === undefined ? undefined : number(v.settlementAmount), attachments: attachments(v.attachments), note: String(v.note ?? "") };
 }
 function reservation(source: ReturnType<typeof tradingState>, record: StockRecord, excluded?: string) {
@@ -137,9 +138,10 @@ function preview(userId: string, d: Draft, excluded?: string, targetRecord?: Sto
   if (total < 0 || total > 1e12 || d.side === "buy" && total > cash! - reserved.cash + 1e-8 || d.side === "sell" && d.qty > qty - reserved.qty + 1e-10) throw conflict("可用现金或可卖数量不足");
   const position = applyOrder({ qty, cost }, d);
   if (![position.qty, position.cost].every(Number.isFinite) || position.qty > 1e12) throw new RecordsError("成交后数量或成本超出上限");
+  const feeDetail=d.feeInput?calculateTradeFees(userId,record,d,d.feeInput):undefined;
   return { accountId: userId, recordId: record.id, recordRevision: record.revision, snapshotRevision: state.snapshotRevision,
     mode: d.mode, executionModel: "internal_trade_ledger", priceCurrency: ACCOUNT_MARKET_CURRENCY[record.market], settlementCurrency: currency,
-    amount, fees: d.fees, feeSource: "owner_recorded", feeBreakdown: null, settlementAmount: total,
+    amount, fees: d.fees, feeSource: feeDetail?.source ?? "owner_recorded", feeBreakdown: feeDetail?.components ?? null, feeDetail:feeDetail??null, settlementAmount: total,
     cashBefore: cash!, cashAfter: cash! + (d.side === "buy" ? -total : total), qtyBefore: qty, qtyAfter: position.qty, costBefore: cost, costAfter: position.cost,
     reservedCash: reserved.cash, reservedQty: reserved.qty, attachments: d.attachments ?? null, immediateAccounting: d.mode === "record", canSubmit: true };
 }
@@ -185,7 +187,7 @@ function children(userId: string, parent: string, d: Draft, fillPrice: number) {
   for (const [role, leg] of [["take_profit", d.attachments.takeProfit], ["stop_loss", d.attachments.stopLoss]] as const) {
     if (!leg) continue;
     const above = (d.side === "buy") === (role === "take_profit"), trigger = fillPrice * (1 + (above ? 1 : -1) * leg.percent / 100);
-    const child: Draft = { ...d, side: d.side === "buy" ? "sell" : "buy", mode: "order", price: leg.limitPrice ?? trigger, fees: leg.fees, orderType: leg.orderType, session: d.attachments.session, tif: d.attachments.tif, attachments: undefined, tradedAt: undefined };
+    const child: Draft = { ...d, side: d.side === "buy" ? "sell" : "buy", mode: "order", price: leg.limitPrice ?? trigger, fees: leg.fees, feeInput:undefined, orderType: leg.orderType, session: d.attachments.session, tif: d.attachments.tif, attachments: undefined, tradedAt: undefined };
     const id = pending(userId, child); saveMeta(userId, id, child, parent, role, above);
     getDb().prepare("UPDATE trade_orders SET trigger_price=? WHERE id=?").run(trigger, id);
   }
@@ -224,6 +226,7 @@ export function submitTrade(userId: string, body: unknown, authorize: () => stri
     }
     const id = d.mode === "record" ? executeOrder({ userId, ...d, triggerStatus: "API 实际成交登记" }).order.id : pending(userId, d);
     saveMeta(userId, id, d);
+    if(d.feeInput && p.feeDetail)saveTradeFee(userId,id,d.feeInput,p.feeDetail);
     if (d.mode === "record") children(userId, id, d, d.price);
     const childIds = new Set(metas(userId).filter(m => m.parent_id === id).map(m => m.order_id));
     return { ...(resolved ? {buyTarget:{...resolved.target,recordId:d.recordId,recordRevision:readRecord(userId,d.recordId)!.revision,createdRecordId}} : {}), preview: p, items: assetOrderRows(userId).filter(row => row.id === id || childIds.has(row.id)).map(row => assetOrderItem(userId, row)), snapshot: committedState(userId, d.recordId) };
@@ -237,6 +240,7 @@ export function amendTrade(userId: string, id: string, body: unknown, authorize:
     const p = preview(userId, d, id), db = getDb();
     db.prepare("UPDATE trade_orders SET side=?,qty=?,price=?,fees=?,amount=?,order_type=?,tif=?,session=?,note=?,trigger_status='等待明确行情观察' WHERE id=? AND user_id=?").run(d.side, d.qty, d.price, d.fees, d.qty * d.price, d.orderType, d.tif, d.session, d.note, id, userId);
     db.prepare("UPDATE app_trade_metadata SET draft_json=?,identity_json=? WHERE order_id=?").run(JSON.stringify({ ...d, confirmedAt: new Date().toISOString() }), identity(readRecord(userId, d.recordId)!), id);
+    if(d.feeInput && p.feeDetail)saveTradeFee(userId,id,d.feeInput,p.feeDetail);else clearTradeFee(userId,id);
     return { preview: p, items: [assetOrderItem(userId, assetOrderRows(userId).find(row => row.id === id)!)], snapshot: committedState(userId, d.recordId) };
   });
 }
