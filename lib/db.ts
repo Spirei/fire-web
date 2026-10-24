@@ -63,6 +63,15 @@ function migrate(database: Database.Database) {
       revoked_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_app_grants_user ON app_grants(user_id);
+    CREATE TABLE IF NOT EXISTS app_account_consents (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      client_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      security_stamp TEXT NOT NULL,
+      revision TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(user_id,client_id)
+    );
     CREATE TABLE IF NOT EXISTS app_login_challenges (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

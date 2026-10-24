@@ -279,6 +279,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v2/assets",
   "/api/v2/assets/lookup",
   "/api/v2/auth/config",
+  "/api/v2/auth/consent",
   "/api/v2/auth/email",
   "/api/v2/auth/email-change/confirm",
   "/api/v2/auth/email-change/request",

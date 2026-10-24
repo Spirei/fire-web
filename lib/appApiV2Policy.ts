@@ -29,6 +29,7 @@ export const APP_V2_ROUTES = [
   {path:"auth/login",methods:["POST"],access:"credential"},
   {path:"auth/login/totp",methods:["POST"],access:"credential"},
   {path:"auth/permissions",methods:["POST"],access:"portfolio.read"},
+  {path:"auth/consent",methods:["GET","POST"],access:"portfolio.read"},
   {path:"auth/token",methods:["POST"],access:"credential"},
   {path:"auth/revoke",methods:["POST"],access:"credential"},
   {path:"auth/password-reset/request",methods:["POST"],access:"credential"},

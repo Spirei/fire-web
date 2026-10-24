@@ -45,7 +45,7 @@ export function assertAppOrigin(request: Request) {
 type SecurityUser = { password_hash: string; totp_secret: string; totp_enabled: number };
 export function appSecurityStamp(user: SecurityUser) { return appTokenHash(`${user.password_hash}:${user.totp_enabled}:${user.totp_secret}`); }
 interface Grant extends SecurityUser {
-  id: string; user_id: string; scope: string; passkey_id: string | null; security_stamp: string;
+  id: string; user_id: string; client_id: string; scope: string; passkey_id: string | null; security_stamp: string;
   device_name: string; last_used_at: number; created_at: number; expires_at: number; revoked_at: number | null;
   username: string; nickname: string; uid: string; email: string; avatar: string; is_test: number;
 }
@@ -58,6 +58,39 @@ function activeGrant(id: string): Grant | null {
     revokeAppGrant(row.id); return null;
   }
   return row;
+}
+/** Account/client approval is separate from device tokens. Never union devices' permissions. */
+export function accountAppConsent(userId: string) {
+  const db=getDb();
+  if (!db.inTransaction) throw new Error("授权核对必须位于事务中");
+  const user=db.prepare("SELECT password_hash,totp_secret,totp_enabled FROM users WHERE id=?").get(userId) as SecurityUser | undefined;
+  if (!user) throw new Error("账户已失效");
+  const stamp=appSecurityStamp(user);
+  const saved=db.prepare("SELECT scope,security_stamp,revision FROM app_account_consents WHERE user_id=? AND client_id=?").get(userId,APP_CLIENT_ID) as {scope:string;security_stamp:string;revision:string}|undefined;
+  if (saved) return {scope:saved.security_stamp===stamp?saved.scope:APP_SCOPE,revision:appTokenHash(saved.revision+stamp)};
+  // Upgrade old installations from the latest still-valid, explicitly expanded grant.
+  // Base login grants cannot erase that approval; revoked/expired/foreign grants cannot seed it.
+  const rows=db.prepare("SELECT id FROM app_grants WHERE user_id=? AND client_id=? AND revoked_at IS NULL ORDER BY created_at DESC,rowid DESC").all(userId,APP_CLIENT_ID) as {id:string}[];
+  let scope=APP_SCOPE;
+  for (const row of rows) {
+    const grant=activeGrant(row.id);
+    if (!grant) continue;
+    const values=grant.scope.split(" ").filter(Boolean);
+    if (values.some(value=>!APP_SUPPORTED_SCOPES.includes(value)) || !values.includes("portfolio.read")) continue;
+    if (["feed","security","resources"].some(value=>values.includes(value+".write")&&!values.includes(value+".read"))) continue;
+    if (values.some(value=>!APP_SCOPE.split(" ").includes(value))) {scope=[...new Set(values)].join(" ");break;}
+  }
+  rememberAppConsent(userId,scope);
+  return accountAppConsent(userId);
+}
+export function rememberAppConsent(userId:string,scope:string) {
+  const db=getDb();
+  if (!db.inTransaction) throw new Error("授权保存必须位于事务中");
+  const user=db.prepare("SELECT password_hash,totp_secret,totp_enabled FROM users WHERE id=?").get(userId) as SecurityUser | undefined;
+  if (!user) throw new Error("账户已失效");
+  db.prepare(`INSERT INTO app_account_consents(user_id,client_id,scope,security_stamp,revision,updated_at) VALUES(?,?,?,?,?,?)
+    ON CONFLICT(user_id,client_id) DO UPDATE SET scope=excluded.scope,security_stamp=excluded.security_stamp,revision=excluded.revision,updated_at=excluded.updated_at`)
+    .run(userId,APP_CLIENT_ID,scope,appSecurityStamp(user),opaque("fcr_"),Date.now());
 }
 export function issueAppCode(auth: AppAuthorization, userId: string, browserToken: string): string {
   const db = getDb();
@@ -98,6 +131,7 @@ export function createNativeAppGrant(userId: string, scope: string, deviceName: 
   if (!scopes.includes("portfolio.read") || scopes.some(value => !APP_SUPPORTED_SCOPES.includes(value)) || (scopes.includes("feed.write") && !scopes.includes("feed.read")) || (scopes.includes("security.write") && !scopes.includes("security.read")) || (scopes.includes("resources.write") && !scopes.includes("resources.read"))) throw new Error("不支持的授权范围");
   const user = getDb().prepare("SELECT password_hash,totp_secret,totp_enabled FROM users WHERE id=?").get(userId) as SecurityUser | undefined;
   if (!user) throw new Error("账户已失效");
+  accountAppConsent(userId); // Preserve legacy approval before device-cap pruning.
   return createAppGrant(userId, user, [...new Set(scopes)].join(" "), deviceName, null,preserveGrantId);
 }
 export function exchangeAppCode(values: Record<string, unknown>) {
@@ -112,7 +146,9 @@ export function exchangeAppCode(values: Record<string, unknown>) {
     const session = db.prepare("SELECT passkey_id FROM sessions WHERE token=? AND user_id=? AND expires_at>?").get(code.session_hash, code.user_id, Date.now()) as { passkey_id: string | null } | undefined;
     const user = db.prepare("SELECT * FROM users WHERE id=?").get(code.user_id) as SecurityUser | undefined;
     if (!session || !user) return null;
-    return createAppGrant(code.user_id, user, code.scope, code.device_name, session.passkey_id);
+    const tokens=createAppGrant(code.user_id, user, code.scope, code.device_name, session.passkey_id);
+    rememberAppConsent(code.user_id,code.scope);
+    return tokens;
   }).immediate();
 }
 export function refreshAppTokens(clientId: unknown, token: unknown) {
@@ -139,8 +175,13 @@ export function revokeAppToken(token: string) {
   if (row) revokeAppGrant(row.grant_id);
 }
 export function revokeUserAppGrants(userId: string) {
-  getDb().prepare("UPDATE app_grants SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=?").run(Date.now(), userId);
-  getDb().prepare("DELETE FROM app_codes WHERE user_id=?").run(userId);
+  const db=getDb();
+  db.transaction(()=>{
+    // Persist the reset before any later login; do not re-seed from old devices.
+    rememberAppConsent(userId,APP_SCOPE);
+    db.prepare("UPDATE app_grants SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=?").run(Date.now(), userId);
+    db.prepare("DELETE FROM app_codes WHERE user_id=?").run(userId);
+  }).immediate();
 }
 
 /** Live App token validation shared across versions; never accepts a browser session token. */

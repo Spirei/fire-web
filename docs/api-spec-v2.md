@@ -90,7 +90,7 @@ security.version 为2，read_scope / write_scope 为 security.read / security.wr
 <details>
 <summary>额外权限 · 用户明确申请</summary>
 
-POST `/api/v2/auth/permissions`，携带当前 App Bearer：`{client_id:"fire-ios",scope:"profile.write"}`。scope 为明确申请的范围，最终并入原 scope，security.write/feed.write 需各自 read；普通登录、启动及恢复连接不能自动扩权。
+POST `/api/v2/auth/permissions`，携带当前 App Bearer：`{client_id:"fire-ios",scope:"profile.write"}`。scope 为明确申请的范围，最终并入原 scope，security.write/feed.write 需各自 read；普通登录仍仅签发基础范围，跨设备恢复只能沿 auth/consent 核对服务端已批准范围。
 
 有效本人连接明确申请后直接返回 authenticated，不要求密码或二次验证码，也不创建 permissions 挑战。native_login.version=2，permissions_authentication="current_grant"，permissions_requires_password=false，permissions_requires_2fa=false；旧客户端的 currentPassword 字段仍接受但不使用。只有实际修改邮箱、密码、两步验证、删除密钥/设备/账号等敏感操作才校验凭据，登录验证保持不变。
 
@@ -190,6 +190,8 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | POST | `/api/v2/auth/login` | credential |
 | POST | `/api/v2/auth/login/totp` | credential |
 | POST | `/api/v2/auth/permissions` | portfolio.read |
+| GET | `/api/v2/auth/consent` | portfolio.read |
+| POST | `/api/v2/auth/consent` | portfolio.read |
 | GET | `/api/v2/market-calendar` | public |
 | GET | `/api/v2/market-calendar/batch` | public |
 | POST | `/api/v2/auth/token` | credential |
@@ -1182,3 +1184,10 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 ### 飞书、Discord 与 QQ 个人提醒扩展
 
 沿 `price_alerts.messengers` 显式发现。客户端使用 `X-Alcor-Price-Alerts: messengers-v1` 才看到 feishu、discord、qq，并保留 wechat；`wechat-v1` 仍只有四渠道，无此请求头仍只有三渠道。操作名为 `feishu_start|confirm|disconnect`、`discord_*`、`qq_*`，收件人分别是单个 open_id 或邮箱、Discord 用户 ID、QQ openid。验证码、次数、限流和密钥规则与企业微信个人提醒相同。详情见 [股价提醒通知](native-price-alert-notifications.md)。
+
+
+### Account-scoped App consent
+
+Discovery: native_login.account_consent={version:1,path:"/api/v2/auth/consent",authentication:"current_grant",scope_source:"account_client"}. GET requires a live App Bearer and returns apiVersion/version/client_id/user_id/grant_id/scope/revision. This scope describes account approval, not current-device access.
+
+POST accepts only client_id and revision. The transaction checks the live grant and latest approval revision (409 on conflict), then issues an independent device grant with scope equal to the union of current access and account approval. The response is the complete permissions authenticated receipt with replaces_grant_id; unchanged grants return status="unchanged" and the GET descriptor. Responses are private,no-store. Invalid or late receipts must not replace a connection. See docs/native-account-consent.md for lifecycle and migration details.

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { APP_CLIENT_ID, APP_SCOPE, APP_SUPPORTED_SCOPES, appSecurityStamp, appTokenHash, authenticateAppAccess, createNativeAppGrant } from "./appAuth";
+import { APP_CLIENT_ID, APP_SCOPE, APP_SUPPORTED_SCOPES, accountAppConsent, rememberAppConsent, appSecurityStamp, appTokenHash, authenticateAppAccess, createNativeAppGrant } from "./appAuth";
 import { authenticateUser, getAuthUser } from "./auth";
 import { appProfile } from "./appProfile";
 import { DEFAULT_APP_DEVICE_NAME, normalizeAppDeviceName } from "./brand";
@@ -40,7 +40,7 @@ function currentGrant(request: Request) {
   const token=request.headers.get("authorization")?.match(/^Bearer (fat_[A-Za-z0-9_-]{43})$/)?.[1];
   if (!token) throw new LoginError("需要有效的 App 连接",40101,401);
   const grant=authenticateAppAccess(token,request);
-  if (!grant) throw new LoginError("连接已失效，请重新连接",40102,401);
+  if (!grant || grant.client_id!==APP_CLIENT_ID) throw new LoginError("连接已失效，请重新连接",40102,401);
   return grant;
 }
 function authenticated(request: Request, userId: string, scope: string, deviceName: string, sourceGrantId: string | null = null) {
@@ -74,6 +74,7 @@ function preserveFactorMigration(user: NativeUser) {
   const db=getDb(), before=appSecurityStamp(user), after=appSecurityStamp(current);
   db.prepare("UPDATE app_grants SET security_stamp=? WHERE user_id=? AND security_stamp=?").run(after,user.id,before);
   db.prepare("UPDATE app_login_challenges SET security_stamp=? WHERE user_id=? AND security_stamp=?").run(after,user.id,before);
+  db.prepare("UPDATE app_account_consents SET security_stamp=? WHERE user_id=? AND security_stamp=?").run(after,user.id,before);
 }
 export async function nativeLogin(request: Request) {
   budget(request);
@@ -98,7 +99,25 @@ export async function nativePermissions(request: Request) {
     if (!requested.length || requested.some(scope=>!APP_SUPPORTED_SCOPES.includes(scope)) || (scopes.includes("security.write")&&!scopes.includes("security.read")) || (scopes.includes("feed.write")&&!scopes.includes("feed.read")) || (scopes.includes("resources.write")&&!scopes.includes("resources.read"))) throw new LoginError("不支持的授权范围",40301,403);
     // Explicit scope consent uses the live connection; sensitive mutations verify credentials themselves.
     // Accept legacy currentPassword for compatibility, without storing or using it.
-    return authenticated(request,grant.user_id,scopes.join(" "),grant.device_name,grant.id);
+    const response=authenticated(request,grant.user_id,scopes.join(" "),grant.device_name,grant.id);
+    rememberAppConsent(grant.user_id,response.scope);
+    return response;
+  }).immediate();
+}
+/** Restore only the server's current approval, never caller-supplied scopes or another device's token. */
+export async function nativeAccountConsent(request:Request) {
+  const body=request.method==="POST"?await bodyFor(request,["client_id","revision"]):null;
+  if (body) budget(request);
+  return getDb().transaction(()=>{
+    const grant=currentGrant(request),consent=accountAppConsent(grant.user_id);
+    const descriptor={apiVersion:2,version:1,client_id:APP_CLIENT_ID,user_id:grant.user_id,grant_id:grant.id,...consent};
+    if (!body) return descriptor;
+    if (!body.revision || body.revision!==consent.revision) throw new LoginError("授权已变化，请重新核对",40901,409);
+    const scopes=[...new Set([...grant.scope.split(" "),...consent.scope.split(" ")])];
+    if (scopes.every(scope=>grant.scope.split(" ").includes(scope))) return {status:"unchanged",...descriptor};
+    const response=authenticated(request,grant.user_id,scopes.join(" "),grant.device_name,grant.id);
+    logSecurityEvent(request,grant.user_id,"app_account_consent_restored",JSON.stringify({grantId:response.grant_id}));
+    return response;
   }).immediate();
 }
 export async function nativeLoginFactor(request: Request) {
