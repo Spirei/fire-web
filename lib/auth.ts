@@ -1,3 +1,4 @@
+import { bumpAppSync } from "./appSyncSchema";
 import { purgeResourceUser } from "./resourceLibrary";
 import { createHash, randomBytes } from "crypto";
 import { getDb } from "./db";
@@ -315,7 +316,8 @@ export function updateProfile(
 }
 
 export function updateUserAvatar(userId: string, avatar: string) {
-  getDb().prepare("UPDATE users SET avatar = ? WHERE id = ?").run(avatar, userId);
+  const db=getDb();
+  db.transaction(()=>{db.prepare("UPDATE users SET avatar = ? WHERE id = ?").run(avatar, userId);bumpAppSync(db,userId,"profile");}).immediate();
 }
 
 export interface AdminUser extends User {

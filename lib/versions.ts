@@ -4978,9 +4978,9 @@ export const V0_1_66_ENTRY: VersionEntry = {
 };
 export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_66_ENTRY, version:"v0.1.67", date:"2026-10-25",
-  summary:"同账户跨设备恢复已批准的 App 授权。",
+  summary:"账户授权、自选内容及个人费率跨设备核对。",
   software:V0_1_66_ENTRY.software.map(item=>item.name==='Alcor'?{...item,version:'v0.1.67'}:item),
-  changes:[{kind:"fix",title:"跨设备授权恢复",desc:"同账户、同 App 的批准范围保存在服务端；新设备登录及已登录设备核对后获取独立令牌，旧版登录协议保持。旧安装只迁入最近仍有效的扩展授权，不合并其他设备的权限。"},{kind:"security",title:"授权恢复边界",desc:"恢复要求当前设备有效令牌与批准版本，不接受调用方指定权限；账号级撤销、改密与两步验证变化阻止旧授权复活，冲突与失败不冒充授权成功。"}]
+  changes:[{kind:"fix",title:"账户内容跨设备核对",desc:"自选备注、置顶、关注、分组及个人费率按账户共享，逐字段版本与删除标记防止旧设备覆盖；前台变更信号覆盖资料、持仓、券商、提醒和资源，设备偏好独立。"},{kind:"fix",title:"跨设备授权恢复",desc:"同账户、同 App 的批准范围保存在服务端；新设备登录及已登录设备核对后获取独立令牌，旧版登录协议保持。旧安装只迁入最近仍有效的扩展授权，不合并其他设备的权限。"},{kind:"security",title:"授权恢复边界",desc:"恢复要求当前设备有效令牌与批准版本，不接受调用方指定权限；账号级撤销、改密与两步验证变化阻止旧授权复活，冲突与失败不冒充授权成功。"}]
 };
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 

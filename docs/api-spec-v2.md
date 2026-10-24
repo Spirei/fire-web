@@ -190,6 +190,10 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | POST | `/api/v2/auth/login` | credential |
 | POST | `/api/v2/auth/login/totp` | credential |
 | POST | `/api/v2/auth/permissions` | portfolio.read |
+| GET | `/api/v2/account-sync` | portfolio.read |
+| GET | `/api/v2/app-state` | portfolio.read |
+| POST | `/api/v2/app-state` | portfolio.write |
+| GET | `/api/v2/app-state/operations/{requestId}` | portfolio.read |
 | GET | `/api/v2/auth/consent` | portfolio.read |
 | POST | `/api/v2/auth/consent` | portfolio.read |
 | GET | `/api/v2/market-calendar` | public |
@@ -1191,3 +1195,14 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 Discovery: native_login.account_consent={version:1,path:"/api/v2/auth/consent",authentication:"current_grant",scope_source:"account_client"}. GET requires a live App Bearer and returns apiVersion/version/client_id/user_id/grant_id/scope/revision. This scope describes account approval, not current-device access.
 
 POST accepts only client_id and revision. The transaction checks the live grant and latest approval revision (409 on conflict), then issues an independent device grant with scope equal to the union of current access and account approval. The response is the complete permissions authenticated receipt with replaces_grant_id; unchanged grants return status="unchanged" and the GET descriptor. Responses are private,no-store. Invalid or late receipts must not replace a connection. See docs/native-account-consent.md for lifecycle and migration details.
+
+
+### Account content synchronization
+
+`account_sync` discovery version 1 fixes `/api/v2/account-sync`, `/api/v2/app-state`, `/api/v2/app-state/operations/{requestId}`, 15-second foreground cadence, `patch_only:true` and `automatic_mutation_replay:false`. Namespaces are only `watch` and `fees`; device appearance, credentials and arbitrary preferences are excluded.
+
+GET account-sync returns `{version,userId,epoch,revisions}`. Owner-scoped transactional revisions cover profile, portfolio, watch groups, broker configuration, alerts, resources, feed, settings and account consent. Changes are signals to re-read the original authorized endpoint; counters never confer access to data or mutations. Lazy tables attach tracking before their first write.
+
+GET app-state requires `namespace=watch|fees` and returns `{version,userId,namespace,fields:{key:{revision,value}}}`. Deleted fields retain a null value and a revision. POST requires `{requestId,namespace,changes:[{key,revision,value}]}`; only changed keys are submitted, and all key versions must match in the same transaction. Disjoint edits merge. Same-key conflicts retain the winning data and produce a stored conflict receipt; there is no last-writer overwrite. Successful receipts contain a partial snapshot of the affected keys. Receipts are recovered only by original UUID; a repeated UUID with different body is rejected.
+
+Watch fields use JSON-array paths for hidden/pinned/memberships/orders/notes/aliases. They never create, delete or move a financial record. Fee plan JSON is transported as original base64 bytes to preserve Decimal precision; active plans require the current owner's broker account and cannot overlap effective periods. Sync does not alter historical order fees, cash or profit. Responses are private,no-store and require a live App Bearer; Cookie and another account cannot substitute.

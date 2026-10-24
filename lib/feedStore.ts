@@ -1,3 +1,4 @@
+import { installAppSync } from "./appSyncSchema";
 import { createHash, randomBytes } from "node:crypto";
 import { getDb } from "./db";
 import { FEED_PAGE_SIZE, FEED_ICONS, type FeedJob, type FeedMessage, type FeedPost, type FeedPreferences, type FeedSegment, type FeedSource, type FeedGroup, type FeedMode, type FeedPersonId } from "./feedTypes";
@@ -40,6 +41,7 @@ export function feedTables() {
     db.exec("UPDATE feed_posts SET sort_at=created_at WHERE sort_at=''; CREATE INDEX IF NOT EXISTS feed_posts_timeline ON feed_posts(user_id,group_id,kind,sort_at DESC,id DESC)");
   }).immediate();
   initialized.add(db);
+  installAppSync(db);
   return db;
 }
 export function feedGroup(userId:string,id="default"):FeedGroup {

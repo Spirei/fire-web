@@ -1,3 +1,4 @@
+import { installAppSync } from "./appSyncSchema";
 import { randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import fs from "fs";
@@ -1261,6 +1262,7 @@ export function getDb(): Database.Database {
       installAccountChanges(db);
       installAssetAllocation(db);
       seed(db);
+      installAppSync(db);
     } catch (error) {
       db.close();
       db = null; // A failed startup must not expose a partially initialized handle.

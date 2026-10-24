@@ -1,3 +1,4 @@
+import { installAppSync } from "./appSyncSchema";
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { getDb } from './db';
 import { installPriceAlerts } from './priceAlertsSchema';
@@ -22,7 +23,7 @@ export const channels: AlertChannel[] = ['app','email','telegram','wechat','feis
 const preferenceColumn: Record<AlertChannel,string> = {app:'app',email:'email',telegram:'telegram',wechat:'wechat',feishu:'feishu',discord:'discord',qq:'qq'};
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const bad = (message: string, status = 400): never => { throw new RecordsError(message, status); };
-export function alertDb() { const db=getDb(); installPriceAlerts(db); return db; }
+export function alertDb() { const db=getDb(); installPriceAlerts(db); installAppSync(db); return db; }
 export function touchAlertOwner(userId:string) { alertDb().prepare('INSERT INTO price_alert_collections VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET revision=revision+1').run(userId); }
 export function telegramConfigured() { return telegramReady() && /^[A-Za-z0-9_]{5,32}$/.test(telegramBotUsername()); }
 export function alertsAvailable() { return process.env.ALCOR_PRICE_ALERTS_ENABLED !== 'false'; }

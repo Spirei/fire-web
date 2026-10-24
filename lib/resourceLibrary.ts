@@ -1,3 +1,4 @@
+import { installAppSync } from "./appSyncSchema";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
@@ -33,6 +34,7 @@ function database() {
         PRIMARY KEY(user_id,request_id));`);
     initialized.add(db);
   }
+  installAppSync(db);
   return db;
 }
 export function resourceCategory(value: unknown): ResourceCategory {
