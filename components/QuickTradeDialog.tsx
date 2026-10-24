@@ -412,8 +412,9 @@ export default function QuickTradeDialog({ open, record, initialSide, initialQty
               : <i className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>;
           })()}
           <span className="text-lg font-bold text-[#1d1d1f] dark:text-white">{record.name}</span>
-          <MarketCodeBadge market={record.market} code={record.code} /><StockConnectBadge market={record.market} accountMarket={record.accountMarket} />
+          <MarketCodeBadge market={record.market} code={record.code} />
           <span className="text-sm text-[#6b6b70] dark:text-white/60">{record.code}.{record.market}</span>
+          <StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} />
           <span className="flex-1" />
         </div>
 

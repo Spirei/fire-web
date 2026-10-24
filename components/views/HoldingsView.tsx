@@ -567,7 +567,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           {icon ? <img src={icon} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{(record.name || "?").slice(0, 1)}</span>}
           <EtfDoubleBadge market={record.market} code={record.code} name={record.name} />
         </span>
-        <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={record.market} code={record.code} /><StockConnectBadge market={record.market} accountMarket={record.accountMarket} /><span className="truncate text-[11px] text-faint">{record.code}</span><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></span></span>
+        <span className="min-w-0"><span className="block truncate font-semibold text-ink transition-colors group-hover:text-brand-deep dark:group-hover:text-[#c6cdd8]">{record.name}</span><span className="mt-0.5 flex min-w-0 items-center gap-1.5"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate text-[11px] text-faint">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></span></span>
       </button>;
     }
     if (key === "marketValue") return marketValue !== null ? <span className="font-semibold">{compactMoney(marketValue * displayMoneyFactor, displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
@@ -929,8 +929,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
               <div className="min-w-0">
                 <div className="flex min-w-0 items-baseline gap-2">
                   <h2 className="truncate text-lg font-bold text-ink">{selectedHolding.name}</h2>
-                  <MarketCodeBadge market={selectedHolding.market} code={selectedHolding.code} /><StockConnectBadge market={selectedHolding.market} accountMarket={selectedHolding.accountMarket} />
+                  <MarketCodeBadge market={selectedHolding.market} code={selectedHolding.code} />
                   <span className="flex-none text-xs font-semibold text-faint">{selectedHolding.code}</span>
+                  <StockConnectBadge variant="label" market={selectedHolding.market} accountMarket={selectedHolding.accountMarket} />
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                   <span className="inline-flex items-center gap-1.5"><MarketIcon market={selectedHolding.market} flag={flagFor(selectedHolding.market)} size={16} />{isStockConnect(selectedHolding) ? "港股上市 · A 股账户" : detailMeta.label}</span>

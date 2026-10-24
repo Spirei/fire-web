@@ -225,10 +225,10 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 const ORDER_COLUMNS: OrderColumnDef[] = [
-  { key: "actions", label: "操作", align: "center", defaultVisible: true, sortable: false, minWidth: 110 },
+  { key: "actions", label: "操作", align: "center", defaultVisible: true, sortable: false, minWidth: 168 },
   { key: "status", label: "订单状态", align: "left", defaultVisible: true, sortable: true, minWidth: 90 },
   { key: "market", label: "市场", align: "left", defaultVisible: true, sortable: true, minWidth: 80 },
-  { key: "code", label: "股票代码", align: "left", defaultVisible: true, sortable: true, minWidth: 100 },
+  { key: "code", label: "股票代码", align: "left", defaultVisible: true, sortable: true, minWidth: 156 },
   { key: "name", label: "股票名称", align: "left", defaultVisible: true, sortable: true, minWidth: 220 },
   { key: "side", label: "方向", align: "center", defaultVisible: true, sortable: true, minWidth: 70 },
   { key: "orderType", label: "委托类型", align: "left", defaultVisible: true, sortable: true, minWidth: 90 },
@@ -954,7 +954,7 @@ export default function TradeOrdersPanel({
           </span>
         );
       case "code":
-        return <span className="font-mono font-semibold text-ink">{order.code}</span>;
+        return <span className="inline-flex items-center gap-1.5"><span className="font-mono font-semibold text-ink">{order.code}</span><StockConnectBadge variant="label" market={order.market} accountMarket={order.accountMarket} /></span>;
       case "name": {
         const icon = stockIcons[`${order.market.toUpperCase()}:${order.code.toUpperCase()}`];
         return (
@@ -963,7 +963,7 @@ export default function TradeOrdersPanel({
               {icon ? <img src={icon} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-gray text-[11px] font-bold text-muted">{order.name.slice(0, 1)}</span>}
               <EtfDoubleBadge market={order.market} code={order.code} name={order.name} />
             </span>
-            <span className="truncate font-medium text-ink" title={order.name}>{order.name}</span><StockConnectBadge market={order.market} accountMarket={order.accountMarket} />
+            <span className="truncate font-medium text-ink" title={order.name}>{order.name}</span>
           </span>
         );
       }
@@ -997,38 +997,43 @@ export default function TradeOrdersPanel({
       case "rejectReason": return <span className="text-faint">—</span>;
       case "actions":
         return (
-          <div className="inline-flex items-center gap-1">
-            {order.status === "pending" && !order.apiManaged && (
+          <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
+            <span />
+            <span className="inline-flex items-center gap-1">
+              {order.status === "pending" && !order.apiManaged && (
+                <button
+                  type="button"
+                  onClick={() => void handleCancel(order)}
+                  title="撤单"
+                  aria-label="撤单"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink dark:border-white/10 dark:hover:bg-white/10"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                    <path d="M4 8h16" /><path d="M6 8l1 12h10l1-12" /><path d="M9 8V6a2 2 0 0 1 4 0v2" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => void handleCancel(order)}
-                title="撤单"
-                aria-label="撤单"
+                onClick={() => setDetailOrder(order)}
+                title="查看订单详情"
+                aria-label="查看订单详情"
                 className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink dark:border-white/10 dark:hover:bg-white/10"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <path d="M4 8h16" /><path d="M6 8l1 12h10l1-12" /><path d="M9 8V6a2 2 0 0 1 4 0v2" />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="h-3.5 w-3.5">
+                  <path d="M9 5h11M9 10h11M9 15h11M9 20h11" /><path d="M4 5h1M4 10h1M4 15h1M4 20h1" />
                 </svg>
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setDetailOrder(order)}
-              title="查看订单详情"
-              aria-label="查看订单详情"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink dark:border-white/10 dark:hover:bg-white/10"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="h-3.5 w-3.5">
-                <path d="M9 5h11M9 10h11M9 15h11M9 20h11" /><path d="M4 5h1M4 10h1M4 15h1M4 20h1" />
-              </svg>
-            </button>
-            {(order.apiManaged || order.historyLocked) && <span className="text-[11px] text-muted" title={order.apiManaged ? "在 App 中管理此订单" : "此证券包含 App 成交回执，保留历史记录"}>{order.apiManaged ? "App 订单" : "只读"}</span>}
-            {onEdit && !order.apiManaged && !order.historyLocked && <button type="button" onClick={() => onEdit(order)} className="btn btn-ghost btn-sm">编辑</button>}
-            {onDelete && !order.apiManaged && !order.historyLocked && (
-              <button type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="btn btn-ghost btn-sm text-down disabled:opacity-50">
-                {deletingId === order.id ? "删除中…" : <DeleteIcon size={13} />}
-              </button>
-            )}
+            </span>
+            <span className="flex min-w-0 items-center gap-1 overflow-hidden pl-1">
+              {(order.apiManaged || order.historyLocked) && <span className="truncate text-[11px] text-muted" title={order.apiManaged ? "在 App 中管理此订单" : "此证券包含 App 成交回执，保留历史记录"}>{order.apiManaged ? "App 订单" : "只读"}</span>}
+              {onEdit && !order.apiManaged && !order.historyLocked && <button type="button" onClick={() => onEdit(order)} className="btn btn-ghost btn-sm">编辑</button>}
+              {onDelete && !order.apiManaged && !order.historyLocked && (
+                <button type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="btn btn-ghost btn-sm text-down disabled:opacity-50">
+                  {deletingId === order.id ? "删除中…" : <DeleteIcon size={13} />}
+                </button>
+              )}
+            </span>
           </div>
         );
       default: return null;
@@ -1836,7 +1841,7 @@ export default function TradeOrdersPanel({
                     </span>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">{detail.name}</p>
-                      <p className="truncate text-[11px] text-faint">{detail.code} · {meta.label} · {currency}</p>
+                      <p className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-faint"><span>{detail.code}</span><StockConnectBadge variant="label" market={detail.market} accountMarket={detail.accountMarket} /><span className="truncate">· {meta.label} · {currency}</span></p>
                     </div>
                   </div>
                 </div>
