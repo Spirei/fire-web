@@ -52,3 +52,14 @@ assert 'bad' not in data['charts']
 assert all(option == {'subscribe_push': False, 'session': 'ALL'} for option in Context.last.options)
 assert Context.last.closed
 print('PASS production RT_DATA bridge: actual fields, session, blank/wrong-security/overnight rejection, per-symbol failure and close (fake SDK only)')
+
+# The opt-in full-session API preserves actual overnight stamps without altering the legacy chart.
+output = io.StringIO()
+payload['cmd'] = 'chart_series'
+with patch.dict(sys.modules, {'futu': sdk}), patch('sys.stdin', io.StringIO(json.dumps(payload))), patch('sys.stdout', output):
+    bridge.main()
+full = json.loads(output.getvalue())['charts']['review']['points']
+assert [p['price'] for p in full] == [45, 46, 100]
+assert all(isinstance(p['timestamp'], int) for p in full)
+assert Context.last.closed
+print('PASS full-session bridge retains real overnight timestamp; blank and wrong-security rows remain excluded')

@@ -20,6 +20,7 @@ export function appConfiguration(request:Request,version:1|2=1) {
   try { assertAppOrigin(request); } catch(error) { return fail(40301,(error as Error).message,403); }
   const base=`/api/v${version}`;
   return ok({version,api_versions_supported:[1,2],app_api_version:2,app_api_base_path:"/api/v2",
+    chart_series: { version: 1, path: `${base}/chart-series`, markets: ["US", "HK", "CN", "JP", "KR"] },
     market_ranking: { version: 1, path: `${base}/market-ranking`, metric: "volume", markets: ["US", "HK", "CN"] },
     market_amount_ranking: { version: 1, path: `${base}/market-ranking`, metric: "amount", markets: ["US", "HK", "CN"] },
     account_sync:appSyncDiscovery(),

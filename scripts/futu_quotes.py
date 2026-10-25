@@ -205,7 +205,7 @@ def main():
     try:
         ctx = OpenQuoteContext(host=host, port=port)
 
-        if cmd == "intraday":
+        if cmd in ("intraday", "chart_series"):
             from futu import SubType, Session
             charts = {}
             for item in items:
@@ -234,9 +234,17 @@ def main():
                             continue
                         minute = stamp[11:16]
                         # Current contract is one 04:00–20:00 US trading day.
-                        if market == "US" and not "04:00" <= minute < "20:00":
+                        if cmd == "intraday" and market == "US" and not "04:00" <= minute < "20:00":
                             continue
                         rows.append((stamp[:10], {"time": minute, "price": price, "volume": _num(row.get("volume")) or 0}))
+                    if rows and cmd == "chart_series":
+                        from datetime import datetime
+                        from zoneinfo import ZoneInfo
+                        zone = ZoneInfo({"US": "America/New_York", "HK": "Asia/Hong_Kong", "CN": "Asia/Shanghai"}[market])
+                        charts[str(item.get("id") or symbol)] = {"points": [
+                            {"timestamp": int(datetime.strptime(day + " " + point["time"], "%Y-%m-%d %H:%M").replace(tzinfo=zone).timestamp()), "price": point["price"]}
+                            for day, point in rows], "source": "futu"}
+                        continue
                     if rows:
                         date = max(row[0] for row in rows)
                         points = {row[1]["time"]: row[1] for row in rows if row[0] == date}

@@ -105,6 +105,7 @@ export const APP_V2_ROUTES = [
   {path:"celebs/[id]/returns",methods:["GET"],access:"public"},
   {path:"quotes",methods:["POST"],access:"public"},
   {path:"quote-subscriptions",methods:["GET","POST","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
+  {path:"chart-series",methods:["GET"],access:"public"},
   {path:"charts",methods:["POST"],access:"public"},
   {path:"kline",methods:["GET"],access:"public"},
   {path:"index-kline",methods:["GET"],access:"public"},

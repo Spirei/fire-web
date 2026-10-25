@@ -177,6 +177,17 @@ export async function fetchFutuIntraday(items: QuoteItem[], signal: AbortSignal)
   return (parsed.charts as Record<string, import("./quotes").Intraday> | undefined) || {};
 }
 
+/** Preserve all RT_DATA timestamps for the opt-in full-session contract. Legacy charts stay unchanged. */
+export async function fetchFutuMinuteSeries(market: string, code: string, signal: AbortSignal): Promise<Array<{ timestamp: number; price: number }>> {
+  if (!["US", "HK", "CN"].includes(market) || !(await isFutuAvailable())) return [];
+  signal.throwIfAborted();
+  const { futuHost, futuPort } = getSiteSettings();
+  const parsed = await runBridge({ cmd: "chart_series", items: [{ id: "series", market, code }] }, futuHost, Number(futuPort) || 11111, signal);
+  signal.throwIfAborted();
+  const charts = parsed.charts as Record<string, { points?: Array<{ timestamp: number; price: number }> }> | undefined;
+  return charts?.series?.points ?? [];
+}
+
 /** 富途搜索（get_search_quote + 快照补价）；失败抛错由调用方回退腾讯。 */
 export async function searchFutu(keyword: string, limit = 8): Promise<SearchMatch[]> {
   if (!keyword.trim() || !(await isFutuAvailable())) return [];
