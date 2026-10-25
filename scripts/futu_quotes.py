@@ -171,6 +171,29 @@ def _market_snapshot(ctx, symbols, skipped, split_budget, ret_ok):
     return _market_snapshot(ctx, symbols[:mid], skipped, split_budget, ret_ok) + _market_snapshot(ctx, symbols[mid:], skipped, split_budget, ret_ok)
 
 
+def _detail_metrics(row, market):
+    """Strict observed snapshot metrics; no generic PE, NAV or AUM fallback."""
+    equity = str(row.get("equity_valid")).lower() == "true"
+    currency = {"US": "USD", "HK": "HKD", "CN": "CNY", "JP": "JPY", "KR": "KRW"}.get(market)
+    def metric(key, eligible=True, positive=False, nonzero=False):
+        value = _num(row.get(key)) if eligible else None
+        if value is None or (positive and value <= 0) or (nonzero and value == 0):
+            return None
+        return value
+    turnover = metric("turnover_rate")
+    dividend = metric("dividend_ratio_ttm", equity)
+    return {
+        "currency": currency,
+        "time": str(row.get("update_time") or ""),
+        "source": "futu",
+        "turnoverRate": turnover if turnover is not None and turnover >= 0 else None,
+        "peTtm": metric("pe_ttm_ratio", equity, nonzero=True),
+        "pe": metric("pe_ratio", equity, nonzero=True),
+        "marketCap": metric("total_market_val", equity, positive=True),
+        "dividendYieldTtm": dividend if dividend is not None and dividend >= 0 else None,
+    }
+
+
 def main():
     _ensure_utf8_io()
     try:
@@ -495,6 +518,7 @@ def main():
                     "floatShares": _num(row.get("outstanding_shares")),
                     "averagePrice": _num(row.get("avg_price")),
                     "dividendYieldTtm": _num(row.get("dividend_ratio_ttm")),
+                    "detailMetrics": _detail_metrics(row, item.get("market")),
                     "secStatus": str(row.get("sec_status") or "")
                 }
         print(json.dumps({"ok": True, "quotes": out, "skipped": skipped}, ensure_ascii=False))

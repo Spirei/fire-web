@@ -1219,3 +1219,11 @@ GET account-sync returns `{version,userId,epoch,revisions}`. Owner-scoped transa
 GET app-state requires `namespace=watch|fees` and returns `{version,userId,namespace,fields:{key:{revision,value}}}`. Deleted fields retain a null value and a revision. POST requires `{requestId,namespace,changes:[{key,revision,value}]}`; only changed keys are submitted, and all key versions must match in the same transaction. Disjoint edits merge. Same-key conflicts retain the winning data and produce a stored conflict receipt; there is no last-writer overwrite. Successful receipts contain a partial snapshot of the affected keys. Receipts are recovered only by original UUID; a repeated UUID with different body is rejected.
 
 Watch fields use JSON-array paths for hidden/pinned/memberships/orders/notes/aliases. They never create, delete or move a financial record. Fee plan JSON is transported as original base64 bytes to preserve Decimal precision; active plans require the current owner's broker account and cannot overlap effective periods. Sync does not alter historical order fees, cash or profit. Responses are private,no-store and require a live App Bearer; Cookie and another account cannot substitute.
+
+### 个股详情快照指标（quotes 可选字段）
+
+`POST /api/v2/quotes`（v1 同源）每条行情可包含 `detailMetrics: { currency, time, source, turnoverRate, peTtm, pe, marketCap, dividendYieldTtm }`。字段缺失或 null 为未知；换手率／股息率均为百分数值（0.27 表示 0.27%），PE 为倍数，市值为 currency 原币绝对金额。指标保留自身快照 `time`／`source`，扩展报价兜底替换现价时不重写指标观察时间；不表示历史蜡烛当时的估值。
+
+富途只在 `equity_valid=true` 时输出正股 TTM PE、普通 PE、TTM 股息率与总市值；不以普通 `pe_ratio`、净资产或 ETF AUM 补造。腾讯沿已有 f39 普通 PE 合同输出 `pe`，不标为 TTM，不把含糊的市值字段或估算字段提升为已核实数据。App 优先 `peTtm`，仅有 `pe` 时显示无 TTM 上标的市盈率；仅旧服务无该对象且明确富途／腾讯来源时可沿原 `pe` 合同显示普通市盈率。Yahoo 缺少该对象时不补造。旧 `pe`／`marketCap` 行为保持兼容；`includeMarketCap` 的 ETF 估值补齐不写入 `detailMetrics`。新 App 只消费该可选对象，旧服务缺失时安静显示未知，无额外上游请求。
+
+数据口径：[富途快照字段](https://openapi.futunn.com/futu-api-doc/quote/get-market-snapshot.html)。

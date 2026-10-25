@@ -41,6 +41,22 @@ global.fetch = async url => tencent(url);
 let count = 0;
 async function test(name, run) { await run(); console.log('PASS ' + name); count++; }
 (async () => {
+  await test('fallback quotes retain actual generic PE without inventing TTM or promoting ambiguous market caps', async () => {
+    const previousFetch = global.fetch;
+    global.fetch = async url => {
+      const symbol = String(url).split('/').pop(), fields = Array(70).fill('');
+      Object.assign(fields, {1:'Fixture',3:'100',30:'20261023160000',31:'1',36:'1000',38:symbol==='usEMPTY'?'':'0',39:'99',44:'50700',52:'1.2'});
+      return new Response(`v_${symbol}="${fields.join('~')}";`);
+    };
+    try {
+      const rows = await fetchBatch(['usAAPL','hk00700','sh600519','usEMPTY','jp7203']);
+      for (const [symbol,currency] of [['usAAPL','USD'],['hk00700','HKD'],['sh600519','CNY'],['usEMPTY','USD']]) {
+        assert.equal(rows.get(symbol).pe,99);
+        assert.deepEqual(rows.get(symbol).detailMetrics,{currency,time:'20261023160000',source:'tencent',pe:99});
+      }
+      assert.equal(rows.get('jp7203').detailMetrics,undefined);
+    } finally { global.fetch=previousFetch; }
+  });
   await test('published HK symbols release joined readers before mixed US batch finishes', async () => {
     const slow = gate(); let mixedFinished = false;
     futuLoad = async rows => { await slow.promise; return new Map(rows.map(row => [row.id, quote])); };

@@ -18,6 +18,18 @@ const DEFAULT_CHART_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?c
 // 东方财富搜索联想接口的公开 token（接口本身无需授权，权当常量避免散落在 URL 字符串里）
 const EASTMONEY_SEARCH_TOKEN = "D43BF722C8E33BDC906FB84D85E326E8";
 
+export interface QuoteDetailMetrics {
+  /** Snapshot currency; cap is an observed total, never ETF AUM/price-derived. */
+  currency?: string | null;
+  time?: string;
+  source?: "futu" | "tencent";
+  turnoverRate?: number | null;
+  peTtm?: number | null;
+  pe?: number | null;
+  marketCap?: number | null;
+  dividendYieldTtm?: number | null;
+}
+
 export interface Quote {
   name: string;
   price: number;
@@ -37,7 +49,7 @@ export interface Quote {
   amount?: number;
   /** 市盈率（腾讯 f39） */
   pe?: number;
-  /** 换手率 %（腾讯 f43） */
+  /** 换手率 %（腾讯 f38） */
   turnover?: number;
   amplitude?: number;
   epsTtm?: number;
@@ -53,6 +65,8 @@ export interface Quote {
   averagePrice?: number;
   /** 总市值（本地货币，腾讯 f44 × 1e8） */
   marketCap?: number;
+  /** Optional strict detail metrics; legacy pe/marketCap remain independent. */
+  detailMetrics?: QuoteDetailMetrics;
   /** 行情来源：futu=富途 / tencent=腾讯兜底 / yahoo=Yahoo 扩展时段兜底 / auto */
   source?: "futu" | "tencent" | "yahoo" | "auto";
   /** A recent active-pool snapshot was returned while scheduled updates continue. */
@@ -155,6 +169,12 @@ export async function fetchBatch(symbols: string[], signal?: AbortSignal, publis
           volume,
           amount,
           pe: Number(f[39]) || undefined,
+          // Generic PE is the established f39 contract; do not label it TTM.
+          detailMetrics: /^(us|hk|sh|sz|bj)/.test(parsed.symbol) ? {
+            currency: parsed.symbol.startsWith("us") ? "USD" : parsed.symbol.startsWith("hk") ? "HKD" : "CNY",
+            time: f[30] || "", source: "tencent",
+            pe: Number.isFinite(Number(f[39])) && Number(f[39]) !== 0 ? Number(f[39]) : undefined
+          } : undefined,
           turnover: Number(f[38]) || 0,
           amplitude: Number(f[43]) || 0,
           marketCap: Number(f[44]) > 0 ? Number(f[44]) * 1e8 : undefined,

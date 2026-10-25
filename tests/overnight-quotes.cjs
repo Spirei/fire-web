@@ -24,6 +24,9 @@ function bridge(row,ctx=context('US',new RealDate(now)),extra=[]){
  const payload={cmd:'quotes',items:[{id:'a',market:'US',code:'AAPL',...ctx},...extra],testRows:[{code:'US.AAPL',name:'AAPL',last_price:100,prev_close_price:90,update_time:'2026-10-01 23:36:54.780',volume:0,turnover:0,overnight_price:101,overnight_change_val:1,...row}]};
  const r=spawnSync('python3',['-c',python,path.join(root,'scripts/futu_quotes.py')],{input:JSON.stringify(payload),encoding:'utf8',timeout:5000});assert.equal(r.status,0,r.stderr);const result=JSON.parse(r.stdout);assert.equal(result.ok,true);return result;
 }
+const detailRow=bridge({equity_valid:true,turnover_rate:0.27,pe_ttm_ratio:39.36,pe_ratio:99,total_market_val:5070000000000,dividend_ratio_ttm:0.4}).quotes.a;
+assert.deepEqual(detailRow.detailMetrics,{currency:'USD',time:'2026-10-01 23:36:54.780',source:'futu',turnoverRate:0.27,peTtm:39.36,pe:99,marketCap:5070000000000,dividendYieldTtm:0.4});
+assert.equal(bridge({equity_valid:false,pe_ttm_ratio:39.36,pe_ratio:99}).quotes.a.detailMetrics.peTtm,null);
 let count=0;async function test(name,run){await run();count++;console.log('PASS '+name);}
 (async()=>{
  await test('US Sunday open and Friday/Saturday closure keep the 20:00 settlement boundary',()=>{
