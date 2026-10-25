@@ -349,6 +349,7 @@ records 新增显式 `auth/config → data.records_contract.version=1`，按原�
 | --- | --- | --- | --- |
 | POST | `/api/v1/quotes` | 批量实时行情（≤100 只，body `{ items: [{ id, market, code }] }`） | 无（限流） |
 | POST | `/api/v1/charts` | 多市场当日分时走势（≤100 只） | 无（限流） |
+| GET | `/api/v1/chart-series` | 单证券全天或五日分时（`market`、`code`、`days=1\|5`，交易所当地日期） | 无（限流） |
 | GET | `/api/v1/kline` | 月 K（`?market=US&code=AAPL`） | 登录 |
 | GET | `/api/v1/rates` | 汇率（`?refresh=1` 强制刷新） | 登录 |
 | GET | `/api/v1/search` | 股票搜索（`?q=`） | 无（限流） |

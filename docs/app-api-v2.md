@@ -80,6 +80,7 @@ security.version=2，read_scope:security.read/write_scope:security.write；secur
 | `quotes` | POST | public |
 | `quote-subscriptions` | GET,POST,DELETE | portfolio.read；写入 portfolio.write |
 | `charts` | POST | public |
+| `chart-series` | GET | public |
 | `kline` | GET | public |
 | `index-kline` | GET | public |
 | `kline-sessions` | GET | public |

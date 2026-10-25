@@ -306,6 +306,7 @@ public 可匿名访问且不继承 Cookie 身份；显式携带 Authorization �
 | POST | `/api/v2/quote-subscriptions` | portfolio.write |
 | DELETE | `/api/v2/quote-subscriptions` | portfolio.write |
 | POST | `/api/v2/charts` | public |
+| GET | `/api/v2/chart-series` | public |
 | GET | `/api/v2/kline` | public |
 | GET | `/api/v2/index-kline` | public |
 | GET | `/api/v2/kline-sessions` | public |
@@ -598,6 +599,18 @@ v1/v2 共用按市场分开的公共行情池。已认证的批量报价、资�
 - **客户端**：两版行情共用服务和上述字段。缺少可确认的当期报价时继续保留持仓，本期金额显示 `—`，不填0、不隐藏股票、不用旧价算本期夜盘收益。个股夜盘可用性不同，完整规则见 [夜盘报价交接](overnight-quotes.md)。
 
 美股 K 线会先规范化交易所后缀（例如 `SPCH.AM → SPCH`）。日 K 首选新浪，空数据时自动回退 Yahoo 日线；5 日分钟线同样在新浪缺失时回退 Yahoo 5 分钟线。客户端只消费统一的 `items` / `points`，无需识别上游，适用于新上市 ETF 与美交所证券。
+
+### 6.3.1 全天与五日分时
+
+单只证券的分钟序列，与上面的批量迷你图 `POST /api/v2/charts` 分开。v1、v2 分别为 `GET /api/v1/chart-series`、`GET /api/v2/chart-series`，权限 public。两版 `auth/config` 的 `chart_series` 为 `{version:1, path, markets:["US","HK","CN","JP","KR"]}`，`path` 跟随所读配置的版本。
+
+`GET /api/v2/chart-series?market=US&code=AAPL&days=1`
+
+`days` 只接受 `1` 或 `5`。`code` 为 1–40 位大写字母、数字、`.`、`_`、`-`。参数不符返回 40001。单地址每分钟 90 次、全站每分钟 500 次，超出返回 42901。真实分钟点不足两个时返回 50002。
+
+`data` 为 `{market, code, days, source, coverage:{overnight}, points:[{date, time, price}]}`。`date` 是 `YYYY-MM-DD`，`time` 是 `HH:mm`，都按交易所时区：美股 `America/New_York`，港股 `Asia/Hong_Kong`，A 股 `Asia/Shanghai`，日股 `Asia/Tokyo`，韩股 `Asia/Seoul`。只保留实际观测到的正价格；不按日历补点，不用昨收填空，同一分钟出现不同价格时丢掉该分钟。
+
+`days=5` 的美股只保留常规交易时段 `09:30`–`16:00`。`days=1` 的美股可以纳入前一当地日 `20:00` 起的点来选取本次交易日，点上的 `date` 仍是原始当地日；出现 `20:00` 及以后或 `04:00` 以前的点时 `coverage.overnight` 为 true，否则为 false。`days=1` 先读富途分钟，失败再读含盘前盘后的 Yahoo 1 分钟；`days=5` 读 Yahoo 5 分钟。同一证券和天数共享约 30 秒。北交所代码（`4`、`8`、`920` 开头）没有对应序列。
 
 ### 6.4 K 线时段
 
