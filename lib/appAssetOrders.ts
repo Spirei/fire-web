@@ -1,3 +1,4 @@
+import { orderExecutionAuthorized } from "./orderExecutionAuthorization";
 import { getDb } from "./db";
 import { readRecord, listRecords } from "./store";
 import { RecordsError, validRecordRequestId } from "./recordsContract";
@@ -39,7 +40,14 @@ export function assetOrderItem(userId: string, row: Row, quote?: Quote, cachedRe
       }
     } catch { /* Missing confirmation inputs must not be guessed by amendment editors. */ }
   }
+  let executionGrant: string | undefined;
+  try { executionGrant = JSON.parse(String(row.submission_draft)).executionGrant; } catch { /* Legacy drafts stay explicit. */ }
+  const continuousExecution = typeof executionGrant === "string";
+  const executionScan = continuousExecution ? getDb().prepare("SELECT result,scanned_at FROM app_order_worker_scans WHERE order_id=?").get(row.id) as {result:string|null;scanned_at:number}|undefined : undefined;
+  const executionFailure = executionScan?.result;
+  const executionStatus = row.status !== "pending" ? null : !row.role ? null : !identityMatches ? "证券身份已变化，执行已暂停" : !continuousExecution ? "待重新确认委托" : !orderExecutionAuthorized(userId, executionGrant!) ? "授权失效，执行已暂停" : executionFailure ? executionFailure : row.trigger_status === "已触发，等待委托价" ? row.trigger_status : !executionScan ? "等待服务端核对" : Date.now() - executionScan.scanned_at > 30000 ? "服务端监控暂未更新" : "服务端持续核对";
   return {
+    continuousExecution, executionStatus,
     id: row.id, orderNo: row.order_no, recordId: row.record_id, market: row.market, code: row.code, name: row.name,
     side: row.side, status: row.status, revision: row.revision, recordRevision: record?.revision ?? null, identityMatches,
     accountMarket: identityMatches ? holdingAccountMarket(record!) : row.settlement_currency === "CNY" ? "CN" : row.market,

@@ -52,8 +52,8 @@ export async function tradingResponse(request: Request, action: Action, params?:
       const snapshot = await fetchOverviewQuotes([{ id: row.id, market: row.market, code: row.code }], 1_500, { tracked: false }); authorize();
       outcome = observeTrade(first.user_id, row.id, body, snapshot.quotes[row.id], authorize);
     } else if (action === "cash") outcome = reconcileCash(first.user_id, body, authorize);
-    else if (action === "amend") outcome = amendTrade(first.user_id, args?.orderId ?? "", body, authorize);
-    else outcome = submitTrade(first.user_id, body, authorize);
+    else if (action === "amend") outcome = amendTrade(first.user_id, args?.orderId ?? "", body, authorize, request.headers.get("X-Alcor-Order-Execution") === "continuous-v1" ? first.id : undefined);
+    else outcome = submitTrade(first.user_id, body, authorize, request.headers.get("X-Alcor-Order-Execution") === "continuous-v1" ? first.id : undefined);
     return outcome.error ? fail(outcome.error.code, outcome.error.message, outcome.error.status) : tradeFeeOk(request,outcome.result);
   } catch (error) {
     const status = error instanceof RecordsError ? error.status : error instanceof RequestBodyTooLargeError ? 413 : 500;

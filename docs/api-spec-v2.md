@@ -1227,3 +1227,12 @@ Watch fields use JSON-array paths for hidden/pinned/memberships/orders/notes/ali
 富途只在 `equity_valid=true` 时输出正股 TTM PE、普通 PE、TTM 股息率与总市值；不以普通 `pe_ratio`、净资产或 ETF AUM 补造。腾讯沿已有 f39 普通 PE 合同输出 `pe`，不标为 TTM，不把含糊的市值字段或估算字段提升为已核实数据。App 优先 `peTtm`，仅有 `pe` 时显示无 TTM 上标的市盈率；仅旧服务无该对象且明确富途／腾讯来源时可沿原 `pe` 合同显示普通市盈率。Yahoo 缺少该对象时不补造。旧 `pe`／`marketCap` 行为保持兼容；`includeMarketCap` 的 ETF 估值补齐不写入 `detailMetrics`。新 App 只消费该可选对象，旧服务缺失时安静显示未知，无额外上游请求。
 
 数据口径：[富途快照字段](https://openapi.futunn.com/futu-api-doc/quote/get-market-snapshot.html)。
+
+
+### 持续委托执行（2026-10-26，continuous-v1）
+
+请求头 `X-Alcor-Order-Execution: continuous-v1` 协商 `account_trading.background_execution=true` 和 `continuous_orders.version=1`。无请求头保持旧声明、旧手动观察协议；不改写旧客户端的授权或暗中迁入旧委托。新版提交／改单原子保存确认时的授权连接，已有未绑定委托须重新预览并确认，保留原订单号。内部记账，不向外部券商下单。
+
+生产服务 instrumentation 启动5秒扫描，最多64笔，持久扫描顺序及30秒跨进程租约；读取页面不触发成交。网络后重新核对本人、同一 grant、权限、安全版本、证券身份、订单版本、持仓及资金；失败保留委托并展示原因。新鲜报价不得早于确认时刻，不接收陈旧、未来、未知来源、夜盘或非约定时段，不回溯此前触价。日单按既有交易所日期到期，GTC不跨日过期；无行情同样检查到期。附加单继承授权，触发后的限价继续等待委托价，成交后同事务撤销另一侧。稳定请求UUID与持久回执、状态CAS阻止双进程或手动观察重复成交。
+
+订单项增加可选 `continuousExecution` 与 `executionStatus`，分别表示已绑定持续执行和当前原因；旧接口路径、权限、executionModel字段保持。授权失效不自动换用另一设备grant；需本人重新确认。测试／开发／构建不自动启动金融worker，验收仅调用隔离数据库tick。

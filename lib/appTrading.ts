@@ -18,7 +18,7 @@ type Leg = { percent: number; orderType: "limit" | "market"; limitPrice?: number
 type Attachment = { takeProfit?: Leg; stopLoss?: Leg; session: string; tif: "day" | "gtc" };
 type Draft = { feeInput?:FeeInput; buyTarget?: BuyTarget; targetRevision?: string; brokerTargetId?: string; recordId: string; recordRevision: number; snapshotRevision: string; side: "buy" | "sell" | "dividend";
   mode: "record" | "order"; orderType: "limit" | "market"; qty: number; price: number; fees: number;
-  tif: "day" | "gtc"; session: string; tradedAt?: string; settlementAmount?: number; attachments?: Attachment; note: string; confirmedAt?: string; triggeredAt?: string };
+  tif: "day" | "gtc"; session: string; tradedAt?: string; settlementAmount?: number; attachments?: Attachment; note: string; executionGrant?: string; confirmedAt?: string; triggeredAt?: string };
 type Meta = { order_id: string; parent_id: string | null; role: string; trigger_above: number | null; draft_json: string; identity_json: string };
 const defaults = { currency: "USD", costMethod: "diluted" as const, usPrice: "observed" as const };
 const profile = { username: "", nickname: "", uid: "", avatar: "" };
@@ -113,7 +113,7 @@ function preview(userId: string, d: Draft, excluded?: string, targetRecord?: Sto
   const source = tradingState(userId), state = source.snapshot, record = targetRecord ?? source.records.find(r => r.id === d.recordId);
   if (!record) throw new RecordsError("本人证券不存在", 404);
   if (state.snapshotRevision !== d.snapshotRevision || record.revision !== d.recordRevision) throw conflict("账户或证券已变化，请重新预览");
-  if (d.brokerTargetId && record.brokerAccountId !== d.brokerTargetId) throw conflict('委托的券商归属已变化');
+  if (d.brokerTargetId !== undefined && (record.brokerAccountId || "") !== d.brokerTargetId) throw conflict('委托的券商归属已变化');
   if (record.brokerAccountId) {
     const account = getDb().prepare('SELECT holding_source FROM broker_accounts WHERE user_id=? AND id=?').get(userId,record.brokerAccountId) as {holding_source:string}|undefined;
     if (!account) throw new RecordsError('券商账户不存在',404);
@@ -211,8 +211,9 @@ function mutation(userId: string, body: unknown, kind: string, authorize: () => 
     return { result, error };
   }).immediate();
 }
-export function submitTrade(userId: string, body: unknown, authorize: () => string) {
+export function submitTrade(userId: string, body: unknown, authorize: () => string, executionGrant?: string) {
   const d = draft(body, userId);
+  d.executionGrant = executionGrant;
   if ("orderRevision" in (body as Values)) throw new RecordsError("新建交易不接受订单版本");
   return mutation(userId, body, "submit_trade", authorize, () => {
     const resolved = d.buyTarget ? resolveBuyTarget(userId,d.buyTarget) : null;
@@ -224,6 +225,7 @@ export function submitTrade(userId: string, body: unknown, authorize: () => stri
       if (resolved.target.createsRecord) createdRecordId=r.id;
       Object.assign(d,{recordId:r.id,recordRevision:r.revision,buyTarget:undefined,targetRevision:undefined,brokerTargetId:r.brokerAccountId});
     }
+    if (d.mode === "order") d.brokerTargetId = readRecord(userId, d.recordId)?.brokerAccountId || "";
     const id = d.mode === "record" ? executeOrder({ userId, ...d, triggerStatus: "API 实际成交登记" }).order.id : pending(userId, d);
     saveMeta(userId, id, d);
     if(d.feeInput && p.feeDetail)saveTradeFee(userId,id,d.feeInput,p.feeDetail);
@@ -232,14 +234,17 @@ export function submitTrade(userId: string, body: unknown, authorize: () => stri
     return { ...(resolved ? {buyTarget:{...resolved.target,recordId:d.recordId,recordRevision:readRecord(userId,d.recordId)!.revision,createdRecordId}} : {}), preview: p, items: assetOrderRows(userId).filter(row => row.id === id || childIds.has(row.id)).map(row => assetOrderItem(userId, row)), snapshot: committedState(userId, d.recordId) };
   });
 }
-export function amendTrade(userId: string, id: string, body: unknown, authorize: () => string) {
+export function amendTrade(userId: string, id: string, body: unknown, authorize: () => string, executionGrant?: string) {
   const d = draft(body, userId), b = body as Values;
+  d.executionGrant = executionGrant;
   if (!Number.isSafeInteger(b.orderRevision) || Number(b.orderRevision) < 1 || d.mode !== "order") throw new RecordsError("改单版本或模式无效");
   return mutation(userId, body, "amend_trade", authorize, () => {
     amendTarget(userId, id, d, b);
     const p = preview(userId, d, id), db = getDb();
+    d.brokerTargetId = readRecord(userId, d.recordId)?.brokerAccountId || "";
     db.prepare("UPDATE trade_orders SET side=?,qty=?,price=?,fees=?,amount=?,order_type=?,tif=?,session=?,note=?,trigger_status='等待明确行情观察' WHERE id=? AND user_id=?").run(d.side, d.qty, d.price, d.fees, d.qty * d.price, d.orderType, d.tif, d.session, d.note, id, userId);
     db.prepare("UPDATE app_trade_metadata SET draft_json=?,identity_json=? WHERE order_id=?").run(JSON.stringify({ ...d, confirmedAt: new Date().toISOString() }), identity(readRecord(userId, d.recordId)!), id);
+    db.prepare("DELETE FROM app_order_worker_scans WHERE order_id=?").run(id);
     if(d.feeInput && p.feeDetail)saveTradeFee(userId,id,d.feeInput,p.feeDetail);else clearTradeFee(userId,id);
     return { preview: p, items: [assetOrderItem(userId, assetOrderRows(userId).find(row => row.id === id)!)], snapshot: committedState(userId, d.recordId) };
   });
@@ -282,16 +287,15 @@ export function observeTrade(userId: string, id: string, body: unknown, quote: Q
     if (row.tif === "day" && assetLocalDate(now, row.market) !== assetLocalDate(created, row.market)) {
       getDb().prepare("UPDATE trade_orders SET status='expired',trigger_status='当日有效已到期' WHERE id=?").run(id);
     } else {
-      const at = quote ? tradingQuoteTime(quote.time, row.market) : null;
-      if (!quote || at === null || at < created || at > now || now - at > 30_000 || !Number.isFinite(quote.price) || quote.price <= 0 || !["futu", "tencent", "yahoo"].includes(quote.source ?? "") || (quote as Quote & { displayStale?: boolean }).displayStale || !["REGULAR", ...(d.session === "EXTENDED" && row.market === "US" ? ["PRE", "AFTER"] : [])].includes(quote.session ?? "")) throw conflict("缺少保存之后的有效实时行情，未执行订单");
-      const triggered = !!d.triggeredAt || meta.trigger_above === null || (meta.trigger_above ? quote.price >= Number(row.trigger_price) : quote.price <= Number(row.trigger_price));
-      const limit = d.orderType === "market" || (d.side === "buy" ? quote.price <= d.price : quote.price >= d.price);
+      const decision = tradeObservationDecision(row, meta, d, quote, now, created);
+      if (!decision) throw conflict("缺少保存之后的有效实时行情，未执行订单");
+      const { at, triggered, limit } = decision;
       if (triggered && limit) {
-        const actual = { ...d, mode: "record" as const, tradedAt: new Date(at).toISOString(), price: quote.price, snapshotRevision: state.snapshotRevision, recordRevision: record.revision! };
+        const actual = { ...d, mode: "record" as const, tradedAt: new Date(at).toISOString(), price: quote!.price, snapshotRevision: state.snapshotRevision, recordRevision: record.revision! };
         preview(userId, actual, id);
-        if (!fillPendingRow(row, quote.price, new Date(at).toISOString())) throw conflict("委托未成交，请重新读取");
+        if (!fillPendingRow(row, quote!.price, new Date(at).toISOString())) throw conflict("委托未成交，请重新读取");
         if (meta.parent_id) getDb().prepare("UPDATE trade_orders SET status='cancelled',trigger_status='附加单另一侧已成交' WHERE status='pending' AND id IN(SELECT order_id FROM app_trade_metadata WHERE parent_id=? AND order_id<>?)").run(meta.parent_id, id);
-        else children(userId, id, d, quote.price);
+        else children(userId, id, d, quote!.price);
       } else if (triggered && meta.trigger_above !== null && !d.triggeredAt) {
         getDb().prepare("UPDATE app_trade_metadata SET draft_json=? WHERE order_id=?").run(JSON.stringify({ ...d, triggeredAt: new Date(at).toISOString() }), id);
         getDb().prepare("UPDATE trade_orders SET trigger_status='已触发，等待委托价' WHERE id=?").run(id);
@@ -325,4 +329,43 @@ export function reconcileCash(userId: string, body: unknown, authorize: () => st
     const next = cashSnapshot(userId);
     return { ...next, transactions: undefined, currency, before, after: Number(b.balance), adjustment: delta };
   });
+}
+
+/** Identical admission for manual observation and the background worker. */
+function tradeObservationDecision(row: ReturnType<typeof assetOrderRows>[number], meta: Meta, d: Draft, quote: Quote | undefined, now: number, created: number) {
+  const at = quote ? tradingQuoteTime(quote.time, row.market) : null;
+  if (!quote || at === null || at < created || at > now || now - at > 30_000 || !Number.isFinite(quote.price) || quote.price <= 0 || !["futu", "tencent", "yahoo"].includes(quote.source ?? "") || (quote as Quote & {displayStale?: boolean}).displayStale || !["REGULAR", ...(d.session === "EXTENDED" && row.market === "US" ? ["PRE", "AFTER"] : [])].includes(quote.session ?? "")) return null;
+  const triggered = !!d.triggeredAt || meta.trigger_above === null || (meta.trigger_above ? quote.price >= Number(row.trigger_price) : quote.price <= Number(row.trigger_price));
+  return {at, triggered, limit: d.orderType === "market" || (d.side === "buy" ? quote.price <= d.price : quote.price >= d.price)};
+}
+/** Called under an immediate transaction after provider I/O. Never uses the pre-I/O draft. */
+export function observeScheduledTrade(userId: string, id: string, revision: number, grantId: string, quote: Quote | undefined, authorize: () => string) {
+  return getDb().transaction(() => {
+    if (authorize() !== userId) return;
+    const row = assetOrderRows(userId).find(r => r.id === id), meta = metas(userId).find(m => m.order_id === id);
+    if (!row || !meta || row.status !== "pending" || row.revision !== revision) return;
+    const d = JSON.parse(meta.draft_json) as Draft, record = readRecord(userId, row.record_id);
+    if (d.executionGrant !== grantId || !record || identity(record) !== meta.identity_json) return;
+    const now = Date.now(), created = Date.parse(d.confirmedAt ?? String(row.created_at));
+    if (!Number.isFinite(created)) return;
+    const expired = row.tif === "day" && assetLocalDate(now,row.market) !== assetLocalDate(created,row.market);
+    const decision = tradeObservationDecision(row,meta,d,quote,now,created);
+    if (!expired && (!decision || !decision.triggered || !decision.limit && (meta.trigger_above === null || !!d.triggeredAt))) return;
+    const state = tradingState(userId).snapshot;
+    // A blocked automatic scan is not a new financial operation every five seconds.
+    // Retain its reason in worker state; actual transitions still receive an atomic receipt.
+    if (!expired && decision?.triggered && decision.limit && quote) {
+      try {
+        preview(userId,{...d,mode:"record",tradedAt:new Date(decision.at).toISOString(),price:quote.price,snapshotRevision:state.snapshotRevision,recordRevision:record.revision!},id);
+      } catch (error) {
+        if (error instanceof RecordsError) return {error};
+        throw error;
+      }
+    }
+    // A stable UUID identifies this precise order revision, account state and observation.
+    const hash = createHash("sha256").update(JSON.stringify(["order-worker-v1",userId,id,revision,state.snapshotRevision,expired ? "expired" : [decision?.at,quote?.price]])).digest("hex");
+    const requestId = `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-a${hash.slice(17,20)}-${hash.slice(20,32)}`;
+    if (getDb().prepare("SELECT 1 FROM app_asset_operations WHERE user_id=? AND request_id=?").get(userId,requestId)) return;
+    return observeTrade(userId,id,{requestId,accountId:userId,snapshotRevision:state.snapshotRevision,orderRevision:revision,recordRevision:record.revision},quote,authorize);
+  }).immediate();
 }

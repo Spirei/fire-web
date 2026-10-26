@@ -27,6 +27,9 @@ export function installAppAssets(db: Database.Database) {
       role TEXT NOT NULL, trigger_above INTEGER, draft_json TEXT NOT NULL,
       identity_json TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS app_order_worker_lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, until_at INTEGER NOT NULL);
+    INSERT OR IGNORE INTO app_order_worker_lease VALUES(1,'',0);
+    CREATE TABLE IF NOT EXISTS app_order_worker_scans (order_id TEXT PRIMARY KEY REFERENCES trade_orders(id) ON DELETE CASCADE, scanned_at INTEGER NOT NULL, result TEXT);
     INSERT OR IGNORE INTO app_asset_order_versions SELECT id,1 FROM trade_orders;
     CREATE TRIGGER IF NOT EXISTS app_asset_order_insert AFTER INSERT ON trade_orders BEGIN
       INSERT INTO app_asset_order_versions VALUES(NEW.id,1);

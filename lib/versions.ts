@@ -4976,16 +4976,23 @@ export const V0_1_66_ENTRY: VersionEntry = {
   software:V0_1_65_ENTRY.software.map(item=>item.name==='Alcor'?{...item,version:'v0.1.66'}:item),
   changes:[{kind:"feature",title:"交易费用来源与历史规则",desc:"实际成交可附本人手填分项或个人费率快照，后端用精确十进制独立核验总费并保存原币分项、来源和生效规则。明确零保留，旧协议继续可用；自动费用不冒充券商实收，未知品种、月阶梯和待成交自动费用暂不启用。"},{kind:"feature",title:"成交修改合并与删除",desc:"新增本人带签名预览和完整版本核对的成交更正，原子保留原单及墓碑、生成替换单并重放后续成本与盈亏，现金只计净差额。合并本金和数量守恒、时间取选定原单；官方来源、附加单、港股通净结算和已覆盖期初保护保持，原UUID结果可恢复。"},{kind:"fix",title:"旧版成交更正保存独立证据",desc:"旧App不带费用分项时，替换单也保存本次确认的稳定账户及手填费用快照，保留明确零和连续更正链；未归属现金保持未归属，不沿用原单费率或冒充券商实收。"},{kind:"fix",title:"港股通文字放在代码后面",desc:"持仓分布、持仓列表、盈亏排行、交易和订单等能完整显示的身份行，在股票代码后显示港股通。账户角标簇仍用 A/H。"},{kind:"fix",title:"订单操作列对齐",desc:"当日订单和历史订单的操作按钮与表头居中对齐，App 订单和只读标记不再把图标挤偏。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_67_ENTRY: VersionEntry = {
   ...V0_1_66_ENTRY, version:"v0.1.67", date:"2026-10-25",
   summary:"账户授权、自选内容及个人费率跨设备核对。",
   software:V0_1_66_ENTRY.software.map(item=>item.name==='Alcor'?{...item,version:'v0.1.67'}:item),
   changes:[{kind:"feature",title:"App 全天及五日分时",desc:"新增能力声明与版本化分时接口，按交易所日期输出真实分钟数据，证券身份、未来时间和重复冲突校验；保留实际时段覆盖，缺失夜盘不补造。"},{kind:"fix",title:"账户内容跨设备核对",desc:"自选备注、置顶、关注、分组及个人费率按账户共享，逐字段版本与删除标记防止旧设备覆盖；前台变更信号覆盖资料、持仓、券商、提醒和资源，设备偏好独立。"},{kind:"fix",title:"跨设备授权恢复",desc:"同账户、同 App 的批准范围保存在服务端；新设备登录及已登录设备核对后获取独立令牌，旧版登录协议保持。旧安装只迁入最近仍有效的扩展授权，不合并其他设备的权限。"},{kind:"security",title:"授权恢复边界",desc:"恢复要求当前设备有效令牌与批准版本，不接受调用方指定权限；账号级撤销、改密与两步验证变化阻止旧授权复活，冲突与失败不冒充授权成功。"},{kind:"fix",title:"分时接口写入公开目录",desc:"v1 与 v2 公开目录补上全天及五日分时，路径、权限和交易所日期合约与已发布接口一致。"},{kind:"fix",title:"分时接口记入请求白名单",desc:"请求日志按真实路径记录全天及五日分时，不再把这两个接口标成未识别路径。"}]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_67_ENTRY, version: "v0.1.68", date: "2026-10-26",
+  summary: "委托持续执行与授权核对。",
+  software: V0_1_67_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.68"} : item),
+  changes: [{kind:"fix",title:"委托持续执行",desc:"新协议确认的 App 委托由服务端持续核对真实行情，支持当日到期及附加单互斥；成交、现金、持仓与唯一回执原子提交。旧委托重新确认后接入，授权失效暂停，不回溯补造历史成交。"}]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_67_ENTRY,
   V0_1_66_ENTRY,
   V0_1_65_ENTRY,
   V0_1_64_ENTRY,

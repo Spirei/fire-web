@@ -144,3 +144,12 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 成功原UUID回执 `data.buyTarget` 使用上表字段，recordId必为最终实际记录ID、recordRevision为提交完成后真实版本，并额外含 `createdRecordId: string | null`（新建为实际ID，加仓为null）。createsRecord及targetRevision仍描述本次确认；`data.preview`是提交前预演，内部新目标ID仍null。核对最终记录同时检查data.buyTarget、items[].recordId及snapshot.position.recordId。失败回执data=null；40902包括版本变化、目标hash缺失或不匹配、重复证券；404为账户不存在／外人账户；40903为官方管理账户。格式错误为400。未知结果仅查询原operation_path及原UUID，不自动重放，不先创建记录再补交易。旧recordId路径和授权scope保持；旧服务无此发现能力时禁用新目标。
 
 券商资金最小账本见 [资金合约](native-broker-cash-contract.md)。cash_ledger.trading_enforced=false时，当前交易仍校验本人总币种现金，新成交可记录稳定券商归属但不保证券商内购买力；客户端不得把account现金balance用作available。
+
+
+### 持续委托执行（2026-10-26，continuous-v1）
+
+请求头 `X-Alcor-Order-Execution: continuous-v1` 协商 `account_trading.background_execution=true` 和 `continuous_orders.version=1`。无请求头保持旧声明、旧手动观察协议；不改写旧客户端的授权或暗中迁入旧委托。新版提交／改单原子保存确认时的授权连接，已有未绑定委托须重新预览并确认，保留原订单号。内部记账，不向外部券商下单。
+
+生产服务 instrumentation 启动5秒扫描，最多64笔，持久扫描顺序及30秒跨进程租约；读取页面不触发成交。网络后重新核对本人、同一 grant、权限、安全版本、证券身份、订单版本、持仓及资金；失败保留委托并展示原因。新鲜报价不得早于确认时刻，不接收陈旧、未来、未知来源、夜盘或非约定时段，不回溯此前触价。日单按既有交易所日期到期，GTC不跨日过期；无行情同样检查到期。附加单继承授权，触发后的限价继续等待委托价，成交后同事务撤销另一侧。稳定请求UUID与持久回执、状态CAS阻止双进程或手动观察重复成交。
+
+订单项增加可选 `continuousExecution` 与 `executionStatus`，分别表示已绑定持续执行和当前原因；旧接口路径、权限、executionModel字段保持。授权失效不自动换用另一设备grant；需本人重新确认。测试／开发／构建不自动启动金融worker，验收仅调用隔离数据库tick。

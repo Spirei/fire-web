@@ -1346,3 +1346,12 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 ### 飞书、Discord 与 QQ 个人提醒扩展
 
 沿 `price_alerts.messengers` 显式发现。客户端使用 `X-Alcor-Price-Alerts: messengers-v1` 才看到 feishu、discord、qq，并保留 wechat；`wechat-v1` 仍只有四渠道，无此请求头仍只有三渠道。操作名为 `feishu_start|confirm|disconnect`、`discord_*`、`qq_*`，收件人分别是单个 open_id 或邮箱、Discord 用户 ID、QQ openid。验证码、次数、限流和密钥规则与企业微信个人提醒相同。详情见 [股价提醒通知](native-price-alert-notifications.md)。
+
+
+### 持续委托执行（2026-10-26，continuous-v1）
+
+请求头 `X-Alcor-Order-Execution: continuous-v1` 协商 `account_trading.background_execution=true` 和 `continuous_orders.version=1`。无请求头保持旧声明、旧手动观察协议；不改写旧客户端的授权或暗中迁入旧委托。新版提交／改单原子保存确认时的授权连接，已有未绑定委托须重新预览并确认，保留原订单号。内部记账，不向外部券商下单。
+
+生产服务 instrumentation 启动5秒扫描，最多64笔，持久扫描顺序及30秒跨进程租约；读取页面不触发成交。网络后重新核对本人、同一 grant、权限、安全版本、证券身份、订单版本、持仓及资金；失败保留委托并展示原因。新鲜报价不得早于确认时刻，不接收陈旧、未来、未知来源、夜盘或非约定时段，不回溯此前触价。日单按既有交易所日期到期，GTC不跨日过期；无行情同样检查到期。附加单继承授权，触发后的限价继续等待委托价，成交后同事务撤销另一侧。稳定请求UUID与持久回执、状态CAS阻止双进程或手动观察重复成交。
+
+订单项增加可选 `continuousExecution` 与 `executionStatus`，分别表示已绑定持续执行和当前原因；旧接口路径、权限、executionModel字段保持。授权失效不自动换用另一设备grant；需本人重新确认。测试／开发／构建不自动启动金融worker，验收仅调用隔离数据库tick。

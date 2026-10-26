@@ -6,5 +6,7 @@ export async function register() {
     startFeedScheduler();
     const { startPriceAlertWorker } = await import("./lib/priceAlertWorker");
     startPriceAlertWorker();
+    const { startOrderExecutionWorker } = await import("./lib/orderExecutionWorker");
+    startOrderExecutionWorker();
   }
 }

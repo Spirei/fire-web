@@ -252,5 +252,43 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
   const before=economic(target),sync=funds.syncOrderCashTransactions;funds.syncOrderCashTransactions=()=>{throw Error('injected cash failure');};try{assert.throws(()=>transfer.restoreBackupPayload(payload,target.user.id,false),/injected cash failure/);assert.deepEqual(economic(target),before);}finally{funds.syncOrderCashTransactions=sync;}
   transfer.restoreBackupPayload(payload,target.user.id,false);const r=store.listRecords(target.user.id).find(r=>r.code==='00700');assert.equal(r.accountMarket,'CN');assert.equal(r.qty,12);const o=orders.listOrders(target.user.id,'all').find(o=>o.code==='00700');assert.equal(o.settlementCurrency,'CNY');assert.equal(o.settlementAmount,19);assert.equal(funds.readFundBalances(target.user.id).CNY,981);assert.equal(funds.readFundBalances(target.user.id).HKD,0);
  });
+ const continuous=async(f,over={})=>{const r=await call(2,f,'trading/submissions','POST',input(f,{mode:'order',tradedAt:undefined,...over}),{'X-Alcor-Order-Execution':'continuous-v1'});assert.equal(r.status,200,JSON.stringify(r));return r.data.data.items[0];};
+ const tick=()=>load('lib/orderExecutionWorker.ts').orderExecutionTick();
+ await test('continuous execution negotiated; legacy orders require reconfirmation',async()=>{
+  const f=fixture();for(const v of [1,2]){const req=new Request(process.env.FIRE_APP_ORIGIN+`/api/v${v}/auth/config`,{headers:{'X-Alcor-Order-Execution':'continuous-v1'}});const response=await load(`app/api/v${v}/auth/config/route.ts`).GET(req);assert.equal((await response.json()).data.account_trading.background_execution,true);}
+  const o=await pending(f);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();const old=state(f).orders.find(x=>x.id===o.id);assert.equal(old.status,'pending');assert.equal(old.executionStatus,'待重新确认委托');
+ });
+ await test('worker fills TSLL-shaped sell once without any page request',async()=>{
+  const f=fixture(),o=await continuous(f,{side:'sell',qty:10,price:10.88});assert.equal(o.continuousExecution,true);quote={price:10.91,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();assert.equal(state(f).orders.find(x=>x.id===o.id).status,'filled');assert.equal(store.readRecord(f.user.id,f.r.id).qty,0);const before=economic(f);await tick();assert.deepEqual(economic(f),before);
+  const receipts=db.prepare('SELECT result_json FROM app_asset_operations WHERE user_id=?').all(f.user.id).map(r=>JSON.parse(r.result_json));assert.equal(receipts.filter(r=>r.kind==='observe_trade'&&r.state==='completed').length,1);
+ });
+ await test('worker rejects stale future overnight wrong-session and display-only quotes',async()=>{
+  const f=fixture(),o=await continuous(f),before=economic(f);
+  for(const q of [{price:9,time:new Date(Date.now()-60000).toISOString(),source:'futu',session:'REGULAR'},{price:9,time:new Date(Date.now()+60000).toISOString(),source:'futu',session:'REGULAR'},{price:9,time:new Date().toISOString(),source:'futu',session:'OVERNIGHT'},{price:9,time:new Date().toISOString(),source:'futu',session:'PRE'},{price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR',displayStale:true}]){quote=q;await tick();assert.deepEqual(economic(f),before);}
+  const ext=fixture(),e=await continuous(ext,{session:'EXTENDED'});quote={price:9,time:new Date().toISOString(),source:'futu',session:'PRE'};await tick();assert.equal(state(ext).orders.find(x=>x.id===e.id).status,'filled');assert.equal(state(f).orders.find(x=>x.id===o.id).status,'pending');
+ });
+ await test('expiry works without provider; GTC preserved and cross-process lease honored',async()=>{
+  const f=fixture(),o=await continuous(f,{tif:'day'}),g=await continuous(f,{tif:'gtc'});for(const id of [o.id,g.id])db.prepare("UPDATE app_trade_metadata SET draft_json=json_set(draft_json,'$.confirmedAt',?) WHERE order_id=?").run(new Date(Date.now()-86400000).toISOString(),id);
+  db.prepare("UPDATE app_order_worker_lease SET owner='other',until_at=?").run(Date.now()+30000);await tick();assert.equal(state(f).orders.find(x=>x.id===o.id).status,'pending');db.prepare('UPDATE app_order_worker_lease SET until_at=0').run();await tick();assert.equal(state(f).orders.find(x=>x.id===o.id).status,'expired');assert.equal(state(f).orders.find(x=>x.id===g.id).status,'pending');
+ });
+ await test('revocation during network wait prevents fill',async()=>{
+  const f=fixture(),o=await continuous(f);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};afterQuote=async()=>{app.revokeAppGrant(f.grant.grant_id);};await tick();afterQuote=undefined;const row=state(f).orders.find(x=>x.id===o.id);assert.equal(row.status,'pending');assert.equal(row.executionStatus,'授权失效，执行已暂停');
+ });
+ await test('amend during quote wait rejects old draft and next scan uses new limit',async()=>{
+  const f=fixture(),o=await continuous(f);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};afterQuote=async()=>{const r=await call(2,f,'trading/orders/'+o.id,'PUT',input(f,{mode:'order',tradedAt:undefined,price:8,orderRevision:o.revision}),{'X-Alcor-Order-Execution':'continuous-v1'});assert.equal(r.status,200);};await tick();afterQuote=undefined;assert.equal(state(f).orders.find(x=>x.id===o.id).status,'pending');quote={price:7,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();assert.equal(state(f).orders.find(x=>x.id===o.id).status,'filled');
+ });
+ await test('worker OCO inherits grant, latches trigger and cancels sibling',async()=>{
+  const f=fixture(),o=await continuous(f,{attachments:{takeProfit:{percent:10,orderType:'limit',limitPrice:12,fees:0},stopLoss:{percent:10,orderType:'market',fees:0},session:'REGULAR',tif:'gtc'}});quote={price:10,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();let children=state(f).orders.filter(x=>x.parentOrderId===o.id);assert.equal(children.length,2);assert(children.every(x=>x.continuousExecution));quote={price:11.5,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();children=state(f).orders.filter(x=>x.parentOrderId===o.id);assert.equal(children.find(x=>x.attachmentRole==='take_profit').triggerStatus,'已触发，等待委托价');quote={price:12,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();assert.deepEqual(state(f).orders.filter(x=>x.parentOrderId===o.id).map(x=>x.status).sort(),['cancelled','filled']);
+ });
+ await test('cash changes block background fill with a readable reason',async()=>{
+  const f=fixture(),o=await continuous(f,{qty:60});funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'withdrawal',amount:990,direction:-1});quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();const r=state(f).orders.find(x=>x.id===o.id);assert.equal(r.status,'pending');assert.match(r.executionStatus,/可用现金/);const before=economic(f);await tick();assert.deepEqual(economic(f),before);
+ });
+ await test('worker cancellation and security change during read preserve financial data',async()=>{
+  const f=fixture(),o=await continuous(f);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};afterQuote=async()=>{db.prepare("UPDATE trade_orders SET status='cancelled' WHERE id=?").run(o.id);};await tick();afterQuote=undefined;assert.equal(state(f).orders.find(x=>x.id===o.id).status,'cancelled');assert.equal(store.readRecord(f.user.id,f.r.id).qty,10);
+  const g=fixture(),p=await continuous(g);afterQuote=async()=>{db.prepare("UPDATE users SET password_hash='changed' WHERE id=?").run(g.user.id);};await tick();afterQuote=undefined;assert.equal(state(g).orders.find(x=>x.id===p.id).status,'pending');
+ });
+ await test('legacy amendment opts in without changing its order number',async()=>{
+  const f=fixture(),o=await pending(f);const r=await call(2,f,'trading/orders/'+o.id,'PUT',input(f,{mode:'order',tradedAt:undefined,orderRevision:o.revision}),{'X-Alcor-Order-Execution':'continuous-v1'});assert.equal(r.status,200);const bound=state(f).orders.find(x=>x.id===o.id);assert.equal(bound.continuousExecution,true);assert.equal(bound.orderNo,o.orderNo);quote={price:9,time:new Date().toISOString(),source:'futu',session:'REGULAR'};await tick();assert.equal(state(f).orders.find(x=>x.id===o.id).status,'filled');
+ });
  console.log(count+' API trading chain suites passed');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{db.close();fs.rmSync(temp,{recursive:true,force:true});});
