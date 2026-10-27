@@ -4982,16 +4982,23 @@ const V0_1_67_ENTRY: VersionEntry = {
   software:V0_1_66_ENTRY.software.map(item=>item.name==='Alcor'?{...item,version:'v0.1.67'}:item),
   changes:[{kind:"feature",title:"App 全天及五日分时",desc:"新增能力声明与版本化分时接口，按交易所日期输出真实分钟数据，证券身份、未来时间和重复冲突校验；保留实际时段覆盖，缺失夜盘不补造。"},{kind:"fix",title:"账户内容跨设备核对",desc:"自选备注、置顶、关注、分组及个人费率按账户共享，逐字段版本与删除标记防止旧设备覆盖；前台变更信号覆盖资料、持仓、券商、提醒和资源，设备偏好独立。"},{kind:"fix",title:"跨设备授权恢复",desc:"同账户、同 App 的批准范围保存在服务端；新设备登录及已登录设备核对后获取独立令牌，旧版登录协议保持。旧安装只迁入最近仍有效的扩展授权，不合并其他设备的权限。"},{kind:"security",title:"授权恢复边界",desc:"恢复要求当前设备有效令牌与批准版本，不接受调用方指定权限；账号级撤销、改密与两步验证变化阻止旧授权复活，冲突与失败不冒充授权成功。"},{kind:"fix",title:"分时接口写入公开目录",desc:"v1 与 v2 公开目录补上全天及五日分时，路径、权限和交易所日期合约与已发布接口一致。"},{kind:"fix",title:"分时接口记入请求白名单",desc:"请求日志按真实路径记录全天及五日分时，不再把这两个接口标成未识别路径。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_68_ENTRY: VersionEntry = {
   ...V0_1_67_ENTRY, version: "v0.1.68", date: "2026-10-26",
   summary: "委托持续执行与授权核对。",
   software: V0_1_67_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.68"} : item),
   changes: [{kind:"fix",title:"委托持续执行",desc:"新协议确认的 App 委托由服务端持续核对真实行情，支持当日到期及附加单互斥；成交、现金、持仓与唯一回执原子提交。旧委托重新确认后接入，授权失效暂停，不回溯补造历史成交。"}]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_68_ENTRY, version: "v0.1.69", date: "2026-10-27",
+  summary: "部署状态准确区分镜像发布与复用，避免重复构建。",
+  software: V0_1_68_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.69"} : item),
+  changes: [{kind:"fix",title:"镜像发布去重与状态同步",desc:"以实际发布步骤核对镜像，跳过构建显示复用已有镜像；分页查找成功发布记录，定时与手动发布共享队列，先查已有镜像再执行构建检查，状态核对失败不触发构建。群晖自动更新按镜像提交去重，不因重复检查重置等待。"}]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_68_ENTRY,
   V0_1_67_ENTRY,
   V0_1_66_ENTRY,
   V0_1_65_ENTRY,

@@ -1,3 +1,4 @@
+import { findPublishedRun, isImageRun, publicationOutcome } from "@/lib/deployPublication.mjs";
 import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -66,6 +67,22 @@ function deployToken() {
   return (oauth ? decryptDeploySecret(oauth) : "") || process.env.GITHUB_TOKEN || (fallback ? decryptDeploySecret(fallback) : "");
 }
 
+function githubApi(repository: string, token: string) {
+  return async (path: string) => {
+    const cacheKey = `${repository}:${path}`;
+    const cached = jobsCache.get(cacheKey);
+    if (path.includes("/jobs?") && cached && Date.now() - cached.fetchedAt < 15_000) return { jobs: cached.jobs };
+    const response = await fetch(`https://api.github.com/repos/${repository}${path}`, {
+      headers: { accept: "application/vnd.github+json", "user-agent": "fire-deploy-status", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`无法核对 GitHub 发布状态（${response.status}）`);
+    const data = await response.json();
+    if (path.includes("/jobs?") && Array.isArray(data.jobs)) jobsCache.set(cacheKey, { fetchedAt: Date.now(), jobs: data.jobs });
+    return data;
+  };
+}
+
 function hongKongDayKey(value: string | Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
 }
@@ -120,6 +137,18 @@ export async function GET(request: Request) {
     if (!response.ok) return NextResponse.json({ error: `GitHub API ${response.status}（仓库：${repository}）`, repository }, { status: 502 });
     const payload = await response.json() as { total_count?: number; workflow_runs?: GithubRun[] };
     const workflowRuns = payload.workflow_runs || [];
+    const api = githubApi(repository, token);
+    const outcomes = new Map<number, string>();
+    const imageRunsToCheck = workflowRuns.filter(isImageRun);
+    for (let offset = 0; offset < imageRunsToCheck.length; offset += 5) {
+      await Promise.all(imageRunsToCheck.slice(offset, offset + 5).map(async run => {
+        if (run.status !== "completed") { outcomes.set(run.id, "pending"); return; }
+        try {
+          const data = await api(`/actions/runs/${run.id}/jobs?per_page=100`);
+          outcomes.set(run.id, publicationOutcome(run, data.jobs || []));
+        } catch { outcomes.set(run.id, "unknown"); }
+      }));
+    }
     const runs = workflowRuns.map((run) => ({
       id: run.id,
       name: run.name,
@@ -128,6 +157,7 @@ export async function GET(request: Request) {
       status: run.status,
       conclusion: run.conclusion,
       event: run.event,
+      publication: outcomes.get(run.id),
       workflowPath: run.path || "",
       startedAt: run.run_started_at || run.updated_at,
       updatedAt: run.updated_at,
@@ -201,8 +231,7 @@ export async function GET(request: Request) {
       // Actions 数据仍可展示，源码版本暂时标记为未知。
     }
 
-    const imageRuns = workflowRuns.filter((run) => run.path === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
-    const latestSuccessfulImageRun = imageRuns.find((run) => run.status === "completed" && run.conclusion === "success") || null;
+    const latestSuccessfulImageRun = await findPublishedRun(api);
     const latestMainPushRun = workflowRuns.find((run) => run.path === ".github/workflows/docker-publish.yml" && run.event === "push") || null;
     const mainSha = mainCommit?.sha || latestMainPushRun?.head_sha || "";
     const deployedSha = process.env.FIRE_BUILD_SHA?.trim() || "unknown";
@@ -248,35 +277,27 @@ export async function POST(request: Request) {
   }
   lastDispatchAt = now;
   try {
-    const runsResponse = await fetch(`https://api.github.com/repos/${repository}/actions/workflows/docker-publish.yml/runs?branch=main&per_page=10`, {
-      headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
-      cache: "no-store"
-    });
-    if (runsResponse.ok) {
-      const payload = await runsResponse.json() as { workflow_runs?: GithubRun[] };
-      const activeRun = payload.workflow_runs?.find((run) => (run.event === "schedule" || run.event === "workflow_dispatch") && run.status !== "completed");
-      if (activeRun) {
+    const api = githubApi(repository, token);
+    // Query active runs separately: ordinary pushes must not hide a queued release.
+    for (const status of ["queued", "in_progress", "waiting", "pending", "requested"]) {
+      const payload = await api(`/actions/workflows/docker-publish.yml/runs?branch=main&status=${status}&per_page=100`);
+      if (!Array.isArray(payload.workflow_runs)) throw new Error("GitHub 运行记录不完整");
+      const active = payload.workflow_runs.find(isImageRun);
+      if (active) {
         lastDispatchAt = 0;
-        return NextResponse.json({ error: "已有 Push image 正在排队或运行，请等待完成", runUrl: activeRun.html_url }, { status: 409 });
-      }
-      const latestSuccessfulImage = payload.workflow_runs?.find((run) =>
-        (run.event === "schedule" || run.event === "workflow_dispatch") &&
-        run.status === "completed" && run.conclusion === "success"
-      );
-      const mainResponse = await fetch(`https://api.github.com/repos/${repository}/commits/main`, {
-        headers: { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "user-agent": "fire-deploy-status" },
-        cache: "no-store"
-      });
-      if (mainResponse.ok) {
-        const main = await mainResponse.json() as GithubCommit;
-        if (latestSuccessfulImage?.head_sha && latestSuccessfulImage.head_sha === main.sha) {
-          lastDispatchAt = 0;
-          return NextResponse.json({ error: "当前 main 提交已有可用镜像，无需重复构建", runUrl: latestSuccessfulImage.html_url }, { status: 409 });
-        }
+        return NextResponse.json({ error: "已有镜像发布正在排队或运行，请等待完成", runUrl: active.html_url }, { status: 409 });
       }
     }
+    const main = await api("/commits/main") as GithubCommit;
+    if (!/^[a-f0-9]{40}$/.test(main.sha)) throw new Error("无法核对 main 提交");
+    const published = await findPublishedRun(api, main.sha);
+    if (published) {
+      lastDispatchAt = 0;
+      return NextResponse.json({ error: "当前 main 提交已有可用镜像，无需重复构建", runUrl: published.html_url }, { status: 409 });
+    }
   } catch {
-    // GitHub 状态预检失败时仍由下面的 dispatch 请求给出最终结果。
+    lastDispatchAt = 0;
+    return NextResponse.json({ error: "无法完整核对已有镜像，暂未触发构建，请稍后重试" }, { status: 502 });
   }
   let response: Response;
   try {

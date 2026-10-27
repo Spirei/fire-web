@@ -12,7 +12,7 @@ on:
 
 concurrency:
   # 保留队列中的推送，避免连续提交时互相取消并产生大量失败/取消记录。
-  group: fire-image-${{ github.event_name }}-${{ github.ref }}
+  group: fire-image-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'publish' || github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -26,6 +26,8 @@ env:
 jobs:
   test:
     name: TypeScript check
+    needs: scheduled-change-gate
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -50,6 +52,8 @@ jobs:
         run: npm ci --prefix tools/model-optimizer
       - name: Public repository safety audit
         run: npm run audit:public
+      - name: Image publication regression
+        run: node tests/deploy-publication.mjs && node tests/deploy-status.cjs
       - name: Local and GHCR deployment parity audit
         run: npm run audit:deploy
       - name: Security and site regression
@@ -79,8 +83,7 @@ jobs:
 
   scheduled-change-gate:
     name: Check scheduled source changes
-    needs: test
-    if: always() && needs.test.result == 'success'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -88,21 +91,17 @@ jobs:
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Decide whether image should be built
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           CURRENT_SHA: ${{ github.sha }}
-        run: |
-          last_sha=$(gh api "repos/${REPOSITORY}/actions/workflows/docker-publish.yml/runs?status=success&per_page=30" --jq '[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].head_sha // ""')
-          if [ "$last_sha" = "$CURRENT_SHA" ]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "当前 main 提交已有可用镜像，跳过重复构建。"
-          else
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "检测到 main 新提交，继续构建镜像。"
-          fi
+        run: node scripts/check-image-published.mjs
 
   publish:
     name: Publish linux/amd64 image

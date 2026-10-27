@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { findPublishedRun, publicationOutcome, isImageRun, PUBLISH_JOB } from '../lib/deployPublication.mjs';
+const release = (id, sha = 'same') => ({ id, head_sha: sha, path: '.github/workflows/docker-publish.yml', event: 'schedule', status: 'completed', conclusion: 'success' });
+const jobs = conclusion => ({ jobs: [{ name: PUBLISH_JOB, conclusion }] });
+assert.equal(publicationOutcome(release(1), jobs('skipped').jobs), 'reused');
+assert.equal(publicationOutcome(release(1), jobs('success').jobs), 'published');
+assert.equal(publicationOutcome(release(1), []), 'unknown');
+assert.equal(publicationOutcome({ ...release(1), conclusion: 'failure' }, jobs('success').jobs), 'failed');
+assert.equal(publicationOutcome({ ...release(1), status: 'queued' }, []), 'pending');
+assert.equal(isImageRun({ ...release(1), path: 'another.yml' }), false);
+let requested = [];
+const result = await findPublishedRun(async path => {
+  requested.push(path);
+  if (path.includes('/jobs?')) return jobs(path.includes('/101/') ? 'success' : 'skipped');
+  if (path.includes('page=2')) return { workflow_runs: [release(101)] };
+  return { workflow_runs: Array.from({ length: 100 }, (_, i) => ({ ...release(i + 1), event: i === 0 ? 'schedule' : 'push' })) };
+}, 'same');
+assert.equal(result.id, 101);
+assert(requested.some(p => p.includes('page=2')));
+assert.equal(await findPublishedRun(async path => path.includes('/jobs?') ? jobs('skipped') : { workflow_runs: [release(1)] }, 'same'), null);
+assert.equal(await findPublishedRun(async () => ({ workflow_runs: [release(1, 'other')] }), 'same'), null);
+await assert.rejects(findPublishedRun(async () => { throw new Error('GitHub unavailable'); }), /unavailable/);
+await assert.rejects(findPublishedRun(async () => ({})), /不完整/);
+await assert.rejects(findPublishedRun(async path => path.includes('/jobs?') ? {} : { workflow_runs: [release(1)] }), /不完整/);
+console.log('PASS deploy publication: actual publish, skipped reuse, unknown/failure, pagination, matching SHA and API failure');
