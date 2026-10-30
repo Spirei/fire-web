@@ -8,12 +8,12 @@ const Database = require('better-sqlite3');
 const ts = require('typescript');
 
 // Production limiter with real SQLite, isolated from app data and seeding.
-function loadLimiter(db, source = 'rateLimit') {
+function loadLimiter(db, source = 'rateLimit', postgresActive = false) {
   const filename = path.resolve(__dirname, `../lib/${source}.ts`);
   const m = new Module(filename, module);
   m.filename = filename; m.paths = Module._nodeModulePaths(path.dirname(filename));
   const original = m.require.bind(m);
-  m.require = name => name === './db' ? { getDb: () => db } : name === './rateLimit' ? loadLimiter(db) : original(name);
+  m.require = name => name === './db' ? { getDb: () => db } : name === './postgresRuntime' ? { readPostgresRuntime: () => postgresActive ? { backend: 'postgres' } : null } : name === './rateLimit' ? loadLimiter(db, 'rateLimit', postgresActive) : original(name);
   m._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }
   }).outputText, filename);
@@ -57,6 +57,9 @@ if (!isMainThread) {
       const contended = loadLimiter({ prepare() { throw Object.assign(new Error('busy'), { code: 'SQLITE_BUSY' }); } });
       assert.equal(contended.rateLimit('contention', 25, 60000), false);
       console.log('PASS database contention cannot bypass the shared budget via memory fallback');
+      const unavailablePostgres = loadLimiter({ prepare() { throw new Error('connection unavailable'); } }, 'rateLimit', true);
+      assert.equal(unavailablePostgres.rateLimit('postgres-unavailable', 25, 60000), false);
+      console.log('PASS PostgreSQL connection failure cannot admit through a process-local memory budget');
       const req = value => new Request('https://fire.example.test', { headers: { 'x-forwarded-for': value } });
       delete process.env.FIRE_TRUST_PROXY_HEADERS;
       assert.equal(clientIp(req('192.0.2.1')), 'direct');
@@ -128,7 +131,7 @@ if (!isMainThread) {
       const broken=loadLimiter({transaction(){throw new Error('disk unavailable');}},'mailBudget');
       assert.throws(()=>broken.reserveMailAttempt('safe@example.test','reset'),/暂不可用/);
       console.log('PASS SMTP remains persistent in memory-limit mode and fails closed on storage failure');
-      console.log('8 rate-limit suites passed');
+      console.log('9 rate-limit suites passed');
     } finally {
       await Promise.all(workers.map(worker => worker.terminate()));
       db.close(); fs.rmSync(temp, { recursive: true, force: true });
