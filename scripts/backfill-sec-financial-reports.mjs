@@ -11,6 +11,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import Database from "better-sqlite3";
+import { openBusinessDatabase } from './business-db.cjs';
 import { execSync } from "child_process";
 
 const UA = "AlcorFinance admin@example.com";
@@ -59,7 +60,7 @@ function fiscalLabel(periodEnd, fyEndMonth, fyEndDay, isAnnual) {
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function main() {
-  const db = new Database(DB_PATH, { fileMustExist: true });
+  const db = openBusinessDatabase(DB_PATH, { fileMustExist: true });
   // 1) 取持仓/自选里的美股代码（去交易所后缀）
   const rows = db.prepare(
     `SELECT DISTINCT code FROM records WHERE market = 'US'`

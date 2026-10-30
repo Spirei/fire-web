@@ -1,7 +1,8 @@
 import type Database from 'better-sqlite3';
 import { RecordsError } from './recordsContract';
+import { postgresHandle } from './postgresDatabase';
 const contexts=new WeakMap<Database.Database,ReadonlySet<string>>();
-export function withTradeCorrection<T>(db:Database.Database,ids:ReadonlySet<string>,run:()=>T):T{const old=contexts.get(db);contexts.set(db,ids);try{return run();}finally{if(old)contexts.set(db,old);else contexts.delete(db);}}
+export function withTradeCorrection<T>(db:Database.Database,ids:ReadonlySet<string>,run:()=>T):T{const old=contexts.get(db);contexts.set(db,ids);postgresHandle(db)?.setGuardContext('tradeCorrection',ids);try{return run();}finally{postgresHandle(db)?.setGuardContext('tradeCorrection',old);if(old)contexts.set(db,old);else contexts.delete(db);}}
 export function registerTradeCorrection(db:Database.Database){db.function('trade_correction_allowed',(id:unknown)=>contexts.get(db)?.has(String(id))?1:0);db.function('trade_correction_conflict',()=>{throw new RecordsError('成交更正凭证不可由旧接口覆盖或删除',409,40903);});}
 export function installTradeCorrections(db:Database.Database){registerTradeCorrection(db);db.transaction(()=>{
   db.exec(`CREATE TABLE IF NOT EXISTS trade_fee_details(

@@ -13,6 +13,13 @@ const userId = value('--user'), ids = value('--records').split(',').filter(Boole
   // Backup precedes even additive startup schema changes.
   const dataDir = path.join(process.cwd(), 'data');
   if (args.includes('--apply')) {
+    if(fs.existsSync(path.join(dataDir,'database-runtime.json'))||fs.existsSync(path.join(dataDir,'database-postgres-required'))){
+      const {readPostgresRuntime,postgresConnection}=require('../server-tools/postgres/postgresRuntime.js');
+      const {backupPostgres}=require('../server-tools/postgres/postgresBackup.js');
+      const config=readPostgresRuntime();if(!config)throw Error('PostgreSQL cutover is incomplete');
+      const folder=path.join(dataDir,'migration-backups');fs.mkdirSync(folder,{recursive:true,mode:0o700});
+      await backupPostgres(postgresConnection(config),path.join(folder,`stock-connect-${new Date().toISOString().replace(/[:.]/g,'-')}.sql`));
+    }else{
     const Database = require('better-sqlite3'), source = new Database(path.join(dataDir, 'fire.db'), { readonly: true, fileMustExist: true });
     const backupDir = path.join(dataDir, 'migration-backups'); fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
     const destination = path.join(backupDir, `stock-connect-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
@@ -22,6 +29,7 @@ const userId = value('--user'), ids = value('--records').split(',').filter(Boole
     verified.pragma('journal_mode=DELETE');
     if (verified.pragma('integrity_check', { simple: true }) !== 'ok') throw Error('Backup verification failed');
     verified.close();
+    }
     console.log(`Backup: ${destination}`);
   }
   const { getDb } = require('../lib/db.ts'), { readRecord } = require('../lib/store.ts');

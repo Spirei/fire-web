@@ -86,6 +86,7 @@ export function replaceUrls(value, moves) {
   return value.replace(new RegExp('(?:' + escaped.join('|') + ')(?=$|[?#[\\]\\s"\'<>)};,])', 'g'), match => map.get(match));
 }
 export async function migrateAssets({ dbPath, uploads, apply = false, once = false }) {
+  if (fs.existsSync(path.join(path.dirname(dbPath), 'database-runtime.json')) || fs.existsSync(path.join(path.dirname(dbPath), 'database-postgres-required'))) throw new Error('PostgreSQL 已启用，拒绝对旧 SQLite 副本执行素材迁移');
   if (dbPath.startsWith('/Volumes/') || uploads.startsWith('/Volumes/')) throw new Error('Run migration on the database host, not SMB');
   const db = new Database(dbPath, { fileMustExist: true, readonly: !apply });
   db.pragma('busy_timeout = 10000');

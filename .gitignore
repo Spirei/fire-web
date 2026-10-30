@@ -80,3 +80,5 @@ public/uploads/cards/
 
 /app/favicon.ico
 /public/favicon.ico
+
+/server-tools/postgres/

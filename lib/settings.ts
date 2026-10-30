@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { readPostgresRuntime } from "./postgresRuntime";
 import type { GroupConfig, HomeNavItem, Market, SiteSettings, TabConfig, TickerConfig } from "./types";
 import { DEFAULT_MARKET_BADGES, normalizeMarketBadges } from "./marketBadge";
 import { DEFAULT_HOLDING_COLUMNS, normalizeHoldingColumns } from "./holdingColumns";
@@ -549,6 +550,13 @@ export class BrokerGroupNameConflict extends Error {
 export function updateSiteSettings(patch: Partial<SiteSettings> & { clearXueqiuCookie?: boolean }, expectedModelRevision?: string): SiteSettings {
   const db = getDb();
   db.transaction(() => {
+  const activeDatabase = readPostgresRuntime();
+  if (activeDatabase) {
+    if (patch.dbType === "sqlite") throw new Error("业务已切换 PostgreSQL，回退前须先迁移最新数据");
+    const destinations = { pgHost: activeDatabase.host, pgPort: String(activeDatabase.port), pgDatabase: activeDatabase.database, pgUser: activeDatabase.user };
+    for (const key of Object.keys(destinations) as (keyof typeof destinations)[]) if (typeof patch[key] === "string" && patch[key]!.trim() !== destinations[key]) throw new Error("切换连接地址前须先迁移数据；当前数据库未修改");
+    if (typeof patch.pgPassword === "string" && patch.pgPassword.trim() && patch.pgPassword !== "********" && patch.pgPassword.trim() !== getSiteSettings().pgPassword) throw new Error("更改数据库密码须同步更新服务器连接配置；当前配置未修改");
+  }
   assertSmtpPasswordDestination(getSiteSettings(), patch);
   if (Array.isArray(patch.modelServices) && getSiteSettings().modelServicesError) throw new Error(getSiteSettings().modelServicesError);
   if (expectedModelRevision !== undefined && modelSettingsRevision() !== expectedModelRevision) throw new ModelSettingsConflictError();

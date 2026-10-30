@@ -336,7 +336,7 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   {
     label: "系统",
     items: [
-      { key: "database", label: "数据库增强", desc: "SQLite / PostgreSQL 配置" },
+      { key: "database", label: "数据库存储", desc: "SQLite / PostgreSQL 业务读写与事务" },
       { key: "cron", label: "定时任务", desc: "汇率刷新、数据缓存与自动更新" },
       { key: "api", label: "API 开发接口", desc: "后端接口一览与鉴权说明" },
       { key: "about", label: "关于", desc: "网站技术栈、数据源与版本信息" }
@@ -3816,7 +3816,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
 
                   </SettingsManagedPane>
-                  <SettingsManagedPane name="connection" title={site.dbType === "sqlite" ? "数据库状态" : "连接配置"} summary={site.dbType === "sqlite" ? dbStatus ? `${(dbStatus.sizeBytes / 1024).toFixed(1)} KB · ${dbStatus.tables.length} 张表` : dbStatusError || "读取中…" : `${site.pgHost || "未设置主机"}:${site.pgPort || "5432"}`}>
+                  <SettingsManagedPane name="connection" title={site.dbType === "sqlite" ? "数据库状态" : "连接配置"} summary={site.dbType === "sqlite" ? dbStatus ? `${(dbStatus.sizeBytes / 1024).toFixed(1)} KB · ${dbStatus.tables.length} 张表` : dbStatusError || "读取中…" : `${site.pgHost || "未设置主机"}:${site.pgPort || "5432"} · ${dbStatus?.type === "postgres" ? "已启用" : "尚未切换业务存储"}`}>
                 {/* SQLite 信息 */}
                 {site.dbType === "sqlite" && (
                   <>
@@ -4097,7 +4097,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效 · KTX2/UASTC 纹理压缩 · zxcvbn-ts（本地密码强度）</span>
                   </div>
                   <div className="sw-row">
-                    <div className="sw-row-label"><b>数据与服务</b><span>本地优先，可切换企业数据库</span></div>
+                    <div className="sw-row-label"><b>数据与服务</b><span>SQLite 本地存储或 PostgreSQL 共享业务存储</span></div>
                     <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · ExcelJS · saxes（SVG / RSS 校验）· SimpleWebAuthn（通行密钥）</span>
                   </div>
                   <div className="sw-row">

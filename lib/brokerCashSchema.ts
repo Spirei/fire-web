@@ -1,10 +1,12 @@
 import type Database from 'better-sqlite3';
 import { RecordsError } from './recordsContract';
+import { postgresHandle } from './postgresDatabase';
 const feeCorrections = new WeakMap<Database.Database, ReadonlySet<string>>();
 /** Connection-local and synchronous; never opens a general financial-write exemption. */
 export function withBrokerFeeCorrection<T>(db:Database.Database,ids:ReadonlySet<string>,run:()=>T):T {
   const previous=feeCorrections.get(db);feeCorrections.set(db,ids);
-  try{return run();}finally{if(previous)feeCorrections.set(db,previous);else feeCorrections.delete(db);}
+  postgresHandle(db)?.setGuardContext('feeCorrection',ids);
+  try{return run();}finally{postgresHandle(db)?.setGuardContext('feeCorrection',previous);if(previous)feeCorrections.set(db,previous);else feeCorrections.delete(db);}
 }
 export function registerBrokerCashGuard(db: Database.Database) {
   db.function('broker_cash_conflict',()=>{throw new RecordsError('券商资金已有覆盖记录，请核对资金账本后操作',409,40902);});

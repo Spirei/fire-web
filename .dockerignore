@@ -2,6 +2,7 @@
 node_modules
 .next
 .next-dev
+server-tools/postgres
 
 # 运行期数据与上传（由 volume 挂载）；仅公开展示缓存作为镜像种子。
 data/*

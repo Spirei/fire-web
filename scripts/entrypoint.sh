@@ -64,7 +64,7 @@ fi
 # Upgrade legacy image paths inside the container, before the web process accepts writes.
 # The migration creates a SQLite backup, verifies copies, keeps old paths, and runs once.
 ASSET_MIGRATION_SCRIPT="${FIRE_ENTRYPOINT_ASSET_MIGRATION_SCRIPT:-/app/scripts/rename-assets.mjs}"
-if [ -f "$DATA_DIR/fire.db" ] && [ -f "$ASSET_MIGRATION_SCRIPT" ]; then
+if [ ! -f "$DATA_DIR/database-runtime.json" ] && [ ! -f "$DATA_DIR/database-postgres-required" ] && [ -f "$DATA_DIR/fire.db" ] && [ -f "$ASSET_MIGRATION_SCRIPT" ]; then
   node "$ASSET_MIGRATION_SCRIPT" --apply --once --db "$DATA_DIR/fire.db" --uploads "$UPLOADS_DIR" \
     || echo "[entrypoint] 素材地址升级未完成，保留旧地址；下次启动自动重试。" >&2
 fi

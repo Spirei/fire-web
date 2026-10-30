@@ -1,4 +1,5 @@
 import { installAppSync } from "./appSyncSchema";
+import { runtimePostgresDatabase } from "./postgresRuntime";
 import { randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import fs from "fs";
@@ -1229,6 +1230,16 @@ function seed(database: Database.Database) {
 }
 
 export function getDb(): Database.Database {
+  const postgres = runtimePostgresDatabase();
+  if (postgres) {
+    // Confirmed/imported history remains authoritative. Market dividend schedules do not synthesize orders here.
+    const handle = postgres.asDatabase();
+    registerBrokerSourceGuard(handle);
+    registerBrokerCashGuard(handle);
+    registerTradeCorrection(handle);
+    maybeRunBackup();
+    return handle;
+  }
   // 定时备份惰性检查（60 秒节流）：服务器运行且有访问时按计划自动备份
   maybeRunBackup();
   // 股息结算惰性检查（15 分钟节流）：到派息日自动生成股息订单
@@ -1273,6 +1284,12 @@ export function getDb(): Database.Database {
 }
 
 export function getDbStatus() {
+  const postgres = runtimePostgresDatabase();
+  if (postgres) {
+    return { type: "postgres", file: postgres.name,
+      sizeBytes: Number(postgres.raw("SELECT pg_database_size(current_database()) AS bytes").rows[0].bytes),
+      tables: postgres.raw("SELECT tablename FROM pg_tables WHERE schemaname=$1 ORDER BY tablename", [postgres.connection.schema]).rows.map(r => String(r.tablename)) };
+  }
   const database = getDb();
   const tables = (database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")

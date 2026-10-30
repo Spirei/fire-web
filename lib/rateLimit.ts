@@ -6,6 +6,7 @@
  */
 
 import { getDb } from "./db";
+import { readPostgresRuntime } from "./postgresRuntime";
 import { createHash } from "crypto";
 import { isIP } from "node:net";
 
@@ -64,6 +65,7 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
     } catch (error) {
       const code = (error as { code?: string } | null)?.code || "";
       if (code.startsWith("SQLITE_BUSY") || code.startsWith("SQLITE_LOCKED")) return false;
+      if (readPostgresRuntime()) return false;
       // SQLite 不可用（如仅 PostgreSQL 模式 / 磁盘异常）时回退内存
       return memoryRateLimit(key, limit, windowMs);
     }

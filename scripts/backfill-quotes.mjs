@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { openBusinessDatabase } from './business-db.cjs';
 
 const ROOT = process.cwd();
 const LIMIT = Number(process.argv[2]) || Infinity;
@@ -56,7 +57,7 @@ async function fetchBatch(symbols) {
 }
 
 async function main() {
-  const db = new Database(path.join(ROOT, "data", "fire.db"));
+  const db = openBusinessDatabase(path.join(ROOT, "data", "fire.db"));
   const rows = db
     .prepare("SELECT id, market, code FROM assets WHERE type = 'stock' AND price IS NULL ORDER BY market, code")
     .all();

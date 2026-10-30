@@ -29,6 +29,17 @@ jobs:
     needs: scheduled-change-gate
     if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true')
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: alcor_ci
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: alcor_cutover_test_c1
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U alcor_ci -d alcor_cutover_test_c1"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -58,6 +69,13 @@ jobs:
         run: npm run audit:deploy
       - name: Security and site regression
         run: npm run test:review
+      - name: PostgreSQL business transaction regression
+        env:
+          ALCOR_PG_TEST_CONFIG: /tmp/alcor-pg-ci.json
+          CI_PG_PASSWORD: isolated-ci-only
+        run: |
+          node -e "require('fs').writeFileSync(process.env.ALCOR_PG_TEST_CONFIG,JSON.stringify({host:'127.0.0.1',port:5432,database:'alcor_cutover_test_c1',user:'alcor_ci',password:process.env.CI_PG_PASSWORD,schema:'ledger',ssl:false}),{mode:0o600})"
+          node tests/postgres-business.cjs
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Model optimizer tests

@@ -11,6 +11,8 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { randomBytes } from "node:crypto";
+import { readPostgresRuntime, postgresConnection } from "./postgresRuntime";
+import { backupPostgres } from "./postgresBackup";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
@@ -220,14 +222,17 @@ async function performBackup(): Promise<{ name: string; size: number }> {
 
   let complete = false;
   try {
-    const dbFile = path.join(process.cwd(), "data", "fire.db");
-    const src = new Database(dbFile, { readonly: true, fileMustExist: true });
-    try {
+    const postgres = readPostgresRuntime();
+    if (postgres) {
+      await backupPostgres(postgresConnection(postgres), path.join(dir, "postgresql.sql"));
+    } else {
+      const dbFile = path.join(process.cwd(), "data", "fire.db");
+      const src = new Database(dbFile, { readonly: true, fileMustExist: true });
+      try {
       // 在线备份：生成一致快照（WAL 安全，better-sqlite3 的 backup 为异步）
       await src.backup(path.join(dir, "fire.db"));
       try { await fs.promises.chmod(path.join(dir, "fire.db"), 0o600); } catch { /* 不支持 POSIX 权限的平台忽略 */ }
-    } finally {
-      src.close();
+      } finally { src.close(); }
     }
     let size = await copyDir(UPLOADS_DIR, path.join(dir, "uploads"));
     for (const entry of await fs.promises.readdir(dir, { withFileTypes: true })) {

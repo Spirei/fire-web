@@ -2,6 +2,7 @@
  * 用法：node scripts/backfill-icons.mjs [最多处理 N 只，默认全部]
  */
 import Database from "better-sqlite3";
+import { openBusinessDatabase } from './business-db.cjs';
 import fs from "node:fs";
 import path from "node:path";
 
@@ -93,7 +94,7 @@ async function resolveIcon(market, code, name) {
   return null;
 }
 
-const db = new Database(path.join(process.cwd(), "data", "fire.db"));
+const db = openBusinessDatabase(path.join(process.cwd(), "data", "fire.db"));
 const rows = db.prepare("SELECT market, code, name FROM assets WHERE type='stock' AND (url='' OR url IS NULL) ORDER BY market").all();
 const limit = Number(process.argv[2]) || rows.length;
 const todo = rows.slice(0, limit);

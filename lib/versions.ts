@@ -4988,16 +4988,28 @@ const V0_1_68_ENTRY: VersionEntry = {
   software: V0_1_67_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.68"} : item),
   changes: [{kind:"fix",title:"委托持续执行",desc:"新协议确认的 App 委托由服务端持续核对真实行情，支持当日到期及附加单互斥；成交、现金、持仓与唯一回执原子提交。旧委托重新确认后接入，授权失效暂停，不回溯补造历史成交。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_69_ENTRY: VersionEntry = {
   ...V0_1_68_ENTRY, version: "v0.1.69", date: "2026-10-27",
   summary: "部署状态准确区分镜像发布与复用，避免重复构建。",
   software: V0_1_68_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.69"} : item),
   changes: [{kind:"fix",title:"镜像发布去重与状态同步",desc:"以实际发布步骤核对镜像，跳过构建显示复用已有镜像；分页查找成功发布记录，定时与手动发布共享队列，先查已有镜像再执行构建检查，状态核对失败不触发构建。群晖自动更新按镜像提交去重，不因重复检查重置等待。"}]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_69_ENTRY, version: "v0.1.71", date: "2026-10-31",
+  summary: "Web 与 App 共用 PostgreSQL 业务存储，保留完整导入历史。",
+  frontend: [...V0_1_69_ENTRY.frontend, {name:"node-postgres",version:"8.22.0",desc:"PostgreSQL 共享业务存储与原子事务"}],
+  software: V0_1_69_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.71"} : item),
+  changes: [
+    {kind:"feature",title:"PostgreSQL 业务读写",desc:"Web 与 App 的共用服务端接入 PostgreSQL，保留原账户、授权、持仓、资金、订单及唯一回执；同一事务提交金融变更，连接失败不回退旧 SQLite。"},
+    {kind:"fix",title:"历史导入保持唯一",desc:"从已核对的账本快照迁移现有订单，不重新解析 Excel、不重放历史现金流，重复迁移被拒绝。迁移后不从行情股息日程补造历史订单。"},
+    {kind:"security",title:"迁移、回滚与备份",desc:"明确切换时才启用共享数据库，凭据沿原密钥加密保存；缺失或未完成的切换阻止回退写入。PostgreSQL 备份保留原始数值、数据库结构、金融保护和编号序列。"}
+  ]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_69_ENTRY,
   V0_1_68_ENTRY,
   V0_1_67_ENTRY,
   V0_1_66_ENTRY,

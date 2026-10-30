@@ -5,7 +5,7 @@
   "scripts": {
     "predev": "node scripts/generate-api-request-routes.mjs && node scripts/prepare-assets.mjs",
     "dev": "NEXT_DIST_DIR=.next-dev next dev -H 0.0.0.0 -p 3000",
-    "prebuild": "node scripts/generate-api-request-routes.mjs && node scripts/generate-showcase-ktx-worker.mjs",
+    "prebuild": "node scripts/generate-api-request-routes.mjs && node scripts/generate-showcase-ktx-worker.mjs && node scripts/build-postgres-tools.cjs",
     "build": "next build",
     "prestart": "node scripts/prepare-assets.mjs",
     "start": "next start -H 0.0.0.0 -p 3000",
