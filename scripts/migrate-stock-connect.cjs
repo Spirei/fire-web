@@ -13,16 +13,18 @@ const userId = value('--user'), ids = value('--records').split(',').filter(Boole
   // Backup precedes even additive startup schema changes.
   const dataDir = path.join(process.cwd(), 'data');
   if (args.includes('--apply')) {
+    let destination;
     if(fs.existsSync(path.join(dataDir,'database-runtime.json'))||fs.existsSync(path.join(dataDir,'database-postgres-required'))){
       const {readPostgresRuntime,postgresConnection}=require('../server-tools/postgres/postgresRuntime.js');
       const {backupPostgres}=require('../server-tools/postgres/postgresBackup.js');
       const config=readPostgresRuntime();if(!config)throw Error('PostgreSQL cutover is incomplete');
       const folder=path.join(dataDir,'migration-backups');fs.mkdirSync(folder,{recursive:true,mode:0o700});
-      await backupPostgres(postgresConnection(config),path.join(folder,`stock-connect-${new Date().toISOString().replace(/[:.]/g,'-')}.sql`));
+      destination=path.join(folder,`stock-connect-${new Date().toISOString().replace(/[:.]/g,'-')}.sql`);
+      await backupPostgres(postgresConnection(config),destination);
     }else{
     const Database = require('better-sqlite3'), source = new Database(path.join(dataDir, 'fire.db'), { readonly: true, fileMustExist: true });
     const backupDir = path.join(dataDir, 'migration-backups'); fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-    const destination = path.join(backupDir, `stock-connect-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
+    destination = path.join(backupDir, `stock-connect-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
     await source.backup(destination); source.close(); fs.chmodSync(destination, 0o600);
     const verified = new Database(destination, { fileMustExist: true });
     // A standalone backup must not depend on WAL sidecars or shared memory on its recovery volume.
