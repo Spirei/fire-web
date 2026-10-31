@@ -10,11 +10,11 @@ let quote,afterQuote,quoteReads=0,index=0,count=0;
 load('lib/quotes.ts').fetchOverviewQuotes=async items=>{quoteReads++;if(afterQuote)await afterQuote();return{quotes:quote?Object.fromEntries(items.map(i=>[i.id,quote])):{},cached:[],pending:false};};
 load('lib/rates.ts').getRates=async()=>({USD:1,HKD:7,CNY:7});
 const full='portfolio.read portfolio.write assets.read positions.read cash.read orders.read orders.write orders.cancel';
-function fixture(scope=full){
+function fixture(scope=full,stockCode='TEST'){
  const user=auth.createUser('api_trade_'+(++index),'Trade-test-123'),cookie=auth.createSession(user.id),verifier=crypto.randomBytes(32).toString('base64url');
  const a={client_id:app.APP_CLIENT_ID,redirect_uri:app.APP_REDIRECT_URI,response_type:'code',code_challenge_method:'S256',code_challenge:crypto.createHash('sha256').update(verifier).digest('base64url'),state:crypto.randomBytes(32).toString('base64url'),scope};
  const code=app.issueAppCode(app.parseAppAuthorization(a),user.id,cookie),grant=app.exchangeAppCode({...a,code,code_verifier:verifier});
- const r=store.createRecord(user.id,{name:'Synthetic',code:'TEST',market:'US',qty:10,cost:5,price:10,group:'Broker',note:''});
+ const r=store.createRecord(user.id,{name:'Synthetic',code:stockCode,market:'US',qty:10,cost:5,price:10,group:'Broker',note:''});
  assets.declareInstrument(user.id,r.id,{requestId:crypto.randomUUID(),recordRevision:r.revision,revision:0,kind:'cash_equity',listingStatus:'listed'},()=>user.id);
  funds.createFundTransaction({userId:user.id,currency:'USD',type:'opening',amount:1000,direction:1});return{user,cookie,grant,r};
 }
@@ -68,7 +68,7 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
    const full=state(f),b=input(f);assert.equal(full.orders.length,40);formatted=0;
    for(const v of [1,2]){
     const cash=await call(v,f,'cash');assert.equal(cash.status,200);assert.equal(cash.data.snapshotRevision,full.snapshotRevision);assert.equal(cash.data.nativeBalancesByCurrency.USD,full.cash.nativeBalancesByCurrency.USD);
-    const preview=await call(v,f,'trading/preview','POST',b);assert.equal(preview.status,200);assert.equal(preview.data.snapshotRevision,full.snapshotRevision);assert.equal(preview.data.reservedCash,40);
+    const preview=await call(v,f,'trading/preview','POST',b);assert.equal(preview.status,200);assert.equal(preview.data.snapshotRevision,full.snapshotRevision);assert.equal(preview.data.reservedCash,0);
    }
    assert.equal(formatted,0,'cash and preview must not format unused historical order DTOs');
    const again=await call(2,f);assert.deepEqual(again.data.orders,full.orders);assert.equal(again.data.snapshotRevision,full.snapshotRevision);assert.equal(formatted,40);
@@ -81,7 +81,7 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
   const f=fixture(),b=input(f);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'withdrawal',amount:5,direction:-1});const before=economic(f),r=await call(1,f,'trading/submissions','POST',b);assert.equal(r.code,40902);assert.deepEqual(economic(f),before);assert.equal((await call(2,f,'operations/'+b.requestId)).data.state,'failed');assert.equal((await call(2,f,'trading/submissions','POST',b)).code,40901);
  });
  await test('invalid amounts, unknown fields, missing units, oversells and insufficient cash cannot commit',async()=>{
-  const f=fixture(),before=economic(f);for(const change of [{qty:-1},{price:null},{fees:undefined},{fees:'0'},{userId:f.user.id},{qty:1000},{side:'sell',qty:11},{tradedAt:new Date(Date.now()+86400000).toISOString()}])assert.notEqual((await call(2,f,'trading/submissions','POST',input(f,change))).status,200);assert.deepEqual(economic(f),before);
+  const f=fixture(),before=economic(f);for(const change of [{qty:-1},{price:null},{fees:undefined},{fees:'0'},{userId:f.user.id},{mode:'order',tradedAt:undefined,qty:1000},{side:'sell',qty:11},{tradedAt:new Date(Date.now()+86400000).toISOString()}])assert.notEqual((await call(2,f,'trading/submissions','POST',input(f,change))).status,200);assert.deepEqual(economic(f),before);
   db.prepare("UPDATE app_asset_instruments SET kind='unknown' WHERE record_id=?").run(f.r.id);const unclassifiedBefore=economic(f);assert.equal((await call(1,f,'trading/preview','POST',input(f))).code,0);assert.deepEqual(economic(f),unclassifiedBefore);
  });
  await test('cash reconciliation records only a signed delta with CAS, pagination and one-time receipts',async()=>{
@@ -100,7 +100,37 @@ async function test(name,run){quote=undefined;afterQuote=undefined;quoteReads=0;
   quote={price:12,time:new Date().toISOString(),source:'futu',session:'REGULAR'};r=await call(1,f,'trading/orders/'+child.id+'/observations','POST',observe(f,child));assert.equal(r.status,200,JSON.stringify(r));assert.equal(store.readRecord(f.user.id,f.r.id).qty,10);const states=children.map(c=>state(f).orders.find(x=>x.id===c.order_id).status);assert.deepEqual(states.sort(),['cancelled','filled']);assert.equal(state(f).cash.nativeBalancesByCurrency.USD,1003);
  });
  await test('order reservations prevent oversubscribing cash or quantity, OCO shares one reservation',async()=>{
-  const f=fixture();await pending(f,{qty:60});assert.equal((await call(1,f,'trading/preview','POST',input(f,{qty:50}))).code,40902);await pending(f,{side:'sell',qty:6});assert.equal((await call(2,f,'trading/preview','POST',input(f,{side:'sell',qty:5}))).code,40902);
+  const f=fixture();await pending(f,{qty:60});assert.equal((await call(1,f,'trading/preview','POST',input(f,{mode:'order',tradedAt:undefined,qty:50}))).code,40902);await pending(f,{side:'sell',qty:6});assert.equal((await call(2,f,'trading/preview','POST',input(f,{mode:'order',tradedAt:undefined,side:'sell',qty:5}))).code,40902);
+ });
+ await test('owner-recorded fills ignore pending reservations and current buying power; pending execution keeps its own capacity guard',async()=>{
+  for(const v of [1,2]){
+   const f=fixture();await pending(f,{qty:90,fees:0});await pending(f,{side:'sell',qty:9,fees:0});
+   const buy=input(f,{qty:120,price:10,fees:1});const before=economic(f);
+   const p=await call(v,f,'trading/preview','POST',buy);assert.equal(p.status,200,JSON.stringify(p));assert.equal(p.data.reservedCash,0);assert.equal(p.data.reservedQty,0);assert.equal(p.data.cashAfter,-201);assert.deepEqual(economic(f),before);
+   const written=await call(v,f,'trading/submissions','POST',buy);assert.equal(written.status,200,JSON.stringify(written));assert.equal(state(f).cash.nativeBalancesByCurrency.USD,-201);assert.equal(store.readRecord(f.user.id,f.r.id).qty,130);
+   const sell=input(f,{side:'sell',qty:125,fees:0});const sp=await call(v,f,'trading/preview','POST',sell);assert.equal(sp.status,200,JSON.stringify(sp));assert.equal(sp.data.qtyAfter,5);assert.equal(sp.data.reservedQty,0);
+   assert.equal((await call(v,f,'trading/submissions','POST',sell)).status,200);
+   assert.equal((await call(v,f,'trading/submissions','POST',sell)).code,40901);
+  }
+  const g=fixture(),o=await pending(g,{qty:90,fees:0});const debit=input(g,{qty:110,fees:0});assert.equal((await call(2,g,'trading/submissions','POST',debit)).status,200);
+  quote={price:10,time:new Date().toISOString(),source:'futu',session:'REGULAR'};
+  const before=economic(g),observed=await call(2,g,'trading/orders/'+o.id+'/observations','POST',observe(g,o));assert.equal(observed.code,40902);assert.deepEqual(economic(g),before);
+ });
+ await test('ROBN recorded buy 366 at 20 plus 2.93 fees ignores existing buy reservations',async()=>{
+  for(const v of [1,2]){
+   const f=fixture(full,'ROBN');db.prepare("UPDATE records SET qty=20 WHERE id=?").run(f.r.id);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:18362.56,direction:1});
+   await pending(f,{qty:1900,price:10,fees:0});
+   const b=input(f,{qty:366,price:20,fees:2.93}),before=economic(f),preview=await call(v,f,'trading/preview','POST',b);
+   assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.data.amount,7320);assert(Math.abs(preview.data.cashAfter-12039.63)<1e-8);assert.deepEqual(economic(f),before);
+   const out=await call(v,f,'trading/submissions','POST',b);assert.equal(out.status,200,JSON.stringify(out));assert.equal(store.readRecord(f.user.id,f.r.id).qty,386);assert(Math.abs(state(f).cash.nativeBalancesByCurrency.USD-12039.63)<1e-8);
+  }
+ });
+ await test('ROBN actual USD cash 2959.56 does not cap a recorded 7322.93 debit',async()=>{
+  for(const v of [1,2]){
+   const f=fixture(full,'ROBN');db.prepare("UPDATE records SET qty=20 WHERE id=?").run(f.r.id);funds.createFundTransaction({userId:f.user.id,currency:'USD',type:'deposit',amount:1959.56,direction:1});
+   const b=input(f,{qty:366,price:20,fees:2.93}),p=await call(v,f,'trading/preview','POST',b);assert.equal(p.status,200,JSON.stringify(p));assert(Math.abs(p.data.cashBefore-2959.56)<1e-8);assert(Math.abs(p.data.cashAfter+4363.37)<1e-8);
+   const out=await call(v,f,'trading/submissions','POST',b);assert.equal(out.status,200,JSON.stringify(out));assert(Math.abs(state(f).cash.nativeBalancesByCurrency.USD+4363.37)<1e-8);assert.equal(store.readRecord(f.user.id,f.r.id).qty,386);
+  }
  });
  await test('amend preserves the order number, increments revision and rejects stale or old-route writers',async()=>{
   const f=fixture(),o=await pending(f),b=input(f,{mode:'order',tradedAt:undefined,price:8,orderRevision:o.revision});const r=await call(1,f,'trading/orders/'+o.id,'PUT',b);assert.equal(r.status,200,JSON.stringify(r));const latest=state(f).orders.find(x=>x.id===o.id);assert.equal(latest.orderNo,o.orderNo);assert(latest.revision>o.revision);assert.equal(latest.price,8);assert.equal((await call(2,f,'trading/orders/'+o.id,'PUT',b)).code,40901);assert.throws(()=>orders.cancelOrder({userId:f.user.id,orderId:o.id}),/版本/);assert.throws(()=>orders.deleteOrder({userId:f.user.id,orderId:o.id}),/回执/);assert.throws(()=>orders.updateOrder({userId:f.user.id,orderId:o.id,side:'buy',qty:1,price:3,fees:0}),/版本/);

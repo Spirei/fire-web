@@ -5000,6 +5000,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   frontend: [...V0_1_69_ENTRY.frontend, {name:"node-postgres",version:"8.22.0",desc:"PostgreSQL 共享业务存储与原子事务"}],
   software: V0_1_69_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.71"} : item),
   changes: [
+    {kind:"fix",title:"补录成交不校验购买力",desc:"记录实际发生买卖不再受当前购买力和未成交委托占用拦截，原币现金可如实变负；委托创建及实际执行继续核对资金和数量，数量链与原子唯一回执保持。"},
     {kind:"feature",title:"PostgreSQL 业务读写",desc:"Web 与 App 的共用服务端接入 PostgreSQL，保留原账户、授权、持仓、资金、订单及唯一回执；同一事务提交金融变更，连接失败不回退旧 SQLite。"},
     {kind:"fix",title:"历史导入保持唯一",desc:"从已核对的账本快照迁移现有订单，不重新解析 Excel、不重放历史现金流，重复迁移被拒绝。迁移后不从行情股息日程补造历史订单。"},
     {kind:"security",title:"迁移、回滚与备份",desc:"明确切换时才启用共享数据库，凭据沿原密钥加密保存；缺失或未完成的切换阻止回退写入。PostgreSQL 备份保留原始数值、数据库结构、金融保护和编号序列。"}

@@ -133,9 +133,14 @@ function preview(userId: string, d: Draft, excluded?: string, targetRecord?: Sto
   const currency = holdingAccountCurrency(record), cash = state.cash.nativeBalancesByCurrency?.[currency];
   const qty = record.qty === "" ? NaN : Number(record.qty), cost = record.cost === "" ? qty > 0 ? null : 0 : Number(record.cost);
   if (!state.cash.sourceComplete || !Number.isFinite(cash) || !Number.isFinite(qty) || qty < 0 || cost === null || !Number.isFinite(cost)) throw conflict("现金、数量或成本来源不完整，请先核对");
-  const reserved = reservation(source, record, excluded), amount = d.qty * d.price;
+  // Owner-recorded fills describe an event that has already happened. Only
+  // internal orders (including their observed fills) check present capacity.
+  const checksCapacity = d.mode === "order" || excluded !== undefined;
+  const reserved = checksCapacity ? reservation(source, record, excluded) : {cash: 0, qty: 0};
+  const amount = d.qty * d.price;
   const total = d.settlementAmount ?? (d.side === "buy" ? amount + d.fees : amount - d.fees);
-  if (total < 0 || total > 1e12 || d.side === "buy" && total > cash! - reserved.cash + 1e-8 || d.side === "sell" && d.qty > qty - reserved.qty + 1e-10) throw conflict("可用现金或可卖数量不足");
+  if (total < 0 || total > 1e12 || checksCapacity && (d.side === "buy" && total > cash! - reserved.cash + 1e-8 || d.side === "sell" && d.qty > qty - reserved.qty + 1e-10)) throw conflict("可用现金或可卖数量不足");
+  if (!checksCapacity && d.side === "sell" && d.qty > qty + 1e-10) throw conflict("成交数量超过账面持仓，请先补齐遗漏的买入或期初持仓");
   const position = applyOrder({ qty, cost }, d);
   if (![position.qty, position.cost].every(Number.isFinite) || position.qty > 1e12) throw new RecordsError("成交后数量或成本超出上限");
   const feeDetail=d.feeInput?calculateTradeFees(userId,record,d,d.feeInput):undefined;
