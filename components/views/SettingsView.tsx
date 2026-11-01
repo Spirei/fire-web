@@ -875,6 +875,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [dbMsg, setDbMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [dbSaving, setDbSaving] = useState(false);
   const [dbTesting, setDbTesting] = useState(false);
+  // Keep the unsaved password out of settings refreshes and saved/redacted snapshots.
+  const [dbPasswordDraft, setDbPasswordDraft] = useState("");
   const icoRef = useRef<HTMLInputElement>(null);
   const pwaIconRef = useRef<HTMLInputElement>(null);
   const [pwaUploading, setPwaUploading] = useState(false);
@@ -1496,6 +1498,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
   const [editingDb, setEditingDb] = useState(false);
+  useEffect(() => {
+    setDbPasswordDraft("");
+  }, [editingDb, site.pgHost, site.pgPort, site.pgDatabase, site.pgUser]);
   const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
     : activeAnchor === "info" ? editingSiteInfo
     : activeAnchor === "appearance" ? editingAppearance
@@ -1794,12 +1799,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           pgPort: site.pgPort,
           pgDatabase: site.pgDatabase,
           pgUser: site.pgUser,
-          pgPassword: site.pgPassword
+          pgPassword: dbPasswordDraft
         })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "保存失败");
       setSite({ ...DEFAULT_SETTINGS, ...data.settings });
+      setDbPasswordDraft("");
       captureSaved(data.settings);
       setDbMsg({ type: "ok", text: `数据库配置已保存（当前类型：${data.settings.dbType === "postgres" ? "PostgreSQL" : "SQLite"}）` });
       showToast("数据库配置已保存");
@@ -1826,7 +1832,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           port: site.pgPort,
           database: site.pgDatabase,
           pgUser: site.pgUser,
-          password: site.pgPassword
+          password: dbPasswordDraft
         })
       });
       const data = await res.json().catch(() => null);
@@ -3874,7 +3880,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </label>
                       <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2 md:col-span-2">
                         密码
-                        <PasswordInput type="password" value={site.pgPassword} readOnly={!editingDb} onChange={(e) => setSite({ ...site, pgPassword: e.target.value })} placeholder="数据库密码" className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
+                        <PasswordInput type="password" value={dbPasswordDraft} readOnly={!editingDb} onChange={(e) => setDbPasswordDraft(e.target.value)} placeholder={site.pgPasswordConfigured ? "已保存 · 留空复用" : "数据库密码"} className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
                       </label>
                     </div>
                     {dbMsg && (

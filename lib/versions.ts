@@ -4994,7 +4994,7 @@ const V0_1_69_ENTRY: VersionEntry = {
   software: V0_1_68_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.69"} : item),
   changes: [{kind:"fix",title:"镜像发布去重与状态同步",desc:"以实际发布步骤核对镜像，跳过构建显示复用已有镜像；分页查找成功发布记录，定时与手动发布共享队列，先查已有镜像再执行构建检查，状态核对失败不触发构建。群晖自动更新按镜像提交去重，不因重复检查重置等待。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_71_ENTRY: VersionEntry = {
   ...V0_1_69_ENTRY, version: "v0.1.71", date: "2026-10-31",
   summary: "Web 与 App 共用 PostgreSQL 业务存储，保留完整导入历史。",
   frontend: [...V0_1_69_ENTRY.frontend, {name:"node-postgres",version:"8.22.0",desc:"PostgreSQL 共享业务存储与原子事务"}],
@@ -5006,10 +5006,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     {kind:"security",title:"迁移、回滚与备份",desc:"明确切换时才启用共享数据库，凭据沿原密钥加密保存；缺失或未完成的切换阻止回退写入。PostgreSQL 备份保留原始数值、数据库结构、金融保护和编号序列。"}
   ]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_71_ENTRY, version: "v0.1.72", date: "2026-11-01",
+  summary: "数据库事务异常恢复与连接密码复用。",
+  software: V0_1_71_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.72"} : item),
+  changes: [
+    {kind:"fix",title:"事务锁失败后恢复连接",desc:"PostgreSQL 获取事务锁失败也会回滚；回滚失败则关闭连接，避免页面、动态及委托任务持续复用失败事务。原操作不自动重试。"},
+    {kind:"fix",title:"数据库连接密码复用",desc:"重复测试保留当前密码草稿，设置刷新不再清空输入；已保存的同一连接可留空复用密码，连接配置改变后须重新输入。失败的连接测试同样释放资源。"}
+  ]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_71_ENTRY,
   V0_1_69_ENTRY,
   V0_1_68_ENTRY,
   V0_1_67_ENTRY,

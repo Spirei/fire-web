@@ -77,6 +77,28 @@ let fixture,record,originalOrder,nativeGrant;
   pg.transaction(()=>{assert.throws(()=>pg.prepare('INSERT INTO records(id,user_id,name,code,market,price,updated_at) VALUES(?,?,?,?,?,?,?)').run(record.id,fixture.id,'Duplicate','TEST','US',10,new Date().toISOString()));pg.prepare('UPDATE records SET note=? WHERE id=?').run('failure receipt remains writable',record.id);})();
   assert.equal(store.readRecord(fixture.id,record.id).note,'failure receipt remains writable');
  });
+ await test('a transaction lock timeout rolls back before returning the connection to later requests',()=>{
+  const competing=new PostgresDatabase(config);let called=false;
+  try {
+   competing.raw("SET lock_timeout='80ms'");
+   pg.transaction(()=>{
+    assert.throws(()=>competing.transaction(()=>{called=true;})(),e=>e.code==='55P03');
+    assert.equal(called,false,'a rejected lock must never execute the write callback');
+    assert.equal(competing.inTransaction,false);
+    assert.equal(competing.raw('SELECT 1 AS healthy').rows[0].healthy,1,'later reads must not fail with 25P02');
+   })();
+   assert.equal(competing.transaction(()=>competing.raw('SELECT 2 AS healthy').rows[0].healthy)(),2);
+  } finally {competing.close();}
+ });
+ await test('failed rollback discards the connection and preserves the original error without replay',()=>{
+  const damaged=new PostgresDatabase(config),raw=damaged.raw.bind(damaged),cause=Error('isolated original failure');let calls=0;
+  damaged.raw=(sql,...args)=>{if(sql==='ROLLBACK')throw Error('isolated rollback failure');return raw(sql,...args);};
+  try {
+   assert.throws(()=>damaged.transaction(()=>{calls++;throw cause;})(),error=>error===cause);
+   assert.equal(calls,1);assert.equal(damaged.open,false);assert.equal(damaged.inTransaction,false);
+   assert.equal(pg.raw('SELECT 1 AS healthy').rows[0].healthy,1,'discard releases the failed transaction lock');
+  } finally {damaged.close();}
+ });
  await test('PostgreSQL login and native token issue/refresh retain the original account identity',()=>{
   const session=auth.createSession(fixture.id),verifier=crypto.randomBytes(32).toString('base64url'),a={client_id:app.APP_CLIENT_ID,redirect_uri:app.APP_REDIRECT_URI,response_type:'code',code_challenge_method:'S256',code_challenge:crypto.createHash('sha256').update(verifier).digest('base64url'),state:crypto.randomBytes(32).toString('base64url'),scope:'portfolio.read portfolio.write assets.read positions.read cash.read orders.read orders.write orders.cancel'};
   const code=app.issueAppCode(app.parseAppAuthorization(a),fixture.id,session),grant=app.exchangeAppCode({...a,code,code_verifier:verifier});assert(grant.access_token);nativeGrant=app.refreshAppTokens(app.APP_CLIENT_ID,grant.refresh_token);assert(nativeGrant.access_token);

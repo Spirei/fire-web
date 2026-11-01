@@ -321,6 +321,7 @@ export interface SiteSettings {
   pgDatabase: string;
   pgUser: string;
   pgPassword: string;
+  pgPasswordConfigured?: boolean;
   smtpHost: string;
   smtpPort: string;
   smtpSecure: boolean;

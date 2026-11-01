@@ -2293,6 +2293,41 @@ function fontHeaderFixture(ext) {
     assert.equal((await settingsRoute.GET(request())).status, 401);
     assert.equal((await settingsRoute.PUT(request('user', {assetMarketOrder:['HK','US']},'PUT'))).status,403);
   });
+  await test('database tests reuse saved credentials only for the same connection and always close the probe', async () => {
+    const pg=require('pg'),OriginalClient=pg.Client,original=settings.getSiteSettings(),calls=[];
+    let rejectConnection=false,ended=0;
+    pg.Client=class {
+      constructor(config){calls.push(config);}
+      async connect(){if(rejectConnection)throw Error('isolated connection failure');}
+      async query(){return {rows:[{v:'PostgreSQL isolated fixture'}]};}
+      async end(){ended++;}
+    };
+    try {
+      settings.updateSiteSettings({pgHost:'db.example.test',pgPort:'5432',pgDatabase:'fixture',pgUser:'fixture_user',pgPassword:'SAVED_DB_FIXTURE'});
+      const route=require(path.join(root,'app/api/db/test/route.ts'));
+      const connection={host:'db.example.test',port:'5432',database:'fixture',pgUser:'fixture_user',password:''};
+      assert.equal((await route.POST(request(undefined,connection,'POST'))).status,401);
+      assert.equal((await route.POST(request('user',connection,'POST'))).status,403);
+      assert.equal(calls.length,0);
+      for(let i=0;i<2;i++){
+        const response=await route.POST(request('admin',connection,'POST'));
+        assert.equal(response.status,200);assert.equal(calls.at(-1).password,'SAVED_DB_FIXTURE');
+        assert(!JSON.stringify(await response.json()).includes('SAVED_DB_FIXTURE'));
+      }
+      await route.POST(request('admin',{...connection,host:'other.example.test'},'POST'));
+      assert.equal(calls.at(-1).password,'','saved passwords must not follow a changed destination');
+      for(let i=0;i<2;i++){
+        assert.equal((await route.POST(request('admin',{...connection,password:'DRAFT_DB_FIXTURE'},'POST'))).status,200);
+        assert.equal(calls.at(-1).password,'DRAFT_DB_FIXTURE');
+      }
+      rejectConnection=true;
+      assert.equal((await route.POST(request('admin',connection,'POST'))).status,400);
+      assert.equal(ended,calls.length,'failed probes must also close their client');
+    } finally {
+      pg.Client=OriginalClient;
+      settings.updateSiteSettings({pgHost:original.pgHost,pgPort:original.pgPort,pgDatabase:original.pgDatabase,pgUser:original.pgUser,pgPassword:original.pgPassword});
+    }
+  });
   await test('FIRE manual asset records keep their baseline, percentage and account isolation', async () => {
     const route = require(path.join(root, 'app/api/v1/fire-settings/route.ts'));
     const { fireAssetChange } = require(path.join(root, 'lib/fireAssetHistory.ts'));

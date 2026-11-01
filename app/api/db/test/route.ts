@@ -38,12 +38,13 @@ export async function POST(request: Request) {
     await client.connect();
     const res = await client.query("SELECT version() AS v");
     const version = res.rows[0]?.v ?? "";
-    await client.end();
     return NextResponse.json({ ok: true, version });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "连接失败" },
       { status: 400 }
     );
+  } finally {
+    await client.end().catch(() => {});
   }
 }

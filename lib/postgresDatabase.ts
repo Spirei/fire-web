@@ -125,17 +125,29 @@ export class PostgresDatabase {
   }
   transaction<T extends (...args: never[]) => unknown>(fn: T) {
     const execute = (...args: Parameters<T>): ReturnType<T> => {
-      const nested = this.depth > 0, savepoint = "alcor_" + this.depth;
-      this.raw(nested ? `SAVEPOINT ${savepoint}` : "BEGIN ISOLATION LEVEL READ COMMITTED");
-      // Serialize application write/read-modify-write sequences across server instances.
-      if (!nested) this.raw("SELECT pg_advisory_xact_lock(hashtext(current_database()||':alcor-business'))");
-      this.depth++;
+      const previousDepth = this.depth, nested = previousDepth > 0, savepoint = "alcor_" + previousDepth;
+      let started = false;
       try {
+        this.raw(nested ? `SAVEPOINT ${savepoint}` : "BEGIN ISOLATION LEVEL READ COMMITTED");
+        started = true;
+        this.depth = previousDepth + 1;
+        // Lock acquisition can fail too; it must share the transaction's rollback path.
+        if (!nested) this.raw("SELECT pg_advisory_xact_lock(hashtext(current_database()||':alcor-business'))");
         const value = fn(...args);
         if (value && typeof (value as Promise<unknown>).then === "function") throw Error("Database transaction callback must be synchronous");
         this.raw(nested ? `RELEASE SAVEPOINT ${savepoint}` : "COMMIT"); return value as ReturnType<T>;
-      } catch (error) { if (this.open) { try { this.raw(nested ? `ROLLBACK TO SAVEPOINT ${savepoint}` : "ROLLBACK"); if (nested) this.raw(`RELEASE SAVEPOINT ${savepoint}`); } catch { /* Retain the original error, including an unknown write outcome. */ } } throw error; }
-      finally { this.depth--; }
+      } catch (error) {
+        if (started && this.open) {
+          try {
+            this.raw(nested ? `ROLLBACK TO SAVEPOINT ${savepoint}` : "ROLLBACK");
+            if (nested) this.raw(`RELEASE SAVEPOINT ${savepoint}`);
+          } catch {
+            // A connection that cannot roll back is unsafe to reuse. Never retry its writes.
+            try { this.close(); } catch { /* Preserve the original transaction error. */ }
+          }
+        }
+        throw error;
+      } finally { this.depth = previousDepth; }
     };
     return Object.assign(execute, { immediate: execute, deferred: execute, exclusive: execute });
   }
