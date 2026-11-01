@@ -75,6 +75,10 @@ SHARED_POOL_EXPECT=403
 if [ "$ACCOUNT_ROLE" = admin ]; then SHARED_POOL_EXPECT=200; fi
 check "共享股票池按账号权限访问" "$SHARED_POOL_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/api/quote-pool?scope=shared")"
 
+for REMOVED in /assistant /api/assistant /api/assistant/action /api/assistant/attachments /api/assistant/history /api/assistant/models /api/assistant/preferences /api/assistant/spaces /api/assistant/usage /api/asset-allocation /api/asset-allocation/assign /api/v1/asset-allocation /api/v2/asset-allocation /api/v1/asset-allocation/assign /api/v2/asset-allocation/assign; do
+  check "已移除 ${REMOVED}" 404 "$(code -b "$JAR_ACCOUNT" "$BASE$REMOVED")"
+done
+
 # 公开数据接口：交易广场 / 行情 / 分时 / 汇率（交易广场页面曾整页 500，接口也要有兜底检查）
 echo "== 公开数据接口 =="
 for API in /api/trading-square/feed /api/trading-square/duan /api/trading-square/trump; do

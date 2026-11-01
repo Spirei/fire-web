@@ -3,7 +3,7 @@ import { proxyFetch } from "./net";
 import { readLimitedResponseBytes, readLimitedResponseJson, RequestBodyTooLargeError } from "./requestBody";
 import { modelAttempts } from "./modelServices";
 import { getSiteSettings } from "./settings";
-import { logAssistantUsage } from "./assistantWorkspace";
+import { logModelUsage } from "./modelUsage";
 import { FeedError, sourceUrl } from "./feedStore";
 import type { FeedSource } from "./feedTypes";
 import { feedSkill } from "./feedSkill";
@@ -119,10 +119,10 @@ async function nativeSearch(queries: string[], userId: string | undefined, attem
     if (!r.ok) throw new Error("http");
     const payload = await readLimitedResponseJson<{ usage?: { input_tokens?: number; output_tokens?: number } }>(r, 1_500_000);
     const sources = parseDeepSeekSearch(payload);
-    if (userId) logAssistantUsage({ userId, serviceId: attempt.service.id, serviceName: attempt.service.name, model: "deepseek-native-search", status: "ok", latencyMs: Date.now() - started, promptTokens: payload?.usage?.input_tokens, completionTokens: payload?.usage?.output_tokens, attemptIndex: 0, dataScope: "feed" });
+    if (userId) logModelUsage({ userId, serviceId: attempt.service.id, serviceName: attempt.service.name, model: "deepseek-native-search", status: "ok", latencyMs: Date.now() - started, promptTokens: payload?.usage?.input_tokens, completionTokens: payload?.usage?.output_tokens, attemptIndex: 0, dataScope: "feed" });
     return sources;
   } catch (e) {
-    if (userId) logAssistantUsage({ userId, serviceId: attempt.service.id, serviceName: attempt.service.name, model: "deepseek-native-search", status: "error", latencyMs: Date.now() - started, error: status && status !== 200 ? `feed_search_http_${status}` : "feed_search_failed", attemptIndex: 0, dataScope: "feed" });
+    if (userId) logModelUsage({ userId, serviceId: attempt.service.id, serviceName: attempt.service.name, model: "deepseek-native-search", status: "error", latencyMs: Date.now() - started, error: status && status !== 200 ? `feed_search_http_${status}` : "feed_search_failed", attemptIndex: 0, dataScope: "feed" });
     throw failure("deepseek", e, status);
   }
 }

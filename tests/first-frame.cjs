@@ -82,6 +82,19 @@ function elements(tree) {
   return[tree,...elements(tree.props.children)];
 }
 try {
+  test('ranking icons match exact library securities across provider suffixes without borrowing another coin',()=>{
+    const { marketCapStockKey, marketCapLibraryIcon } = require(path.join(root,'lib/marketCapIcons.ts'));
+    const stocks = { 'US:AAPL':'/library/apple.png','US:BRK.B':'/library/brkb.png','HK:00700':'/library/tencent.png','CN:600519':'/library/moutai.png','JP:7203':'/library/toyota.png','KR:005930':'/library/samsung.png' };
+    for(const [market,code,canonical] of [['US','AAPL','AAPL'],['US','BRK-B','BRK.B'],['HK','700.HK','00700'],['CN','600519.SS','600519'],['JP','7203.T','7203'],['KR','005930.KS','005930']]) {
+      const item = {market,code,type:'stock'};
+      assert.deepEqual(marketCapStockKey(item),{market,code:canonical});
+      assert.equal(marketCapLibraryIcon(item,stocks,{}),stocks[market+':'+canonical]);
+    }
+    assert.equal(marketCapLibraryIcon({market:'US',code:'AAPL',type:'stock'},{'HK:AAPL':'wrong-market'},{}),undefined);
+    assert.equal(marketCapLibraryIcon({market:'US',code:'ETH',type:'crypto'},stocks,{BTC:'/library/bitcoin.png'}),undefined);
+    assert.equal(marketCapLibraryIcon({market:'US',code:'GOLD',type:'metal'},stocks,{GOLD:'/library/gold.png'}),'/library/gold.png');
+
+  });
   test('quote pool restores private scope, market, search and selected stock in its first frame',()=>{
     const at=Date.UTC(2026,9,4), hk={market:'HK',code:'00700',name:'腾讯控股',icon:'/hk.svg',state:'dormant',updating:false,lastRequestedAt:at,expiresAt:at+604800000};
     const us={...hk,market:'US',code:'AAPL',name:'Apple',icon:'/us.svg'};
@@ -619,7 +632,7 @@ try {
   test('global navigation ends in quote pool and preserves its active entry before hydration',()=>{
     const html=render('components/GlobalSectionNav.tsx',{section:'quote-pool',onSelect() {}});
     const labels=[...html.matchAll(/<button[^>]+aria-label="([^"]+)"/g)].map(match=>match[1]);
-    assert.deepEqual(labels,['资产配置','市值排行','汇率换算','休市日历','股票池']);
+    assert.deepEqual(labels,['市值排行','汇率换算','休市日历','股票池']);
     assert.match(html, /aria-label="股票池" aria-current="page"/);
     let opened=0;
     const view=frameHarness('components/views/GlobalPreviewView.tsx',{

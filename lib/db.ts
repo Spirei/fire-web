@@ -174,45 +174,6 @@ function migrate(database: Database.Database) {
       simple TEXT NOT NULL DEFAULT '{}'
     );
 
-    CREATE TABLE IF NOT EXISTS assistant_conversations (
-      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-      messages TEXT NOT NULL DEFAULT '[]',
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS assistant_conversation_threads (
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      conversation_id TEXT NOT NULL,
-      title TEXT NOT NULL DEFAULT '新对话',
-      messages TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, conversation_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_assistant_threads_updated
-      ON assistant_conversation_threads(user_id, updated_at DESC);
-
-    CREATE TABLE IF NOT EXISTS assistant_preferences (
-      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-      memory_enabled INTEGER NOT NULL DEFAULT 0,
-      memory TEXT NOT NULL DEFAULT '',
-      selected_model TEXT NOT NULL DEFAULT 'auto',
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS assistant_spaces (
-      id TEXT NOT NULL,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, id)
-    );
-    CREATE TABLE IF NOT EXISTS assistant_conversation_spaces (
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      conversation_id TEXT NOT NULL,
-      space_id TEXT NOT NULL DEFAULT '',
-      PRIMARY KEY (user_id, conversation_id)
-    );
     CREATE TABLE IF NOT EXISTS assistant_usage (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -234,28 +195,6 @@ function migrate(database: Database.Database) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_assistant_usage_user_time ON assistant_usage(user_id, created_at DESC);
-    CREATE TABLE IF NOT EXISTS assistant_attachments (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      conversation_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      url TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_assistant_attachments_conversation ON assistant_attachments(user_id,conversation_id);
-
-    CREATE TABLE IF NOT EXISTS assistant_actions (
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      action_id TEXT NOT NULL,
-      action_type TEXT NOT NULL,
-      request_hash TEXT NOT NULL,
-      response TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, action_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_assistant_actions_created ON assistant_actions(created_at);
-
     CREATE TABLE IF NOT EXISTS mail_send_attempts (
       id INTEGER PRIMARY KEY,
       recipient_hash TEXT NOT NULL,
@@ -617,20 +556,13 @@ function migrate(database: Database.Database) {
   const userSettingCols = (database.prepare("PRAGMA table_info(user_settings)").all() as { name: string }[]).map((c) => c.name);
   if (!userSettingCols.includes("simple")) database.exec("ALTER TABLE user_settings ADD COLUMN simple TEXT NOT NULL DEFAULT '{}'");
 
-  const assistantUsageCols = (database.prepare("PRAGMA table_info(assistant_usage)").all() as { name: string }[]).map((c) => c.name);
-  if (!assistantUsageCols.includes("turn_id")) database.exec("ALTER TABLE assistant_usage ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
-  if (!assistantUsageCols.includes("attempt_index")) database.exec("ALTER TABLE assistant_usage ADD COLUMN attempt_index INTEGER NOT NULL DEFAULT 0");
-  if (!assistantUsageCols.includes("first_token_ms")) database.exec("ALTER TABLE assistant_usage ADD COLUMN first_token_ms INTEGER NOT NULL DEFAULT 0");
-  if (!assistantUsageCols.includes("image_count")) database.exec("ALTER TABLE assistant_usage ADD COLUMN image_count INTEGER NOT NULL DEFAULT 0");
-  if (!assistantUsageCols.includes("data_scope")) database.exec("ALTER TABLE assistant_usage ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'none'");
-  const assistantThreadCols = (database.prepare("PRAGMA table_info(assistant_conversation_threads)").all() as { name: string }[]).map((c) => c.name);
-  if (!assistantThreadCols.includes("archived")) database.exec("ALTER TABLE assistant_conversation_threads ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
-  const assistantPreferenceCols = (database.prepare("PRAGMA table_info(assistant_preferences)").all() as { name: string }[]).map((c) => c.name);
-  if (!assistantPreferenceCols.includes("selected_model")) {
-    database.exec("ALTER TABLE assistant_preferences ADD COLUMN selected_model TEXT NOT NULL DEFAULT 'auto'");
-    if (assistantPreferenceCols.includes("default_model")) database.exec("UPDATE assistant_preferences SET selected_model=default_model WHERE default_model<>'auto'");
-  }
-
+  // 动态页的模型调用仍使用原用量表。
+  const modelUsageCols = (database.prepare("PRAGMA table_info(assistant_usage)").all() as { name: string }[]).map((c) => c.name);
+  if (!modelUsageCols.includes("turn_id")) database.exec("ALTER TABLE assistant_usage ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''");
+  if (!modelUsageCols.includes("attempt_index")) database.exec("ALTER TABLE assistant_usage ADD COLUMN attempt_index INTEGER NOT NULL DEFAULT 0");
+  if (!modelUsageCols.includes("first_token_ms")) database.exec("ALTER TABLE assistant_usage ADD COLUMN first_token_ms INTEGER NOT NULL DEFAULT 0");
+  if (!modelUsageCols.includes("image_count")) database.exec("ALTER TABLE assistant_usage ADD COLUMN image_count INTEGER NOT NULL DEFAULT 0");
+  if (!modelUsageCols.includes("data_scope")) database.exec("ALTER TABLE assistant_usage ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'none'");
   // 卡面库卡背信息增量字段（兼容旧库）：备注与币种后加
   const cardDetailCols = (database.prepare("PRAGMA table_info(card_details)").all() as { name: string }[]).map((c) => c.name);
   if (!cardDetailCols.includes("note")) database.exec("ALTER TABLE card_details ADD COLUMN note TEXT NOT NULL DEFAULT ''");

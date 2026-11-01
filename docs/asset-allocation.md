@@ -1,4 +1,7 @@
-# 全球预览 · 资产配置
+# 全球预览 · 资产配置（已移除）
+
+2026-11-01：资产配置页面及 Web、v1、v2 API 已移除，`auth/config` 不再声明此能力。下文仅为历史数据和港股通迁移工具的核算说明，不代表可用接口。
+
 
 入口 `/global?section=allocation`。服务端 `assetAllocation.ts` 为 Web、v1 与 v2 的唯一计算源；配置存在本人 `asset_allocation_accounts`，读取不修补原持仓、资金、银行卡或简化账本。
 

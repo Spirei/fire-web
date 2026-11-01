@@ -79,8 +79,6 @@ export const APP_V2_ROUTES = [
   {path:"account-assets/cash",methods:["GET","POST"],access:"cash.read",writeAccess:"portfolio.write"},
   {path:"account-assets/operations/[requestId]",methods:["GET"],access:"portfolio.read"},
   {path:"overview",methods:["GET"],access:"portfolio.read"},
-  {path:"asset-allocation",methods:["GET","POST","PUT","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
-  {path:"asset-allocation/assign",methods:["POST"],access:"portfolio.write"},
   {path:"records",methods:["GET","POST"],access:"portfolio.read",writeAccess:"portfolio.write"},
   {path:"records/[id]",methods:["GET","PUT","DELETE"],access:"portfolio.read",writeAccess:"portfolio.write"},
   {path:"records/operations/[requestId]",methods:["GET"],access:"portfolio.read"},

@@ -30,8 +30,6 @@ await test('CN account combines converted Stock Connect and ordinary A shares wi
  const overview=load('lib/overview.ts').buildOverview(store.listRecords(u.id),rates);assert.equal(overview.byMarket.CN.market,20);assert.equal(overview.byMarket.HK.market,10);
  const app=load('lib/appAssets.ts').buildAssets(u.id,{username:'Test',nickname:'',uid:'',avatar:''},rates,{}, {currency:'CNY',costMethod:'diluted',usPrice:'observed'});
  assert.equal(app.positions.find(p=>p.recordId===connect.id).currency,'HKD');assert.equal(app.positions.find(p=>p.recordId===connect.id).accountCurrency,'CNY');assert.equal(app.markets.find(m=>m.market==='CN').nativeMarketValue,80);assert.equal(app.markets.find(m=>m.market==='CN').positionCount,2);
- assert(load('lib/assetAllocationClient.ts').validAllocationSnapshot(s,'USD',u.id));
- const broken=structuredClone(s);broken.positions.find(p=>p.channel).currency='HKD';assert.equal(load('lib/assetAllocationClient.ts').validAllocationSnapshot(broken,'USD',u.id),false);
 });
 await test('missing exchange rates produce incomplete valuation and never 1:1 or zero',()=>{
  const u=user();rec(u,{accountMarket:'CN'});for(const bad of [{USD:1,CNY:4},{USD:1,HKD:8},{USD:1,CNY:0,HKD:8}]){const s=allocation.buildAssetAllocation(u.id,bad,{},'USD');assert.equal(s.accounts[0].amount,null);assert.equal(s.summary.totalAsset,null);assert.equal(s.summary.complete,false);}assert(Number.isNaN(account.holdingMoneyFactor({market:'HK',accountMarket:'CN'},{USD:1,CNY:4},'CNY')));

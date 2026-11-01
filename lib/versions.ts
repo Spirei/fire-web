@@ -5008,9 +5008,12 @@ const V0_1_71_ENTRY: VersionEntry = {
 };
 export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_71_ENTRY, version: "v0.1.72", date: "2026-11-01",
-  summary: "数据库事务异常恢复与连接密码复用。",
+  summary: "数据库事务异常恢复、连接密码复用与功能精简。",
   software: V0_1_71_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.72"} : item),
   changes: [
+    {kind:"fix",title:"股票池切换与全球资产图标",desc:"股票池与同排页面统一左边距和宽度，入口按操作意图预加载，加载失败可在页内重试；市值排行按榜单证券补取素材库图标，兼容交易所后缀，图标地址更新后可恢复显示。"},
+    {kind:"feature",title:"移除资产配置页面",desc:"移除全球资产中的资产配置页面及 Web、v1、v2 专用 API；保留市值排行、汇率换算、休市日历、股票池及原有账户账本。"},
+    {kind:"feature",title:"移除独立智能助手",desc:"移除侧栏助手页面、悬浮小窗口及专用会话、附件与操作接口；动态页的生成、讨论和模型配置保持原有功能。"},
     {kind:"fix",title:"事务锁失败后恢复连接",desc:"PostgreSQL 获取事务锁失败也会回滚；回滚失败则关闭连接，避免页面、动态及委托任务持续复用失败事务。原操作不自动重试。"},
     {kind:"fix",title:"数据库连接密码复用",desc:"重复测试保留当前密码草稿，设置刷新不再清空输入；已保存的同一连接可留空复用密码，连接配置改变后须重新输入。失败的连接测试同样释放资源。"}
   ]

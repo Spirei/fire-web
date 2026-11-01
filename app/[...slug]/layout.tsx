@@ -19,13 +19,10 @@ import { headers } from "next/headers";
 import { unstable_noStore } from "next/cache";
 import { totalFundBalances } from "@/lib/fundState";
 import { listWatchGroups } from "@/lib/watchGroupsStore";
-import { getAssistantHistoryState } from "@/lib/assistantHistory";
 import { feedBootstrap } from "@/lib/feedGeneration";
 import { CURRENT_VERSION } from "@/lib/versions";
 import { readQuotePool } from "@/lib/quotePoolData";
 import { passkeySettingsSnapshot } from "@/lib/passkeySettingsSnapshot";
-import { allocationSnapshotRevision, buildAssetAllocation } from "@/lib/assetAllocation";
-import { getRates } from "@/lib/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -52,9 +49,7 @@ export default async function SlugLayout({
   // 资产盈亏分析：应用壳内隐藏页签（不进导航菜单），直接按路径进入
   const specialTab = path === "/quote-pool" ? { key: "quote-pool" } : path === "/asset-pnl-analysis"
     ? { key: "pnl" }
-    : path === "/assistant"
-      ? (settings.tabs.find((item) => item.key === "assistant") ?? { key: "assistant" })
-      : null;
+    : null;
   let tab = specialTab ?? settings.tabs.find((t) => (t.url || `/${t.key}`) === path);
   // 个股详情直达：/watchlist/US.GOOGL —— 股票代码就是唯一标识，不再用 ?symbol= / ?filter=
   let initialSymbol: string | undefined;
@@ -84,18 +79,11 @@ export default async function SlugLayout({
   // 后台首屏数据在服务端鉴权后直接读取。避免浏览器再次串行请求
   // /api/auth/me → records / activities / settings，首帧不再被全局转圈遮挡。
   const initialQuotePool = tab.key === "quote-pool" ? { mine: readQuotePool(user.id, "mine"), ...(isAdmin(user) ? { shared: readQuotePool(user.id, "shared") } : {}) } : null;
-  // Authenticated, request-local projection: no external quote wait and no shared account cache.
-  const initialAllocation = tab.key === "global" ? buildAssetAllocation(user.id, await getRates(), {}, currencyCookie && ["USD", "HKD", "CNY", "SGD", "JPY", "KRW", "EUR"].includes(currencyCookie) ? currencyCookie : "USD") : null;
-  if (initialAllocation) {
-    initialAllocation.quoteStatus = { pending: initialAllocation.positions.length > 0, cached: [], missing: initialAllocation.positions.map(position => position.id) };
-    initialAllocation.snapshotRevision = allocationSnapshotRevision(initialAllocation);
-  }
   const initialRecords = listRecords(user.id);
   // 自选股分组随记录一并进入服务端首屏，避免刷新时客户端请求完成前只显示“全部”。
   const initialWatchGroups = tab.key === "watchlist" ? listWatchGroups(user.id) : [];
   // 日志只在日志页首屏使用；其他页进入日志时再按需读取。
   const initialUserLogs = tab.key === "activities" ? listSecurityLogs(200, user.id) : [];
-  const initialAssistantHistory = tab.key === "assistant" ? getAssistantHistoryState(user.id) : null;
   // 资金余额与持仓记录一起进入首屏，避免切到“我的持仓”时先按 0 现金计算、随后再跳到完整净资产。
   const initialFundBalances = totalFundBalances(user.id);
   // 当前账户涉及的股票图标随 HTML 首屏下发，不再等待客户端请求 3,000+ 条素材。
@@ -156,7 +144,6 @@ export default async function SlugLayout({
           initialRecords={initialRecords}
           initialWatchGroups={initialWatchGroups}
           initialUserLogs={initialUserLogs}
-          initialAssistantHistory={initialAssistantHistory}
           initialPasskeys={tab.key === "settings" ? passkeySettingsSnapshot(user.id) : null}
           initialFundBalances={initialFundBalances}
           initialStockIcons={initialStockIcons}
@@ -167,7 +154,6 @@ export default async function SlugLayout({
           initialCardLibrary={initialCardLibrary}
           initialFeed={initialFeed}
           initialQuotePool={initialQuotePool}
-          initialAllocation={initialAllocation}
           initialSettings={{
             title: settings.title,
             logoText: settings.logoText,

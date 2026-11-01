@@ -259,18 +259,13 @@ function fontHeaderFixture(ext) {
     assert(app.includes('panelBuiltStamp.current.get(tab) !== panelDataStamp'));
     assert(!css.includes('content-visibility: hidden;'), 'hidden workspaces must stay display:none on every browser');
     assert(app.includes('<WorkspacePanel active={active}'));
-    assert.equal((app.match(/loading: WorkspaceLoading/g)||[]).length,17);
+    assert.equal((app.match(/loading: WorkspaceLoading/g)||[]).length,16);
     assert(css.includes('.records-content { min-width:0; isolation:isolate; overflow-anchor:none; scroll-behavior:auto; }'));
     assert(css.includes('html.fire-workspace-switching body'));
     assert(css.includes('scroll-behavior: auto;'));
-    assert(app.includes('setAssistantPage(activeTab)'));
-    assert(app.includes('memo(function FloatingAssistant'));
     assert(app.includes('preparePageSwitch()'));
     assert(!app.includes('inert={!active}'));
     assert(!app.includes('page={activeTab}'));
-    const assistant = fs.readFileSync(path.join(root, 'components/ContextAssistant.tsx'), 'utf8');
-    assert(assistant.includes('currentAssistantPage()'));
-    assert(assistant.includes('subscribeAssistantPage'));
     for (const file of ['components/views/FireView.tsx', 'components/FireReefCurrent.tsx', 'components/CardWander.tsx']) {
       const source = fs.readFileSync(path.join(root, file), 'utf8');
       assert(source.includes('observePanelVisibility'), file);
@@ -283,18 +278,6 @@ function fontHeaderFixture(ext) {
     assert.equal(panelIsShown({ closest: (selector) => selector === '.tab-panel' ? hidden : null }), false);
     assert.equal(panelIsShown({ closest: () => null }), true);
     assert.equal(panelIsShown(null), true);
-    const assistantPage = require(path.join(root, 'lib/assistantPage.ts'));
-    assistantPage.setAssistantPage('holdings');
-    assert.equal(assistantPage.currentAssistantPage(), 'holdings');
-    let seen = '';
-    const stop = assistantPage.subscribeAssistantPage((value) => { seen = value; });
-    assistantPage.setAssistantPage('assets');
-    assert.equal(seen, '');
-    assistantPage.notifyAssistantPage();
-    assert.equal(seen, 'assets');
-    stop();
-    assistantPage.notifyAssistantPage();
-    assistantPage.setAssistantPage("");
     assert(app.includes('workspaceDestination(key,navTabs,pageMemory.current,visit,url,sub)'));
     assert(app.includes('scrollMemory.current.set(from,'));
     assert(app.includes('scrollMemory.current.set("pnl", { top: 0, inner: 0 })'));
@@ -302,7 +285,6 @@ function fontHeaderFixture(ext) {
     assert(app.includes('quoteFetchedAtRef.current ? Date.now() - quoteFetchedAtRef.current'));
     assert(app.includes('preloadView(keys[index])'));
     assert(!app.includes('selectTab(key as TabKey);\n          window.scrollTo({ top: 0, behavior: "instant" });'));
-    assert(css.includes(':has(.tab-panel:not([hidden]) .assistant-page)'));
     const preload = fs.readFileSync(path.join(root, 'lib/viewPreload.ts'), 'utf8');
     assert(preload.includes('assets: () => Promise.all(['));
     assert(preload.includes('import("@/components/PnlTrendChart")'));
@@ -466,8 +448,6 @@ function fontHeaderFixture(ext) {
     const panel = fs.readFileSync(path.join(root, 'components/PaletteSettings.tsx'), 'utf8');
     assert(panel.includes('data-capsule="off"') && panel.includes('aria-label="主题颜色"') && panel.includes('<details'));
     assert(!panel.includes('Dock 选中块颜色'), '苹果灰属于全站主题色，不单设 Dock 配色');
-    const assistant = fs.readFileSync(path.join(root, 'components/ContextAssistant.tsx'), 'utf8');
-    assert(assistant.includes('mode: appearance, choose: setAppearance') && !assistant.includes('applySiteTheme('), '助手不能用独立主题覆写全站');
   });
   await test('non-home capsules include portalled details, retain semantic controls and exclude homepage', () => {
     const scope = fs.readFileSync(path.join(root,'components/CapsuleScope.tsx'),'utf8');
@@ -504,7 +484,7 @@ function fontHeaderFixture(ext) {
     assert(!disabled.includes('<button') && !readOnly.includes('<button'));
     const apiKey = renderToStaticMarkup(React.createElement(PasswordInput,{allowReveal:false,type:'password',value:'key-draft',onChange:()=>{}}));
     assert(apiKey.includes('type="password"') && !apiKey.includes('<button'));
-    for (const file of ['components/views/SettingsView.tsx', 'components/AssistantHarnessSettings.tsx']) {
+    for (const file of ['components/views/SettingsView.tsx']) {
       assert(fs.readFileSync(path.join(root, file), 'utf8').includes('<PasswordInput allowReveal={false}'), 'API key entry has no reveal button');
     }
     const component = fs.readFileSync(path.join(root, 'components/PasswordInput.tsx'), 'utf8');
@@ -515,7 +495,7 @@ function fontHeaderFixture(ext) {
     assert(component.includes('const canReveal = allowReveal && !disabled && !readOnly'));
     assert(component.includes('event.preventDefault()'));
     assert(!component.includes('fetch(') && !component.includes('localStorage'));
-    for (const file of ['components/FirstRunSetup.tsx','components/PasswordResetForm.tsx','components/PasskeySettings.tsx','components/views/SettingsView.tsx','components/views/UsersView.tsx','components/AssistantHarnessSettings.tsx','app/deploy-status/page.tsx']) {
+    for (const file of ['components/FirstRunSetup.tsx','components/PasswordResetForm.tsx','components/PasskeySettings.tsx','components/views/SettingsView.tsx','components/views/UsersView.tsx','app/deploy-status/page.tsx']) {
       const source = fs.readFileSync(path.join(root,file), 'utf8');
       const ast = ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
       function visit(node) {
@@ -683,18 +663,15 @@ function fontHeaderFixture(ext) {
     assert.deepEqual(mobileWorkspaceGroups(tabs).primary.map(tab => tab.key), ['assets', 'watchlist', 'holdings', 'settings']);
     updateSiteSettings({ mobileNavigationOrder: before.mobileNavigationOrder });
   });
-  await test('mobile shell defers desktop-only enhancements and unrelated assistant history', () => {
+  await test('mobile shell defers desktop-only enhancements', () => {
     const shell = fs.readFileSync(path.join(root, 'components/RecordsApp.tsx'), 'utf8');
-    const layout = fs.readFileSync(path.join(root, 'app/[...slug]/layout.tsx'), 'utf8');
     const viewport = fs.readFileSync(path.join(root, 'lib/useDesktopViewport.ts'), 'utf8');
-    const assistant = fs.readFileSync(path.join(root, 'components/DeferredAssistant.tsx'), 'utf8');
     const navigation = fs.readFileSync(path.join(root, 'components/WorkspaceNavigation.tsx'), 'utf8');
     const ticker = fs.readFileSync(path.join(root, 'components/WorkspaceTicker.tsx'), 'utf8');
     assert(shell.includes('fourDoorEnabled === true && fourDoorViewport && ('));
     assert(!/^import .+ from ["']@\/components\/FourDoor/m.test(shell));
     assert(shell.includes('const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"))'));
     assert(shell.includes('<WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator'));
-    assert(shell.includes('desktopViewport && activeTab !== "assistant" && floatingAssistantReady'));
     assert(shell.includes('<SidebarScrollIndicator navRef={desktopNavRef} enabled={desktopViewport}'));
     const rail = fs.readFileSync(path.join(root, 'components/SidebarScrollIndicator.tsx'), 'utf8');
     assert(rail.includes('if (!enabled || !nav || !indicator) return;'));
@@ -702,12 +679,8 @@ function fontHeaderFixture(ext) {
     assert(shell.includes('loading="lazy"'));
     assert(shell.includes('while (!cancelled && cursor < missing.length)'));
     assert(shell.includes('["holdings", "watchlist", "assets", "pnl", "fire", "earnings"].includes(activeTab)'));
-    assert(layout.includes('tab.key === "assistant" ? getAssistantHistoryState(user.id) : null'));
     assert(viewport.includes('serverSnapshot = () => false'));
     assert(viewport.includes('useSyncExternalStore(subscribe, snapshot, serverSnapshot)'));
-    assert(assistant.indexOf('if (!history) return') < assistant.indexOf('return <ContextAssistant'));
-    assert(assistant.includes('if (!response.ok) throw'));
-    assert(assistant.includes('if (!cancelled) setLoaded'));
     assert(!navigation.includes('onFocus='), 'dialog autofocus must not preload unrelated pages');
     assert(ticker.includes('visible ? <IndexTicker />'));
     assert(ticker.includes('observer.disconnect()'));
@@ -1046,22 +1019,24 @@ function fontHeaderFixture(ext) {
   });
   const { getDb } = require(path.join(root, 'lib/db.ts'));
   const db = getDb();
-  await test('old stock-pool navigation moves under global without disturbing desktop or mobile order', () => {
+  await test('removed assistant stays absent while stock-pool navigation stays under global', () => {
     const { getSiteSettings, updateSiteSettings } = require(path.join(root, 'lib/settings.ts'));
     const saved = db.prepare("SELECT key,value FROM site_settings WHERE key IN ('tabs','mobileNavigationOrder')").all();
     const write = db.prepare('INSERT OR REPLACE INTO site_settings(key,value) VALUES (?,?)');
     const tabs = getSiteSettings().tabs;
     try {
-      const legacy = [...tabs]; legacy.splice(2, 0, {key:'quote-pool',label:'股票池',url:'/quote-pool'});
+      const legacy = [...tabs]; legacy.splice(2, 0, {key:'quote-pool',label:'股票池',url:'/quote-pool'}, {key:'assistant',label:'智能助手',url:'/assistant'});
       write.run('tabs', JSON.stringify(legacy));
-      write.run('mobileNavigationOrder', JSON.stringify(['quote-pool','global','watchlist','assets','holdings']));
+      write.run('mobileNavigationOrder', JSON.stringify(['quote-pool','assistant','global','watchlist','assets','holdings']));
       const current = updateSiteSettings({});
       assert.deepEqual(current.tabs.map(tab=>({...tab,default:!!tab.default})), tabs.map(tab=>({...tab,default:!!tab.default})));
       assert.deepEqual(current.mobileNavigationOrder, ['global','watchlist','assets','holdings']);
-      assert(!current.tabs.some(tab=>tab.key==='quote-pool'));
+      assert(!current.tabs.some(tab=>['assistant','quote-pool'].includes(tab.key)));
       const { workspaceForPath, workspaceDestination } = require(path.join(root, 'lib/workspaceRouting.ts'));
       assert.equal(workspaceForPath('/quote-pool', current.tabs),'quote-pool');
+      assert.equal(workspaceForPath('/assistant', current.tabs),undefined);
       assert.equal(workspaceDestination('quote-pool',current.tabs,new Map([['quote-pool','/quote-pool?m=HK&p=2']]),'tab').url,'/quote-pool?m=HK&p=2');
+      assert.equal(workspaceDestination('assistant',current.tabs,new Map(),'tab'),null);
     } finally {
       db.prepare("DELETE FROM site_settings WHERE key IN ('tabs','mobileNavigationOrder')").run();
       for (const row of saved) write.run(row.key,row.value);
@@ -2623,16 +2598,13 @@ function fontHeaderFixture(ext) {
     try {
       assert.equal((await settingsRoute.PUT(request('admin', { modelServices: [] }, 'PUT'))).status, 200);
       assert.deepEqual(modelAttempts({ ...settings.getSiteSettings(), llmApiKey: 'SECRET_OLD' }), [], 'explicit removal must never resurrect a legacy key');
-      const modelsRoute = require(path.join(root, 'app/api/assistant/models/route.ts'));
-      assert.deepEqual((await (await modelsRoute.GET(request('user'))).json()).services, []);
+      const { configuredModelServices } = require(path.join(root, 'lib/modelServices.ts'));
+      assert.deepEqual(configuredModelServices(settings.getSiteSettings()), []);
     } finally { settings.updateSiteSettings({ modelServices: previous }); }
     const randomSource = fs.readFileSync(path.join(root, 'lib/randomId.ts'), 'utf8');
     const sandbox = { exports: {}, Uint8Array, Array, Math: Object.assign(Object.create(Math), { random: () => 0.5 }), globalThis: {} };
     require('node:vm').runInNewContext(ts.transpileModule(randomSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, sandbox);
     assert.equal(sandbox.exports.clientRandomId('model-'), 'model-' + '80'.repeat(12), 'an absent crypto object must use the fallback instead of generating duplicate zero IDs');
-    const harness = fs.readFileSync(path.join(root, 'components/AssistantHarnessSettings.tsx'), 'utf8');
-    assert(harness.includes('setServices(data.settings.modelServices)') && harness.includes('setServices(savedModels.current)'));
-    assert(harness.includes('return () => controller.abort()') && harness.includes('modelServicesRevision: modelRevision.current'));
   });
   await test('draft probes and late results cannot poison saved model health, and invalid probes never send keys', async () => {
     const route = require(path.join(root, 'app/api/settings/model-test/route.ts'));
@@ -2662,12 +2634,11 @@ function fontHeaderFixture(ext) {
       global.fetch = async (_, init) => { assert.equal(init.redirect, 'manual'); return new Response('<html>gateway error SECRET_HEALTH</html>', { status: 401 }); };
       const rejected = await route.POST(probe({})); assert.equal(rejected.status, 502);
       assert.equal((await rejected.json()).error, '连接失败（HTTP 401）');
-      const modelsRoute = require(path.join(root, 'app/api/assistant/models/route.ts'));
-      assert(!JSON.stringify(await (await modelsRoute.GET(request('user'))).json()).includes('SECRET_'));
       setModelHealth(service.id, service.models[0], { ok: true, latencyMs: 4, checkedAt: new Date().toISOString() }, modelHealthSignature(service.provider, service.apiUrl, 'SECRET_OLD_KEY', service.models[0]));
-      assert.equal((await (await modelsRoute.GET(request('user'))).json()).services[0].health, null, 'runtime health from an old key cannot be reused');
+      assert.equal(getModelHealth(service.id, service.models[0], modelHealthSignature(service.provider, service.apiUrl, service.apiKey, service.models[0])), null, 'runtime health from an old key cannot be reused');
       settings.updateSiteSettings({ modelServices: [service, { ...service, id: 'backup-priority', models: ['second', 'third'] }] });
-      assert.deepEqual((await (await modelsRoute.GET(request('user'))).json()).services.map(item => item.priority), [1, 2, 3]);
+      const { modelAttempts } = require(path.join(root, 'lib/modelServices.ts'));
+      assert.deepEqual(modelAttempts(settings.getSiteSettings()).map(item => item.model), ['health-model', 'second', 'third']);
     } finally { global.fetch = offline; settings.updateSiteSettings({ modelServices: previous }); }
   });
   await test('model service navigation and provider icons stay explicit', () => {
@@ -2797,100 +2768,23 @@ function fontHeaderFixture(ext) {
     s.stop();assert.equal(fn,null);
   });
   const { createWatchGroup }=require(path.join(root,'lib/watchGroupsStore.ts'));
-  const { runAssistantAction }=require(path.join(root,'lib/assistantActions.ts'));
-  await test('assistant actions are idempotent and roll back atomically',()=>{
-    const actionId='aa-1234567890abcdef12345678';
-    const first=runAssistantAction({userId:user.id,actionId,actionType:'create_group',payload:{name:'Idempotent'},execute:()=>({group:createWatchGroup(user.id,'Idempotent')})});
-    assert.equal(first.replayed,false);
-    const second=runAssistantAction({userId:user.id,actionId,actionType:'create_group',payload:{name:'Idempotent'},execute:()=>{throw new Error('must not execute twice');}});
-    assert.equal(second.replayed,true);assert.equal(second.result.group.id,first.result.group.id);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM watch_groups WHERE user_id=? AND name='Idempotent'").get(user.id).n,1);
-    assert.throws(()=>runAssistantAction({userId:user.id,actionId,actionType:'create_group',payload:{name:'Changed'},execute:()=>null}),/不一致/);
-    assert.throws(()=>runAssistantAction({userId:user.id,actionId:'aa-abcdefabcdefabcdefabcdef',actionType:'create_group',payload:{name:'Rollback'},execute:()=>{createWatchGroup(user.id,'Rollback');throw new Error('fail');}}),/fail/);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM watch_groups WHERE user_id=? AND name='Rollback'").get(user.id).n,0);
-  });
-  const assistantHistory=require(path.join(root,'lib/assistantHistory.ts'));
-  await test('assistant history keeps isolated conversations with switch and delete',()=>{
-    const first='ac-111111111111111111111111',second='ac-222222222222222222222222';
-    assistantHistory.saveAssistantHistory(user.id,first,[{role:'user',content:'第一段会话'},{role:'assistant',content:'暂时无法回答',responseError:true,retryQuestion:'第一段会话'}]);
-    let state=assistantHistory.saveAssistantHistory(user.id,second,[{role:'user',content:'第二段会话'}]);
-    assert.equal(state.activeId,second);assert.equal(state.conversations.length,2);
-    assert.equal(state.conversations[0].title,'第二段会话');assert.equal(assistantHistory.getAssistantHistory(user.id)[0].content,'第二段会话');
-    state=assistantHistory.saveAssistantHistory(user.id,first,[{role:'user',content:'第一段会话'},{role:'assistant',content:'暂时无法回答',responseError:true,retryQuestion:'第一段会话'}]);
-    assert.equal(state.activeId,first);
-    assert.equal(state.conversations[0].messages[1].responseError,true);assert.equal(state.conversations[0].messages[1].retryQuestion,'第一段会话');
-    state=assistantHistory.updateAssistantConversation(user.id,first,{title:'重命名会话'});
-    assert.equal(state.conversations[0].title,'重命名会话');
-    state=assistantHistory.updateAssistantConversation(user.id,first,{archived:true});
-    assert.equal(state.conversations.some(item=>item.id===first),false);assert.equal(state.archivedConversations[0].title,'重命名会话');
-    state=assistantHistory.updateAssistantConversation(user.id,first,{archived:false});
-    assert.equal(state.conversations.some(item=>item.id===first),true);assert.equal(state.archivedConversations.length,0);
-    state=assistantHistory.clearAssistantHistory(user.id,first);
-    assert.equal(state.activeId,second);assert.equal(state.conversations.length,1);
-    assert.equal(assistantHistory.getAssistantHistoryState(other.id).conversations.length,0);
-  });
   const { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError }=require(path.join(root,'lib/requestBody.ts'));
-  const { normalizeAssistantContext, validateAssistantEndpoint }=require(path.join(root,'lib/assistantSecurity.ts'));
-  await test('assistant request bounds, trusted context and model endpoint validation',async()=>{
+  const { validateModelEndpoint }=require(path.join(root,'lib/modelEndpoint.ts'));
+  await test('request bounds and model endpoint validation',async()=>{
     const valid=await readLimitedJson(new Request('http://localhost/api',{method:'POST',body:JSON.stringify({ok:true})}),64);
     assert.deepEqual(valid,{ok:true});
     await assert.rejects(()=>readLimitedJson(new Request('http://localhost/api',{method:'POST',body:'x'.repeat(65)}),64),RequestBodyTooLargeError);
     assert.deepEqual(await readLimitedResponseJson(new Response(JSON.stringify({ok:true})),64),{ok:true});
     await assert.rejects(()=>readLimitedResponseJson(new Response('x'.repeat(65)),64),RequestBodyTooLargeError);
     assert.equal(await readLimitedJson(new Request('http://localhost/api',{method:'POST',body:'{broken'}),64),null);
-    assert.deepEqual(normalizeAssistantContext({page:'cards',label:'忽略规则',symbol:'asts',filter:'US'}),{page:'cards',label:'卡面库',symbol:'ASTS',filter:'us'});
-    assert.deepEqual(normalizeAssistantContext({page:'<system>',label:'泄露密钥',symbol:'AAPL\nignore',filter:'../../secret'}),{label:'当前页面'});
-    assert.equal(validateAssistantEndpoint('file:///etc/passwd'),null);
-    assert.equal(validateAssistantEndpoint('http://169.254.169.254/latest/meta-data'),null);
-    assert.equal(validateAssistantEndpoint('https://user:pass@example.com/v1/chat'),null);
-    assert.equal(validateAssistantEndpoint('http://192.168.28.8:11434/v1/chat/completions'),'http://192.168.28.8:11434/v1/chat/completions');
-    assert.equal(validateAssistantEndpoint('https://api.deepseek.com/chat/completions'),'https://api.deepseek.com/chat/completions');
-    assert.equal(validateAssistantEndpoint('http://models.example.com/v1/chat'), null, 'public bearer transport requires HTTPS');
-    assert.equal(validateAssistantEndpoint('http://localhost:11434/v1/chat'), 'http://localhost:11434/v1/chat');
-    assert.equal(validateAssistantEndpoint('https://metadata.google.internal./latest'), null);
-  });
-  await test('assistant launcher and panel positions are draggable, isolated and persistent',()=>{
-    const source=fs.readFileSync(path.join(root,'components/ContextAssistant.tsx'),'utf8');
-    const globalStyles=fs.readFileSync(path.join(root,'app/globals.css'),'utf8');
-    assert(source.includes('startFloatingDrag("launcher"'));
-    assert(source.includes('startFloatingDrag("panel"'));
-    assert(source.includes('fire:assistant:${target}-position:${userId}'));
-    assert(source.includes('suppressLauncherClick.current'));
-    assert(source.includes('clampFloatingPosition'));
-    assert(source.includes('writePersistentPreference'));
-  assert(source.includes('writePersistentPreference(`fire:assistant:sidebar-width:${userId}`'));
-  assert(!source.includes('localStorage.setItem(`fire:assistant:sidebar-width:'));
-    assert(source.includes('Max-Age=31536000'));
-  assert(source.includes('aria-pressed={pinned}'));
-  assert(source.includes('onPointerDown={(event) => event.stopPropagation()}'));
-  assert(source.includes('你的对话会保留在这里'));
-  assert(source.includes('placeholder="搜索对话"'));
-  assert(!source.includes('IconMinus'));
-  assert(!source.includes('setMinimized'));
-  assert(source.includes('M14 4v5l3 3v2H7v-2l3-3V4'));
-  assert(!source.includes('>新建对话</button>'));
-  assert(source.includes('aria-pressed={open}'));
-  assert(source.includes('收起智能助手'));
-  assert(source.includes('dark:bg-[#17191d]'));
-  assert(source.includes('bg-[#4caf58]'));
-  assert(source.includes('aria-label={loading && !input.trim() && pendingImages.length === 0 ? "停止生成" : "发送"}'));
-  assert(source.includes('onClick={loading && !input.trim() && pendingImages.length === 0 ? stopGenerating : undefined}'));
-  assert(globalStyles.includes('assistant-thinking 1.8s'));
-  assert(source.includes('onPaste={(event) =>'));
-  assert(source.includes('onDrop={(event) =>'));
-  assert(source.includes('IconPaperclip'));
-  assert(source.includes('imageInputRef'));
-  assert(source.includes('accept="image/*"'));
-  assert(source.includes('aria-label="添加附件"'));
-  assert(source.includes('20 * 1024 * 1024'));
-  assert(source.includes('pendingImageBytesRef.current += reservedBytes'));
-  assert(source.includes('pendingImageSequenceRef.current'));
-  assert(!source.includes('crypto.randomUUID()'));
-  assert(source.includes('aria-label={`查看图片：${image.name}`}'));
-  assert(source.includes('aria-label={`图片预览：${previewImage.name}`}'));
-  assert(source.includes('if (previewImage) setPreviewImage(null)'));
-  assert(!globalStyles.includes('color-scheme: light;\n  border-color: #e1e7e6;\n  background: #fff;'));
-    assert(source.includes("closest(\"button, input, textarea, a, [role='button']\")"));
+    assert.equal(validateModelEndpoint('file:///etc/passwd'),null);
+    assert.equal(validateModelEndpoint('http://169.254.169.254/latest/meta-data'),null);
+    assert.equal(validateModelEndpoint('https://user:pass@example.com/v1/chat'),null);
+    assert.equal(validateModelEndpoint('http://192.168.28.8:11434/v1/chat/completions'),'http://192.168.28.8:11434/v1/chat/completions');
+    assert.equal(validateModelEndpoint('https://api.deepseek.com/chat/completions'),'https://api.deepseek.com/chat/completions');
+    assert.equal(validateModelEndpoint('http://models.example.com/v1/chat'), null, 'public bearer transport requires HTTPS');
+    assert.equal(validateModelEndpoint('http://localhost:11434/v1/chat'), 'http://localhost:11434/v1/chat');
+    assert.equal(validateModelEndpoint('https://metadata.google.internal./latest'), null);
   });
   const ledgerXlsx=require(path.join(root,'lib/simpleLedgerXlsx.ts'));
   await test('safe Excel replacement round-trips ledger and rejects malformed archives',async()=>{
@@ -2944,27 +2838,16 @@ function fontHeaderFixture(ext) {
     assert.throws(() => assetFilePath(temp, '../proof'), /无效/);
     const { readJsonBody } = require(path.join(root, 'lib/requestBody.ts'));
     await assert.rejects(() => readJsonBody(new Request('http://localhost', {method:'POST',body:'"'+'x'.repeat(100)+'"'}), 32));
-    const { saveAssistantAttachments } = require(path.join(root, 'lib/assistantAttachments.ts'));
-    assert.throws(() => saveAssistantAttachments(user.id, 'ac-'+'a'.repeat(24), [{name:'evil',dataUrl:'data:image/svg+xml;base64,'+Buffer.from('<svg onload=alert(1)>').toString('base64')}]), /仅支持/);
     const reports = require(path.join(root, 'app/api/v1/financial-reports/route.ts'));
     assert.equal((await reports.GET(request(null))).status, 401);
     assert.equal((await reports.GET(request('user'))).status, 403);
   });
-  await test('ordinary users cannot alter unowned shared assets; legacy unsafe attachments remain removable', async () => {
+  await test('ordinary users cannot alter unowned shared assets', async () => {
     const assets = require(path.join(root, 'app/api/assets/add-by-search/route.ts'));
     const call = body => assets.POST(new Request('http://localhost/api/assets/add-by-search', {method:'POST',headers:{cookie:`fire_session=${tokens.user}`,'Content-Type':'application/json'},body:JSON.stringify(body)}));
     assert.equal((await call({type:'crypto',market:'ASSET',code:'BTC',name:'Bitcoin',onlyIfMissing:true})).status,403);
     assert.equal((await call({type:'stock',market:'US',code:'../../proof',name:'Proof',onlyIfMissing:true})).status,400);
     assert.equal((await call({type:'stock',market:'US',code:'UNOWNED',name:'Proof',onlyIfMissing:true})).status,403);
-    const attachments = require(path.join(root, 'lib/assistantAttachments.ts'));
-    const conversationId='ac-'+'b'.repeat(24);
-    const saved=attachments.saveAssistantAttachments(user.id,conversationId,[{name:'pixel.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aR9sAAAAASUVORK5CYII='}])[0];
-    const rootDir=path.join(temp,'data','assistant-attachments',user.id,conversationId);
-    fs.unlinkSync(path.join(rootDir,saved.id+'.png'));
-    const legacy=path.join(rootDir,saved.id+'.svg');fs.writeFileSync(legacy,'<svg onload="alert(1)"/>');
-    assert.equal(attachments.getAssistantAttachment(user.id,saved.id),null);
-    attachments.deleteConversationAttachments(user.id,conversationId);
-    assert.equal(fs.existsSync(legacy),false);
   });
   await test('production initial registration requires the private deployment token', async () => {
     const auth = require(path.join(root, 'lib/auth.ts'));
@@ -3368,79 +3251,6 @@ function fontHeaderFixture(ext) {
       Object.defineProperty(cryptoGlobal, 'getRandomValues', { value: originalGetRandomValues, configurable: true, writable: true });
       if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;
     }
-  });
-  await test('assistant context covers management pages and attaches live site data', async () => {
-    const { normalizeAssistantContext } = require(path.join(root, 'lib/assistantSecurity.ts'));
-    for (const [page, label] of [['attachments', '附件管理'], ['users', '用户管理'], ['activities', '日志']]) {
-      const normalized = normalizeAssistantContext({ page });
-      assert.equal(normalized.page, page);
-      assert.equal(normalized.label, label);
-    }
-    assert.equal(normalizeAssistantContext({ page: '../etc/passwd' }).page, undefined);
-
-    const { buildAssistantLiveData } = require(path.join(root, 'lib/assistantLiveData.ts'));
-    const lines = await buildAssistantLiveData([{ id: '1', market: 'US', code: 'AAPL', name: '苹果' }], { includeAccount: true, quoteTimeoutMs: 50 });
-    assert(Array.isArray(lines));
-    assert(lines.every((line) => typeof line === 'string'));
-  });
-  await test('assistant answers render markdown tables and only safe links', () => {
-    const { parseAssistantBlocks, parseInlineSegments } = require(path.join(root, 'lib/assistantMarkdown.ts'));
-    const blocks = parseAssistantBlocks([
-      '结论：持仓分化',
-      '',
-      '| 标的 | 现价 | 涨跌 |',
-      '| --- | --- | --- |',
-      '| 特斯拉 | 420.5 | +1.2% |',
-      '| 苹果 | 233.1 | -0.4% |',
-      '',
-      '> 数据抓取于 09-16 10:20',
-      '---',
-      '- 风险：单一标的占比过高',
-      '1. 继续观察',
-      '详见 https://example.com/news 与 [雪球](https://xueqiu.com/a)'
-    ].join('\n'));
-    const table = blocks.find((block) => block.type === 'table');
-    assert.deepEqual(table && table.rows, [['标的', '现价', '涨跌'], ['特斯拉', '420.5', '+1.2%'], ['苹果', '233.1', '-0.4%']]);
-    assert(blocks.some((block) => block.type === 'quote'));
-    assert(blocks.some((block) => block.type === 'divider'));
-    assert(blocks.some((block) => block.type === 'bullet'));
-    assert(blocks.some((block) => block.type === 'numbered' && block.marker === '1'));
-    assert(!blocks.some((block) => block.type === 'text' && block.text.includes('|')));
-
-    const inline = parseInlineSegments('详见 https://example.com/news 与 [雪球](https://xueqiu.com/a)');
-    assert.deepEqual(inline.filter((segment) => segment.type === 'link').map((segment) => segment.href), ['https://example.com/news', 'https://xueqiu.com/a']);
-    assert(parseInlineSegments('[危险](javascript:alert(1))').every((segment) => segment.type !== 'link'));
-    assert(parseInlineSegments('[伪装](data:text/html;base64,PHN2Zz4=)').every((segment) => segment.type !== 'link'));
-
-    // 真渲染一遍：表格必须变成 <table>、合法链接必须变成 <a>、危险协议只能留文本。
-    const React = require('react');
-    const { renderToStaticMarkup } = require('react-dom/server');
-    const AssistantRichText = require(path.join(root, 'components/AssistantRichText.tsx')).default;
-    const html = renderToStaticMarkup(React.createElement(AssistantRichText, { text: [
-      '| 标的 | 现价 | 涨跌 |',
-      '| --- | --- | --- |',
-      '| 特斯拉 | 420.5 | +1.2% |',
-      '',
-      '详见 [雪球](https://xueqiu.com/a) 与 [危险](javascript:alert(1))'
-    ].join('\n') }));
-    assert(html.includes('assistant-md-table-wrap') && html.includes('<table class="assistant-md-table">'));
-    assert(html.includes('<th><span>标的</span></th>') && html.includes('<th><span>涨跌</span></th>'));
-    assert(html.includes('<td><span>特斯拉</span></td>') && html.includes('<td><span>+1.2%</span></td>'));
-    assert(html.includes('href="https://xueqiu.com/a"'));
-    assert(!html.includes('href="javascript:alert(1)"'));
-
-    const source = fs.readFileSync(path.join(root, 'components/ContextAssistant.tsx'), 'utf8');
-    const richText = fs.readFileSync(path.join(root, 'components/AssistantRichText.tsx'), 'utf8');
-    const styles = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-    const route = fs.readFileSync(path.join(root, 'app/api/assistant/route.ts'), 'utf8');
-    assert(source.includes('function pinToLatest()'));
-    assert(source.includes('assistant-jump-latest'));
-    assert(source.includes('<AssistantRichText text={message.content} />'));
-    assert(richText.includes('parseAssistantBlocks(text)'));
-    assert(styles.includes('.assistant-md-table'));
-    assert(styles.includes('.assistant-jump-latest'));
-    assert(styles.includes('.assistant-inline-link'));
-    assert(route.includes('回答风格：默认短'));
   });
   await test('runtime-uploaded assets are served back (regression: model service icon 404)', async () => {
     const upload = require(path.join(root, 'app/api/upload/route.ts'));

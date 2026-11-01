@@ -1,5 +1,5 @@
 import type { ModelServiceConfig, SiteSettings } from "./types";
-import { validateAssistantEndpoint } from "./assistantSecurity";
+import { validateModelEndpoint } from "./modelEndpoint";
 import { modelProviderConfig } from "./modelServiceDrafts";
 
 const PROVIDERS = new Set(["deepseek", "openai", "jev", "custom"]);
@@ -17,8 +17,8 @@ function normalizeProviderConfig(item: Record<string, unknown>) {
 export function savedModelProviderConfig(service: ModelServiceConfig | undefined, provider: string, apiUrl: string) {
   if (!service || !PROVIDERS.has(provider)) return undefined;
   const config = service.provider === provider ? modelProviderConfig(service) : service.providerConfigs?.[provider as ModelServiceConfig["provider"]];
-  const endpoint = validateAssistantEndpoint(apiUrl);
-  return config && endpoint && validateAssistantEndpoint(config.apiUrl) === endpoint ? config : undefined;
+  const endpoint = validateModelEndpoint(apiUrl);
+  return config && endpoint && validateModelEndpoint(config.apiUrl) === endpoint ? config : undefined;
 }
 
 export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
@@ -62,7 +62,7 @@ export function normalizeModelServices(value: unknown): ModelServiceConfig[] {
 }
 
 function validateProviderConfig(raw: Record<string, unknown>, name: string) {
-  if (typeof raw.apiUrl !== "string" || raw.apiUrl.length > 2048 || (raw.apiUrl.trim() && !validateAssistantEndpoint(raw.apiUrl.trim()))) throw new Error(`${name} 的 API 地址无效或不安全`);
+  if (typeof raw.apiUrl !== "string" || raw.apiUrl.length > 2048 || (raw.apiUrl.trim() && !validateModelEndpoint(raw.apiUrl.trim()))) throw new Error(`${name} 的 API 地址无效或不安全`);
   if (typeof raw.apiKey !== "string" || raw.apiKey.trim().length > 500 || /[\r\n\0]/.test(raw.apiKey) || raw.apiKey.startsWith("enc:")) throw new Error(`${name} 的 API 密钥格式无效`);
   if (!Array.isArray(raw.models) || raw.models.length > 20 || raw.models.some(model => typeof model !== "string" || model.trim().length > 160 || /[\r\n\0]/.test(model))) throw new Error(`${name} 的模型 ID 格式无效，最多配置 20 个模型`);
   const models = raw.models.map(model => (model as string).trim()).filter(Boolean);
@@ -115,13 +115,13 @@ export function prepareModelServices(value: unknown, previous: SiteSettings): Mo
     const providerConfigs = { ...old?.providerConfigs, ...(old ? { [old.provider]: modelProviderConfig(old) } : {}) };
     const protectExistingEndpoint = (provider: string, apiUrl: string, apiKey: string) => {
       const existing = old?.provider === provider ? old : old?.providerConfigs?.[provider as ModelServiceConfig["provider"]];
-      if (existing?.apiKey && !apiKey && validateAssistantEndpoint(existing.apiUrl) !== validateAssistantEndpoint(apiUrl)) throw new Error(`${item.name} 的 API 地址已更改，请输入新地址的密钥；原配置未修改`);
+      if (existing?.apiKey && !apiKey && validateModelEndpoint(existing.apiUrl) !== validateModelEndpoint(apiUrl)) throw new Error(`${item.name} 的 API 地址已更改，请输入新地址的密钥；原配置未修改`);
     };
     protectExistingEndpoint(item.provider, item.apiUrl, item.apiKey);
     for (const [provider, config] of Object.entries(item.providerConfigs || {})) {
       if (!config) continue;
       protectExistingEndpoint(provider, config.apiUrl, config.apiKey);
-      if (config.apiUrl && !validateAssistantEndpoint(config.apiUrl)) throw new Error(`${item.name} 的 API 地址无效或不安全`);
+      if (config.apiUrl && !validateModelEndpoint(config.apiUrl)) throw new Error(`${item.name} 的 API 地址无效或不安全`);
       providerConfigs[provider as ModelServiceConfig["provider"]] = { ...config, apiKey: config.apiKey || savedModelProviderConfig(old, provider, config.apiUrl)?.apiKey || "" };
     }
     const service = {
@@ -131,7 +131,7 @@ export function prepareModelServices(value: unknown, previous: SiteSettings): Mo
     };
     service.providerConfigs[service.provider] = modelProviderConfig(service);
     if (!service.name) throw new Error("每个模型服务都需要名称");
-    if (!validateAssistantEndpoint(service.apiUrl)) throw new Error(`${service.name} 的 API 地址无效或不安全`);
+    if (!validateModelEndpoint(service.apiUrl)) throw new Error(`${service.name} 的 API 地址无效或不安全`);
     if (service.icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(service.icon)) throw new Error(`${service.name} 的图标路径无效`);
     if (Object.values(service.icons || {}).some(icon => icon && !/^\/uploads\/(?:asset\/icon|logo)\//.test(icon))) throw new Error(`${service.name} 的图标路径无效`);
     return service;
@@ -144,7 +144,7 @@ export function configuredModelServices(settings: SiteSettings): ModelServiceCon
   if (services.length || settings.modelServicesInitialized) return services;
   const provider = settings.llmProvider === "openai" ? "openai" : settings.llmProvider === "custom" ? "custom" : "deepseek";
   const apiUrl = settings.llmApiUrl || settings.deepseekApiUrl;
-  const dedicatedDeepSeek = provider === "deepseek" && validateAssistantEndpoint(apiUrl) === validateAssistantEndpoint(settings.deepseekApiUrl);
+  const dedicatedDeepSeek = provider === "deepseek" && validateModelEndpoint(apiUrl) === validateModelEndpoint(settings.deepseekApiUrl);
   const key = (settings.llmApiKey || (dedicatedDeepSeek ? settings.deepseekApiKey : "") || process.env.LLM_API_KEY || (dedicatedDeepSeek ? process.env.DEEPSEEK_API_KEY : "") || "").trim();
   return [{
     id: "legacy-primary",
@@ -159,7 +159,7 @@ export function configuredModelServices(settings: SiteSettings): ModelServiceCon
 
 export function modelAttempts(settings: SiteSettings, preferred?: { serviceId?: string; model?: string }) {
   const all = configuredModelServices(settings).filter(service => service.provider !== "jev").flatMap(service => {
-    const apiUrl = validateAssistantEndpoint(service.apiUrl);
+    const apiUrl = validateModelEndpoint(service.apiUrl);
     if (!apiUrl || !service.apiKey) return [];
     return service.models.map(model => ({ service, apiUrl, model }));
   });

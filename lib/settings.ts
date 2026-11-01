@@ -60,7 +60,6 @@ const DEFAULTS: SiteSettings = {
     { key: "global", label: "全球经济", url: "/global" },
     { key: "trading", label: "动态", url: "/trading" },
     { key: "earnings", label: "财报日历", url: "/earnings" },
-    { key: "assistant", label: "智能助手", url: "/assistant" },
     { key: "celebs", label: "名人持仓", url: "/celebs" },
     { key: "users", label: "用户管理", url: "/users" },
     { key: "attachments", label: "附件管理", url: "/attachments" },
@@ -189,7 +188,7 @@ const SIMPLE_KEYS: ("domain" | "title" | "ico" | "pwaIcon" | "homepageBg" | "log
   "wechatName", "wechatCorpId", "wechatAgentId", "wechatSecret", "wechatProxyUrl", "wechatToken", "wechatAesKey", "wechatAdminIds", "wechatWebhook", "telegramName", "telegramTypes", "telegramBotUsername", "telegramBotToken", "telegramChatId", "telegramUserIds", "telegramAdminIds", "telegramApiBase", "feishuName", "feishuTypes", "feishuAppId", "feishuAppSecret", "feishuOpenId", "feishuChatId", "feishuAdminIds", "feishuVerificationToken", "feishuEncryptKey", "feishuWebhook", "qqName", "qqTypes", "qqAppId", "qqAppSecret", "qqUserOpenId", "qqGroupOpenId", "qqAdminIds", "discordName", "discordTypes", "discordBotToken", "discordGuildId", "discordChannelId", "discordAdminIds", "webPushName", "webPushTypes", "webPushUsername"
 ];
 
-export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "assistant", "celebs", "users", "attachments", "library", "cards", "activities", "settings"] as const;
+export const NAV_KEYS = ["holdings", "assets", "fire", "watchlist", "global", "trading", "earnings", "celebs", "users", "attachments", "library", "cards", "activities", "settings"] as const;
 const DEFAULT_LABELS: Record<string, string> = Object.fromEntries(
   DEFAULTS.tabs.map((t) => [t.key, t.label])
 );

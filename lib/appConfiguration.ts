@@ -13,7 +13,6 @@ import { marketCalendarDiscovery } from "./marketCalendar";
 import { nativeLoginDiscovery } from "./appNativeLoginConfig";
 import { recordsDiscovery } from "./recordsContract";
 import { quoteSubscriptionsDiscovery } from "./quoteDemand";
-import { allocationDiscovery } from "./assetAllocationContract";
 import { tradingDiscovery } from "./appTradingConfig";
 
 export function appConfiguration(request:Request,version:1|2=1) {
@@ -25,7 +24,6 @@ export function appConfiguration(request:Request,version:1|2=1) {
     market_amount_ranking: { version: 1, path: `${base}/market-ranking`, metric: "amount", markets: ["US", "HK", "CN"] },
     account_sync:appSyncDiscovery(),
     price_alerts: priceAlertsDiscovery(version),
-    asset_allocation: allocationDiscovery(version),
     account_trading: tradingDiscovery(version, request.headers.get("X-Alcor-Order-Execution") === "continuous-v1"),
     quote_subscriptions_contract:quoteSubscriptionsDiscovery(),
     personal_profile:personalProfileDiscovery(version),

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthUser, isAdmin } from "@/lib/auth";
 import { getSiteSettings } from "@/lib/settings";
 import { configuredModelServices, savedModelProviderConfig } from "@/lib/modelServices";
-import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
+import { validateModelEndpoint } from "@/lib/modelEndpoint";
 import { readLimitedJson, readLimitedResponseJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { clientIp, rateLimit, rateLimitGlobal } from "@/lib/rateLimit";
 import { getModelTestHealth, modelHealthSignature, setModelHealth, setModelTestHealth } from "@/lib/modelHealth";
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
   const tests: Record<string, { ok: boolean; latencyMs: number; error?: string }> = {};
   for (const service of configuredModelServices(getSiteSettings())) {
-    const apiUrl = validateAssistantEndpoint(service.apiUrl);
+    const apiUrl = validateModelEndpoint(service.apiUrl);
     if (!apiUrl || !service.apiKey) continue;
     for (const model of service.models) {
       const result = getModelTestHealth(service.id, model, modelHealthSignature(service.provider, apiUrl, service.apiKey, model));
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const saved = configuredModelServices(getSiteSettings()).find(item => item.id === serviceId);
   const provider = String(body?.provider || saved?.provider || "");
   const providerConfig = saved?.provider === provider ? saved : saved?.providerConfigs?.[provider as NonNullable<typeof saved>["provider"]];
-  const apiUrl = validateAssistantEndpoint(String(body?.apiUrl ?? providerConfig?.apiUrl ?? "").trim());
+  const apiUrl = validateModelEndpoint(String(body?.apiUrl ?? providerConfig?.apiUrl ?? "").trim());
   const model = String(body?.model || "").trim();
   const apiKey = String(body?.apiKey || (apiUrl ? savedModelProviderConfig(saved, provider, apiUrl)?.apiKey : "") || "").trim();
   if (provider !== "jev" && provider !== "deepseek" && provider !== "openai" && provider !== "custom") {
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     if (request.signal.aborted) return;
     // Unsaved drafts and results arriving after a configuration change cannot alter live health.
     const current = configuredModelServices(getSiteSettings()).find(item => item.id === serviceId);
-    const currentUrl = current && validateAssistantEndpoint(current.apiUrl);
+    const currentUrl = current && validateModelEndpoint(current.apiUrl);
     if (!current || !currentUrl || !current.models.includes(model) || modelHealthSignature(current.provider, currentUrl, current.apiKey, model) !== testSignature) return;
     setModelHealth(serviceId, model, value, testSignature);
     setModelTestHealth(serviceId, model, testSignature, value);

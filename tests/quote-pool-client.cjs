@@ -38,4 +38,21 @@ function harness(initial={mine:snapshot('mine'),shared:snapshot('shared')}){
   h.setScope('shared');assert.equal(h.value.error,'','scope errors stay local');h.reply(1,snapshot('mine'));await h.drain();assert.equal(h.value.snapshot,undefined);assert.equal(h.value.error,'股票池暂时无法读取');
   h.value.refresh();h.render();h.reply(2,snapshot('shared'));await h.drain();assert.equal(h.value.error,'');assert.equal(h.value.snapshot.scope,'shared');h.close();
   console.log('PASS bounded timeout, invalid scope rejection and explicit retry recovery');
+  const panelExports = {};
+  class BoundaryComponent { constructor(props) { this.props = props; } setState(patch) { this.state = { ...this.state, ...patch }; } }
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, 'components/WorkspacePanel.tsx'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX }
+  }).outputText, { exports: panelExports, require: id => id === 'react' ? { Component: BoundaryComponent, memo: value => value } : id === '@/lib/workspacePanel' ? {} : require(id) });
+  let retries = 0, finishRetry;
+  const retry = () => { retries++; return new Promise(resolve => { finishRetry = resolve; }); };
+  const boundary = new panelExports.WorkspaceBoundary({ active: true, onRetry: retry, children: 'pool' });
+  boundary.state.failed = true;
+  boundary.componentDidUpdate({ active: false });
+  assert.equal(retries, 1, 'returning to a failed pool retries its page code');
+  assert(boundary.state.retrying);
+  await boundary.retry(); assert.equal(retries, 1, 'rapid retry clicks cannot start parallel reloads');
+  finishRetry(); await Promise.resolve(); await Promise.resolve();
+  assert(!boundary.state.retrying);
+  boundary.componentDidUpdate({ active: true }); assert.equal(retries, 1, 'an active error cannot loop through automatic retries');
+  console.log('PASS failed pool re-entry retries locally once, coalesces clicks and does not reload the document');
 })().catch(error=>{console.error(error);process.exitCode=1;});

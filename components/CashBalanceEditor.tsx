@@ -84,7 +84,7 @@ export default function CashBalanceEditor({ preferredCurrency, frozenByCurrency,
     <button type="button" aria-label="修改可用现金" title="修改可用现金" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg-gray hover:text-ink" onClick={() => {
       setCurrency(isFundCurrency(preferredCurrency) ? preferredCurrency : "USD"); setFrozen({ ...frozenByCurrency }); setSnapshot(null); setEdited(false); setAmount(""); setError(""); setOpen(true);
     }}><IconPencil className="h-3.5 w-3.5" /></button>
-    {open && <AppModal title="修改可用现金" desc="按币种核对实际金额，保存后同步账户总览与资产配置。" onClose={() => setOpen(false)} closeDisabled={saving}>
+    {open && <AppModal title="修改可用现金" desc="按币种核对实际金额，保存后同步账户总览。" onClose={() => setOpen(false)} closeDisabled={saving}>
       <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <label className="block text-xs text-muted">币种</label>
       <AppSelect ariaLabel="现金币种" value={currency} options={FUND_CURRENCIES.map(value => ({ value, label: `${FUND_CURRENCY_META[value].label} · ${value}` }))} onChange={value => { setCurrency(value as FundCurrency); setEdited(false); setError(""); }} disabled={saving || loading} className="mt-1 w-full rounded-lg border border-edge px-3 py-2.5 text-sm" />

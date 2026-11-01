@@ -8,7 +8,7 @@ import { syncRecordGroups } from "@/lib/brokers";
 import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
 import { ModelSettingsConflictError } from "@/lib/modelSettingsRevision";
 import { configuredModelServices, prepareModelServices } from "@/lib/modelServices";
-import { validateAssistantEndpoint } from "@/lib/assistantSecurity";
+import { validateModelEndpoint } from "@/lib/modelEndpoint";
 import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
 import { publicVerificationOrigin } from "@/lib/emailVerification";
 import { isConnectionIconUrl } from "@/lib/appConnectionBrand";
@@ -59,7 +59,7 @@ export async function PUT(request: Request) {
   }
   if (body.llmApiUrl !== undefined) {
     const value = String(body.llmApiUrl).trim();
-    if (value.length > 2048 || (value && !validateAssistantEndpoint(value))) {
+    if (value.length > 2048 || (value && !validateModelEndpoint(value))) {
       return NextResponse.json({ error: "模型 API 地址必须是有效的 http(s) 地址" }, { status: 400 });
     }
   }
@@ -84,9 +84,9 @@ export async function PUT(request: Request) {
   const legacy = configuredModelServices({ ...before, modelServices: [], modelServicesInitialized: false })[0];
   const replacedLegacyKey = typeof body.llmApiKey === "string" && Boolean(body.llmApiKey.trim()) && body.llmApiKey.trim() !== "********";
   const legacyDestinationChanged = (llmProvider !== undefined && llmProvider !== before.llmProvider)
-    || (body.llmApiUrl !== undefined && validateAssistantEndpoint(String(body.llmApiUrl).trim()) !== validateAssistantEndpoint(before.llmApiUrl));
+    || (body.llmApiUrl !== undefined && validateModelEndpoint(String(body.llmApiUrl).trim()) !== validateModelEndpoint(before.llmApiUrl));
   if (legacy?.apiKey && legacyDestinationChanged && !replacedLegacyKey) return NextResponse.json({ error: "旧版模型地址或提供方已更改，请输入新配置的密钥；原配置未修改" }, { status: 400 });
-  if (body.deepseekApiUrl !== undefined && (before.deepseekApiKey || process.env.DEEPSEEK_API_KEY) && validateAssistantEndpoint(String(body.deepseekApiUrl).trim()) !== validateAssistantEndpoint(before.deepseekApiUrl)
+  if (body.deepseekApiUrl !== undefined && (before.deepseekApiKey || process.env.DEEPSEEK_API_KEY) && validateModelEndpoint(String(body.deepseekApiUrl).trim()) !== validateModelEndpoint(before.deepseekApiUrl)
     && !(typeof body.deepseekApiKey === "string" && body.deepseekApiKey.trim() && body.deepseekApiKey.trim() !== "********")) return NextResponse.json({ error: "旧版 DeepSeek 地址已更改，请输入新地址的密钥；原配置未修改" }, { status: 400 });
   let modelServices = undefined;
   if (body.modelServices !== undefined) {

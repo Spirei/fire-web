@@ -24,8 +24,7 @@ const loaders: Record<string, () => Promise<unknown>> = {
   attachments: () => import("@/components/views/AttachmentsView"),
   "quote-pool": () => import("@/components/views/QuotePoolView"),
   global: () => import("@/components/views/GlobalPreviewView"),
-  pnl: () => import("@/components/AssetPnlAnalysis"),
-  assistant: () => import("@/components/views/AssistantView")
+  pnl: () => import("@/components/AssetPnlAnalysis")
 };
 const loaded = new Map<string, Promise<void>>();
 const ready = new Map<string, ComponentType<object>>();
@@ -33,10 +32,10 @@ const ready = new Map<string, ComponentType<object>>();
 /** Reuse evaluated page code on its first mount, without another lazy boundary. */
 export function preloadedView(key:string) {return ready.get(key);}
 
-export function preloadView(key: string) {
+export function preloadView(key: string, options: { required?: boolean } = {}) {
   if (typeof navigator === "undefined") return;
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  if (connection?.saveData || ["slow-2g", "2g"].includes(connection?.effectiveType ?? "")) return;
+  if (!options.required && (connection?.saveData || ["slow-2g", "2g"].includes(connection?.effectiveType ?? ""))) return;
   if (!Object.prototype.hasOwnProperty.call(loaders, key)) return;
   const existing = loaded.get(key);
   if (existing) return existing;

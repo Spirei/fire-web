@@ -9,7 +9,6 @@ import WorkspacePanel, { WorkspaceBoundary, WorkspaceLoading } from "@/component
 import MobileBackGesture from "@/components/MobileBackGesture";
 import { mobilePanelDirection } from "@/lib/mobileNavigation";
 import { accountHoldingPrice } from "@/lib/accountCash";
-import { currentAssistantPage, notifyAssistantPage, setAssistantPage } from "@/lib/assistantPage";
 import { useRouter } from "next/navigation";
 import {
   MARKET_LIST,
@@ -67,16 +66,11 @@ const AttachmentsView = preloadedWorkspace("attachments", dynamic(() => import("
 const QuotePoolView = preloadedWorkspace("quote-pool", dynamic(() => import("@/components/views/QuotePoolView"), { loading: WorkspaceLoading }));
 const GlobalPreviewView = preloadedWorkspace("global", dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading }));
 const AssetPnlAnalysisView = preloadedWorkspace("pnl", dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading }));
-const AssistantView = preloadedWorkspace("assistant", dynamic(() => import("@/components/views/AssistantView"), { loading: WorkspaceLoading }));
-const DeferredAssistant = dynamic(() => import("@/components/DeferredAssistant"));
-const FloatingAssistant = memo(function FloatingAssistant({ symbol, userId, onNavigate }: { symbol?: string; userId: string; onNavigate: (path: string) => void }) {
-  return <DeferredAssistant page={currentAssistantPage()} symbol={symbol} userId={userId} initialHistory={null} onNavigate={onNavigate} />;
-});
 const FourDoorNavigator = lazy(() => import("@/components/FourDoorNavigator"));
 // 预览也按需下载：关闭时不把插图代码打入主页面；开启时与交互代码并行加载。
 const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"));
 
-type TabKey = "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "assistant" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
+type TabKey = "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -96,7 +90,6 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "trading", label: "动态", url: "/trading" },
   { key: "quotes", label: "股票添加", url: "/quotes" },
   { key: "earnings", label: "财报日历", url: "/earnings" },
-  { key: "assistant", label: "智能助手", url: "/assistant" },
   { key: "celebs", label: "名人持仓", url: "/celebs" },
   { key: "users", label: "用户管理", url: "/users" },
   { key: "attachments", label: "附件管理", url: "/attachments" },
@@ -126,7 +119,6 @@ export default function RecordsApp({
   initialRecords,
   initialWatchGroups = [],
   initialUserLogs,
-  initialAssistantHistory = null,
   initialPasskeys = null,
   initialFundBalances,
   initialSettings,
@@ -137,8 +129,7 @@ export default function RecordsApp({
   initialAssetLibrary = null,
   initialCardLibrary = null,
   initialFeed = null,
-  initialQuotePool = null,
-  initialAllocation = null
+  initialQuotePool = null
 }: {
   initialTab: string;
   initialNow: number;
@@ -150,7 +141,6 @@ export default function RecordsApp({
   initialRecords: StockRecord[];
   initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
-  initialAssistantHistory?: import("@/lib/assistantHistory").AssistantHistoryState | null;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   initialFundBalances: Record<string, number>;
   initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
@@ -161,7 +151,6 @@ export default function RecordsApp({
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
   initialQuotePool?: import("@/lib/quotePoolView").PoolBootstrap | null;
-  initialAllocation?: import("@/lib/assetAllocationTypes").AllocationSnapshot | null;
   initialFeed?: import("@/lib/feedTypes").FeedChrome | import("@/lib/feedTypes").FeedPayload | null;
 }) {
   const router = useRouter();
@@ -269,9 +258,6 @@ export default function RecordsApp({
       document.documentElement.classList.remove("fire-workspace-switching");
     }
   }, [activeTab]);
-  useLayoutEffect(() => {
-    notifyAssistantPage();
-  }, [activeTab]);
   const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
   const [mobileNavigationOrder, setMobileNavigationOrder] = useState(initialSettings.mobileNavigationOrder ?? []);
   const settingsReloadGeneration = useRef(0);
@@ -284,7 +270,7 @@ export default function RecordsApp({
     if(!timing||timing.key!==activeTab||!panel)return;
     delete panel.dataset.workspaceOpenMs;
     panel.dataset.workspaceOpenResult="loading";
-    const stopEntrance = ["settings", "assistant"].includes(activeTab) ? () => {} : animateWorkspaceEntrance(panel);
+    const stopEntrance = activeTab === "settings" ? () => {} : animateWorkspaceEntrance(panel);
     const stopTiming = observeWorkspaceReady(panel,timing.start,(ms,failed)=>{
       if(navigationTimingRef.current!==timing)return;
       panel.dataset.workspaceOpenMs=String(ms);
@@ -303,7 +289,6 @@ export default function RecordsApp({
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
   const { assetIcons, stockIcons } = useAssetIcons(["icon", "stock"], { stockIconCdn: initialSettings.stockIconCdn });
   const [navIconsHydrated, setNavIconsHydrated] = useState(false);
-  const [floatingAssistantReady, setFloatingAssistantReady] = useState(false);
   const attemptedIconBackfillRef = useRef(new Set<string>());
 
   // 市场色块是模块级 store（不是 React 状态）：必须在水合首帧之前按服务端设置初始化。
@@ -320,19 +305,6 @@ export default function RecordsApp({
   useMemo(() => primeNavIconCache(initialNavIcons), [initialNavIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
   useEffect(() => setNavIconsHydrated(true), []);
-  useEffect(() => {
-    if (!desktopViewport || activeTab === "assistant") return;
-    const win = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
-    const start = () => {
-      setFloatingAssistantReady(true);
-    };
-    if (typeof win.requestIdleCallback === "function") {
-      const id = win.requestIdleCallback(start, { timeout: 2500 });
-      return () => win.cancelIdleCallback?.(id);
-    }
-    const id = window.setTimeout(start, 1200);
-    return () => window.clearTimeout(id);
-  }, [desktopViewport, activeTab]);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
@@ -569,6 +541,10 @@ export default function RecordsApp({
     panelBuiltStamp.current.delete(key);
     setPanelEpoch((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
   }, []);
+  const retryQuotePool = useCallback(async () => {
+    await preloadView("quote-pool", { required: true });
+    reopenTab("quote-pool");
+  }, [reopenTab]);
 
   // Tabs, explicit links and browser history use the same activation and retention rules.
   const activateWorkspace = useCallback((key:TabKey,visit:WorkspaceVisit,url?:string,sub?:string|null) => {
@@ -614,7 +590,7 @@ export default function RecordsApp({
     if (assetReturnRef.current) window.history.replaceState({}, "", assetReturnRef.current.url);
   }, [selectTab]);
 
-  const navigateFromAssistant = useCallback((path: string) => {
+  const navigateWorkspace = useCallback((path: string) => {
     const url = new URL(path, window.location.origin);
     if(url.origin!==window.location.origin)return;
     const key=workspaceForPath(url.pathname,navTabs);
@@ -1033,7 +1009,7 @@ export default function RecordsApp({
     groups, markets, marketLabels, marketOptions, userLogs, systemLogs, user,
     navTabs, mobileNavigationOrder, settingsSub, settingsSubReady,
     initialNow, initialVersion, initialSymbol, initialCelebAvatars, initialCelebs, initialUser,
-    initialWatchGroups, initialAssistantHistory, initialPasskeys, initialFundBalances,
+    initialWatchGroups, initialPasskeys, initialFundBalances,
     initialSettings, initialAssetLibrary, initialCardLibrary, initialFeed
   ]);
   // A quote refresh must not rebuild settings, calendars or other non-price views.
@@ -1044,12 +1020,11 @@ export default function RecordsApp({
   const celebsPanelDataStamp = useMemo(() => ({}), [user, initialCelebAvatars, initialCelebs]);
   const earningsPanelDataStamp = useMemo(() => ({}), [records, initialNow, initialUser]);
   const managementPanelDataStamp = useMemo(() => ({}), [user, initialSettings, initialAssetLibrary, initialCardLibrary]);
-  const assistantPanelDataStamp = useMemo(() => ({}), [user, initialSymbol, initialAssistantHistory, navigateFromAssistant]);
   const independentPanelStamps: Partial<Record<TabKey, object>> = {
     settings: settingsPanelDataStamp, global: globalPanelDataStamp, "quote-pool": globalPanelDataStamp,
     trading: feedPanelDataStamp, celebs: celebsPanelDataStamp, earnings: earningsPanelDataStamp,
     users: managementPanelDataStamp, attachments: managementPanelDataStamp,
-    library: managementPanelDataStamp, cards: managementPanelDataStamp, assistant: assistantPanelDataStamp
+    library: managementPanelDataStamp, cards: managementPanelDataStamp
   };
 
   const settingsPanel = (
@@ -1082,7 +1057,6 @@ export default function RecordsApp({
     </div>
   );
 
-  if (typeof document !== "undefined") setAssistantPage(activeTab);
   // translate="no" + notranslate：整页禁止机器翻译。<html> 上已经声明过一次，这里在应用主体上再标一次——
   // 翻译扩展通常按「最近的祖先」判断要不要翻。翻译器会在水合前改写 DOM（连 title 属性都会动：
   // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
@@ -1234,14 +1208,13 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" ? initialNow : 0} />}
-          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} initialAllocation={initialAllocation} onOpenQuotePool={() => selectTab("quote-pool")} />}
-          {activeTab === "quote-pool" && <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-6">
-            <GlobalSectionNav section="quote-pool" onSelect={section => { if (section !== "quote-pool") navigateFromAssistant(`/global?section=${section}`); }} />
-            <QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateFromAssistant} />
+          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} />}
+          {activeTab === "quote-pool" && <div className="global-economy-page flex flex-col gap-6">
+            <GlobalSectionNav section="quote-pool" onSelect={section => { if (section !== "quote-pool") navigateWorkspace(`/global?section=${section}`); }} />
+            <div className="global-section-panel"><QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateWorkspace} /></div>
           </div>}
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
-          {activeTab === "assistant" && <AssistantView page="assistant" symbol={initialSymbol} userId={user.id} initialHistory={initialAssistantHistory} onNavigate={navigateFromAssistant} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} initialData={initialCelebs} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
@@ -1257,13 +1230,12 @@ export default function RecordsApp({
           }
           return (
             <div key={`${tab}:${panelEpoch[tab] ?? 0}`} hidden={!active} data-workspace={tab} data-direction={active ? panelDirection : "none"} className="tab-panel min-w-0">
-              <WorkspacePanel active={active} path={tab === "pnl" ? "/asset-pnl-analysis" : navTabs.find(item => item.key === tab)?.url || `/${tab}`} query={active ? searchParams.toString() : new URL(pageMemory.current.get(tab) || "/", "http://workspace.invalid").search.slice(1)}>{node}</WorkspacePanel>
+              <WorkspacePanel active={active} path={tab === "pnl" ? "/asset-pnl-analysis" : navTabs.find(item => item.key === tab)?.url || `/${tab}`} query={active ? searchParams.toString() : new URL(pageMemory.current.get(tab) || "/", "http://workspace.invalid").search.slice(1)} onRetry={tab === "quote-pool" ? retryQuotePool : undefined}>{node}</WorkspacePanel>
             </div>
           );
         })}
       </div>
     </div>
-    {desktopViewport && activeTab !== "assistant" && floatingAssistantReady && <FloatingAssistant symbol={initialSymbol} userId={user.id} onNavigate={navigateFromAssistant} />}
     </>
   );
 }

@@ -7,15 +7,15 @@ import FxConverter from "@/components/FxConverter";
 import MarketCalendarView from "@/components/MarketCalendarView";
 import { fmtPct } from "@/lib/format";
 import MarketIcon from "@/components/MarketIcon";
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { ensureStockIcons, useAssetIcons } from "@/lib/useAssetIcons";
+import { marketCapLibraryIcon, marketCapStockKey } from "@/lib/marketCapIcons";
+import SafeAssetImage from "@/components/SafeAssetImage";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { sharedRead } from "@/lib/sharedRead";
 import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
 import GlobalSectionNav, { type GlobalSection } from "@/components/GlobalSectionNav";
-import AssetAllocationView from "@/components/views/AssetAllocationView";
-import type { AllocationSnapshot } from "@/lib/assetAllocationTypes";
 
 interface TopAsset {
   market: string;
@@ -193,16 +193,12 @@ const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
 
 // ---------- Logo（素材库优先，404 自动回退首字母） ----------
 function AssetLogo({ item, custom }: { item: TopAsset; custom?: string }) {
-  const [err, setErr] = useState(false);
   const src = custom || item.logo;
-  if (!src || err) {
-    return (
+  return <SafeAssetImage src={src} loading="lazy" className="h-8 w-8 rounded-full object-cover" fallback={
       <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-brand-light text-xs font-bold text-brand-deep">
         {zhName(item).slice(0, 1)}
       </span>
-    );
-  }
-  return <img src={src} alt="" loading="lazy" onError={() => setErr(true)} className="h-8 w-8 flex-none rounded-full object-cover" />;
+  } />;
 }
 
 function EmptyMarketIcon() {
@@ -272,11 +268,9 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
     };
   }, []);
 
-  function customLogo(it: TopAsset): string | undefined {
-    if (it.type === "crypto") return assetIcons[it.code.toUpperCase()] ?? assetIcons["BTC"];
-    if (it.type === "metal") return assetIcons[it.code.toUpperCase()];
-    return stockIcons[`${it.market.toUpperCase()}:${it.code.toUpperCase()}`];
-  }
+  useEffect(() => {
+    void ensureStockIcons(items.flatMap(item => { const key = marketCapStockKey(item); return key ? [key] : []; }));
+  }, [items]);
 
   // 首页内嵌时每页展示 pageSize 条
   const totalPages = pageSize ? Math.max(1, Math.ceil(items.length / pageSize)) : 1;
@@ -341,7 +335,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
                       </td>
                       <td className="px-3 py-3 text-left">
                         <div className="flex items-center justify-start gap-2.5">
-                          <AssetLogo item={it} custom={customLogo(it)} />
+                          <AssetLogo item={it} custom={marketCapLibraryIcon(it, stockIcons, assetIcons)} />
                           <span className="min-w-0 max-w-[126px]">
                             <span className="block truncate font-semibold text-ink">{zhName(it)}</span>
                             <span className="mt-0.5 flex items-center gap-1.5"><MarketCodeBadge market={it.market} code={it.code} /><span className="text-[11px] text-faint">{it.code}</span></span>
@@ -422,11 +416,11 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
 }
 
 function parseGlobalSection(value: string | null): GlobalSection {
-  if (value === "allocation" || value === "convert" || value === "calendar") return value;
+  if (value === "convert" || value === "calendar") return value;
   return "assets";
 }
 
-export default function GlobalPreviewView({ pageSize, initialNow, initialAllocation, onOpenQuotePool }: { pageSize?: number; initialNow?: number; initialAllocation?: AllocationSnapshot | null; onOpenQuotePool?: () => void }) {
+export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePool }: { pageSize?: number; initialNow?: number; onOpenQuotePool?: () => void }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
@@ -449,7 +443,7 @@ export default function GlobalPreviewView({ pageSize, initialNow, initialAllocat
     <div className="global-economy-page flex flex-col gap-6">
       <GlobalSectionNav section={section} onSelect={selectSection} />
       <div key={section} className="global-section-panel">
-        {section === "allocation" ? <AssetAllocationView initial={initialAllocation} /> : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
+        {section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
       </div>
     </div>
   );

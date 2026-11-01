@@ -172,15 +172,13 @@ async function test(name,run) { rates={USD:1,HKD:7,CNY:7,JPY:150,KRW:1400,SGD:1.
     assert.equal((await fundsRoute.GET(new Request('http://localhost/api/v1/funds?balancesOnly=1'))).status,401);
   });
   const saveCash=(f,body)=>fundsRoute.POST(new Request('http://localhost/api/v1/funds',{method:'POST',headers:{cookie:'fire_session='+f.token,'content-type':'application/json'},body:JSON.stringify({action:'set_balance',...body})}));
-  await test('manual cash reconciliation includes bank once and synchronizes overview and allocation',async()=>{
+  await test('manual cash reconciliation includes bank once and synchronizes overview',async()=>{
     const f=fixture(), other=fixture(), before=businessSnapshot();
     const response=await saveCash(f,{currency:'USD',expectedBalance:107,targetBalance:200});
     assert.equal(response.status,200); const saved=(await response.json()).data;
     assert.equal(saved.balances.USD,200); assert.equal(saved.cardCash.USD,7);
     assert.equal(saved.transaction.type,'adjustment'); assert.equal(saved.transaction.amount,93); assert.equal(saved.transaction.direction,1);
     const result=await overview(f); assert.equal(result.totalCash,202); assert.equal(result.totalAsset,222);
-    const allocation=load('lib/assetAllocation.ts').buildAssetAllocation(f.user.id,rates,{},'USD');
-    assert.equal(allocation.summary.totalAsset,222);
     assert.equal(cashStore.readAccountCash(other.user.id).balances.USD,107);
     const after=businessSnapshot(); for(const table of ['records','trade_orders','card_amounts','card_holdings']) assert.deepEqual(after[table],before[table]);
     const again=await saveCash(f,{currency:'USD',expectedBalance:107,targetBalance:200}); assert.equal(again.status,200);
