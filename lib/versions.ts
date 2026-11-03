@@ -5006,7 +5006,7 @@ const V0_1_71_ENTRY: VersionEntry = {
     {kind:"security",title:"迁移、回滚与备份",desc:"明确切换时才启用共享数据库，凭据沿原密钥加密保存；缺失或未完成的切换阻止回退写入。PostgreSQL 备份保留原始数值、数据库结构、金融保护和编号序列。"}
   ]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_72_ENTRY: VersionEntry = {
   ...V0_1_71_ENTRY, version: "v0.1.72", date: "2026-11-01",
   summary: "数据库事务异常恢复、连接密码复用与功能精简。",
   software: V0_1_71_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version: "v0.1.72"} : item),
@@ -5018,10 +5018,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     {kind:"fix",title:"数据库连接密码复用",desc:"重复测试保留当前密码草稿，设置刷新不再清空输入；已保存的同一连接可留空复用密码，连接配置改变后须重新输入。失败的连接测试同样释放资源。"}
   ]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_72_ENTRY, version: "v0.1.73", date: "2026-11-03",
+  summary: "完整数据库与登记原件的统一迁移导出。",
+  software: V0_1_72_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.73" } : item),
+  changes: [
+    { kind: "feature", title: "统一迁移导出", desc: "管理员核准实际 PostgreSQL 实例、运行版本后，导出完整数据库、原始用户标识、交易回执、条件单和登记原件；按同一只读快照生成逐表清单，原件缺失或变化时停止。个人 JSON 导出保持兼容。" },
+    { kind: "security", title: "独立密钥与隔离核验", desc: "迁移包使用独立密钥加密，导出密钥和原库加密密钥均单独交付；提供逐文件 SHA-256、来源声明和离线校验工具。导出不修改业务、连接、计划任务或历史备份，不执行交易重放。" }
+  ]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_72_ENTRY,
   V0_1_71_ENTRY,
   V0_1_69_ENTRY,
   V0_1_68_ENTRY,

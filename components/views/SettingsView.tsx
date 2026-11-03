@@ -14,6 +14,7 @@ import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
+import UnifiedMigrationExport from "@/components/UnifiedMigrationExport";
 import { lockScroll } from "@/lib/overlayLifecycle";
 import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
@@ -3651,6 +3652,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                   </SettingsManagedPane>
+                  {user.role === "admin" && <SettingsManagedPane name="unified-export" title="统一迁移导出" summary="完整数据库与原件 · 管理员"><UnifiedMigrationExport /></SettingsManagedPane>}
                   <SettingsManagedPane name="import" title="导入网站数据" summary="从 Alcor 备份文件恢复数据">
                   <p className="settings-managed-note">选择 Alcor 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
                   <div className="sw-row">
@@ -4102,7 +4104,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>SQLite 本地存储或 PostgreSQL 共享业务存储</span></div>
-                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · ExcelJS · saxes（SVG / RSS 校验）· SimpleWebAuthn（通行密钥）</span>
+                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · PostgreSQL Client 17（完整迁移导出）· ExcelJS · saxes（SVG / RSS 校验）· SimpleWebAuthn（通行密钥）</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>

@@ -79,6 +79,17 @@ RUN apt-get update && \
     /opt/futu-venv/bin/pip install --no-cache-dir -r /app/scripts/requirements-futu.txt && \
     rm -rf /var/lib/apt/lists/*
 ENV PATH="/opt/futu-venv/bin:${PATH}"
+# Complete migration exports use native PG 17 tools; no database server is installed.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gpg && \
+    mkdir -p /usr/share/postgresql-common/pgdg && \
+    curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc && \
+    gpg --show-keys --with-colons /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc | grep -q 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' && \
+    . /etc/os-release && \
+    printf 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt %s-pgdg main\n' "$VERSION_CODENAME" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 && \
+    /usr/lib/postgresql/17/bin/pg_dump --version && /usr/lib/postgresql/17/bin/pg_restore --version && \
+    rm -rf /var/lib/apt/lists/*
+ENV ALCOR_PG_BIN="/usr/lib/postgresql/17/bin"
 RUN chmod +x /app/entrypoint.sh
 
 # 运行期数据与上传占位（由 compose volume 挂载覆盖）
