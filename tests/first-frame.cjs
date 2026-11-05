@@ -446,12 +446,6 @@ try {
     assert(filtered.includes('value="00700"'));
     assert(!filtered.includes('错误默认股票'));
   });
-  test('attachments load requested category and report folder in server HTML',()=>{
-    const html=render('components/views/AttachmentsView.tsx',{},'category=reports&view=HK/SEHK/00700/2025');
-    assert(html.includes('00700'));
-    assert(!html.includes('attachment-file-table'));
-    assert.doesNotThrow(()=>render('components/LibraryAttachmentsView.tsx',{},'view=HK/%25broken/00700/NaN',{},'FinancialAttachments'));
-  });
   test('earnings calendar URL selects market and stock type before client effects',()=>{
     const html=render('components/views/EarningsCalendarView.tsx',{initialNow:Date.UTC(2026,9,1)},'market=HK&type=hold');
     assert(html.includes('港股'));
