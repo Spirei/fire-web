@@ -259,7 +259,7 @@ function fontHeaderFixture(ext) {
     assert(app.includes('panelBuiltStamp.current.get(tab) !== panelDataStamp'));
     assert(!css.includes('content-visibility: hidden;'), 'hidden workspaces must stay display:none on every browser');
     assert(app.includes('<WorkspacePanel active={active}'));
-    assert.equal((app.match(/loading: WorkspaceLoading/g)||[]).length,16);
+    assert.equal((app.match(/loading: WorkspaceLoading/g)||[]).length,15);
     assert(css.includes('.records-content { min-width:0; isolation:isolate; overflow-anchor:none; scroll-behavior:auto; }'));
     assert(css.includes('html.fire-workspace-switching body'));
     assert(css.includes('scroll-behavior: auto;'));
@@ -815,12 +815,17 @@ function fontHeaderFixture(ext) {
     assert.equal(restored['fire:small'], '简体');
     assert.equal(restored['fire:large'], undefined);
   });
-  await test('attachment pagination rejects non-finite and unsafe offsets', () => {
-    const { queryLibraryAssets } = require(path.join(root, 'lib/attachments.ts'));
-    for (const page of [Infinity, -Infinity, NaN, 1.5, Number.MAX_VALUE]) {
-      assert.equal(queryLibraryAssets({ page }).page, 1);
-    }
-    assert.equal(queryLibraryAssets({ page: 2 }).page, 2);
+  await test('retired attachment administration has no entry or dedicated API', async () => {
+    const records=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
+    const settings=fs.readFileSync(path.join(root,'lib/settings.ts'),'utf8');
+    assert(!records.includes('AttachmentsView') && !records.includes('"attachments"'));
+    assert(!settings.includes('key: "attachments"'));
+    for(const file of ['app/api/attachments/route.ts','app/api/attachments/library/route.ts','lib/attachments.ts','components/views/AttachmentsView.tsx','components/LibraryAttachmentsView.tsx']) assert(!fs.existsSync(path.join(root,file)));
+    assert(fs.existsSync(path.join(root,'app/api/v1/resource-library/[[...action]]/route.ts')));
+    assert(fs.existsSync(path.join(root,'app/api/v1/financial-reports/route.ts')));
+    const Page=require(path.join(root,'app/[...slug]/page.tsx')).default;
+    for(const slug of [['attachments'],['api','attachments'],['api','attachments','library']]) await assert.rejects(()=>Page({params:Promise.resolve({slug})}),error=>error.digest==='NEXT_HTTP_ERROR_FALLBACK;404');
+    assert.equal(await Page({params:Promise.resolve({slug:['watchlist']})}),null);
   });
   await test('FIRE blank years never imply that retirement has been reached', () => {
     const source = fs.readFileSync(path.join(root, 'components/views/FireView.tsx'), 'utf8');

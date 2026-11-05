@@ -370,7 +370,6 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "earnings", label: "财报日历", url: "/earnings" },
   { key: "celebs", label: "名人持仓", url: "/celebs" },
   { key: "users", label: "用户管理", url: "/users" },
-  { key: "attachments", label: "附件管理", url: "/attachments" },
   { key: "library", label: "素材库", url: "/library" },
   { key: "activities", label: "日志", url: "/activities" },
   { key: "settings", label: "设置", url: "/settings" }

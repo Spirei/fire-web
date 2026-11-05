@@ -22,7 +22,7 @@ function request(endpoint, user = owner, method = 'GET', body) {
 }
 const groups = load('lib/watchGroupsStore.ts'), groupRoute = load('app/api/v1/watch-groups/[id]/route.ts');
 const cleanup = load('lib/fileCleanup.ts'), cards = load('app/api/cards/custom/route.ts');
-const uploads = load('app/uploads/[...path]/route.ts'), attachments = load('app/api/attachments/route.ts');
+const uploads = load('app/uploads/[...path]/route.ts');
 function fixture(relative, bytes = 'protected fixture') {
   const file = path.join(temp, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes); return file;
 }
@@ -115,23 +115,6 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
     assert.equal((await call(['reports/US/report.pdf'], null)).status, 400);
     assert.equal((await call(['reports\\US\\report.pdf'], null)).status, 400);
     assert.equal((await call(['REPORTS', 'US', 'report.pdf'], null)).status, 403);
-  });
-  await test('arbitrary attachment preview is sandboxed and private; users remain denied', async () => {
-    fixture('data/attachments/malicious.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>window.attachedScript=true</script></svg>');
-    assert.equal((await attachments.GET(request('/api/attachments?action=preview&path=malicious.svg', owner))).status, 403);
-    for (const action of ['preview', 'download']) {
-      const response = await attachments.GET(request('/api/attachments?action=' + action + '&path=malicious.svg', admin));
-      assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
-      assert.match(response.headers.get('content-security-policy'), /^sandbox;/); assert(!response.headers.get('content-security-policy').includes('allow-scripts'));
-      assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
-    }
-  });
-  await test('attachment reads, writes and listings cannot follow an escaping symlink', () => {
-    const store = load('lib/attachments.ts'); fixture('outside/attachment.txt');
-    fs.symlinkSync(path.join(temp, 'outside'), path.join(temp, 'data/attachments/escape'));
-    assert.throws(() => store.readAttachment('escape/attachment.txt')); assert.throws(() => store.writeAttachment('escape/new.txt', Buffer.from('bad')));
-    assert.equal(store.listAttachments().files.some(item => item.name === 'escape'), false);
-    assert(!fs.existsSync(path.join(temp, 'outside/new.txt')));
   });
   await test('showcase cover cancels an over-limit body without Content-Length before buffering the remainder', async () => {
     const cover = load('app/api/showcase/models/cover/route.ts'); let pulls = 0, cancelled = false;

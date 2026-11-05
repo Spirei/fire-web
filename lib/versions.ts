@@ -5018,7 +5018,7 @@ const V0_1_72_ENTRY: VersionEntry = {
     {kind:"fix",title:"数据库连接密码复用",desc:"重复测试保留当前密码草稿，设置刷新不再清空输入；已保存的同一连接可留空复用密码，连接配置改变后须重新输入。失败的连接测试同样释放资源。"}
   ]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_73_ENTRY: VersionEntry = {
   ...V0_1_72_ENTRY, version: "v0.1.73", date: "2026-11-03",
   summary: "完整数据库与登记原件的统一迁移导出。",
   software: V0_1_72_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.73" } : item),
@@ -5027,10 +5027,17 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "security", title: "独立密钥与隔离核验", desc: "迁移包使用独立密钥加密，导出密钥和原库加密密钥均单独交付；提供逐文件 SHA-256、来源声明和离线校验工具。导出不修改业务、连接、计划任务或历史备份，不执行交易重放。" }
   ]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_73_ENTRY, version: "v0.1.74", date: "2026-11-05",
+  summary: "移除旧附件管理，保留原文件与 App 资源服务。",
+  software: V0_1_73_ENTRY.software.map(item => item.name === "Alcor" ? {...item,version:"v0.1.74"} : item),
+  changes: [{kind:"feature",title:"移除旧附件管理",desc:"移除旧 Web 附件管理导航、页面、专属文件操作和素材资源接口及遗留样式；保留磁盘原件、迁移导出、素材库、通用上传与 App 私人资源及财报服务。"}]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_73_ENTRY,
   V0_1_72_ENTRY,
   V0_1_71_ENTRY,
   V0_1_69_ENTRY,

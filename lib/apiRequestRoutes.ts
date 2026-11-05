@@ -13,8 +13,6 @@ export const API_REQUEST_ROUTES = [
   "/api/assets/cleanup",
   "/api/assets/search",
   "/api/assets/sync",
-  "/api/attachments",
-  "/api/attachments/library",
   "/api/auth/email-verification/confirm",
   "/api/auth/email-verification/request",
   "/api/auth/login",

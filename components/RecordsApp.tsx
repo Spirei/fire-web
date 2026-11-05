@@ -62,7 +62,6 @@ const SettingsView = preloadedWorkspace("settings", dynamic(() => import("@/comp
 const UsersView = preloadedWorkspace("users", dynamic(() => import("@/components/views/UsersView"), { loading: WorkspaceLoading }));
 const AssetLibraryView = preloadedWorkspace("library", dynamic(() => import("@/components/views/AssetLibraryView"), { loading: WorkspaceLoading }));
 const CardLibraryView = preloadedWorkspace("cards", dynamic(() => import("@/components/views/CardLibraryView"), { loading: WorkspaceLoading }));
-const AttachmentsView = preloadedWorkspace("attachments", dynamic(() => import("@/components/views/AttachmentsView"), { loading: WorkspaceLoading }));
 const QuotePoolView = preloadedWorkspace("quote-pool", dynamic(() => import("@/components/views/QuotePoolView"), { loading: WorkspaceLoading }));
 const GlobalPreviewView = preloadedWorkspace("global", dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading }));
 const AssetPnlAnalysisView = preloadedWorkspace("pnl", dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading }));
@@ -70,7 +69,7 @@ const FourDoorNavigator = lazy(() => import("@/components/FourDoorNavigator"));
 // 预览也按需下载：关闭时不把插图代码打入主页面；开启时与交互代码并行加载。
 const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"));
 
-type TabKey = "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "attachments" | "library" | "cards" | "settings" | "pnl";
+type TabKey = "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -92,7 +91,6 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: "earnings", label: "财报日历", url: "/earnings" },
   { key: "celebs", label: "名人持仓", url: "/celebs" },
   { key: "users", label: "用户管理", url: "/users" },
-  { key: "attachments", label: "附件管理", url: "/attachments" },
   { key: "library", label: "素材库", url: "/library" },
   { key: "cards", label: "卡面库", url: "/cards" },
   { key: "activities", label: "日志", url: "/activities" },
@@ -926,7 +924,7 @@ export default function RecordsApp({
   const sidebarTabs = useMemo(
     () =>
       navTabs
-        .filter((t) => (user?.role === "admin") || (t.key !== "users" && t.key !== "attachments" && t.key !== "library"))
+        .filter((t) => (user?.role === "admin") || (t.key !== "users" && t.key !== "library"))
         .map((t) => {
           // SSR 与客户端水合首帧必须使用同一份服务端快照；本地缓存只在水合完成后补充。
           const key = t.key.toUpperCase();
@@ -947,7 +945,7 @@ export default function RecordsApp({
     [navTabs, user, assetIcons, initialNavIcons, navIconsHydrated]
   );
   const randomWorkspaceKeys = useMemo(
-    () => sidebarTabs.filter((tab) => !["users", "attachments", "library", "cards", "activities", "settings"].includes(tab.key)).map((tab) => tab.key),
+    () => sidebarTabs.filter((tab) => !["users", "library", "cards", "activities", "settings"].includes(tab.key)).map((tab) => tab.key),
     [sidebarTabs]
   );
   useEffect(() => {
@@ -1023,7 +1021,7 @@ export default function RecordsApp({
   const independentPanelStamps: Partial<Record<TabKey, object>> = {
     settings: settingsPanelDataStamp, global: globalPanelDataStamp, "quote-pool": globalPanelDataStamp,
     trading: feedPanelDataStamp, celebs: celebsPanelDataStamp, earnings: earningsPanelDataStamp,
-    users: managementPanelDataStamp, attachments: managementPanelDataStamp,
+    users: managementPanelDataStamp,
     library: managementPanelDataStamp, cards: managementPanelDataStamp
   };
 
@@ -1076,9 +1074,9 @@ export default function RecordsApp({
           )}
           <div className="fire-sidebar-section-label">资产</div>
           {sidebarTabs.map((t, index) => {
-            const isManagement = ["users", "attachments", "library", "cards", "activities", "settings"].includes(t.key);
+            const isManagement = ["users", "library", "cards", "activities", "settings"].includes(t.key);
             const previous = sidebarTabs[index - 1];
-            const startsManagement = isManagement && !previous?.key || isManagement && !["users", "attachments", "library", "cards", "activities", "settings"].includes(previous.key);
+            const startsManagement = isManagement && !previous?.key || isManagement && !["users", "library", "cards", "activities", "settings"].includes(previous.key);
             return (
               <div key={t.key}>
                 {startsManagement && <div className="fire-sidebar-section-label fire-sidebar-section-label-spaced">管理</div>}
@@ -1217,7 +1215,6 @@ export default function RecordsApp({
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} initialData={initialCelebs} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
-          {activeTab === "attachments" && (user?.role === "admin" ? <AttachmentsView /> : <NoPermission />)}
           {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
           {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
