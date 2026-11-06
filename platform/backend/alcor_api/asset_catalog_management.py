@@ -437,7 +437,8 @@ class AssetManagement:
     ):
         from .card_catalog import published_card_assets
 
-        async with self.catalog.context(connection=connection) as conn:
+        context = self.catalog.context() if connection is None else self.catalog.context(connection=connection)
+        async with context as conn:
             removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
             rows = await (
                 await conn.execute(

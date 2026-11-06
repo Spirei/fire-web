@@ -47,8 +47,12 @@ def test_release_workflow_indexes_request_and_checks_confirmed_commit_before_bui
     assert jobs["test"]["strategy"]["matrix"]["shard"] == list(range(8))
     assert jobs["test"]["strategy"]["fail-fast"] is False
     assert any("uv run python tools/test-shard.py --index ${{ matrix.shard }} --count 8" in step.get("run", "") for step in jobs["test"]["steps"])
-    for step in jobs["test"]["steps"]:
-        if any(command in step.get("run", "") for command in ("npm ci", "npm run build", "docker build", "docker run")):
+    steps = jobs["test"]["steps"]
+    dependency = next(i for i, step in enumerate(steps) if step.get("run") == "npm ci")
+    regression = next(i for i, step in enumerate(steps) if "tools/test-shard.py" in step.get("run", ""))
+    assert dependency < regression and "if" not in steps[dependency]
+    for step in steps:
+        if any(command in step.get("run", "") for command in ("npm run build", "docker build", "docker run")):
             assert step.get("if") == "matrix.shard == 0"
     assert any("docker build --build-arg" in step.get("run", "") for step in jobs["test"]["steps"])
     assert (
