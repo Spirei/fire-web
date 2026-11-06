@@ -41,6 +41,12 @@ async def test_cookie_closure_revokes_all_identity_and_keeps_financial_owner(cli
     assert (
         await client.put("/api/cards/holdings", json={"cardKey": "private-card", "held": True})
     ).status_code == 200
+    history = await client.post("/api/auth/search-history", json={"action":"record", "query":"Private completed query", "revision":0})
+    assert history.status_code == 200, history.text
+    async with db.connection() as conn:
+        peer = (await (await conn.execute("SELECT id FROM users WHERE username='ClosureAdmin'")).fetchone())["id"]
+        await conn.execute("INSERT INTO user_search_history_state(user_id) VALUES(%s)", (peer,))
+        await conn.execute("INSERT INTO user_search_history(id,user_id,query_key,query) VALUES(gen_random_uuid(),%s,'peer','Peer history')", (peer,))
     result = await client.post(PATH, json={"password": PASSWORD})
     assert result.status_code == 200 and result.json() == {"ok": True}, result.text
     assert result.headers["cache-control"] == "no-store"
@@ -51,6 +57,9 @@ async def test_cookie_closure_revokes_all_identity_and_keeps_financial_owner(cli
     async with db.connection() as conn:
         user = await (await conn.execute("SELECT * FROM users WHERE id=%s", (uid,))).fetchone()
         assert user["deleted_at"] and not user["active"] and user["password_hash"] == ""
+        for table in ("user_search_history", "user_search_history_state"):
+            assert not await (await conn.execute("SELECT 1 FROM " + table + " WHERE user_id=%s", (uid,))).fetchone()
+            assert await (await conn.execute("SELECT 1 FROM " + table + " WHERE user_id=%s", (peer,))).fetchone()
         assert (
             await (await conn.execute("SELECT * FROM portfolio_records WHERE owner_id=%s", (uid,))).fetchone()
         ) == original

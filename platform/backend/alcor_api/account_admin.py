@@ -526,6 +526,14 @@ async def retire_account(conn, who, user_id, data, request_id, *, self_close=Fal
     await conn.execute("DELETE FROM watch_group_icon_versions WHERE owner_id=%s", (user_id,))
     await conn.execute("DELETE FROM resource_media_objects WHERE owner_id=%s", (user_id,))
     await conn.execute("DELETE FROM account_preferences WHERE user_id=%s", (user_id,))
+    history_installed = (await (await conn.execute(
+        "SELECT EXISTS(SELECT 1 FROM public.schema_migrations WHERE name='0150_fire_web_preferences.sql') AS installed"
+    )).fetchone())["installed"]
+    for table in ("user_search_history", "user_search_history_state"):
+        if history_installed:
+            await conn.execute("DELETE FROM public." + table + " WHERE user_id=%s", (user_id,))
+        elif (await (await conn.execute("SELECT to_regclass(%s) AS relation", ("public." + table,))).fetchone())["relation"] is not None:
+            raise HTTPException(503, "搜索历史结构与迁移记录不一致，请先核对")
     from .card_catalog import purge_owner as purge_card_catalog_owner
 
     await purge_card_catalog_owner(conn, user_id)
