@@ -312,3 +312,19 @@ html:root[data-palette] body { background-image: linear-gradient(rgb(var(--site-
 /* Destructive actions keep a semantic red across every palette. */
 html:root[data-palette] .fire-cap-danger { --cap-ink: #b23a2a; --cap-ink-strong: #9c2f20; border-color: #b23a2a66; }
 html:root.dark[data-palette] .fire-cap-danger { --cap-ink: #e8867a; --cap-ink-strong: #ff9c8f; border-color: #e8867a66; }
+
+/* Platform chrome follows the same theme tokens as the new Web. */
+html:root[data-palette] .fire-sidebar { background:color-mix(in srgb,rgb(var(--site-bg)) 62%,rgb(var(--site-surface))); border-color:rgb(var(--site-edge)); box-shadow:none; }
+html:root[data-palette="muse"] .fire-sidebar { background:#f3f4f5; }
+html:root.dark[data-palette="muse"] .fire-sidebar { background:rgba(29,31,34,.96); }
+html:root[data-palette="muse"] .app-shell-root { font-size:14px; line-height:1.6; }
+html:root[data-palette] .fire-sidebar-panel { background:transparent; }
+html:root[data-palette] .platform-group { color:rgb(var(--site-muted)); }
+html:root[data-palette] .platform-child { color:rgb(var(--site-ink)); }
+html:root[data-palette] .platform-child.fire-sidebar-item-active { background:rgb(var(--site-accent)); color:#fff; border-color:transparent; }
+html:root[data-palette] .platform-appearance.is-active { background:rgb(var(--site-accent)); color:#fff; }
+html:root[data-palette] .platform-status-dot { box-shadow:0 0 0 3px color-mix(in srgb,rgb(var(--site-bg)) 62%,rgb(var(--site-surface))); }
+html:root.dark[data-palette="muse"] .platform-status-dot { box-shadow:0 0 0 3px #1d1f22; }
+html:root[data-palette] .user-role-pill,html:root[data-palette] .user-current-pill { background:rgb(var(--site-accent) / .12)!important; color:rgb(var(--site-accent))!important; border-color:rgb(var(--site-accent) / .2)!important; font-weight:500; }
+html:root[data-palette] .users-page { font-size:14px; font-weight:400; }
+html:root[data-palette] .users-page b { font-weight:500; }

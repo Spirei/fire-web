@@ -1,8 +1,8 @@
 /* Opt-in preset only. Existing palettes, user preferences, financial colors and homepage controls stay intact. */
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
-  --muse-bg:#fcfcfc;--muse-surface:#fff;--muse-dialog:#fcfcfc;--muse-field:#f3f4f5;
-  --muse-ink:#111112;--muse-muted:#00040996;--muse-faint:#0007115e;
-  --muse-link:#0064d4;--muse-fill:#0000000d;--muse-edge:#0000001a;--muse-overlay:#0000001a;
+  --muse-bg:rgb(var(--site-bg));--muse-surface:rgb(var(--site-surface));--muse-dialog:rgb(var(--site-surface));--muse-field:rgb(var(--site-soft));--muse-side:#f3f4f5;
+  --muse-ink:rgb(var(--site-ink));--muse-muted:rgb(var(--site-muted));--muse-faint:rgb(var(--site-muted) / .75);
+  --muse-link:#0064d4;--muse-fill:#0000000d;--muse-edge:rgb(var(--site-edge));--muse-overlay:#0000001a;
   --site-action:color-mix(in srgb,#0064d4 90%,#000);--site-action-text:#fff;
   --site-action-hover:color-mix(in srgb,var(--site-action) 95%,#000);--site-action-icon-filter:brightness(0) invert(1);
   --cap-primary:var(--site-action);--cap-primary-hover:var(--site-action-hover);--cap-selected:var(--site-action);
@@ -11,10 +11,10 @@ html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
   background:var(--muse-bg);color:var(--muse-ink);
 }
 html:root.dark[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
-  --muse-bg:#181819;--muse-surface:#28292b;--muse-dialog:#28292b;--muse-field:#181819;
-  --muse-ink:#fff;--muse-muted:#f2f7ff87;--muse-faint:#f1f6ff61;
-  --muse-link:#1793ff;--muse-fill:#ffffff1f;--muse-edge:#ffffff1f;--muse-overlay:#00000066;
-  --site-action:#1793ff;--site-action-text:#000;--site-action-icon-filter:brightness(0);
+  --muse-bg:rgb(var(--site-bg));--muse-surface:rgb(var(--site-surface));--muse-dialog:rgb(var(--site-surface));--muse-field:rgb(var(--site-bg));--muse-side:#1d1f22;
+  --muse-ink:rgb(var(--site-ink));--muse-muted:rgb(var(--site-muted));--muse-faint:rgb(var(--site-muted) / .75);
+  --muse-link:#1793ff;--muse-fill:#ffffff1f;--muse-edge:rgb(var(--site-edge));--muse-overlay:#00000066;
+  --site-action:#1793ff;--site-action-text:#fff;--site-action-icon-filter:brightness(0) invert(1);
   --site-action-hover:color-mix(in srgb,#1793ff 90%,#fff);
 }
 /* Mail template picker sits on the bright Muse action blue. Label and chevron stay white together. */
@@ -29,7 +29,7 @@ html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.te
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.border-edge,.border-edge-strong,.divide-edge>:not([hidden])~:not([hidden])){border-color:var(--muse-edge)!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.bg-bg-gray,.bg-brand-hover,.bg-brand-light){background:var(--muse-field)!important}
 /* Preserve widths, pinning, ordering and tablet controls; only remove tinted navigation surfaces. */
-html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fire-sidebar{background:var(--muse-bg)!important;color:var(--muse-ink);box-shadow:none!important}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fire-sidebar{background:var(--muse-side)!important;color:var(--muse-ink);box-shadow:none!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fire-sidebar::after{box-shadow:inset 0 0 0 1px var(--muse-edge)!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item){color:var(--muse-ink);box-shadow:none!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active,.sw-nav-item.is-active){background:var(--muse-fill)!important;border-color:transparent!important;color:var(--muse-ink)!important}
@@ -65,3 +65,7 @@ html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fx-con
 @media(hover:hover){
   html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item):hover{background:var(--muse-fill)!important;color:var(--muse-ink)!important}
 }
+
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .platform-child.fire-sidebar-item-active{background:rgb(var(--site-accent))!important;color:#fff!important}
+
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.user-role-pill,.user-current-pill){background:rgb(var(--site-accent) / .14)!important;color:rgb(var(--site-accent))!important;border-color:rgb(var(--site-accent) / .2)!important}

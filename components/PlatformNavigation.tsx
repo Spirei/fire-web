@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { IconWallet, IconNews, IconPhoto, IconDatabase, IconFolder, IconAdjustmentsHorizontal, IconUser, IconPalette, IconChevronRight } from "@tabler/icons-react";
+import { IconWallet, IconNews, IconPhoto, IconDatabase, IconFolder, IconAdjustmentsHorizontal, IconUser, IconPalette, IconChevronRight, IconShieldLock, IconKey, IconShieldCheck } from "@tabler/icons-react";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
 
@@ -11,9 +11,9 @@ const groups = [
   { key: "feed", label: "动态", icon: IconNews, keys: ["trading"] },
   { key: "resources", label: "资源", icon: IconPhoto, keys: ["library", "cards"] },
   { key: "data", label: "数据", icon: IconDatabase, keys: ["global", "quote-pool", "earnings", "celebs"] },
-  { key: "management", label: "管理", icon: IconFolder, keys: ["users", "activities"] },
+  { key: "management", label: "管理", icon: IconFolder, keys: ["activities"] },
   { key: "system", label: "系统", icon: IconAdjustmentsHorizontal, keys: ["settings"] },
-  { key: "personal", label: "个人", icon: IconUser, keys: [] }
+  { key: "personal", label: "个人", icon: IconUser, keys: ["users"] }
 ];
 
 export default function PlatformNavigation({ items, activeKey, onSelect, onSettings, onDrop, onDragStart, onDragEnd }: {
@@ -33,7 +33,7 @@ export default function PlatformNavigation({ items, activeKey, onSelect, onSetti
         {children.map(item => <button type="button" key={item.key} className={`fire-sidebar-item platform-child ${activeKey === item.key ? "fire-sidebar-item-active" : ""}`} aria-label={item.label} aria-current={activeKey === item.key ? "page" : undefined} onClick={() => onSelect(item.key)} onPointerEnter={event => { if (event.pointerType === "mouse") preloadView(item.key); }} onFocus={() => preloadView(item.key)} draggable onDragStart={() => onDragStart(item.key)} onDragOver={event => event.preventDefault()} onDrop={() => onDrop(item.key)} onDragEnd={onDragEnd}>
           {item.icon}<span className="fire-sidebar-label truncate">{item.label}</span>
         </button>)}
-        {group.key === "personal" && [{ sub: "profile", label: "个人信息" }, { sub: "totp", label: "两步验证" }, { sub: "passkeys", label: "通行密钥" }, { sub: "authorizations", label: "管理授权" }].map(item => <button type="button" className="platform-child" key={item.sub} onClick={() => onSettings(item.sub)}>{item.label}</button>)}
+
       </div>
     </section>;
   })}</div>;

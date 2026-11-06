@@ -2321,20 +2321,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           <p className="sw-search-empty">没有匹配的设置项</p>
         ) : null}
         </div>
-        <div className="sw-side-foot">
-          <span className="sw-avatar-wrap">
-            {user.avatar ? (
-              <img src={user.avatar} alt="" className="sw-avatar-img" />
-            ) : (
-              <span className="sw-avatar">{user.nickname?.slice(0, 1) || user.username.slice(0, 1)}</span>
-            )}
-            <i className="sw-online" />
-          </span>
-          <div>
-            <b>{user.nickname || user.username}</b>
-            <span>{user.role === "admin" ? "管理员" : "用户"}</span>
-          </div>
-        </div>
       </aside>
 
       {cmdOpen && createPortal(

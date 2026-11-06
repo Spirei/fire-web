@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useLayoutEffect, type ReactNode
 import { usePersistedState } from "@/lib/usePersistedState";
 import { PALETTE_KEY, paletteVariables, resolvePalette, type PaletteId } from "@/lib/palettes";
 import { ACCENT_KEY, accentVariables, resolveAccent, type AppearanceAccent } from "@/lib/appearance";
+import { PlatformAppearanceRuntime } from "@/components/PlatformAppearance";
 const PaletteContext = createContext<{ palette: PaletteId; choose: (id: PaletteId) => void; accent: AppearanceAccent; chooseAccent: (id: AppearanceAccent) => void }>({ palette: "neutral", choose: () => {}, accent: "blue", chooseAccent: () => {} });
 export function applyPalette(id: unknown) {
   const palette = resolvePalette(id);
@@ -22,6 +23,6 @@ export default function PaletteProvider({ children }: { children: ReactNode }) {
     Object.entries(accentVariables(accent)).forEach(([key, value]) => document.documentElement.style.setProperty(key, value));
   }, [palette, accent]);
   const choose = useCallback((id: PaletteId) => { setStored(id); }, [setStored]);
-  return <PaletteContext.Provider value={{ palette, choose, accent, chooseAccent: setAccent }}>{children}</PaletteContext.Provider>;
+  return <PaletteContext.Provider value={{ palette, choose, accent, chooseAccent: setAccent }}><PlatformAppearanceRuntime>{children}</PlatformAppearanceRuntime></PaletteContext.Provider>;
 }
 export const useSitePalette = () => useContext(PaletteContext);

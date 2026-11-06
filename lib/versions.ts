@@ -5033,7 +5033,7 @@ const V0_1_74_ENTRY: VersionEntry = {
   software: V0_1_73_ENTRY.software.map(item => item.name === "Alcor" ? {...item,version:"v0.1.74"} : item),
   changes: [{kind:"feature",title:"移除旧附件管理",desc:"移除旧 Web 附件管理导航、页面、专属文件操作和素材资源接口及遗留样式；保留磁盘原件、迁移导出、素材库、通用上传与 App 私人资源及财报服务。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_75_ENTRY: VersionEntry = {
   ...V0_1_74_ENTRY, version: "v0.1.75", date: "2026-11-06",
   summary: "分类侧栏与后台任务入口，并迁出迈凯轮展示台。",
   software: V0_1_74_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version:"v0.1.75"} : item),
@@ -5048,10 +5048,17 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "fix", title: "去掉车型路径的导出和上传类型", desc: "迁移导出不再把 /mclaren 当作站点资源目录。上传服务去掉只给车型使用的 GLB、HDR 和 KTX2 类型。uploads/mclaren 仍整目录跳过孤立文件清理，避免误删卷上还没搬走的模型。" }
   ]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_75_ENTRY, version: "v0.1.76", date: "2026-11-07",
+  summary: "补齐平台侧栏交互、统一 Muse 主题并精简账号区。",
+  software: V0_1_75_ENTRY.software.map(item => item.name === "Alcor" ? { ...item, version: "v0.1.76" } : item),
+  changes: [{kind:"fix", title:"首页巡检接受跳转", desc:"首页改为跳到全球预览后，CI 与本地冒烟按 307 和 /global 检查，不再要求首页直接返回页面。"}, { kind: "feature", title: "独立外观页面", desc: "按新 Web 迁入视觉风格、模式预览、主题、强调色、前景背景、页面宽度对齐、字体字号及高级选项；选择写入偏好并实际应用，保留已有模式与主题。" }, { kind: "fix", title: "侧栏收起与功能搜索", desc: "补齐整栏收起、图标导航和键盘搜索，刷新保留展开状态；功能搜索遵循当前可见权限，原页面和设置入口保持。Muse 的底色、卡片、文字、分隔和导航密度与新 Web 对齐。" }, { kind: "fix", title: "补齐左下角账号交互", desc: "账号菜单向上展开，头像姓名进入个人主页，保留个人信息、设置、主题和退出登录；个人分类改放用户管理，头像状态支持紧凑选择并按当前用户保存。删除设置栏底部重复的头像姓名区，保留个人信息编辑入口。" }]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_75_ENTRY,
   V0_1_74_ENTRY,
   V0_1_73_ENTRY,
   V0_1_72_ENTRY,

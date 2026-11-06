@@ -6,7 +6,7 @@ Module._load = function(id,parent,...rest){ if (id==='@/lib/viewPreload') return
 for (const ext of ['.ts','.tsx']) require.extensions[ext]=(module,file)=>module._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);
 const Navigation = require('../components/PlatformNavigation.tsx').default;
 const { PrefsProvider } = require('../lib/prefsContext.tsx');
-const items=[['holdings','账户资产'],['trading','动态内容'],['library','素材库'],['global','全球经济'],['users','用户管理'],['settings','设置']].map(([key,label])=>({key,label,icon:null}));
+const items=[['holdings','账户资产'],['trading','动态内容'],['library','素材库'],['global','全球经济'],['users','用户管理'],['activities','日志'],['settings','设置']].map(([key,label])=>({key,label,icon:null}));
 function render(rows,prefs={}){ return renderToStaticMarkup(React.createElement(PrefsProvider,{initialPrefs:prefs},React.createElement(Navigation,{items:rows,activeKey:'holdings',onSelect(){},onSettings(){},onDrop(){},onDragStart(){},onDragEnd(){}}))); }
 const full=render(items);
 for(const label of ['投资','动态','资源','数据','管理','系统','个人'])assert(full.includes(`aria-label="${label}"`),label);
@@ -14,8 +14,9 @@ assert.equal((full.match(/aria-expanded="false"/g)||[]).length,7);
 assert(full.includes('aria-current="page"'));
 const opened=render(items,{'fire:platform-navigation-expanded':{investment:true,personal:true}});
 assert.equal((opened.match(/aria-expanded="true"/g)||[]).length,2,'saved state is applied in server HTML');
-assert(opened.includes('通行密钥') && opened.includes('管理授权'));
-const ordinary=render(items.filter(item=>!['users','library'].includes(item.key)));
+assert(!opened.includes('通行密钥') && !opened.includes('管理授权'));
+assert(opened.includes('用户管理'));
+const ordinary=render(items.filter(item=>!['users','library','activities'].includes(item.key)));
 assert(!ordinary.includes('用户管理')&&!ordinary.includes('素材库'),'private destinations do not reappear after filtering');
 assert(!ordinary.includes('platform-group-management'),'empty groups are absent');
 console.log('PASS platform navigation: seven groups, saved first frame, active destination and filtered permissions');

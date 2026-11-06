@@ -38,6 +38,9 @@ import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import GlobalSectionNav from "@/components/GlobalSectionNav";
 import SidebarScrollIndicator from "@/components/SidebarScrollIndicator";
 import PlatformNavigation from "@/components/PlatformNavigation";
+import PlatformSidebarHeader from "@/components/PlatformSidebarHeader";
+import PlatformAppearance from "@/components/PlatformAppearance";
+import PersonalHome from "@/components/PersonalHome";
 import UserMenu from "@/components/UserMenu";
 import type { WatchGroup } from "@/lib/watchGroups";
 import { useDesktopViewport, useFourDoorViewport, useTabletDevice } from "@/lib/useDesktopViewport";
@@ -179,7 +182,9 @@ export default function RecordsApp({
   const [fourDoorEnabled] = usePersistedState("fire:four-door-enabled", false);
   const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
   const [tabletSidebarCollapsed, setTabletSidebarCollapsed] = usePersistedState("fire:tablet-sidebar-collapsed", false);
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState("fire:platform-sidebar-collapsed", false);
   const [tabletSidebarSide, setTabletSidebarSide] = usePersistedState<"left" | "right">("fire:tablet-sidebar-side", "left");
+  const platformSidebarCollapsed = tabletDevice ? tabletSidebarCollapsed : sidebarCollapsed;
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
@@ -1036,7 +1041,7 @@ export default function RecordsApp({
         </div>
       )}
       <div className={settingsSubReady ? "h-full" : "hidden h-full"} aria-hidden={!settingsSubReady}>
-        <SettingsView
+        {settingsSub === "palette" ? <PlatformAppearance /> : settingsSub === "profile-home" ? <PersonalHome user={user} onEdit={() => navigateTo("settings", "profile")} /> : <SettingsView
           user={{
             username: user?.username ?? "",
             nickname: user?.nickname ?? "",
@@ -1052,7 +1057,7 @@ export default function RecordsApp({
           initialSub={settingsSub ?? undefined}
           initialPasskeys={initialPasskeys}
           initialSettings={initialSettings}
-        />
+        />}
       </div>
     </div>
   );
@@ -1062,9 +1067,10 @@ export default function RecordsApp({
   // 实测把「繁體」改成了「繁体」），React 一比对就报 Hydration failed。站内的繁简 / 英文切换不受影响。
   return (
     <>
-    <div translate="no" data-tablet-device={tabletDevice ? "true" : "false"} data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
+    <div translate="no" data-sidebar-collapsed={platformSidebarCollapsed ? "true" : "false"} data-tablet-device={tabletDevice ? "true" : "false"} data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
       {/* 桌面侧边导航 */}
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:flex ${activeTab === "settings" ? "is-settings" : ""}`}>
+        <PlatformSidebarHeader collapsed={platformSidebarCollapsed} onToggle={() => tabletDevice ? setTabletSidebarCollapsed(value => !value) : setSidebarCollapsed(value => !value)} items={sidebarTabs} onSelect={key => selectTab(key as TabKey)} onSettings={sub => navigateTo("settings", sub)} title={initialSettings.logoText || "Alcor"} />
         <nav id="fire-desktop-nav" ref={desktopNavRef} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           {fourDoorEnabled === true && fourDoorViewport && (
             <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
@@ -1077,7 +1083,7 @@ export default function RecordsApp({
           <PlatformNavigation items={sidebarTabs} activeKey={navigationTab} onSelect={key => selectTab(key as TabKey)} onSettings={sub => navigateTo("settings", sub)} onDrop={key => onTabDrop(key as TabKey)} onDragStart={key => { tabDragKeyRef.current = key as TabKey; }} onDragEnd={() => { tabDragKeyRef.current = null; }} />
         </nav>
         <div className="fire-sidebar-footer">
-          <button type="button" className="platform-appearance" onClick={() => navigateTo("settings", "palette")}><PlatformNavigation.AppearanceIcon /><span>外观</span></button>
+          <button type="button" className={`platform-appearance ${activeTab === "settings" && settingsSub === "palette" ? "is-active" : ""}`} aria-label="外观" title="外观" onClick={() => navigateTo("settings", "palette")}><PlatformNavigation.AppearanceIcon /><span>外观</span></button>
           <UserMenu initialUser={user} placement="sidebar" />
         </div>
         <div className="fire-sidebar-tablet-controls" aria-label="平板侧栏设置">

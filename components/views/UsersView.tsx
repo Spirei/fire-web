@@ -232,7 +232,7 @@ export default function UsersView() {
   }
 
   return (
-    <div>
+    <div className="users-page">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold tracking-[-0.02em]">用户管理</h2>
@@ -279,7 +279,7 @@ export default function UsersView() {
                         <div className="flex min-w-0 items-center gap-2">
                           <b className="truncate font-semibold text-ink">{u.nickname || u.username}</b>
                           {u.online && <span className="h-1.5 w-1.5 flex-none rounded-full bg-down shadow-[0_0_0_3px_rgba(15,160,123,.12)]" title="在线" />}
-                          {u.id === me && <span className="flex-none rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-deep">当前</span>}
+                          {u.id === me && <span className="user-current-pill flex-none rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-deep">当前</span>}
                           {u.totpEnabled && <span className="flex-none rounded-full border border-edge px-2 py-0.5 text-[10px] font-semibold text-ink-2">二次验证</span>}
                           {u.isTest && <span className="flex-none rounded-full border border-dashed border-edge px-2 py-0.5 text-[10px] font-semibold text-muted">测试</span>}
                         </div>
@@ -293,7 +293,7 @@ export default function UsersView() {
                   </div>
                   <div className="min-w-0 text-xs text-muted sm:col-span-2 lg:col-span-1"><span className="lg:hidden text-faint">邮箱 · </span><span className="break-all">{u.email || "未绑定"}</span></div>
                   <div className="sm:col-start-2 sm:row-start-1 sm:self-start sm:justify-self-end lg:col-start-auto lg:row-start-auto lg:self-auto lg:justify-self-start">
-                    <span className={`inline-flex rounded-full border px-2.5 py-[3px] text-[11px] font-medium ${u.role === "admin" ? "border-edge-strong/30 bg-brand-light text-brand-deep" : "border-edge bg-bg-gray text-ink-2 dark:bg-white/[.04]"}`}>
+                    <span className={`user-role-pill inline-flex rounded-full border px-2.5 py-[3px] text-[11px] font-medium ${u.role === "admin" ? "border-edge-strong/30 bg-brand-light text-brand-deep" : "border-edge bg-bg-gray text-ink-2 dark:bg-white/[.04]"}`}>
                       {u.role === "admin" ? "管理员" : "普通用户"}
                     </span>
                   </div>

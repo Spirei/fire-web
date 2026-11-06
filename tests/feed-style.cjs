@@ -50,10 +50,10 @@ assert.equal(resolvePalette('invalid').id, 'neutral');
 assert.deepEqual(SITE_PALETTES.map(p => p.id).filter(id => id !== 'muse'), ['neutral','meta','liquid','ocean','forest','amber','dusk']);
 const muse = resolvePalette('muse');
 assert.equal(muse.name, 'Muse'); assert.equal(muse.glass, false);
-assert.equal(paletteVariables('muse')['--site-bg-light'], '252 252 252');
-assert.equal(paletteVariables('muse')['--site-bg-dark'], '24 24 25');
-assert.equal(paletteVariables('muse')['--site-accent-light'], '0 100 212');
-assert.equal(paletteVariables('muse')['--site-accent-dark'], '23 147 255');
+assert.equal(paletteVariables('muse')['--site-bg-light'], '250 251 252');
+assert.equal(paletteVariables('muse')['--site-bg-dark'], '23 25 28');
+assert.equal(paletteVariables('muse')['--site-accent-light'], '0 100 224');
+assert.equal(paletteVariables('muse')['--site-accent-dark'], '25 147 255');
 const provider = fs.readFileSync('components/PaletteProvider.tsx', 'utf8');
 assert(provider.includes('usePersistedState<PaletteId>(PALETTE_KEY, "neutral")'));
 assert(provider.includes('setStored(id)'));
@@ -86,8 +86,11 @@ skin.walkRules(rule => {
 for(const mode of ['light','dark']) {
   const rule = skin.nodes.find(n => n.type === 'rule' && n.selector === `html:root${mode==='dark'?'.dark':''}[data-palette="muse"] body:has([data-capsule-scope="non-home"])`);
   const vars = values(rule);
-  assert.equal(vars['--muse-bg'], mode==='dark'?'#181819':'#fcfcfc');
-  assert.equal(vars['--site-action-text'], mode==='dark'?'#000':'#fff');
+  assert.equal(vars['--muse-bg'], 'rgb(var(--site-bg))');
+  assert.equal(vars['--muse-surface'], 'rgb(var(--site-surface))');
+  assert.equal(vars['--muse-ink'], 'rgb(var(--site-ink))');
+  assert.equal(vars['--muse-side'], mode==='dark'?'#1d1f22':'#f3f4f5');
+  assert.equal(vars['--site-action-text'], '#fff');
 }
 assert(fs.readFileSync('components/PaletteSettings.tsx', 'utf8').includes('palette === "muse"'));
 console.log('PASS backend skin cannot change other palettes, homepage, Dock, financial colors or layouts');

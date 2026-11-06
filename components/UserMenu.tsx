@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types";
 import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
 import AdminBadge from "@/components/AdminBadge";
+import SidebarAccountMenu from "@/components/SidebarAccountMenu";
 
 interface StockStats {
   holdings: number;
@@ -186,8 +187,10 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "",
   const displayName = user.nickname || user.username;
   const avatarSrc = user.avatar === initialUser?.avatar && initialAvatar ? initialAvatar : user.avatar;
 
+  if (placement === "sidebar") return <SidebarAccountMenu key={user.id} user={user} avatar={avatarSrc} dark={dark} onHome={() => go("settings", "profile-home")} onProfile={() => go("settings", "profile")} onSettings={() => go("settings")} onTheme={toggleTheme} onLogout={logout} />;
+
   return (
-    <div className={`relative ${placement === "sidebar" ? "platform-account" : ""}`} ref={rootRef} onMouseEnter={openSoon} onMouseLeave={closeSoon}>
+    <div className="relative" ref={rootRef} onMouseEnter={openSoon} onMouseLeave={closeSoon}>
       <button
         type="button"
         onClick={() => {
@@ -197,11 +200,10 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "",
           }
           setOpen((v) => !v);
         }}
-        className={`group relative z-[60] flex items-center rounded-full p-0.5 ${placement === "sidebar" ? "platform-account-trigger" : "transition-transform duration-300 ease-[cubic-bezier(.34,1.56,.64,1)] hover:scale-[1.18]"}`}
+        className="group relative z-[60] flex items-center rounded-full p-0.5 transition-transform duration-300 ease-[cubic-bezier(.34,1.56,.64,1)] hover:scale-[1.18]"
         style={{ transformOrigin: "top center" }}
         aria-label="账号菜单"
         aria-expanded={open}
-        data-capsule={placement === "sidebar" ? "off" : undefined}
       >
         <span className="relative inline-flex">
           {avatarSrc ? (
@@ -211,18 +213,16 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "",
               {displayName.slice(0, 1).toUpperCase()}
             </span>
           )}
-          {placement === "sidebar" && <span className="platform-session-dot" aria-label="当前已登录" />}
-          {placement !== "sidebar" && user.role === "admin" && (
+          {user.role === "admin" && (
             <AdminBadge
               className="absolute -bottom-[1px] -right-[1px] h-[10px] w-[10px] rounded-full ring-[1px] ring-white transition-shadow duration-300 dark:ring-[#151a26]"
             />
           )}
         </span>
-        {placement === "sidebar" && <span className="platform-account-copy"><strong>{displayName}</strong><small>{user.role === "admin" ? "管理员" : "用户"}</small></span>}
       </button>
 
       {open && (
-        <div className={`${placement === "sidebar" ? "platform-account-menu " : ""}modal-panel absolute left-1/2 top-[29px] z-50 -ml-[136px] w-[272px] max-w-[calc(100vw-24px)] rounded-2xl border border-edge bg-white shadow-[0_14px_44px_rgba(10,14,25,.16)] dark:border-white/10 dark:bg-[#1c1c1e] max-[768px]:fixed max-[768px]:left-auto max-[768px]:right-3 max-[768px]:top-[72px] max-[768px]:ml-0 max-[768px]:w-[272px]`}>
+        <div className={`modal-panel absolute left-1/2 top-[29px] z-50 -ml-[136px] w-[272px] max-w-[calc(100vw-24px)] rounded-2xl border border-edge bg-white shadow-[0_14px_44px_rgba(10,14,25,.16)] dark:border-white/10 dark:bg-[#1c1c1e] max-[768px]:fixed max-[768px]:left-auto max-[768px]:right-3 max-[768px]:top-[72px] max-[768px]:ml-0 max-[768px]:w-[272px]`}>
           {/* B 站风格跨层头像：头像下半在卡片内、上半探出卡片上方，白边突出 */}
           <div className="px-4 pb-4 pt-10 text-center">
             <div className="min-w-0">
