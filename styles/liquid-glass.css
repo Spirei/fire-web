@@ -30,9 +30,8 @@
 }
 @media (prefers-contrast: more) { .lg-control { background: rgb(var(--site-surface)); border: 1px solid rgb(var(--site-edge)); } }
 /* Liquid Glass 只装饰胶囊；普通按钮与头像不再产生点击后的透镜层。 */
-html:root[data-material="glass"] :is(.fire-cap,.settings-primary-pill,.sc-inspector-reset,.sc-glass-trigger) { background-color:var(--material-fill); -webkit-backdrop-filter:var(--material-blur);backdrop-filter:var(--material-blur); }
+html:root[data-material="glass"] :is(.fire-cap,.settings-primary-pill) { background-color:var(--material-fill); -webkit-backdrop-filter:var(--material-blur);backdrop-filter:var(--material-blur); }
 html:root[data-material="glass"] .settings-primary-pill .pill-ripple { display:none; }
 :root[data-material="glass"] { --material-fill: rgb(var(--site-surface) / .38); --material-blur: blur(6px) saturate(1.15); --material-edge: rgb(var(--site-surface) / .85); --material-highlight: #ffffff16; --material-shadow: inset 0 1px 1px #ffffffb0, inset 0 -1px 1px #ffffff60, 0 0 0 .5px rgb(var(--site-ink) / .09), 0 7px 20px rgb(var(--site-ink) / .065); }
-html:root[data-material="glass"] .showcase.light { --material-fill: rgb(var(--site-surface) / .38); --material-edge: rgb(var(--site-surface) / .85); --material-shadow: inset 0 1px 1px #ffffffb0,inset 0 -1px 1px #ffffff60,0 0 0 .5px #00000014,0 7px 20px #00000010; }
 :root.dark[data-material="glass"] { --material-fill: rgb(var(--site-surface) / .68); }
-@supports not (backdrop-filter: blur(1px)) { :root[data-material="glass"], html:root[data-material="glass"] .showcase.light { --material-fill: rgb(var(--site-surface)); } }
+@supports not (backdrop-filter: blur(1px)) { :root[data-material="glass"] { --material-fill: rgb(var(--site-surface)); } }

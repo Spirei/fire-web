@@ -39,8 +39,6 @@ const nextConfig = {
       { source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" },
       { source: "/uploads/asset/:path*", destination: "/api/managed-upload/asset/:path*" },
       { source: "/uploads/cards/:path*", destination: "/api/managed-upload/cards/:path*" },
-      // 草稿以 .draft- 开头；必须先走动态读取，否则 public 静态服务拒绝隐藏文件并返回 400。
-      { source: "/uploads/mclaren/models/:file", destination: "/api/showcase/model-files/:file" },
       // Run upload authorization before static public files, including encoded folder names.
       { source: "/:uploadPrefix((?:u|%75)(?:p|%70)(?:l|%6[cC])(?:o|%6[fF])(?:a|%61)(?:d|%64)(?:s|%73))/:path*", destination: "/api/upload-files/:path*" }
     ] };
@@ -53,8 +51,6 @@ const nextConfig = {
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
           "style-src 'self' 'unsafe-inline'",
-          // blob: 给 GLTFLoader 解析模型内嵌贴图用：three 走 ImageBitmapLoader（fetch(blob:) → createImageBitmap），
-          // 因此 connect-src 必须放行 blob:；img-src 一并放行，兼容走 <img src=blob:> 的老浏览器。
           "img-src 'self' data: blob: https:",
           "font-src 'self' data:",
           "connect-src 'self' blob:",
@@ -87,12 +83,6 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           ...(isProd ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }] : [])
-        ]
-      },
-      {
-        source: "/vendor/basis/showcase-ktx-worker.js",
-        headers: [
-          { key: "Content-Security-Policy", value: "default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self'; object-src 'none'" }
         ]
       },
       {
@@ -134,22 +124,6 @@ const nextConfig = {
         source: "/api/v1/portfolio-series",
         headers: [{ key: "Cache-Control", value: "private, max-age=30, must-revalidate" }]
       },
-      {
-        // 默认车型（MCL35M）与两张环境贴图随仓库分发：车模放 public/mclaren/，
-        // 约 23MB + 3MB，保证别人克隆或部署后开箱就有车可看。
-        source: "/mclaren/:path*",
-        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
-      },
-      {
-        // 其余车型与隧道环境贴图放 uploads 卷手动导入，不进仓库也不进镜像。
-        // 这些文件按文件名版本化（preset 里带 ?v=），长缓存 + immutable，刷新不再回服务器校验。
-        source: "/uploads/mclaren/models/:path*",
-        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
-      },
-      {
-        source: "/uploads/mclaren/env/:path*",
-        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
-      }
     ];
   }
 };

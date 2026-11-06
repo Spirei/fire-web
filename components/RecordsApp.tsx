@@ -1179,7 +1179,25 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" ? initialNow : 0} />}
-          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} />}
+          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} ledger={
+            <HoldingsView
+              records={records}
+              quotes={quotes}
+              livePrice={livePrice}
+              refreshQuotes={refreshQuotes}
+              onAddMatch={(m) => addFromSearch(m, "holdings")}
+              onUpdate={updateRecord}
+              onRemove={removeRecord}
+              groups={groups}
+              markets={markets}
+              marketLabels={marketLabels}
+              marketOptions={marketOptions}
+              onMarketsChange={applyMarkets}
+              onOrdersChanged={reloadActivities}
+              initialFundBalances={initialFundBalances}
+              valuationReady={valuationReady}
+            />
+          } />}
           {activeTab === "quote-pool" && <div className="global-economy-page flex flex-col gap-6">
             <GlobalSectionNav section="quote-pool" onSelect={section => { if (section !== "quote-pool") navigateWorkspace(`/global?section=${section}`); }} />
             <div className="global-section-panel"><QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateWorkspace} /></div>

@@ -276,7 +276,7 @@ const watchdog = setTimeout(() => { console.error('Cookie regression timed out')
       const count = (segment[2].match(/-?\d+(?:\.\d+)?/g) || []).length;
       assert(segment[1] in arities); if (arities[segment[1]]) assert.equal(count % arities[segment[1]], 0); else assert.equal(count, 0);
     }
-    for (const file of ['PasswordInput.tsx', 'LoginForm.tsx', 'WatchGroupSheet.tsx', 'StockKline.tsx', 'AssetAnalysisDashboard.tsx', 'showcase/ModelImporter.tsx']) assert(fs.readFileSync(path.join(root, 'components', file), 'utf8').includes('VisibilityIcon'));
+    for (const file of ['PasswordInput.tsx', 'LoginForm.tsx', 'WatchGroupSheet.tsx', 'StockKline.tsx', 'AssetAnalysisDashboard.tsx']) assert(fs.readFileSync(path.join(root, 'components', file), 'utf8').includes('VisibilityIcon'));
   });
   console.log(`${passed} cookie and visibility regressions passed`);
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { clearTimeout(watchdog); db.close(); process.chdir(cwd); fs.rmSync(temp, { recursive: true, force: true }); });

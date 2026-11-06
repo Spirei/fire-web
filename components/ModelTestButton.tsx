@@ -1,6 +1,6 @@
 "use client";
 
-import MusicIcon from "./showcase/MusicIcon";
+import MusicIcon from "./MusicIcon";
 
 export type ModelTestState = { state: "loading" | "ok" | "error"; text: string };
 

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./quote-pool.css";
-import "@/styles/time-machine.css";
-import TimeMachine from "@/components/TimeMachine";
 import "@/styles/responsive-base.css";
 import "@/styles/mobile.css";
 import "@/styles/tablet.css";
@@ -111,7 +109,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <PwaRegister />
             {/* 全站拖拽上传：文件拖进页面就近落到最近的上传入口 */}
             <FileDropAnywhere />
-            <TimeMachine />
             <SiteBg />
             <LoginModal />
             <AppDialogHost />

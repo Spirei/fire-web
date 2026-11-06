@@ -12,7 +12,7 @@
 | 琥珀纸 | 暖纸 / 焦糖 | 实色 |
 | 暮光紫 | 雾紫 / 墨紫 | 实色 |
 
-`lib/palettes.ts` 为色值单一来源；每套包含 bg、surface、ink、muted、accent、edge、soft 七个语义通道，各有 light / dark 两版。`styles/palettes.css` 将它们映射到 Tailwind 语义色、设置窗口、首页胶囊、模型面板和车型导入页。Meta 另以主题作用域统一主按钮、选中态、导航、输入框和弹层，并保持项目既有的无焦点光环约定。增加组件优先使用这些语义变量，避免写死浅灰 / 深灰。行情涨跌色、车型贴图、线框指定色及图片保持原意。
+`lib/palettes.ts` 为色值单一来源；每套包含 bg、surface、ink、muted、accent、edge、soft 七个语义通道，各有 light / dark 两版。`styles/palettes.css` 将它们映射到 Tailwind 语义色、设置窗口和导航。Meta 另以主题作用域统一主按钮、选中态、导航、输入框和弹层，并保持项目既有的无焦点光环约定。增加组件优先使用这些语义变量，避免写死浅灰 / 深灰。行情涨跌色及图片保持原意。
 
 材质由 `data-material` 控制，使用 `--material-fill / edge / blur / shadow / highlight / radius`。Liquid Glass 的透明度、边缘与模糊由同一契约提供，实色配色不继续套玻璃效果。模型查看画布保持参考浅灰，控件局部解析所选配色的浅色版本。减少动态效果由现有媒体查询处理；不支持背景模糊时退回不透明表面。
 

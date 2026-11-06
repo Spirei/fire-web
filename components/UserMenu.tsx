@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { TimeMachineLink } from "@/components/TimeMachine";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/types";
 import { applySiteTheme, THEME_CHANGE_EVENT, type SiteTheme } from "@/lib/theme";
@@ -292,7 +291,6 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "",
             </button>
           </div>
           <div className="border-t border-edge p-1.5 dark:border-white/10">
-            <TimeMachineLink to="simple" />
             <button
               type="button"
               onClick={logout}

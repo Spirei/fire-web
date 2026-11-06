@@ -21,7 +21,7 @@ function retryDelay(response: Response) {
 
 export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?: () => void; returnTo?: string }) {
   const authorizationLogin = returnTo.startsWith("/app/authorize?");
-  const destination = authorizationLogin || returnTo === "/app/devices" ? returnTo : "/records";
+  const destination = authorizationLogin || returnTo === "/app/devices" ? returnTo : "/global";
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [loginType, setLoginType] = useState<"username" | "email">("username");

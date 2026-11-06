@@ -3151,7 +3151,7 @@ function fontHeaderFixture(ext) {
     assert(convert >= 0, '汇率换算入口必须保留');
     assert(!view.includes('GlobalEconomyHeatmap'));
     assert(!view.includes('["heatmap", "经济热图"'));
-    assert.match(view, /section === "assets" \? <AssetMarketCapRanking \/> : section === "calendar" \? <MarketCalendarView initialNow=\{initialNow\} \/> : <FxConverter \/>/);
+    assert.match(view, /section === "ledger" \? ledger : section === "assets" \? <AssetMarketCapRanking \/> : section === "calendar" \? <MarketCalendarView initialNow=\{initialNow\} \/> : <FxConverter \/>/);
     assert.match(view, /const section = pageSize \? "assets" : parseGlobalSection\(searchParams.get\("section"\)\)/, '当前地址必须直接决定区块');
     assert.match(view, /const selectSection = \(next: GlobalSection\) => \{\s*if \(!canUseWorkspaceUrl\(\)\) return;/, '只在本页用户切换区块时写地址');
     assert.match(css, /\.fx-converter-card\s*\{[^}]*grid-template-columns:\s*1fr 1fr/, '汇率换算必须一排两个');
@@ -3361,207 +3361,6 @@ function fontHeaderFixture(ext) {
       assert.equal(normalized.icon,icons[provider]);
       assert.deepEqual(normalized.icons,icons);
     }
-  });
-  await test('showcase 写接口限管理员：普通用户改不了首页车型条', async () => {
-    const uploadRoute = require(path.join(root, 'app/api/showcase/models/upload/route.ts'));
-    const listRoute = require(path.join(root, 'app/api/showcase/models/route.ts'));
-    const orderRoute = require(path.join(root, 'app/api/showcase/models/order/route.ts'));
-    const coverRoute = require(path.join(root, 'app/api/showcase/models/cover/route.ts'));
-    const idRoute = require(path.join(root, 'app/api/showcase/models/[id]/route.ts'));
-    const call = (role, url, method = 'GET', body) =>
-      new Request(`http://localhost:3000${url}`, {
-        method,
-        headers: {
-          ...(role ? { cookie: `fire_session=${tokens[role]}` } : {}),
-          ...(body ? { 'Content-Type': 'application/json' } : {})
-        },
-        ...(body ? { body: JSON.stringify(body) } : {})
-      });
-    const params = (id) => ({ params: Promise.resolve({ id }) });
-
-    // 普通用户：导入 / 保存 / 排序 / 封面 / 改参数 / 删除 全部 403（车型条是首页对外的公共内容）
-    assert.equal((await uploadRoute.POST(call('user', '/api/showcase/models/upload?name=x.glb', 'POST'))).status, 403);
-    assert.equal((await listRoute.POST(call('user', '/api/showcase/models', 'POST', { id: 'x', label: 'x', file: 'x.glb' }))).status, 403);
-    assert.equal((await orderRoute.PUT(call('user', '/api/showcase/models/order', 'PUT', { ids: ['mcl35m'] }))).status, 403);
-    assert.equal((await coverRoute.DELETE(call('user', '/api/showcase/models/cover?id=mcl35m', 'DELETE'))).status, 403);
-    assert.equal((await idRoute.PUT(call('user', '/api/showcase/models/gulf2022', 'PUT', {}), params('gulf2022'))).status, 403);
-    assert.equal((await idRoute.DELETE(call('user', '/api/showcase/models/gulf2022?file=1'), params('gulf2022'))).status, 403);
-
-    // 访客：先卡在未登录
-    assert.equal((await listRoute.POST(call(null, '/api/showcase/models', 'POST', {}))).status, 401);
-    assert.equal((await uploadRoute.POST(call(null, '/api/showcase/models/upload?name=x.glb', 'POST'))).status, 401);
-
-    // 管理员：不再是 403（这里只验证授权，不真去写盘）
-    const adminRes = await idRoute.DELETE(call('admin', '/api/showcase/models/not-exist'), params('not-exist'));
-    assert.notEqual(adminRes.status, 403);
-
-    // 公开 GET：只给首页要用的清单，不再把整份登记表（文件参数）下发出去
-    const published = await (await listRoute.GET()).json();
-    assert.ok(Array.isArray(published.models));
-    assert.equal(published.stored, undefined);
-  });
-  await test('showcase 隐藏草稿与正式模型经动态路由读取，保留 Range 与路径防护', async () => {
-    const store = require(path.join(root, 'lib/showcaseModels.ts'));
-    const route = require(path.join(root, 'app/api/showcase/model-files/[file]/route.ts'));
-    const config = (await import(path.join(root, 'next.config.mjs'))).default;
-    const rules = (await config.rewrites()).beforeFiles;
-    assert(rules.some(rule => rule.source === '/uploads/mclaren/models/:file' && rule.destination === '/api/showcase/model-files/:file'), '必须在 public 静态文件匹配之前接管草稿请求');
-    fs.mkdirSync(store.MODELS_DIR, { recursive: true });
-    const bytes = Buffer.from('glTF-preview-regression');
-    const read = (file, range) => route.GET(new Request('http://localhost:3000/api/showcase/model-files/test', { headers: range ? { range } : {} }), { params: Promise.resolve({ file }) });
-    for (const file of [store.draftModelFile('preview.glb'), 'published-preview.glb']) {
-      fs.writeFileSync(path.join(store.MODELS_DIR, file), bytes);
-      const full = await read(file);
-      assert.equal(full.status, 200);
-      assert.equal(full.headers.get('content-type'), 'model/gltf-binary');
-      assert.deepEqual(Buffer.from(await full.arrayBuffer()), bytes);
-      const partial = await read(file, 'bytes=0-3');
-      assert.equal(partial.status, 206);
-      assert.equal(partial.headers.get('content-range'), `bytes 0-3/${bytes.length}`);
-      assert.equal(await partial.text(), 'glTF');
-      fs.unlinkSync(path.join(store.MODELS_DIR, file));
-    }
-    for (const file of ['../outside.glb', 'nested/model.glb', 'showroom.json']) assert.equal((await read(file)).status, 400);
-    assert.equal((await read('missing.glb')).status, 404);
-    fs.writeFileSync(path.join(temp, 'outside.glb'), bytes);
-    fs.symlinkSync(path.join(temp, 'outside.glb'), path.join(store.MODELS_DIR, 'symlink.glb'));
-    assert.equal((await read('symlink.glb')).status, 404);
-    fs.unlinkSync(path.join(store.MODELS_DIR, 'symlink.glb'));
-  });
-  await test('showcase 登记表损坏时停止保存，避免覆盖车型参数', () => {
-    const store = require(path.join(root, 'lib/showcaseModels.ts'));
-    const read = fs.readFileSync;
-    const exists = fs.existsSync;
-    let registryBody = '{invalid-json';
-    fs.existsSync = function(file) {
-      if (String(file) === path.join(store.SHOWROOM_DIR, 'showroom.json')) return true;
-      return exists.call(this, file);
-    };
-    fs.readFileSync = function(file, ...args) {
-      if (String(file) === path.join(store.SHOWROOM_DIR, 'showroom.json')) return registryBody;
-      return read.call(this, file, ...args);
-    };
-    try {
-      assert.throws(() => store.readRegistry(), /登记表读取失败/);
-      assert.throws(() => store.ensureRegistry(), /登记表读取失败/);
-      registryBody = '{"models":[{"id":"bad car","file":"car.glb"}]}';
-      assert.throws(() => store.readRegistry(), /登记表读取失败/);
-    } finally { fs.readFileSync = read; fs.existsSync = exists; }
-  });
-  await test('showcase 体检不留附件，保存成功才落盘，失败与旧草稿均清理', async () => {
-    const route = require(path.join(root, 'app/api/showcase/models/upload/route.ts'));
-    const store = require(path.join(root, 'lib/showcaseModels.ts'));
-    const { cleanupOrphanFiles } = require(path.join(root, 'lib/fileCleanup.ts'));
-    const json = Buffer.from(JSON.stringify({ asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [] }], materials: [{ name: 'tire' }], meshes: [{ primitives: [] }] }));
-    const chunk = Buffer.alloc(Math.ceil(json.length / 4) * 4, 32); json.copy(chunk);
-    const glb = Buffer.alloc(20 + chunk.length); glb.writeUInt32LE(0x46546c67, 0); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(glb.length, 8); glb.writeUInt32LE(chunk.length, 12); glb.writeUInt32LE(0x4e4f534a, 16); chunk.copy(glb, 20);
-    const metadata = { id: 'retention-test', label: 'Retention', note: '', params: { length: 5.6 } };
-    const call = (meta, bytes = glb) => route.POST(new Request('http://localhost:3000/api/showcase/models/upload?name=retention.glb', { method: 'POST', headers: { cookie: `fire_session=${tokens.admin}`, ...(meta ? { 'x-showcase-model': encodeURIComponent(JSON.stringify(meta)) } : {}) }, body: bytes }));
-    const list = () => fs.existsSync(store.MODELS_DIR) ? fs.readdirSync(store.MODELS_DIR).sort() : [];
-    const before = list(); const tempDirs = [];
-    const mkdtemp = fs.promises.mkdtemp;
-    fs.promises.mkdtemp = async (...args) => { const dir = await mkdtemp(...args); tempDirs.push(dir); return dir; };
-    try {
-      const inspected = await call(); assert.equal(inspected.status, 200);
-      assert.equal((await inspected.json()).url, undefined, 'inspection cannot expose a stored draft URL');
-      assert.deepEqual(list(), before, 'successful inspection retains no uploaded GLB');
-      assert.equal((await call(null, Buffer.from('invalid'))).status, 400);
-      assert.equal((await call({ ...metadata, params: { length: 0 } })).status, 400);
-      assert.deepEqual(list(), before, 'invalid upload and invalid save retain no attachment');
-      const rename = fs.renameSync;
-      fs.renameSync = (from, to) => { if (String(to).endsWith('showroom.json')) throw new Error('simulated registry failure'); return rename(from, to); };
-      try { assert.equal((await call(metadata)).status, 400); } finally { fs.renameSync = rename; }
-      assert.deepEqual(list(), before, 'failed registry commit rolls back the copied model');
-      const saved = await call(metadata); assert.equal(saved.status, 200);
-      const { model } = await saved.json();
-      assert.deepEqual(fs.readFileSync(path.join(store.MODELS_DIR, model.file)), glb);
-      assert(store.readStoredModels().some(item => item.id === model.id && item.file === model.file));
-      assert.equal((await call(metadata)).status, 400);
-      assert.deepEqual(list(), [...before, model.file].sort(), 'duplicate save cannot retain another file');
-      fs.writeFileSync(path.join(store.MODELS_DIR, '.draft-old--unsaved.glb'), glb);
-      assert.equal(cleanupOrphanFiles({ scope: 'showcase-unsaved' }).removed, 1);
-      assert(fs.existsSync(path.join(store.MODELS_DIR, model.file)), 'cleanup preserves saved models');
-      assert(tempDirs.every(dir => !fs.existsSync(dir)), 'all inspection and save temp directories are removed');
-      store.removeStoredModel(model.id, { deleteFile: true });
-    } finally { fs.promises.mkdtemp = mkdtemp; }
-  });
-  await test('showcase 上传草稿不会提前上线，保存后原子转正，移出清单不会自动复活', () => {
-    const store = require(path.join(root, 'lib/showcaseModels.ts'));
-    fs.mkdirSync(store.MODELS_DIR, { recursive: true });
-    const draft = store.draftModelFile(`${'future-car-'.repeat(9)}.glb`);
-    assert(store.validModelFile(draft));
-    fs.writeFileSync(path.join(store.MODELS_DIR, draft), Buffer.from('draft'));
-    assert(!store.ensureRegistry().some((item) => item.file === draft));
-    const saved = store.upsertStoredModel({ id: 'future-car', label: 'Future Car', file: draft, params: { wheelPattern: '[invalid' } });
-    assert(!store.isDraftModelFile(saved.file));
-    assert(fs.existsSync(path.join(store.MODELS_DIR, saved.file)));
-    assert.equal(saved.params.wheelPattern, undefined);
-    store.removeStoredModel('future-car');
-    assert(!store.ensureRegistry().some((item) => item.id === 'future-car'));
-    assert(fs.existsSync(path.join(store.MODELS_DIR, saved.file)), '移出清单保留 GLB');
-    assert.throws(() => store.upsertStoredModel({ id: 'mcl35m', label: 'duplicate', file: saved.file }), /内置车型重复/);
-  });
-  await test('showcase 本地预览上传权限、隔离、文件限制与失败保留', async () => {
-    const store = require(path.join(root, 'lib/showcaseModels.ts'));
-    const route = require(path.join(root, 'app/api/showcase/models/preview-upload/route.ts'));
-    const json = Buffer.from(JSON.stringify({ asset:{version:'2.0'}, buffers:[{byteLength:36}], bufferViews:[{buffer:0,byteLength:36}], accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[1,1,0]}], materials:[{name:'body'}], meshes:[{primitives:[{attributes:{POSITION:0},material:0}]}], nodes:[{mesh:0}], scenes:[{nodes:[0]}], scene:0 }));
-    const padded=Math.ceil(json.length/4)*4, glb=Buffer.alloc(28+padded+36);
-    glb.writeUInt32LE(0x46546c67,0); glb.writeUInt32LE(2,4); glb.writeUInt32LE(glb.length,8); glb.writeUInt32LE(padded,12); glb.writeUInt32LE(0x4e4f534a,16); glb.fill(32,20,20+padded); json.copy(glb,20); glb.writeUInt32LE(36,20+padded); glb.writeUInt32LE(0x004e4942,24+padded);
-    const call=(role,id,body=glb,extra={})=>new Request(`http://localhost:3000/api/showcase/models/preview-upload?id=${encodeURIComponent(id)}`,{method:'POST',headers:{cookie:`fire_session=${tokens[role]}`,...extra},body});
-    assert.equal((await route.POST(call('user','mcl35m'))).status,403);
-    assert.equal((await route.POST(call('admin','../bad'))).status,404);
-    assert.equal((await route.POST(call('admin','missing-car'))).status,404);
-    fs.mkdirSync(store.MODELS_DIR,{recursive:true}); fs.mkdirSync(store.PREVIEWS_DIR,{recursive:true});
-    for(const id of ['preview-one','preview-two']) { fs.writeFileSync(path.join(store.MODELS_DIR,`${id}.glb`),glb); store.upsertStoredModel({id,label:id,file:`${id}.glb`}); }
-    const target=path.join(store.PREVIEWS_DIR,'preview-one-preview.glb'), untouched=path.join(store.PREVIEWS_DIR,'preview-two-preview.glb'); fs.writeFileSync(untouched,'untouched');
-    const uploaded = await route.POST(call('admin','preview-one')); assert.equal(uploaded.status,200,await uploaded.text());
-    assert.deepEqual(fs.readFileSync(target),glb); assert.equal(fs.readFileSync(untouched,'utf8'),'untouched');
-    assert.equal((await route.POST(call('admin','preview-one',Buffer.from('broken')))).status,400);
-    assert.deepEqual(fs.readFileSync(target),glb,'failed upload preserves previous preview');
-    assert.equal((await route.POST(call('admin','preview-one',glb,{'content-length':String(33*1024*1024)}))).status,413);
-    assert.equal((await route.POST(call('admin','preview-one',Buffer.alloc(33*1024*1024)))).status,413,'streaming body limit applies without Content-Length');
-    assert(!fs.readdirSync(store.PREVIEWS_DIR).some(file=>file.startsWith('.')),'temporary files removed');
-    assert.equal((await route.POST(call('admin','mcl35m'))).status,200);
-    assert(fs.existsSync(path.join(store.PREVIEWS_DIR,'builtin-mcl35m-preview.glb')));
-    const gpuRoute = require(path.join(root, 'app/api/showcase/models/gpu-upload/route.ts'));
-    const gpuCall=(role,id,body=glb)=>new Request(`http://localhost:3000/api/showcase/models/gpu-upload?id=${encodeURIComponent(id)}`,{method:'POST',headers:{cookie:`fire_session=${tokens[role]}`},body});
-    assert.equal((await gpuRoute.POST(gpuCall('user','preview-one'))).status,403);
-    assert.equal((await gpuRoute.POST(gpuCall('admin','../bad'))).status,404);
-    const gpuDir=path.join(store.SHOWROOM_DIR,'gpu'); fs.mkdirSync(gpuDir,{recursive:true});
-    const oldGpu=path.join(gpuDir,'preview-one-uastc.glb'); fs.writeFileSync(oldGpu,'existing validated derivative');
-    assert.equal((await gpuRoute.POST(gpuCall('admin','preview-one'))).status,422,'source GLB is not a KTX2 derivative');
-    assert.equal(fs.readFileSync(oldGpu,'utf8'),'existing validated derivative','failed upload preserves previous derivative');
-    assert(!fs.readdirSync(gpuDir).some(file=>file.startsWith('.')),'failed derivative temporary file removed');
-    for(const id of ['preview-one','preview-two']) store.removeStoredModel(id,{deleteFile:true});
-  });
-  await test('showcase 首页隐藏持久化、权限校验、恢复及全部隐藏不预载', async () => {
-    const store = require(path.join(root, 'lib/showcaseModels.ts'));
-    const route = require(path.join(root, 'app/api/showcase/models/[id]/route.ts'));
-    const list = require(path.join(root, 'app/api/showcase/models/route.ts'));
-    const context = id => ({ params: Promise.resolve({ id }) });
-    fs.writeFileSync(path.join(store.MODELS_DIR, 'visibility-test.glb'), 'fixture');
-    const model = store.upsertStoredModel({ id: 'visibility-test', label: 'Visibility', file: 'visibility-test.glb' });
-    assert.equal((await route.PATCH(request(null, {hidden:true}, 'PATCH'), context(model.id))).status, 401);
-    assert.equal((await route.PATCH(request('user', {hidden:true}, 'PATCH'), context(model.id))).status, 403);
-    assert.equal((await route.PATCH(request('admin', {hidden:'true'}, 'PATCH'), context(model.id))).status, 400);
-    const foreign = new Request('http://localhost:3000/api/showcase/models/visibility-test', { method:'PATCH', headers:{cookie:`fire_session=${tokens.admin}`,origin:'https://untrusted.example','Content-Type':'application/json'},body:JSON.stringify({hidden:true}) });
-    assert([401,403].includes((await route.PATCH(foreign, context(model.id))).status), 'untrusted origin is rejected');
-    const before = store.listShowcaseOptions().map(item => item.id);
-    for (const id of before) assert.equal((await route.PATCH(request('admin', {hidden:true}, 'PATCH'), context(id))).status,200);
-    assert.deepEqual(store.listShowcaseOptions(), []);
-    assert.deepEqual((await (await list.GET()).json()).models, []);
-    assert(fs.existsSync(path.join(store.MODELS_DIR, model.file)), 'hidden files are retained');
-    assert(store.readStoredModels().some(item => item.id === model.id), 'hidden models remain editable');
-    store.upsertStoredModel({ ...model, label:'Edited while hidden' });
-    store.saveModelOrder([...before].reverse());
-    assert.deepEqual(store.listShowcaseOptions(), [], 'editing and reordering cannot unhide models');
-    assert(store.readRegistry().hiddenIds.includes('mcl35m'), 'builtin visibility persists too');
-    for (const id of before) assert.equal((await route.PATCH(request('admin', {hidden:false}, 'PATCH'), context(id))).status,200);
-    assert.deepEqual(store.listShowcaseOptions().map(item=>item.id), [...before].reverse());
-    store.removeStoredModel(model.id, {deleteFile:true});
-    const home = fs.readFileSync(path.join(root,'components/showcase/HomeShowcase.tsx'),'utf8');
-    assert(home.indexOf('if (!current) return') < home.indexOf('<ShowcaseStage'), 'empty list renders without mounting the scene');
-    assert(!fs.readFileSync(path.join(root,'app/page.tsx'),'utf8').includes('all.slice(0, 1)'), 'no hidden/default fallback');
   });
   await test('entrypoint: unwritable data volume fails loudly, failing seed does not block startup', () => {
     const { spawnSync } = require('node:child_process');
@@ -3858,8 +3657,7 @@ function fontHeaderFixture(ext) {
           const attrs = new Map(opening.attributes.properties.filter(ts.isJsxAttribute).map(attr => [attr.name.getText(ast), attr.initializer?.getText(ast) || '']));
           const alternativeAction = ['onPointerDown', 'onMouseDown', 'onDoubleClick', 'onDragStart', 'onContextMenu'].some(name => attrs.has(name));
           const openingText = opening.getText(ast);
-          const delegatedShowcase = file.endsWith('ShowcaseStage.tsx') && /ref=\{(?:zoomModeRef|zoomOutRef|zoomInRef)\}/.test(openingText);
-          if (tag === 'button' && !attrs.has('onClick') && !alternativeAction && attrs.get('type') !== '"submit"' && !attrs.has('data-copy-code') && !delegatedShowcase) dead.push(`${path.relative(root, file)}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`);
+          if (tag === 'button' && !attrs.has('onClick') && !alternativeAction && attrs.get('type') !== '"submit"' && !attrs.has('data-copy-code')) dead.push(`${path.relative(root, file)}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`);
           if (tag === 'a' && ['"#"', '""'].includes(attrs.get('href'))) dead.push(`${path.relative(root, file)}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`);
           if (attrs.get('role') === '"button"' && !attrs.has('onClick') && !alternativeAction && attrs.get('tabIndex') !== '{-1}') dead.push(`${path.relative(root, file)}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`);
           assert(!/onClick=\{\s*\(.*?\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\}/s.test(openingText), `empty click handler in ${path.relative(root, file)}`);
@@ -3869,8 +3667,6 @@ function fontHeaderFixture(ext) {
       visit(ast);
     }
     assert.deepEqual(dead, [], `dead click targets: ${dead.join(', ')}`);
-    const engine = fs.readFileSync(path.join(root, 'components/showcase/engine.ts'), 'utf8');
-    for (const control of ['zoomIn', 'zoomOut', 'zoomMode']) assert(engine.includes(`hud.${control}?.addEventListener("click"`), `delegated showcase control lacks click binding: ${control}`);
     const login = fs.readFileSync(path.join(root, 'components/LoginForm.tsx'), 'utf8');
     const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
     assert(login.includes('忘记密码？') && login.includes('<EmailRecoveryForm'));

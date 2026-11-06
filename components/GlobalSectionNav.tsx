@@ -1,20 +1,21 @@
 "use client";
 
-import { IconArrowsExchange, IconChartHistogram, IconCalendarPause } from "@tabler/icons-react";
+import { IconArrowsExchange, IconChartHistogram, IconCalendarPause, IconWallet } from "@tabler/icons-react";
 import { NAV_ICONS } from "@/lib/navIcons";
 import { useLayoutEffect, useRef } from "react";
 import { preloadView } from "@/lib/viewPreload";
 
-export type GlobalSection = "assets" | "convert" | "calendar" | "quote-pool";
+export type GlobalSection = "ledger" | "assets" | "convert" | "calendar" | "quote-pool";
 
 const GLOBAL_SECTIONS: [GlobalSection, string, string][] = [
+  ["ledger", "投资账本", "当前账户的持仓、成本与盈亏"],
   ["assets", "市值排行", "全球主要资产的市值、价格与走势"],
   ["convert", "汇率换算", "输入金额，按当前汇率换算其他货币"],
   ["calendar", "休市日历", "A 股、港股及美股全年交易与休市安排"],
   ["quote-pool", "股票池", "查看行情订阅与池内清单"]
 ];
 
-const SECTION_ICONS = { assets: IconChartHistogram, convert: IconArrowsExchange, calendar: IconCalendarPause };
+const SECTION_ICONS = { ledger: IconWallet, assets: IconChartHistogram, convert: IconArrowsExchange, calendar: IconCalendarPause };
 
 export default function GlobalSectionNav({ section, onSelect }: { section: GlobalSection; onSelect: (section: GlobalSection) => void }) {
   const navRef = useRef<HTMLElement>(null);

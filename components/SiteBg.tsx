@@ -7,10 +7,6 @@ export default function SiteBg() {
   const pathname = usePathname();
   useEffect(() => {
     let active = true;
-    if (pathname === "/") {
-      document.documentElement.style.setProperty("--site-bg-image", "none");
-      return;
-    }
     function apply() {
       fetch("/api/settings/public")
         .then((res) => (res.ok ? res.json() : null))

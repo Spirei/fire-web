@@ -59,8 +59,6 @@ jobs:
         run: npm run check:commit-title -- "${PR_BASE_SHA:-$BEFORE_SHA}" "$HEAD_SHA"
       - name: Install dependencies
         run: npm ci
-      - name: Install model optimizer dependencies
-        run: npm ci --prefix tools/model-optimizer
       - name: Public repository safety audit
         run: npm run audit:public
       - name: Image publication regression
@@ -78,8 +76,6 @@ jobs:
           node tests/postgres-business.cjs
       - name: TypeScript check
         run: npx tsc --noEmit
-      - name: Model optimizer tests
-        run: npm test --prefix tools/model-optimizer
       - name: Production build check
         run: npm run build
       - name: Start app and run public smoke
@@ -161,19 +157,6 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Model worker metadata
-        id: worker-meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ${{ env.IMAGE_NAME }}-model-worker
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,format=short
-            type=ref,event=tag
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -189,17 +172,3 @@ jobs:
             FIRE_BUILD_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Build and push model worker
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: ./tools/model-optimizer
-          file: ./tools/model-optimizer/Dockerfile
-          platforms: linux/amd64
-          push: true
-          provenance: false
-          sbom: false
-          tags: ${{ steps.worker-meta.outputs.tags }}
-          labels: ${{ steps.worker-meta.outputs.labels }}
-          cache-from: type=gha,scope=model-worker
-          cache-to: type=gha,scope=model-worker,mode=max

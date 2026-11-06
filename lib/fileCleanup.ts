@@ -137,27 +137,7 @@ export function organizeAssetFiles(): number {
 }
 
 /* 清理孤立文件：扫描 public/uploads 下未被任何记录引用的文件（历史遗留 / 替换后残留） */
-export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {}): { removed: number; failed: number } {
-  if (options.scope === "showcase-unsaved") {
-    const root = path.join(PUBLIC_DIR, "uploads", "mclaren");
-    const models = path.join(root, "models");
-    const saved = new Set<string>();
-    try {
-      const registry = JSON.parse(fs.readFileSync(path.join(root, "showroom.json"), "utf8"));
-      if (!Array.isArray(registry.models)) return { removed: 0, failed: 1 };
-      for (const model of registry.models) if (typeof model?.file === "string") saved.add(model.file);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return { removed: 0, failed: 1 };
-    }
-    let removed = 0; let failed = 0;
-    if (!fs.existsSync(models)) return { removed, failed };
-    for (const entry of fs.readdirSync(models, { withFileTypes: true })) {
-      // 只清理旧导入流程生成的未保存附件，不碰原始素材、正式车型或其他目录。
-      if (!entry.isFile() || !/^\.draft-.*\.(glb|part)$/.test(entry.name) || saved.has(entry.name)) continue;
-      try { fs.unlinkSync(path.join(models, entry.name)); removed++; } catch { failed++; }
-    }
-    return { removed, failed };
-  }
+export function cleanupOrphanFiles(): { removed: number; failed: number } {
   const db = getDb();
   const refs = new Set<string>();
   const addRef = (url: string | null | undefined) => {
@@ -209,7 +189,7 @@ export function cleanupOrphanFiles(options: { scope?: "showcase-unsaved" } = {})
         if (ent.name === "cards" && path.basename(dir) === "uploads") continue;
         // 用户字体由 /api/fonts 管理，个人字体偏好不在数据库引用表里。
         if (ent.name === "fonts" && path.basename(dir) === "uploads") continue;
-        // 车型由 showroom.json 管理，不能按通用素材库的数据库引用判定为孤立文件。
+        // 历史车型目录已迁出，清理时整棵跳过，避免误删卷上残留的模型文件。
         if (ent.name === "mclaren" && path.basename(dir) === "uploads") continue;
         // 安装包与 iOS 发布清单由独立登记表管理。
         if (ent.name === "alcor-test" && path.basename(dir) === "uploads") continue;

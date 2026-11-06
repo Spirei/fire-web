@@ -20,7 +20,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const authorizationLogin = params.next?.startsWith("/app/authorize?") === true;
-  const destination = authorizationLogin ? params.next! : params.next === "/app/devices" ? "/app/devices" : "/records";
+  const destination = authorizationLogin ? params.next! : params.next === "/app/devices" ? "/app/devices" : "/global";
   if (needsSetup() && params.skipSetup !== "1") redirect("/setup");
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;

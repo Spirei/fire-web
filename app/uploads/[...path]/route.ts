@@ -11,15 +11,8 @@ const MIME: Record<string, string> = {
   // 首页 3D 车型与隧道环境贴图（手动放进 uploads 卷，不进仓库也不进镜像）
   glb: "model/gltf-binary", gltf: "model/gltf+json", bin: "application/octet-stream",
   hdr: "image/vnd.radiance", ktx2: "image/ktx2",
-  // 首页背景音乐从 uploads 卷里播（mp3 等音频素材不进公开仓库）
   mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", wav: "audio/wav"
 };
-
-/** 车型 / 环境贴图这类大素材：文件名带版本号即可视为不变，交给浏览器长期缓存；
- *  同时按 Range 分段返回，避免每次把上百 MB 全量读进内存再吐出去。 */
-function isImmutableAsset(segments: string[]) {
-  return segments[0] === "mclaren" && (segments[1] === "models" || segments[1] === "env");
-}
 
 /** 动态服务上传目录 public/uploads/…：
  *  Next `next start` 只服务构建/启动时已存在的 public 文件，运行时上传的文件不会被静态服务，
@@ -65,15 +58,7 @@ export async function GET(
     const ext = (path.extname(source) || "").slice(1).toLowerCase();
     const headers: Record<string, string> = {
       "Content-Type": MIME[ext] || "application/octet-stream",
-      // 头像等上传可能同名重传，不能 immutable；浏览器每次重新校验，避免缓存旧图
-      // 运行期上传的素材同样极少变化：先让浏览器复用上次成功加载的副本，再后台静默校验。
-      // 车型 / 环境贴图按文件名版本化，直接 immutable，刷新不再重新校验。
-      "Cache-Control":
-        privateReport
-          ? "private, no-store"
-          : isImmutableAsset(segs)
-            ? "public, max-age=31536000, immutable"
-            : "public, max-age=3600, stale-while-revalidate=86400",
+      "Cache-Control": privateReport ? "private, no-store" : "public, max-age=3600, stale-while-revalidate=86400",
       "Accept-Ranges": "bytes",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'"

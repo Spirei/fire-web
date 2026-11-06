@@ -14,7 +14,7 @@ export default async function SetupPage() {
   if (!needsSetup()) {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
-    redirect(getUserByToken(token) ? "/records" : "/login");
+    redirect(getUserByToken(token) ? "/global" : "/login");
   }
   return (
     <div style={{ minHeight: "100dvh", background: "#0b0f16" }}>

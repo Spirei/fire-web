@@ -116,12 +116,6 @@ async function test(name, run) { db.prepare('DELETE FROM rate_limit').run(); awa
     assert.equal((await call(['reports\\US\\report.pdf'], null)).status, 400);
     assert.equal((await call(['REPORTS', 'US', 'report.pdf'], null)).status, 403);
   });
-  await test('showcase cover cancels an over-limit body without Content-Length before buffering the remainder', async () => {
-    const cover = load('app/api/showcase/models/cover/route.ts'); let pulls = 0, cancelled = false;
-    const body = new ReadableStream({ pull(controller) { pulls++; controller.enqueue(new Uint8Array(1024 * 1024)); }, cancel() { cancelled = true; } });
-    const request = new Request(origin + '/api/showcase/models/cover?id=mcl35m&name=cover.png', { method: 'POST', headers: { cookie: 'fire_session=' + sessions.get(admin.id), origin }, body, duplex: 'half' });
-    const response = await cover.POST(request); assert.equal(response.status, 413); assert(cancelled); assert(pulls <= 9, 'bounded body consumption');
-  });
   await test('broker XLSX import accepts valid files but bounds real inflation despite forged sizes', () => {
     const { readBrokerOrderSheet } = load('lib/orderImportXlsx.ts'), { buildXlsx } = load('lib/xlsx.ts');
     const valid = buildXlsx([{ name: '订单', headers: ['订单状态', '股票代码'], rows: [['已成交', 'AAPL']] }]);

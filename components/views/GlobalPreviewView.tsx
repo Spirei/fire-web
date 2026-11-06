@@ -2,7 +2,7 @@
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import FxConverter from "@/components/FxConverter";
 import MarketCalendarView from "@/components/MarketCalendarView";
 import { fmtPct } from "@/lib/format";
@@ -416,11 +416,11 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
 }
 
 function parseGlobalSection(value: string | null): GlobalSection {
-  if (value === "convert" || value === "calendar") return value;
-  return "assets";
+  if (value === "assets" || value === "convert" || value === "calendar" || value === "ledger") return value;
+  return "ledger";
 }
 
-export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePool }: { pageSize?: number; initialNow?: number; onOpenQuotePool?: () => void }) {
+export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePool, ledger }: { pageSize?: number; initialNow?: number; onOpenQuotePool?: () => void; ledger?: ReactNode }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
@@ -443,7 +443,7 @@ export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePoo
     <div className="global-economy-page flex flex-col gap-6">
       <GlobalSectionNav section={section} onSelect={selectSection} />
       <div key={section} className="global-section-panel">
-        {section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
+        {section === "ledger" ? ledger : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
       </div>
     </div>
   );
