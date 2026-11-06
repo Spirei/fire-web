@@ -419,16 +419,24 @@ try {
     const html=render('components/views/FireView.tsx',{records:[],quotes:{},livePrice:()=>0});
     assert(html.includes('退休规划')&&html.includes('role="status"')&&!html.includes('aria-hidden="true"'));
   });
-  test('global conversion URL renders converter rather than default ranking before hydration',()=>{
+  test('global URLs restore converter and ranking while unknown sections default to the account ledger',()=>{
     const html=render('components/views/GlobalPreviewView.tsx',{},'section=convert&from=USD&amount=250');
     assert(!html.includes('全球资产市值排行'));
     assert(html.includes('value="250"'));
     assert(html.includes('USD'));
     const foreign=render('components/FxConverter.tsx',{},'from=HKD&amount=250');
     assert(!foreign.includes("fx-converter-row is-active"));
-    const fallback=render('components/views/GlobalPreviewView.tsx',{},'section=invalid');
-    assert(fallback.includes('全球资产市值排行'));
-    assert(fallback.includes('正在读取全球市值排行'));
+    const ledger=React.createElement('div',{'data-test-ledger':true},'当前账户账本');
+    for (const params of ['', 'section=invalid', 'section=ledger']) {
+      const fallback=render('components/views/GlobalPreviewView.tsx',{ledger},params);
+      assert(fallback.includes('data-test-ledger="true"'));
+      assert.match(fallback, /aria-label="投资账本" aria-current="page"/);
+      assert(!fallback.includes('正在读取全球市值排行'));
+    }
+    const ranking=render('components/views/GlobalPreviewView.tsx',{ledger},'section=assets');
+    assert(ranking.includes('全球资产市值排行'));
+    assert(ranking.includes('正在读取全球市值排行'));
+    assert(!ranking.includes('data-test-ledger="true"'));
   });
   test('request filters render their actual URL selection before hydration',()=>{
     const html=render('components/ApiRequests.tsx',{},`rQ=%2Fapi%2Fv3&rPeriod=year&rYear=${new Date().getUTCFullYear()-1}&rPage=3`);
@@ -626,7 +634,7 @@ try {
   test('global navigation ends in quote pool and preserves its active entry before hydration',()=>{
     const html=render('components/GlobalSectionNav.tsx',{section:'quote-pool',onSelect() {}});
     const labels=[...html.matchAll(/<button[^>]+aria-label="([^"]+)"/g)].map(match=>match[1]);
-    assert.deepEqual(labels,['市值排行','汇率换算','休市日历','股票池']);
+    assert.deepEqual(labels,['投资账本','市值排行','汇率换算','休市日历','股票池']);
     assert.match(html, /aria-label="股票池" aria-current="page"/);
     let opened=0;
     const view=frameHarness('components/views/GlobalPreviewView.tsx',{

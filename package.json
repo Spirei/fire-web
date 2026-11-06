@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "dev:pm2": "node scripts/pm2-dev.mjs",
     "predev": "node scripts/generate-api-request-routes.mjs && node scripts/prepare-assets.mjs",
     "dev": "NEXT_DIST_DIR=.next-dev next dev -H 0.0.0.0 -p 3000",
     "prebuild": "node scripts/generate-api-request-routes.mjs && node scripts/build-postgres-tools.cjs && node scripts/build-worker.cjs",

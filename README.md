@@ -20,6 +20,15 @@ npm run clean:dsstore    # 清理 .DS_Store
 
 本地测试账号默认名为 `fire_smoke`，注册时为普通权限、不占 UID；随机密码保存在忽略 Git 的 `data/smoke-account.json`（权限 0600），不使用默认 demo。管理员可通过用户管理调整权限，巡检按账号当前权限验证。`SMOKE_USERNAME` 可在首次注册时指定名称，`SMOKE_ACCOUNT_FILE` 可指定凭据文件；文件绑定目标地址，不会把本地凭据发往不同服务器。外部实例只读取它自己的凭据配置，不自动注册账号。`BASE` 默认 `http://localhost:3000`，回环地址 `127.0.0.1` 也可复用同一配置。
 
+
+## 本地 PM2 启动
+
+使用 `npm run dev:pm2`。从任意目录启动可执行 `node /实际项目路径/fire-web/scripts/pm2-dev.mjs`。
+`ecosystem.config.cjs` 固定项目目录；启动脚本会替换目录错误的旧 fire 进程，最多等待 120 秒确认网页可访问后保存配置。
+固定使用端口 3000，发现其他服务占用时明确报错。失败时执行 `pm2 logs fire --lines 60 --nostream` 查看原因。
+PM2 的 online 仅表示进程存在，应以网页检查为准。开机或登录自动启动属于本机系统配置，须单独安装。
+启动时显示源码提交，提示未提交源码及相对已获取主分支的落后情况；不会自动覆盖本地工作。远端比较以最近一次 `git fetch origin` 为准。
+
 ## 关键位置
 
 - 业务组件：`components/views/`
