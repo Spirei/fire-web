@@ -124,7 +124,7 @@ export default async function SlugLayout({
             <SiteLogo initialLogo={settings.siteLogo} initialText={settings.logoText} initialFont={settings.logoFont} />
           </Link>
           <WorkspaceTicker />
-          <div className="ml-auto flex flex-none items-center gap-2.5">
+          <div className="workspace-header-account ml-auto flex flex-none items-center gap-2.5">
             <UserMenu initialUser={user} initialAvatar={initialAvatar} />
           </div>
         </div>

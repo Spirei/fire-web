@@ -108,7 +108,8 @@ function fontHeaderFixture(ext) {
     assert(shell.includes('usePersistedState("fire:tablet-sidebar-collapsed", false)'));
     assert(shell.includes('aria-label="平板侧栏设置"') && shell.includes('移到右侧'));
     assert(!desktop.includes('.fire-sidebar-item > span {'), 'custom image wrapper must not be hidden with the text');
-    assert(shell.includes('aria-label={t.label}') && shell.includes('className="fire-sidebar-label truncate"'));
+    const navigation = fs.readFileSync(path.join(root, "components/PlatformNavigation.tsx"), "utf8");
+    assert(navigation.includes('aria-label={item.label}') && navigation.includes('className="fire-sidebar-label truncate"'));
     assert(desktop.includes('(min-width: 1024px) and (max-height: 800px)'));
     assert(desktop.includes('.app-shell-footer { display:none; }'));
     assert(tablet.includes('.app-shell-root:has(.records-app.is-settings) { height:100dvh;'));
@@ -242,7 +243,7 @@ function fontHeaderFixture(ext) {
     assert(css.includes('.sv-center :is(.sc-setting-row,.sc-account-card) strong { font-family:inherit; font-synthesis:none; font-weight:var(--site-entry-weight,400)!important; }'));
     assert(css.includes('svg { color:inherit!important; opacity:.72; filter:none; transition:none!important; }'));
     assert(css.includes(',.fire-sidebar-item-active,[aria-current="page"]) svg { opacity:1; }'));
-    assert(app.includes('aria-current={navigationTab === t.key ? "page" : undefined}'));
+    assert(fs.readFileSync(path.join(root, "components/PlatformNavigation.tsx"), "utf8").includes('aria-current={activeKey === item.key ? "page" : undefined}'));
     assert(!app.includes('fire-sidebar-item-active font-semibold'));
     assert.equal(accentVariables('white')['--site-action-icon-filter'], 'brightness(0)');
     assert.equal(accentVariables('brown')['--site-action-icon-filter'], 'brightness(0) invert(1)');
@@ -1296,7 +1297,8 @@ function fontHeaderFixture(ext) {
     assert.equal(exports.preloadedView('__proto__'),undefined);
     const app=fs.readFileSync(path.join(root,'components/RecordsApp.tsx'),'utf8');
     assert(app.includes('!["holdings", "assets", "fire", "pnl", "watchlist"].includes(activeTab)'));
-    assert(app.includes('onPointerEnter=') && app.includes('onFocus='));
+    const navigation = fs.readFileSync(path.join(root, 'components/PlatformNavigation.tsx'), 'utf8');
+    assert(navigation.includes('onPointerEnter=') && navigation.includes('onFocus='));
   });
   await test('warm workspaces open directly while hydration and later imports preserve component identity', () => {
     const output=ts.transpileModule(fs.readFileSync(path.join(root,'components/PreloadedWorkspaceView.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;

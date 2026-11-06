@@ -13,7 +13,7 @@ interface StockStats {
   watchlist: number;
 }
 
-export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" }: { goTo?: string; initialUser?: User | null; initialAvatar?: string }) {
+export default function UserMenu({ goTo, initialUser = null, initialAvatar = "", placement = "header" }: { goTo?: string; initialUser?: User | null; initialAvatar?: string; placement?: "header" | "sidebar" }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(initialUser);
   const [ready, setReady] = useState(Boolean(initialUser));
@@ -50,7 +50,7 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
     let pending = false;
     const controller = new AbortController();
     function loadUser(force = false) {
-      if (document.hidden || pending || (!force && Date.now() - lastCheck < 60000)) return;
+      if (document.hidden || (rootRef.current && !rootRef.current.getClientRects().length) || pending || (!force && Date.now() - lastCheck < 60000)) return;
       pending = true;
       lastCheck = Date.now();
       fetch("/api/auth/me", { method: "POST", cache: "no-store", credentials: "same-origin", signal: controller.signal })
@@ -99,7 +99,9 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
 
   // 统计持股 / 自选股数量（有成本价与数量视为持仓，其余为自选）
   useEffect(() => {
+    if (!open) return;
     function loadStats() {
+      if (document.hidden || (rootRef.current && !rootRef.current.getClientRects().length)) return;
       fetch("/api/records")
         .then((res) => (res.ok ? res.json() : []))
         .then((list) => {
@@ -113,15 +115,18 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
     loadStats();
     window.addEventListener("fire:records-updated", loadStats);
     return () => window.removeEventListener("fire:records-updated", loadStats);
-  }, [goTo]);
+  }, [goTo, open]);
 
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
+    const outside = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", onKey);
     return () => {
+      document.removeEventListener("pointerdown", outside);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -183,7 +188,7 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
   const avatarSrc = user.avatar === initialUser?.avatar && initialAvatar ? initialAvatar : user.avatar;
 
   return (
-    <div className="relative" ref={rootRef} onMouseEnter={openSoon} onMouseLeave={closeSoon}>
+    <div className={`relative ${placement === "sidebar" ? "platform-account" : ""}`} ref={rootRef} onMouseEnter={openSoon} onMouseLeave={closeSoon}>
       <button
         type="button"
         onClick={() => {
@@ -193,10 +198,11 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
           }
           setOpen((v) => !v);
         }}
-        className="group relative z-[60] flex items-center rounded-full p-0.5 transition-transform duration-300 ease-[cubic-bezier(.34,1.56,.64,1)] hover:scale-[1.18]"
+        className={`group relative z-[60] flex items-center rounded-full p-0.5 ${placement === "sidebar" ? "platform-account-trigger" : "transition-transform duration-300 ease-[cubic-bezier(.34,1.56,.64,1)] hover:scale-[1.18]"}`}
         style={{ transformOrigin: "top center" }}
         aria-label="账号菜单"
         aria-expanded={open}
+        data-capsule={placement === "sidebar" ? "off" : undefined}
       >
         <span className="relative inline-flex">
           {avatarSrc ? (
@@ -206,16 +212,18 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "" 
               {displayName.slice(0, 1).toUpperCase()}
             </span>
           )}
-          {user.role === "admin" && (
+          {placement === "sidebar" && <span className="platform-session-dot" aria-label="当前已登录" />}
+          {placement !== "sidebar" && user.role === "admin" && (
             <AdminBadge
               className="absolute -bottom-[1px] -right-[1px] h-[10px] w-[10px] rounded-full ring-[1px] ring-white transition-shadow duration-300 dark:ring-[#151a26]"
             />
           )}
         </span>
+        {placement === "sidebar" && <span className="platform-account-copy"><strong>{displayName}</strong><small>{user.role === "admin" ? "管理员" : "用户"}</small></span>}
       </button>
 
       {open && (
-        <div className="modal-panel absolute left-1/2 top-[29px] z-50 -ml-[136px] w-[272px] max-w-[calc(100vw-24px)] rounded-2xl border border-edge bg-white shadow-[0_14px_44px_rgba(10,14,25,.16)] dark:border-white/10 dark:bg-[#1c1c1e] max-[768px]:fixed max-[768px]:left-auto max-[768px]:right-3 max-[768px]:top-[72px] max-[768px]:ml-0 max-[768px]:w-[272px]">
+        <div className={`${placement === "sidebar" ? "platform-account-menu " : ""}modal-panel absolute left-1/2 top-[29px] z-50 -ml-[136px] w-[272px] max-w-[calc(100vw-24px)] rounded-2xl border border-edge bg-white shadow-[0_14px_44px_rgba(10,14,25,.16)] dark:border-white/10 dark:bg-[#1c1c1e] max-[768px]:fixed max-[768px]:left-auto max-[768px]:right-3 max-[768px]:top-[72px] max-[768px]:ml-0 max-[768px]:w-[272px]`}>
           {/* B 站风格跨层头像：头像下半在卡片内、上半探出卡片上方，白边突出 */}
           <div className="px-4 pb-4 pt-10 text-center">
             <div className="min-w-0">

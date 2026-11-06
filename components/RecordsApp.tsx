@@ -37,6 +37,8 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import GlobalSectionNav from "@/components/GlobalSectionNav";
 import SidebarScrollIndicator from "@/components/SidebarScrollIndicator";
+import PlatformNavigation from "@/components/PlatformNavigation";
+import UserMenu from "@/components/UserMenu";
 import type { WatchGroup } from "@/lib/watchGroups";
 import { useDesktopViewport, useFourDoorViewport, useTabletDevice } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -1062,7 +1064,7 @@ export default function RecordsApp({
     <>
     <div translate="no" data-tablet-device={tabletDevice ? "true" : "false"} data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
       {/* 桌面侧边导航 */}
-      <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:block ${activeTab === "settings" ? "is-settings" : ""}`}>
+      <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:flex ${activeTab === "settings" ? "is-settings" : ""}`}>
         <nav id="fire-desktop-nav" ref={desktopNavRef} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           {fourDoorEnabled === true && fourDoorViewport && (
             <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
@@ -1072,41 +1074,12 @@ export default function RecordsApp({
               </Suspense></WorkspaceBoundary>
             </div>
           )}
-          <div className="fire-sidebar-section-label">资产</div>
-          {sidebarTabs.map((t, index) => {
-            const isManagement = ["users", "library", "cards", "activities", "settings"].includes(t.key);
-            const previous = sidebarTabs[index - 1];
-            const startsManagement = isManagement && !previous?.key || isManagement && !["users", "library", "cards", "activities", "settings"].includes(previous.key);
-            return (
-              <div key={t.key}>
-                {startsManagement && <div className="fire-sidebar-section-label fire-sidebar-section-label-spaced">管理</div>}
-                <button
-                  type="button"
-                  onClick={() => selectTab(t.key)}
-                  onPointerEnter={(event) => { if (event.pointerType === "mouse" && t.key !== activeTab) preloadView(t.key); }}
-                  onPointerDown={() => { if (t.key !== activeTab) preloadView(t.key); }}
-                  onFocus={() => { if (t.key !== activeTab) preloadView(t.key); }}
-                  draggable
-                  onDragStart={() => { tabDragKeyRef.current = t.key; }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => onTabDrop(t.key)}
-                  onDragEnd={() => { tabDragKeyRef.current = null; }}
-                  title={`${t.label}（可拖动排序）`}
-                  aria-label={t.label}
-                  aria-current={navigationTab === t.key ? "page" : undefined}
-                  className={`fire-sidebar-item flex h-[42px] w-full cursor-grab items-center gap-3 rounded-[10px] px-3 text-[15px] font-medium active:cursor-grabbing ${
-                    navigationTab === t.key
-                      ? "fire-sidebar-item-active text-ink dark:text-white"
-                      : "text-muted hover:bg-black/[.05] hover:text-ink dark:hover:bg-[#2a2a2a]"
-                  }`}
-                >
-                  {t.icon}
-                  <span className="fire-sidebar-label truncate">{t.label}</span>
-                </button>
-              </div>
-            );
-          })}
+          <PlatformNavigation items={sidebarTabs} activeKey={navigationTab} onSelect={key => selectTab(key as TabKey)} onSettings={sub => navigateTo("settings", sub)} onDrop={key => onTabDrop(key as TabKey)} onDragStart={key => { tabDragKeyRef.current = key as TabKey; }} onDragEnd={() => { tabDragKeyRef.current = null; }} />
         </nav>
+        <div className="fire-sidebar-footer">
+          <button type="button" className="platform-appearance" onClick={() => navigateTo("settings", "palette")}><PlatformNavigation.AppearanceIcon /><span>外观</span></button>
+          <UserMenu initialUser={user} placement="sidebar" />
+        </div>
         <div className="fire-sidebar-tablet-controls" aria-label="平板侧栏设置">
           <button type="button" onClick={() => setTabletSidebarCollapsed(value => !value)} aria-label={tabletSidebarCollapsed ? "展开侧栏" : "收回侧栏"} aria-controls="fire-desktop-nav" aria-expanded={!tabletSidebarCollapsed} title={tabletSidebarCollapsed ? "展开侧栏" : "收回侧栏"}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16m7-11-3 3 3 3" /></svg>

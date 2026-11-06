@@ -1,6 +1,6 @@
 # Alcor · Web（fire-web）
 
-Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈 Web 端，统一使用端口 3000。
+Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈 Web 端。默认端口 3000；开发时可用 `npm run dev -- --port 3001` 指定空闲端口，不停止已有服务。
 
 ## 生产环境首次启动
 
@@ -11,7 +11,7 @@ Next.js 15 + React 19 + TypeScript + Tailwind + SQLite（better-sqlite3）全栈
 ## 常用命令
 
 ```bash
-npm run dev              # 开发（固定监听 0.0.0.0:3000）
+npm run dev              # 开发（默认监听 0.0.0.0:3000，可指定端口）
 npm run smoke:account    # 首次注册独立本地测试账号，后续执行只验证并复用
 npm run smoke            # 使用独立账号进行只读页面、认证和 API 巡检
 npm run test:review      # 临时数据库中的业务写入与管理员权限回归
@@ -49,3 +49,11 @@ npm run clean:dsstore    # 清理 .DS_Store
 先在本机打包，再复制到目标卷；整包和逐文件 SHA-256 校验通过后发布新备份并删除最旧的一份。挂载不可用、写入或校验失败、源码打包期间改变时保留旧备份；并发运行使用本机文件锁，不会删除其他项目或未识别文件。恢复时将压缩包解到新目录，再按项目说明安装依赖与配置环境。
 
 `npm run test:source-backup` 使用临时项目检查恢复、两份轮换、损坏及失败保护，不访问真实业务数据。
+
+## 独立后台任务（显式切换）
+
+默认保留站内执行方式。独立任务复用现有业务规则，仅允许已切换至 PostgreSQL 的运行目录。
+
+先构建 `npm run build:worker`，在私有环境设置 `FIRE_BACKGROUND_MODE=external` 和经核对的 `FIRE_WORKER_MIGRATION_ID`，执行 `npm run worker -- --check`。检查只核对数据库，不启动任务。实际启动用 `npm run worker`；网站进程也须设置 `FIRE_BACKGROUND_MODE=external`，避免站内执行入口继续运行。切换须单独安排，源码更新不修改现有部署配置。
+
+独立进程持有 PG 会话锁，第二个独立进程拒绝启动；连接中断后退出，由操作员核对原回执。提醒及订单继续沿原数据库租约和未知结果处理，不重放历史。Redis 接入和业务 API 改接仍需后续模块迁移，当前入口不表示已经完成。

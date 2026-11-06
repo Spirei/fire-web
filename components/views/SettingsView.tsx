@@ -2,7 +2,7 @@
 import MailTemplatesSettings from "@/components/MailTemplatesSettings";
 import { DiscordFields, FeishuFields, QqFields, TelegramFields, WebPushFields, WecomFields } from "@/components/NotifyChannelFields";
 
-import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
+import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard, useWorkspaceActive } from "@/lib/workspacePanel";
 
 import PasswordInput from "@/components/PasswordInput";
 import XueqiuCookieInput from "@/components/XueqiuCookieInput";
@@ -78,6 +78,7 @@ interface Props {
 }
 
 function SettingsDetailShell({ title, category, detailKey, showBack = false, closeDisabled = false, editable = false, editing = false, onBack, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; showBack?: boolean; closeDisabled?: boolean; editable?: boolean; editing?: boolean; onBack?: () => void; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
+  const workspaceActive = useWorkspaceActive();
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
@@ -99,7 +100,10 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
   }, []);
   useLayoutEffect(() => { setMounted(true); }, []);
   useEffect(() => {
-    if (!mounted) return;
+    if (!workspaceActive) { closingRef.current = false; setClosing(false); }
+  }, [workspaceActive]);
+  useEffect(() => {
+    if (!mounted || !workspaceActive) return;
     const unlockScroll = lockScroll();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.repeat) return;
@@ -115,9 +119,9 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
       window.removeEventListener("keydown", onKeyDown);
       if (closeTimer.current) clearTimeout(closeTimer.current);
     };
-  }, [mounted, requestClose]);
+  }, [mounted, requestClose, workspaceActive]);
   const content = (
-    <div className={`sc-detail-layer fixed inset-0 z-[10900] flex items-center justify-center p-4 sm:p-8${closing ? " is-closing" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+    <div className={`sc-detail-layer fixed inset-0 z-[10900] flex items-center justify-center p-4 sm:p-8${closing ? " is-closing" : ""}`} style={{ display: workspaceActive ? undefined : "none" }} aria-hidden={!workspaceActive || undefined} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="关闭设置详情" className="sc-detail-scrim absolute inset-0" onClick={requestClose} disabled={closing || closeDisabled} />
       <section className="sc-detail-dialog relative flex w-full max-w-[600px] flex-col overflow-hidden" data-detail={detailKey}>
         <div className="sc-detail-theme-bridge sv-win-root sv-orca sv-center flex min-h-0 flex-1 flex-col">

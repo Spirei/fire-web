@@ -82,3 +82,8 @@ public/uploads/cards/
 /public/favicon.ico
 
 /server-tools/postgres/
+
+/server-tools/worker.cjs
+/node_modules
+/.next
+/.next-integration

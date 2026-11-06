@@ -5027,16 +5027,28 @@ const V0_1_73_ENTRY: VersionEntry = {
     { kind: "security", title: "独立密钥与隔离核验", desc: "迁移包使用独立密钥加密，导出密钥和原库加密密钥均单独交付；提供逐文件 SHA-256、来源声明和离线校验工具。导出不修改业务、连接、计划任务或历史备份，不执行交易重放。" }
   ]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_74_ENTRY: VersionEntry = {
   ...V0_1_73_ENTRY, version: "v0.1.74", date: "2026-11-05",
   summary: "移除旧附件管理，保留原文件与 App 资源服务。",
   software: V0_1_73_ENTRY.software.map(item => item.name === "Alcor" ? {...item,version:"v0.1.74"} : item),
   changes: [{kind:"feature",title:"移除旧附件管理",desc:"移除旧 Web 附件管理导航、页面、专属文件操作和素材资源接口及遗留样式；保留磁盘原件、迁移导出、素材库、通用上传与 App 私人资源及财报服务。"}]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_74_ENTRY, version: "v0.1.75", date: "2026-11-06",
+  summary: "迁入分类侧栏与底部账号区，准备独立后台任务入口。",
+  software: V0_1_74_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version:"v0.1.75"} : item),
+  changes: [
+    {kind:"feature", title:"分类侧栏", desc:"按投资、动态、资源、数据、管理、系统、个人组织现有入口，保留权限与导航排序；分类展开状态刷新保持。"},
+    {kind:"feature", title:"固定外观与账号", desc:"外观与本人头像、名称、角色固定在侧栏底部；菜单向上展开，短窗口导航独立滚动。"},
+    {kind:"feature", title:"独立后台运行入口", desc:"新增独立任务进程和显式运行模式，复用既有金融与提醒规则；启动前核对 PG 标识，不自动切换运行实例。"},
+    {kind:"fix", title:"返回时撤下设置浮层", desc:"离开设置时隐藏详情浮层并释放滚动锁，保留草稿；再次进入时继续原详情。"}
+  ]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_74_ENTRY,
   V0_1_73_ENTRY,
   V0_1_72_ENTRY,
   V0_1_71_ENTRY,
