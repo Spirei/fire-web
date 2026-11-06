@@ -18,7 +18,9 @@ check() {
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 
 echo "== CI 短冒烟 ${BASE} =="
-check "GET /" 200 "$(code --max-time 20 "$BASE/")"
+check "GET / 进入全球预览" 307 "$(code --max-time 20 "$BASE/")"
+HOME_LOC=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 20 "$BASE/")
+check "首页跳到全球预览" 1 "$(printf '%s' "$HOME_LOC" | grep -c '/global')"
 # CI 空库首启：/login → /setup（307）；已初始化实例 /login 为 200。
 # 登录表单用 ?skipSetup=1 直连，避免空库把检查吃掉。
 LOGIN_CODE=$(code --max-time 20 "$BASE/login")

@@ -25,7 +25,9 @@ check() {
 code() { curl -s --max-time 45 -o /dev/null -w '%{http_code}' "$@"; }
 
 echo "== 页面加载 =="
-check "GET /"          200 "$(code "$BASE/")"
+check "GET / 进入全球预览" 307 "$(code "$BASE/")"
+HOME_LOC=$(curl -s -o /dev/null -w '%{redirect_url}' "$BASE/")
+check "首页跳到全球预览" 1 "$(printf '%s' "$HOME_LOC" | grep -c '/global')"
 check "GET /login"     200 "$(code "$BASE/login")"
 check "GET /api/auth/setup-status" 200 "$(code "$BASE/api/auth/setup-status")"
 check "已初始化实例不需要首次设置" 0 "$(curl -s "$BASE/api/auth/setup-status" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("needsSetup") else 0)')"

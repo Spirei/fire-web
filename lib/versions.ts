@@ -5033,7 +5033,7 @@ const V0_1_74_ENTRY: VersionEntry = {
   software: V0_1_73_ENTRY.software.map(item => item.name === "Alcor" ? {...item,version:"v0.1.74"} : item),
   changes: [{kind:"feature",title:"移除旧附件管理",desc:"移除旧 Web 附件管理导航、页面、专属文件操作和素材资源接口及遗留样式；保留磁盘原件、迁移导出、素材库、通用上传与 App 私人资源及财报服务。"}]
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_75_ENTRY: VersionEntry = {
   ...V0_1_74_ENTRY, version: "v0.1.75", date: "2026-11-06",
   summary: "分类侧栏与后台任务入口，并迁出迈凯轮展示台。",
   software: V0_1_74_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version:"v0.1.75"} : item),
@@ -5048,10 +5048,17 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "fix", title: "去掉车型路径的导出和上传类型", desc: "迁移导出不再把 /mclaren 当作站点资源目录。上传服务去掉只给车型使用的 GLB、HDR 和 KTX2 类型。uploads/mclaren 仍整目录跳过孤立文件清理，避免误删卷上还没搬走的模型。" }
   ]
 };
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_75_ENTRY, version: "v0.1.76", date: "2026-11-07",
+  summary: "首页巡检改为接受进入全球预览的跳转。",
+  software: V0_1_75_ENTRY.software.map(item => item.name === "Alcor" ? {...item, version:"v0.1.76"} : item),
+  changes: [{kind:"fix", title:"首页巡检接受跳转", desc:"首页改为跳到全球预览后，CI 与本地冒烟按 307 和 /global 检查，不再要求首页直接返回页面。"}]
+};
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_75_ENTRY,
   V0_1_74_ENTRY,
   V0_1_73_ENTRY,
   V0_1_72_ENTRY,
