@@ -8101,7 +8101,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   {
     "kind": "feature",
     "title": "系统管理迁入 Fire",
-    "desc": "系统总览读取同一 PG、Redis 和 Worker 的真实状态；后台任务使用持久 UUID 回执、权限检查与取消流程。"
+    "desc": "系统总览读取同一 PG、Redis 和 Worker 的真实状态；后台任务使用持久 UUID 回执、权限检查与取消流程，已有头像与业务接口保持原缓存约定。"
   },
   {
     "kind": "feature",
