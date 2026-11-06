@@ -6,7 +6,7 @@ interface Props {
   market: string;
   code: string;
   className?: string;
-  /** Keep identity visible in account reconciliation even when decorative badges are hidden. */
+  /** Keep identity visible in reconciliation and material catalogs when decorative badges are hidden. */
   alwaysVisible?: boolean;
 }
 

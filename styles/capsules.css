@@ -55,7 +55,7 @@ body:has([data-capsule-scope="non-home"]) .card-wander-seg-thumb { background:va
   body:has([data-capsule-scope="non-home"]) :is(:is(button,a):is(.fire-cap,.harness-add-provider,.harness-model-save,.sw-ctrl-btn,.btn,.btn-line,.btn-dark,.btn-brand,.btn-soft,.btn-ghost,.pg-btn,.dialog-btn,.sw-pill,.sc-detail-text-action,.sc-detail-primary-action,.settings-meta-primary,.totp-meta-primary,.settings-full-action,.stock-chart-range,.chart-compare-chip,.stock-chart-compare-legend-chip,.harness-toolbar-pill,.harness-model-button,.harness-setting-pill,.card-wander-pill,.card-wander-zoom-close,[class~="rounded-full"]),.settings-task-row > button,.pk-intro-actions > :is(button,a),.mail-settings-actions > :is(button,a),.totp-meta-backup-actions > :is(button,a),.brand-asset-actions > :is(button,a),.card-wander-modal-actions > :is(button,a),.card-wander-modes > :is(button,a),.card-wander-effects > :is(button,a),.card-library-mode > :is(button,a),.chart-settings-segmented > :is(button,a),.library-asset-card-actions > :is(button,a)):not([role="switch"],[role="checkbox"],.password-visibility-toggle,[data-capsule="off"]):active:not(:disabled),body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.workspace-dock-main > button,.workspace-menu-trigger):active { transform:none; }
 }
 
-/* Meta blue is the non-home primary/selected contract, including body-portalled details. */
+/* Primary actions use the shared palette tokens, including body-portalled details. */
 body:has([data-capsule-scope="non-home"]) :is(button,a):is(.btn,.mail-settings-save,.settings-meta-primary,.totp-meta-primary,.sc-detail-primary-action,.settings-full-action,.btn-dark,.btn-brand,.fire-cap-primary,.dialog-btn-neutral,.harness-add-provider,.harness-model-save,.harness-model-button,.pk-intro-actions > button:last-child,[class~="bg-ink"],[class~="bg-black"],[class~="bg-brand"]):not([role="switch"],[role="checkbox"],.password-visibility-toggle,[data-capsule="off"]) {
   background:var(--cap-primary)!important; border-color:var(--cap-primary)!important; color:var(--site-action-text,#fff)!important;
 }
@@ -125,3 +125,37 @@ body:has([data-capsule-scope="non-home"]) :is(button,a):is(.fire-cap-danger,.dia
     background:var(--dock-selected-fill); pointer-events:none;
   }
 }
+/* One source for palette-filled actions and labels. Neutral controls opt into secondary. */
+html:root { --capsule-fill:rgb(var(--site-accent,8 102 255)); --capsule-ink:#fff; --capsule-hover:color-mix(in srgb,var(--capsule-fill) 88%,#000); }
+html:root:is([data-accent="white"],[data-accent="apple-gray"]) { --capsule-fill:#62666c; --capsule-hover:#50545b; }
+html:root[data-palette] body:has([data-capsule-scope="non-home"]) { --cap-primary:var(--capsule-fill); --cap-selected:var(--capsule-fill); --cap-primary-hover:var(--capsule-hover); --site-action-text:#fff; --site-action-icon-filter:brightness(0) invert(1); }
+html:root[data-palette] body :is(.capsule-control,.capsule-badge) { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid transparent!important; border-radius:999px; font-size:12px; font-weight:500; line-height:1.3; text-decoration:none; }
+html:root[data-palette] body .capsule-control { min-height:34px; min-width:34px; padding:7px 12px; cursor:pointer; }
+html:root[data-palette] body .capsule-badge { padding:4px 10px; white-space:nowrap; }
+html:root[data-palette] body [data-capsule-variant="primary"] { background-color:var(--capsule-fill)!important; border-color:var(--capsule-fill)!important; color:var(--capsule-ink)!important; }
+html:root[data-palette] body .capsule-control[data-capsule-variant="primary"]:hover:not(:disabled) { background-color:var(--capsule-hover)!important; border-color:var(--capsule-hover)!important; }
+html:root[data-palette] body .capsule-control[data-selected="true"] { background-color:var(--capsule-hover)!important; border-color:var(--capsule-hover)!important; font-weight:650; }
+html:root[data-palette] body [data-capsule-variant="secondary"] { background:rgb(var(--site-surface))!important; color:rgb(var(--site-ink))!important; border-color:rgb(var(--site-edge))!important; }
+html:root[data-palette] body .capsule-control:disabled { opacity:.38!important; cursor:not-allowed; box-shadow:none!important; }
+html:root[data-palette] body :is(.btn-brand,.btn-dark,.seg-active,.settings-meta-primary,.sc-detail-primary-action):not([data-capsule="off"]) { background:var(--capsule-fill)!important; color:#fff!important; border-color:var(--capsule-fill)!important; }
+html:root[data-palette] body :is(.btn-brand,.btn-dark,.seg-active,.settings-meta-primary,.sc-detail-primary-action):not([data-capsule="off"]) :is(span,svg) { color:inherit!important; }
+html:root[data-palette] body .platform-child.fire-sidebar-item-active { background:var(--capsule-fill)!important; color:#fff!important; }
+@media(prefers-reduced-motion:no-preference) { .capsule-control { transition:background-color 120ms ease,opacity 120ms ease; } }
+html:root[data-palette] body [data-capsule-variant="primary"] :is(span,svg) { color:inherit!important; background-color:transparent!important; }
+html:root[data-palette] body:has([data-capsule-scope="non-home"]) :is(.pg-btn,.feed-primary):not([data-capsule="off"]) { background:var(--capsule-fill)!important; border-color:var(--capsule-fill)!important; color:#fff!important; }
+
+html:root[data-palette] body .capsule-control[data-capsule-variant="secondary"][data-selected="true"] { background:var(--capsule-fill)!important; color:var(--capsule-ink)!important; border-color:var(--capsule-fill)!important; }
+/* Compact icon actions share size, selection, hover and progress semantics. */
+html:root[data-palette] body .capsule-icon-control { display:inline-flex; flex:none; align-items:center; justify-content:center; width:36px; height:36px; padding:0; border:1px solid transparent; border-radius:11px; background:transparent; color:rgb(var(--site-muted)); cursor:pointer; }
+html:root[data-palette] body .capsule-icon-control:hover:not(:disabled) { background:rgb(var(--site-ink) / .07); color:rgb(var(--site-ink)); }
+html:root[data-palette] body .capsule-icon-control[aria-pressed="true"] { background:rgb(var(--site-ink) / .08); color:var(--capsule-fill); }
+html:root[data-palette] body .capsule-icon-control:disabled { opacity:.4; cursor:not-allowed; }
+@media(prefers-reduced-motion:no-preference) { .capsule-icon-control[data-busy="true"] > svg { animation:collection-spin 1s linear infinite; } }
+@keyframes collection-spin { to { transform:rotate(360deg); } }
+
+/* Navigation and content labels consume the same fill even in palette-specific skins. */
+html:root[data-palette] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active,.sw-nav-item.is-active,.platform-appearance.is-active) { background:var(--capsule-fill)!important; color:var(--capsule-ink)!important; border-color:transparent!important; }
+@media(hover:hover) { html:root[data-palette] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active,.sw-nav-item.is-active,.platform-appearance.is-active):hover { background:var(--capsule-hover)!important; color:var(--capsule-ink)!important; } }
+
+html:root[data-palette] body .capsule-icon-control[data-size="sm"] { width:32px; height:32px; border-radius:9px; }
+html:root[data-palette] body .capsule-icon-control[data-framed="true"] { border-color:rgb(var(--site-edge)); background:rgb(var(--site-surface)); }

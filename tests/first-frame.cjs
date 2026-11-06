@@ -183,14 +183,14 @@ try {
       const view=frameHarness('components/MarketCalendarView.tsx',{'@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true}});
       query=address.searchParams;
       let tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
-      tree.find(node=>node.type==='button'&&node.key==='HK').props.onClick();
+      tree.find(node=>(node.type==='button'||node.type?.render?.name==='Capsule')&&node.key==='HK').props.onClick();
       assert.equal(address.searchParams.get('market'),'HK');
       query=address.searchParams;tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
-      tree.find(node=>node.type==='button'&&node.key==='half_day').props.onClick();
+      tree.find(node=>(node.type==='button'||node.type?.render?.name==='Capsule')&&node.key==='half_day').props.onClick();
       assert.equal(address.searchParams.get('status'),'half_day');
       assert.equal(address.searchParams.get('market'),'HK');
       query=address.searchParams;tree=elements(view.render({initialNow:Date.UTC(2026,9,2)}));
-      tree.find(node=>node.type==='button'&&node.key==='half_day').props.onClick();
+      tree.find(node=>(node.type==='button'||node.type?.render?.name==='Capsule')&&node.key==='half_day').props.onClick();
       assert.equal(address.searchParams.has('status'),false);
     } finally {delete global.window;}
   });
@@ -219,14 +219,14 @@ try {
       const view=frameHarness('components/MarketCalendarView.tsx',{'@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true}});
       query=address.searchParams;
       let tree=elements(view.render());
-      tree.find(node=>node.type==='button'&&node.key==='closed').props.onClick();
+      tree.find(node=>(node.type==='button'||node.type?.render?.name==='Capsule')&&node.key==='closed').props.onClick();
       assert.equal(address.searchParams.get('status'),'closed');
       assert.equal(address.searchParams.get('market'),'HK');
       assert.equal(address.searchParams.get('month'),'2026-10');
       assert(!address.searchParams.has('day'));
       query=address.searchParams;tree=elements(view.render());
-      assert.equal(tree.find(node=>node.type==='button'&&node.key==='closed').props['aria-pressed'],true);
-      tree.find(node=>node.type==='button'&&node.key==='closed').props.onClick();
+      assert.equal(tree.find(node=>(node.type==='button'||node.type?.render?.name==='Capsule')&&node.key==='closed').props['aria-pressed'],true);
+      tree.find(node=>(node.type==='button'||node.type?.render?.name==='Capsule')&&node.key==='closed').props.onClick();
       assert(!address.searchParams.has('status'));
     } finally {delete global.window;}
   });
@@ -276,7 +276,7 @@ try {
       const view=frameHarness('components/MarketCalendarView.tsx',{'@/lib/workspacePanel':{useWorkspaceSearchParams:()=>query,useWorkspaceLocationGuard:()=>()=>true}});
       query=address.searchParams;
       let tree=elements(view.render());
-      tree.find(node=>node.type==='button'&&node.props.children==='全部').props.onClick();
+      tree.find(node=>(node.type==='button'||node.type?.render?.name==='Capsule')&&node.props.children==='全部').props.onClick();
       assert.equal(address.searchParams.get('market'),'ALL');
       assert.equal(address.searchParams.get('month'),'2026-12');
       assert(!address.searchParams.has('calYear')&&!address.searchParams.has('calDay'));
@@ -448,7 +448,7 @@ try {
     const html=render('components/views/AssetLibraryView.tsx',props,'tab=card&view=grid');
     assert(!html.includes('错误默认股票'));
     assert(html.includes('卡片'));
-    assert(html.includes('卡片素材加载中'));
+    assert(html.includes('正在加载素材'));
     assert(!html.includes('暂无卡片素材'));
     const filtered=render('components/views/AssetLibraryView.tsx',props,'market=HK&q=00700&sort=name&dir=asc&page=4');
     assert(filtered.includes('value="00700"'));
@@ -590,7 +590,7 @@ try {
     window.location.pathname='/library';assert.equal(guard(),false);
     window.location.pathname='/holdings';state.active=false;exports.useWorkspaceLocationGuard();assert.equal(guard(),false);
     for(const name of ['AssetLibrary','CardLibrary','Celebs','EarningsCalendar','Holdings','Quotes','Settings']) {
-      const source=fs.readFileSync(path.join(root,`components/views/${name}View.tsx`),'utf8');
+      const source=fs.readFileSync(path.join(root,`components/views/${name==='AssetLibrary'?'AssetCatalog':name}View.tsx`),'utf8');
       assert(source.includes('useWorkspaceLocationGuard'),name+' URL listeners must be workspace scoped');
     }
     assert(fs.readFileSync(path.join(root,'components/FxConverter.tsx'),'utf8').includes('readUrlState(start, searchParams)'));
@@ -630,6 +630,21 @@ try {
       const html=render('components/MarketCodeBadge.tsx',{market:'CN',code:'600019',alwaysVisible:true});
       assert(html.includes('SH 市场'));assert(html.includes('>SH<'));
     } finally { badges.applyMarketBadges(undefined,true); }
+  });
+  test('material stock badges reuse saved market-specific colors, labels and global visibility',()=>{
+    const badges=require(path.join(root,'lib/marketBadge.ts'));
+    try {
+      badges.applyMarketBadges({US:{label:'USA',bg:'#345678',fg:'#ffffff'},HK:{label:'HK',bg:'#784512',fg:'#ffffff'},SH:{label:'SH',bg:'#ac3456',fg:'#ffffff'},SZ:{label:'SZ',bg:'#127856',fg:'#ffffff'}},true);
+      for(const [market,code,label,bg] of [['US','AAPL','USA','#345678'],['HK','00700','HK','#784512'],['CN','600019','SH','#ac3456'],['CN','000001','SZ','#127856']]){
+        const html=render('components/MarketCodeBadge.tsx',{market,code,className:'material-stock-badge'});
+        assert(html.includes('background-color:'+bg));assert(html.includes('>'+label+'<'));
+      }
+      const source=fs.readFileSync(path.join(root,'components/views/AssetCatalogView.tsx'),'utf8');
+      assert(/<MarketCodeBadge\s+market=\{item.market\}\s+code=\{item.code\}/.test(source));
+      badges.applyMarketBadges(undefined,false);
+      assert.equal(render('components/MarketCodeBadge.tsx',{market:'US',code:'AAPL'}),'');
+      assert(render('components/MarketCodeBadge.tsx',{market:'US',code:'AAPL',alwaysVisible:true}).includes('US 市场'));
+    } finally {badges.applyMarketBadges(undefined,true);}
   });
   test('global navigation ends in quote pool and preserves its active entry before hydration',()=>{
     const html=render('components/GlobalSectionNav.tsx',{section:'quote-pool',onSelect() {}});

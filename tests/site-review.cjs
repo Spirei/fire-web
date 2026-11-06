@@ -683,7 +683,8 @@ function fontHeaderFixture(ext) {
     assert(viewport.includes('serverSnapshot = () => false'));
     assert(viewport.includes('useSyncExternalStore(subscribe, snapshot, serverSnapshot)'));
     assert(!navigation.includes('onFocus='), 'dialog autofocus must not preload unrelated pages');
-    assert(ticker.includes('visible ? <IndexTicker />'));
+    assert(ticker.includes('visible && !materialPage ? <IndexTicker />'));
+    assert(ticker.includes('usePathname() === "/library"'));
     assert(ticker.includes('observer.disconnect()'));
     assert(shell.includes('!document.hidden && ["holdings", "watchlist", "assets", "pnl", "fire"].includes(activeTab)'));
     assert(!shell.includes('if (activeTabRef.current === "activities") reloadActivities()'));
@@ -2650,7 +2651,7 @@ function fontHeaderFixture(ext) {
   });
   await test('model service navigation and provider icons stay explicit', () => {
     const source=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');
-    assert(source.includes('label: "模型服务"'));
+    assert(fs.readFileSync(path.join(root,'lib/settingsCatalog.ts'),'utf8').includes('label: "模型服务"'));
     assert(source.includes('function ModelProviderIcon'));
     assert(!source.includes('label: "翻译配置"'));
     assert(source.includes('const input = event.currentTarget'));
@@ -3533,10 +3534,10 @@ function fontHeaderFixture(ext) {
     assert(!settings.includes('/api/auth/totp/reveal'));
     assert(!settings.includes('添加其他验证器'));
     // 登录安全采用可读名称，搜索关键词仍兼容 2FA。
-    assert(settings.includes('label: "双重验证", groupLabel: "账号"'));
+    assert(fs.readFileSync(path.join(root,'lib/settingsCatalog.ts'),'utf8').includes('label: "双重验证", groupLabel: "账号"'));
     assert(!settings.includes('<SettingsHeader name="totp" title="二次验证" />'), '详情弹层不得重复渲染旧标题');
     assert(settings.includes('{sub === "totp" && ('));
-    assert(settings.includes('sub: "totp"'));
+    assert(fs.readFileSync(path.join(root,'lib/settingsCatalog.ts'),'utf8').includes('sub: "totp"'));
     assert(settings.includes('className="totp-meta-methods" aria-label="双重验证方式"'));
     assert(settings.includes('<b>身份验证应用</b>'));
     assert(settings.includes('<em>推荐</em>'));
@@ -3548,7 +3549,7 @@ function fontHeaderFixture(ext) {
     assert(settings.includes('url.searchParams.delete("anchor")'), '只有一个区块时不写重复的 anchor');
   });
   await test('settings details use one flat Meta-style navigation system', async () => {
-    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8');
+    const settings = fs.readFileSync(path.join(root, 'components/views/SettingsView.tsx'), 'utf8') + fs.readFileSync(path.join(root, 'lib/settingsCatalog.ts'), 'utf8');
     const header = fs.readFileSync(path.join(root, 'components/SettingsHeader.tsx'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
     for (const legacy of ['collapsible', 'defaultOpen', 'storageKey', 'settings-section-chevron', 'showAllStockGroups', 'showAllTicker', 'showAllHomeNav', 'showAllTabs', 'showAllMarketBadges']) {

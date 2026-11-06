@@ -3,8 +3,8 @@ html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
   --muse-bg:rgb(var(--site-bg));--muse-surface:rgb(var(--site-surface));--muse-dialog:rgb(var(--site-surface));--muse-field:rgb(var(--site-soft));--muse-side:#f3f4f5;
   --muse-ink:rgb(var(--site-ink));--muse-muted:rgb(var(--site-muted));--muse-faint:rgb(var(--site-muted) / .75);
   --muse-link:#0064d4;--muse-fill:#0000000d;--muse-edge:rgb(var(--site-edge));--muse-overlay:#0000001a;
-  --site-action:color-mix(in srgb,#0064d4 90%,#000);--site-action-text:#fff;
-  --site-action-hover:color-mix(in srgb,var(--site-action) 95%,#000);--site-action-icon-filter:brightness(0) invert(1);
+  --site-action:var(--capsule-fill);--site-action-text:#fff;
+  --site-action-hover:var(--capsule-hover);--site-action-icon-filter:brightness(0) invert(1);
   --cap-primary:var(--site-action);--cap-primary-hover:var(--site-action-hover);--cap-selected:var(--site-action);
   --cap-surface:var(--muse-fill);--cap-text:var(--muse-ink);--cap-border:transparent;--cap-hover:var(--muse-field);
   --material-fill:var(--muse-fill);--material-edge:var(--muse-edge);--material-blur:none;--material-shadow:none;
@@ -14,8 +14,8 @@ html:root.dark[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
   --muse-bg:rgb(var(--site-bg));--muse-surface:rgb(var(--site-surface));--muse-dialog:rgb(var(--site-surface));--muse-field:rgb(var(--site-bg));--muse-side:#1d1f22;
   --muse-ink:rgb(var(--site-ink));--muse-muted:rgb(var(--site-muted));--muse-faint:rgb(var(--site-muted) / .75);
   --muse-link:#1793ff;--muse-fill:#ffffff1f;--muse-edge:rgb(var(--site-edge));--muse-overlay:#00000066;
-  --site-action:#1793ff;--site-action-text:#fff;--site-action-icon-filter:brightness(0) invert(1);
-  --site-action-hover:color-mix(in srgb,#1793ff 90%,#fff);
+  --site-action:var(--capsule-fill);--site-action-text:#fff;--site-action-icon-filter:brightness(0) invert(1);
+  --site-action-hover:var(--capsule-hover);
 }
 /* Mail template picker sits on the bright Muse action blue. Label and chevron stay white together. */
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .mail-template-toolbar .btn,
@@ -32,9 +32,6 @@ html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.bg
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fire-sidebar{background:var(--muse-side)!important;color:var(--muse-ink);box-shadow:none!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fire-sidebar::after{box-shadow:inset 0 0 0 1px var(--muse-edge)!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item){color:var(--muse-ink);box-shadow:none!important}
-html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active,.sw-nav-item.is-active){background:var(--muse-fill)!important;border-color:transparent!important;color:var(--muse-ink)!important}
-html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active) .nav-custom-icon{filter:brightness(0);opacity:1}
-html:root.dark[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active) .nav-custom-icon{filter:brightness(0) invert(1)}
 /* Shared settings, portalled details and passkey panels previously had independent hard-coded palettes. */
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.sv-win-root,.sc-detail-layer,.pk-reference-modal){
   --sv-shell:var(--muse-bg);--sv-bg:var(--muse-bg);--sv-text:var(--muse-ink);--sv-text-2:var(--muse-ink);--sv-text-3:var(--muse-muted);--sv-text-4:var(--muse-faint);
@@ -63,9 +60,5 @@ html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fx
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .fx-converter-row:is(:hover,.is-active,.is-over){background:var(--muse-fill)!important}
 .muse-color-note{font-size:12px;line-height:20px;color:rgb(var(--site-muted));text-align:right}
 @media(hover:hover){
-  html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item):hover{background:var(--muse-fill)!important;color:var(--muse-ink)!important}
+  html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item,.sc-nav-link,.sw-nav-item):not(.fire-sidebar-item-active,.is-active,[aria-current="page"]):hover{background:var(--muse-fill)!important;color:var(--muse-ink)!important}
 }
-
-html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .platform-child.fire-sidebar-item-active{background:rgb(var(--site-accent))!important;color:#fff!important}
-
-html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.user-role-pill,.user-current-pill){background:rgb(var(--site-accent) / .14)!important;color:rgb(var(--site-accent))!important;border-color:rgb(var(--site-accent) / .2)!important}

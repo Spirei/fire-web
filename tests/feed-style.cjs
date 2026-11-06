@@ -18,9 +18,9 @@ for (const [name, light, night] of [
   assert.equal(lightValues['--feed-' + name], light, name + ' light');
   assert.equal(darkValues['--feed-' + name], night, name + ' dark');
 }
-assert.equal(lightValues['--feed-action'], 'color-mix(in srgb,#0064d4 90%,#000)');
-assert.equal(darkValues['--feed-action'], '#1793ff');
-assert.equal(darkValues['--feed-action-ink'], '#000');
+assert.equal(lightValues['--feed-action'], 'var(--capsule-fill)');
+assert.equal(darkValues['--feed-action'], 'var(--capsule-fill)');
+assert.equal(darkValues['--feed-action-ink'], '#fff');
 console.log('PASS measured Muse light/dark palette and exact primary-action mix');
 css.walkRules(rule => {
   if(rule.parent.type==='atrule'&&rule.parent.name==='keyframes'){assert.match(rule.parent.params,/^feed-/,'unscoped animation');return;}

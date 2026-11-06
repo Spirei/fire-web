@@ -2,14 +2,14 @@
 .feed-theme,.app-shell-main:has(.tab-panel:not([hidden]) .alcor-feed){
   --feed-page:#fcfcfc;--feed-panel:#fcfcfc;--feed-field:#f3f4f5;
   --feed-ink:#111112;--feed-secondary:#00040996;--feed-tertiary:#0007115e;
-  --feed-link:#0064d4;--feed-action:color-mix(in srgb,#0064d4 90%,#000);--feed-action-ink:#fff;
+  --feed-link:#0064d4;--feed-action:var(--capsule-fill);--feed-action-ink:#fff;
   --feed-fill:#0000000d;--feed-divider:#0000001a;--feed-overlay:#0000001a;
   --feed-close:#ffffffc2;--feed-reaction:#ff2b4e;--feed-danger:#c01f37;
 }
 .dark .feed-theme,.dark .app-shell-main:has(.tab-panel:not([hidden]) .alcor-feed){
   --feed-page:#181819;--feed-panel:#28292b;--feed-field:#181819;
   --feed-ink:#fff;--feed-secondary:#f2f7ff87;--feed-tertiary:#f1f6ff61;
-  --feed-link:#1793ff;--feed-action:#1793ff;--feed-action-ink:#000;
+  --feed-link:#1793ff;--feed-action:var(--capsule-fill);--feed-action-ink:#fff;
   --feed-fill:#ffffff1f;--feed-divider:#ffffff1f;--feed-overlay:#00000066;
   --feed-close:#383838cc;--feed-reaction:#ff7d89;--feed-danger:#fa4758;
 }

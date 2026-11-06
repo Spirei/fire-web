@@ -20,7 +20,7 @@ const registry = API_REQUEST_ROUTES.map(template => ({
 /** An allowlist prevents identifiers, filenames and secrets in arbitrary paths being logged. */
 export function requestRoute(raw: string): string | null {
   const pathname = raw.split("?")[0];
-  if (!pathname.startsWith("/api/") || /^\/api\/request-logs(?:\/|$)/.test(pathname) || pathname === "/api/health") return null;
+  if (!pathname.startsWith("/api/") || /^\/api\/request-logs(?:\/|$)/.test(pathname) || pathname === "/api/health" || pathname === "/api/auth/personal-activity") return null;
   return registry.find(route => route.pattern.test(pathname))?.template || "/api/[unmatched]";
 }
 export function requestSource(headers: Record<string, string | string[] | undefined>): RequestSource {
@@ -32,7 +32,7 @@ export function requestSource(headers: Record<string, string | string[] | undefi
   return "other";
 }
 
-type Pending = Omit<ApiRequestLog, "id">;
+type Pending = Omit<ApiRequestLog, "id"> & { userId?: string };
 type StoreState = {
   db?: Database.Database; queue: Pending[]; listeners: Set<() => void>;
   timer?: NodeJS.Timeout; lastPrune: number; lastError: number; retryAfter?: number;
@@ -61,7 +61,11 @@ function database() {
       count INTEGER NOT NULL, PRIMARY KEY(hour,path,method,source,status)
     ) WITHOUT ROWID;
     CREATE INDEX IF NOT EXISTS request_hours_day ON request_hours(day);
+    CREATE TABLE IF NOT EXISTS request_owner_daily(user_id TEXT NOT NULL,day TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(user_id,day)) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS request_owner_coverage(singleton INTEGER PRIMARY KEY CHECK(singleton=1),started_at INTEGER NOT NULL);
+
   `);
+  db.prepare("INSERT OR IGNORE INTO request_owner_coverage(singleton,started_at) VALUES(1,?)").run(Date.now());
   state.db = db; return db;
 }
 
@@ -80,6 +84,7 @@ export function flushRequestLogs() {
         insert.run(item);
         const day = requestDay(item.at);
         daily.run({ ...item, day });
+        if (item.userId) db.prepare("INSERT INTO request_owner_daily(user_id,day,count) VALUES (?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET count=count+1").run(item.userId,day);
         hourly.run({ ...item, hour: Math.floor(item.at / 3600_000) * 3600_000, day });
       }
       if (Date.now() - state.lastPrune > 600_000) {
@@ -156,4 +161,13 @@ export function readRequestSnapshot(filters: RequestFilters, now = Date.now()): 
     : db.prepare(`SELECT day AS key,SUM(count) AS count,SUM(CASE WHEN status>=400 THEN count ELSE 0 END) AS errors FROM request_daily WHERE ${where} GROUP BY day ORDER BY day`).all(...args);
   return { revision, today, summary: { ...aggregate, sources }, chart: chart as RequestSnapshot["chart"], chartUnit: hourlyChart ? "hour" : "day", endpoints, logs,
     pagination: { page, pageSize: 20, total, anchor }, heatmap, detailFrom: now - 7 * DAY };
+}
+
+/** Only authenticated owner-attributed observations participate; old global rows remain unassigned. */
+export function readPersonalActivity(userId:string,now=Date.now()){
+ flushRequestLogs();const db=database();const rows=db.prepare("SELECT day,count FROM request_owner_daily WHERE user_id=? ORDER BY day").all(userId) as {day:string;count:number}[];
+ const since=(db.prepare("SELECT started_at FROM request_owner_coverage WHERE singleton=1").get() as {started_at:number}).started_at;
+ let longest=0,run=0,last="";for(const row of rows){const gap=last?(Date.parse(row.day)-Date.parse(last))/86400000:0;run=gap===1?run+1:1;longest=Math.max(longest,run);last=row.day;}
+ const today=requestDay(now),yesterday=requestDay(now-86400000);const current=last===today||last===yesterday?run:0;
+ return {total:rows.reduce((n,r)=>n+r.count,0),activeDays:rows.length,longest,current,since,today,days:Object.fromEntries(rows.map(r=>[r.day,r.count]))};
 }

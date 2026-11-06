@@ -64,9 +64,10 @@ fi
 # 登录后页面巡检：逐页确认服务端渲染没有异常（曾出现 /trading 因 SSR 访问
 # localStorage 直接 500 而测试没发现的情况，这里把主要页面都跑一遍）
 echo "== 页面巡检（登录后） =="
-for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /attachments /users /library /cards /settings /asset-analysis /api-docs /api-requests /simple-app; do
+for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /users /library /cards /settings /asset-analysis /api-docs /api-requests /simple-app; do
   check "GET ${PAGE}（登录后）" 200 "$(code -b "$JAR_ACCOUNT" "$BASE$PAGE")"
 done
+check "Retired attachments page" 404 "$(code -b "$JAR_ACCOUNT" "$BASE/attachments")"
 DEPLOY_STATUS_EXPECT=404
 if [ "$ACCOUNT_ROLE" = admin ]; then DEPLOY_STATUS_EXPECT=200; fi
 check "部署状态页按账号权限访问" "$DEPLOY_STATUS_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/deploy-status")"

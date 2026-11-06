@@ -5,6 +5,7 @@ import { createContext, useContext } from "react";
 export const SettingsSectionSelection = createContext<{ active: string; anchors: readonly string[] } | null>(null);
 
 const ICON_PATHS: Record<string, React.ReactNode> = {
+  "profile-home": (<><circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="3"/><path d="M5.5 18.3a7 7 0 0 1 13 0"/></>),
   "quote-pool": (<><path d="M3 9 7 4h10l4 5v11H3Z"/><path d="M3 9h5l2 4h4l2-4h5M9 6h6"/></>),
   mail: (<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></>),
   social: (<><circle cx="6" cy="12" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="18" cy="17" r="2"/><path d="M8 11.2 16 8M8 12.8 16 16"/></>),

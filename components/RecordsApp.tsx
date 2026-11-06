@@ -1070,7 +1070,7 @@ export default function RecordsApp({
     <div translate="no" data-sidebar-collapsed={platformSidebarCollapsed ? "true" : "false"} data-tablet-device={tabletDevice ? "true" : "false"} data-tablet-sidebar-collapsed={tabletSidebarCollapsed === true ? "true" : "false"} data-tablet-sidebar-side={tabletSidebarSide === "right" ? "right" : "left"} className={`records-app notranslate flex items-start${activeTab === "settings" ? " is-settings" : ""}`}>
       {/* 桌面侧边导航 */}
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:flex ${activeTab === "settings" ? "is-settings" : ""}`}>
-        <PlatformSidebarHeader collapsed={platformSidebarCollapsed} onToggle={() => tabletDevice ? setTabletSidebarCollapsed(value => !value) : setSidebarCollapsed(value => !value)} items={sidebarTabs} onSelect={key => selectTab(key as TabKey)} onSettings={sub => navigateTo("settings", sub)} title={initialSettings.logoText || "Alcor"} />
+        <PlatformSidebarHeader collapsed={platformSidebarCollapsed} onToggle={() => tabletDevice ? setTabletSidebarCollapsed(value => !value) : setSidebarCollapsed(value => !value)} items={sidebarTabs} onSelect={key => selectTab(key as TabKey)} admin={user?.role === "admin"} ownerId={user?.id || "guest"} onSettings={(sub, anchor) => anchor ? activateWorkspace("settings", "link", `/settings?${new URLSearchParams({ sub, anchor })}`) : navigateTo("settings", sub)} title={initialSettings.logoText || "Alcor"} />
         <nav id="fire-desktop-nav" ref={desktopNavRef} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
           {fourDoorEnabled === true && fourDoorViewport && (
             <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
@@ -1212,10 +1212,10 @@ export default function RecordsApp({
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} initialData={initialCelebs} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
-          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
+          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView ownerId={user.id} initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
           {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
-            <SettingsWindow version={initialVersion}>{settingsPanel}</SettingsWindow>
+            settingsSub === "palette" || settingsSub === "profile-home" ? settingsPanel : <SettingsWindow version={initialVersion}>{settingsPanel}</SettingsWindow>
           )}
             </>
             );

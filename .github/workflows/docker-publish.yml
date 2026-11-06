@@ -74,6 +74,7 @@ jobs:
         run: |
           node -e "require('fs').writeFileSync(process.env.ALCOR_PG_TEST_CONFIG,JSON.stringify({host:'127.0.0.1',port:5432,database:'alcor_cutover_test_c1',user:'alcor_ci',password:process.env.CI_PG_PASSWORD,schema:'ledger',ssl:false}),{mode:0o600})"
           node tests/postgres-business.cjs
+          npm run test:search-history:pg
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build check

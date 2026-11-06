@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 import { useMemo, type CSSProperties } from "react";
 import AppSelect from "@/components/AppSelect";
 import MarketIcon from "@/components/MarketIcon";
@@ -99,8 +100,8 @@ export default function MarketCalendarView({ initialNow = Date.UTC(MARKET_CALEND
       <AppSelect ariaLabel="日历年份" value={year < currentYear ? `${year} 年` : String(year)} options={Array.from({ length: 2100 - currentYear + 1 }, (_, i) => ({ value: String(currentYear + i), label: `${currentYear + i} 年${currentYear + i === MARKET_CALENDAR_YEAR ? " · 已核实" : ""}` }))} onChange={value => update({ calYear: value, calDay: "" })} />
     </header>
     <div className="mc-legend">
-      <div className="mc-market-filters" role="group" aria-label="日历市场"><button type="button" aria-pressed={market === "ALL"} onClick={() => update({ market: "ALL", calDay: "" })}>全部</button>{MARKET_ORDER.map(option => <button type="button" key={option} aria-pressed={market === option} onClick={() => update({ market: option, calDay: "" })}><MarketIcon market={option} size={16} />{MARKET_NAMES[option]}</button>)}</div>
-      <div className="mc-status-filters" role="group" aria-label="日历状态筛选">{(["closed", "half_day", "unknown"] as const).map(option => <button type="button" key={option} aria-pressed={status === option} onClick={() => update({ calStatus: status === option ? "" : option, calDay: "" })}><i className={option === "closed" ? "mc-holiday-key" : option === "half_day" ? "mc-half-key" : "mc-unknown-key"} aria-hidden="true" />{FILTER_LABELS[option]}</button>)}</div>
+      <div className="mc-market-filters" role="group" aria-label="日历市场"><Capsule variant="secondary" type="button" aria-pressed={market === "ALL"} selected={market === "ALL"} onClick={() => update({ market: "ALL", calDay: "" })}>全部</Capsule>{MARKET_ORDER.map(option => <Capsule variant="secondary" type="button" key={option} aria-pressed={market === option} selected={market === option} onClick={() => update({ market: option, calDay: "" })}><MarketIcon market={option} size={16} />{MARKET_NAMES[option]}</Capsule>)}</div>
+      <div className="mc-status-filters" role="group" aria-label="日历状态筛选">{(["closed", "half_day", "unknown"] as const).map(option => <Capsule variant="secondary" type="button" key={option} aria-pressed={status === option} selected={status === option} onClick={() => update({ calStatus: status === option ? "" : option, calDay: "" })}><i className={option === "closed" ? "mc-holiday-key" : option === "half_day" ? "mc-half-key" : "mc-unknown-key"} aria-hidden="true" />{FILTER_LABELS[option]}</Capsule>)}</div>
     </div>
     {status !== "all" && <p className="mc-filter-result text-xs text-muted" role="status">{MARKET_NAMES[market]} · {year} 年 {month} 月{FILTER_LABELS[status]} {matchingDays.length} 天</p>}
     {!verified && <div className="mc-coverage is-unknown" role="status"><strong>{year} 年安排未确认</strong><span>当前已核实 {MARKET_CALENDAR_YEAR} 年。该年份全部日期保持未知，不能据工作日判定开市。</span></div>}
