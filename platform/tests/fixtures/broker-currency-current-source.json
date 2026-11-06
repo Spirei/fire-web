@@ -1,0 +1,18 @@
+{
+  "scope": "Current App account DTO and display currency compatibility, not installed-App acceptance",
+  "source_sha256": {
+    "StockLog/Models/AlcorBrokerAccount.swift": "e416ff6a198de845ce43c8deadbfe8bbea9893ea76cb50cbbe62cc1badfd9cf5",
+    "StockLog/Models/PortfolioCurrency.swift": "1c78cc3780452f91e18043a94768878ad2506aa9ddd20b283858c9c71b3bdb54"
+  },
+  "extracts": {
+    "StockLog/Models/AlcorBrokerAccount.swift": [
+      "struct AlcorBrokerAccount:",
+      "/// Validated display inputs only;"
+    ],
+    "StockLog/Models/PortfolioCurrency.swift": [
+      "enum PortfolioCurrency:",
+      "/// Display choices and order never change"
+    ]
+  },
+  "delta": "Frozen old Web account currency list has fourteen entries and rejects CHF. The current account adapters explicitly add CHF to the existing metadata contract; original supported currencies, identity, permission and immutable receipts remain unchanged."
+}

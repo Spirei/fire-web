@@ -1,0 +1,10 @@
+const fs=require('node:fs');const ts=require('typescript');const {DatabaseSync}=require('node:sqlite');
+const input=JSON.parse(fs.readFileSync(0,'utf8'));const db=new DatabaseSync(':memory:');
+db.exec('CREATE TABLE assets(id TEXT,type TEXT,market TEXT,code TEXT,name TEXT,url TEXT,board TEXT,market_cap REAL)');
+for(const row of input.rows)db.prepare('INSERT INTO assets VALUES(?,?,?,?,?,?,?,?)').run(row.id,row.type,row.market,row.code,row.name,'','',null);
+const source=fs.readFileSync(process.argv[2]+'/lib/attachments.ts','utf8');const ast=ts.createSourceFile('attachments.ts',source,ts.ScriptTarget.Latest,true);
+const selected=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&['queryLibraryAssets','listLibraryAssets'].includes(n.name?.text)).map(n=>n.getText(ast).replace(/^export /,''));
+if(selected.length!==2)throw Error('actual source functions missing');
+const getDb=()=>db;
+eval(ts.transpileModule(selected.join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText);
+process.stdout.write(JSON.stringify(input.queries.map(q=>queryLibraryAssets(q))));

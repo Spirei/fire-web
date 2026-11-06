@@ -1,0 +1,2153 @@
+{
+  "sourceSha256": "5836f0343d3efc31a98d107b5eb9efb05fbc2081c8b4531281c977380ee1e46a",
+  "ruleVersion": "2026-10-20.1",
+  "vectors": [
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2023-08-27",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "historical_rate_not_supported",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2023-08-28",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "historical_rate_not_supported",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2025-05-14",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2025-12-31",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-01-01",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-04-03",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-04-05",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-09-30",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-10-01",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-10-20",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.3,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-10-21",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "rate_period_unconfirmed",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2023-08-27",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "historical_rate_not_supported",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2023-08-28",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "historical_rate_not_supported",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2025-05-14",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.32,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0,
+            "rate": 0,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2025-05-14",
+            "effectiveThrough": "2026-04-03",
+            "source": "https://www.sec.gov/files/rules/other/2025/34-102779.pdf"
+          },
+          {
+            "kind": "taf",
+            "amount": 0.02,
+            "rate": 0.000166,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2024-01-01",
+            "effectiveThrough": "2025-12-31",
+            "source": "https://www.finra.org/sites/default/files/2024-11/sr-finra-2024-019.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2025-12-31",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.32,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0,
+            "rate": 0,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2025-05-14",
+            "effectiveThrough": "2026-04-03",
+            "source": "https://www.sec.gov/files/rules/other/2025/34-102779.pdf"
+          },
+          {
+            "kind": "taf",
+            "amount": 0.02,
+            "rate": 0.000166,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2024-01-01",
+            "effectiveThrough": "2025-12-31",
+            "source": "https://www.finra.org/sites/default/files/2024-11/sr-finra-2024-019.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-01-01",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.32,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0,
+            "rate": 0,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2025-05-14",
+            "effectiveThrough": "2026-04-03",
+            "source": "https://www.sec.gov/files/rules/other/2025/34-102779.pdf"
+          },
+          {
+            "kind": "taf",
+            "amount": 0.02,
+            "rate": 0.000195,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2026-01-01",
+            "effectiveThrough": "2026-09-30",
+            "source": "https://www.finra.org/sites/default/files/2024-11/sr-finra-2024-019.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-04-03",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "sec_charge_date_requires_statement",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-04-05",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.34,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0.02,
+            "rate": 0.0000206,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2026-04-04",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2"
+          },
+          {
+            "kind": "taf",
+            "amount": 0.02,
+            "rate": 0.000195,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2026-01-01",
+            "effectiveThrough": "2026-09-30",
+            "source": "https://www.finra.org/sites/default/files/2024-11/sr-finra-2024-019.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-09-30",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.34,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0.02,
+            "rate": 0.0000206,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2026-04-04",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2"
+          },
+          {
+            "kind": "taf",
+            "amount": 0.02,
+            "rate": 0.000195,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2026-01-01",
+            "effectiveThrough": "2026-09-30",
+            "source": "https://www.finra.org/sites/default/files/2024-11/sr-finra-2024-019.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-10-01",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.32,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0.02,
+            "rate": 0.0000206,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2026-04-04",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2"
+          },
+          {
+            "kind": "taf",
+            "amount": 0,
+            "rate": 0,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2026-10-01",
+            "effectiveThrough": "2026-12-31",
+            "source": "https://www.sec.gov/files/rules/sro/finra/2026/34-106409.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-10-20",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.32,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0.3,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0.02,
+            "rate": 0.0000206,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2026-04-04",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2"
+          },
+          {
+            "kind": "taf",
+            "amount": 0,
+            "rate": 0,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2026-10-01",
+            "effectiveThrough": "2026-12-31",
+            "source": "https://www.sec.gov/files/rules/sro/finra/2026/34-106409.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-10-21",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "rate_period_unconfirmed",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2023-08-27",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2023-08-28",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2025-05-14",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2025-12-31",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-01-01",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-04-03",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-04-05",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-09-30",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-10-01",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-10-20",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-10-21",
+        "side": "buy",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": "rate_period_unconfirmed",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2023-08-27",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 6.01,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 1,
+            "rate": 0.001,
+            "basis": "sell_gross",
+            "effectiveFrom": "2008-09-19",
+            "effectiveThrough": "2023-08-27",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2023-08-28",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2025-05-14",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2025-12-31",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-01-01",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-04-03",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-04-05",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-09-30",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-10-01",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-10-20",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 5.51,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 5,
+            "rate": 0.0001154,
+            "basis": "gross_min_5_includes_exchange_regulatory_fees",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-21",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "transfer",
+            "amount": 0.01,
+            "rate": 0.00001,
+            "basis": "gross_both_sides",
+            "effectiveFrom": "2022-04-29",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://jrj.sh.gov.cn/SCDT197/20220429/f715759a877b4158812eb6df70ccb49e.html"
+          },
+          {
+            "kind": "stamp",
+            "amount": 0.5,
+            "rate": 0.0005,
+            "basis": "sell_gross",
+            "effectiveFrom": "2023-08-28",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://fgk.chinatax.gov.cn/zcfgk/c102416/c5211343/content.html"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "huatai",
+        "when": "2026-10-21",
+        "side": "sell",
+        "quantity": "100",
+        "price": "10",
+        "kind": "cn_a_equity",
+        "raw_plan": {
+          "effectiveFrom": "2022-04-29",
+          "effectiveThrough": "2026-10-21",
+          "confirmed": true,
+          "commissionIncludesExchangeFees": true
+        }
+      },
+      "expected": {
+        "reason": "rate_period_unconfirmed",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-09-30",
+        "side": "sell",
+        "quantity": "0.5",
+        "price": "10",
+        "kind": "us_etf",
+        "raw_plan": {
+          "effectiveFrom": "2025-01-01",
+          "effectiveThrough": "2026-10-20",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "fractional_order_requires_statement",
+        "fees": null,
+        "components": []
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-09-30",
+        "side": "sell",
+        "quantity": "100",
+        "price": "0.00001",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2025-01-01",
+          "effectiveThrough": "2026-10-20",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "low_price_taf_requires_statement",
+        "fees": null,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0.01,
+            "rate": 0.0000206,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2026-04-04",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-09-30",
+        "side": "sell",
+        "quantity": "100000",
+        "price": "20",
+        "kind": "us_etf",
+        "raw_plan": {
+          "effectiveFrom": "2025-01-01",
+          "effectiveThrough": "2026-10-20",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 850.99,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 500,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 300,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 41.2,
+            "rate": 0.0000206,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2026-04-04",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2"
+          },
+          {
+            "kind": "taf",
+            "amount": 9.79,
+            "rate": 0.000195,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2026-01-01",
+            "effectiveThrough": "2026-09-30",
+            "source": "https://www.finra.org/sites/default/files/2024-11/sr-finra-2024-019.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-09-30",
+        "side": "sell",
+        "quantity": "1",
+        "price": "0.01",
+        "kind": "us_domestic_equity",
+        "raw_plan": {
+          "effectiveFrom": "2025-01-01",
+          "effectiveThrough": "2026-10-20",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": null,
+        "fees": 1.02,
+        "components": [
+          {
+            "kind": "commission",
+            "amount": 0,
+            "rate": 0,
+            "basis": "waived",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "platform",
+            "amount": 1,
+            "rate": 0.005,
+            "basis": "per_share_min_1_cap_0.99pct_minimum_wins",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "clearing",
+            "amount": 0,
+            "rate": 0.003,
+            "basis": "per_share_cap_7pct_gross",
+            "effectiveFrom": "2025-01-01",
+            "effectiveThrough": "2026-10-20",
+            "source": "owner_confirmed_plan"
+          },
+          {
+            "kind": "sec",
+            "amount": 0.01,
+            "rate": 0.0000206,
+            "basis": "sell_gross_owner_confirmed_cent_rounding",
+            "effectiveFrom": "2026-04-04",
+            "effectiveThrough": "2026-10-20",
+            "source": "https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2"
+          },
+          {
+            "kind": "taf",
+            "amount": 0.01,
+            "rate": 0.000195,
+            "basis": "sell_shares_owner_confirmed_min_0.01_cent_rounding",
+            "effectiveFrom": "2026-01-01",
+            "effectiveThrough": "2026-09-30",
+            "source": "https://www.finra.org/sites/default/files/2024-11/sr-finra-2024-019.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "input": {
+        "provider": "longbridge",
+        "when": "2026-09-30",
+        "side": "sell",
+        "quantity": "100",
+        "price": "1",
+        "kind": "unknown",
+        "raw_plan": {
+          "effectiveFrom": "2025-01-01",
+          "effectiveThrough": "2026-10-20",
+          "confirmed": true
+        }
+      },
+      "expected": {
+        "reason": "instrument_or_adr_unconfirmed",
+        "fees": null,
+        "components": []
+      }
+    }
+  ]
+}

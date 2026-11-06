@@ -1,0 +1,6 @@
+{
+  "source": "fire-web/lib/orders.ts",
+  "sourceSha256": "f4437b796d0900e302895d9d11ee7a36071ad4d2cbc01418fbec73b2fe068388",
+  "fixtureSha256": "d4f9a3b24473b152fba9f80fd0c398c1ed064785ac31265eecea296b74725b36",
+  "transformation": "Original shouldFill body unchanged; remove TypeScript parameter/return annotations and export for independent Node execution."
+}

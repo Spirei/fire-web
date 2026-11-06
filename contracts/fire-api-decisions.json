@@ -1,0 +1,365 @@
+{
+  "baseline": 45,
+  "items": [
+    {
+      "method": "GET",
+      "path": "/api/app-packages",
+      "owner": "platform",
+      "decision": "migrated",
+      "reason": "PG登记与原请求回执、私有不可变原件、完整联合备份",
+      "implementation": "fire_app_packages.py"
+    },
+    {
+      "method": "POST",
+      "path": "/api/app-packages",
+      "owner": "platform",
+      "decision": "migrated",
+      "reason": "PG登记与原请求回执、私有不可变原件、完整联合备份",
+      "implementation": "fire_app_packages.py"
+    },
+    {
+      "method": "GET",
+      "path": "/api/app-packages/download/[id]",
+      "owner": "platform",
+      "decision": "migrated",
+      "reason": "PG登记与原请求回执、私有不可变原件、完整联合备份",
+      "implementation": "fire_app_packages.py"
+    },
+    {
+      "method": "POST",
+      "path": "/api/celebs/avatar",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "GET",
+      "path": "/api/celebs/manage",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "GET",
+      "path": "/api/celebs/returns",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/celebs/stock-icon",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-status/github/callback",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migration-export",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "POST",
+      "path": "/api/migration-export",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migration-export/[id]",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migration-export/[id]/download",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "GET",
+      "path": "/api/simple-app/dev-version",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "移除每700毫秒的开发专用轮询，采用框架开发更新",
+      "replacement": "Next.js Fast Refresh"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-change/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-change/request",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-change/verify",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-verification/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-verification/request",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/passkeys/register-options",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/passkeys/register-verify",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-change/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-change/verify",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/request",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/verify",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/backup-codes",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/disable",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/setup",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-change/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-change/request",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-change/verify",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-verification/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-verification/request",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/passkeys/register-options",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/passkeys/register-verify",
+      "owner": "platform",
+      "decision": "retired",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-change/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-change/verify",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-reset/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-reset/request",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-reset/verify",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/backup-codes",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/confirm",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/disable",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/setup",
+      "owner": "platform",
+      "decision": "keep",
+      "reason": "实际已登记的动态子路由或隐藏回调；纠正原统计漏识别",
+      "implementation": "existing-native-route"
+    }
+  ]
+}

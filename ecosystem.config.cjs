@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: 'fire',
+    name: process.env.FIRE_PM2_NAME || 'fire',
     cwd: __dirname,
     script: 'npm',
     args: 'run dev',

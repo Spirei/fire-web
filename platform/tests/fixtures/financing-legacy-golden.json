@@ -1,0 +1,158 @@
+{
+  "source": "exact frozen pure original functions; no DB/config/network imports",
+  "sha256": {
+    "financingPolicy.ts": "0e37d31a716359225022e61bd6ad2f2647d6cb08a2f9957661736e5ba64b4db7",
+    "recordsContract.ts": "82ee9640b71ec6b7bfe0e176aae73a0d898ce75a3e11f3f6944c632ff6effa17"
+  },
+  "policies": [
+    {
+      "currency": "USD",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "EUR",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "HKD",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "MOP",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "CNY",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "JPY",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "KRW",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "SGD",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "GBP",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "AUD",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "CAD",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "TWD",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "CHF",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "INR",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    },
+    {
+      "currency": "BRL",
+      "limit": 100,
+      "initialMargin": 20,
+      "maintenanceMargin": 10
+    }
+  ],
+  "debts": [
+    {
+      "currency": "USD",
+      "balances": {
+        "USD": -100,
+        "JPY": -15000,
+        "GBP": 100
+      },
+      "rates": {
+        "USD": 1,
+        "JPY": 150
+      },
+      "value": 200
+    },
+    {
+      "currency": "JPY",
+      "balances": {
+        "USD": -100,
+        "JPY": -15000
+      },
+      "rates": {
+        "USD": 1,
+        "JPY": 150
+      },
+      "value": 30000
+    },
+    {
+      "currency": "CHF",
+      "balances": {
+        "USD": -100,
+        "JPY": -15000
+      },
+      "rates": {
+        "USD": 1,
+        "JPY": 150,
+        "CHF": 0.9
+      },
+      "value": 180
+    },
+    {
+      "currency": "CHF",
+      "balances": {
+        "USD": 100,
+        "JPY": 100
+      },
+      "rates": {
+        "USD": 1
+      },
+      "value": 0
+    }
+  ],
+  "missing": {
+    "message": "缺少真实汇率，无法核对融资额度",
+    "status": 409
+  },
+  "invalidMargin": {
+    "message": "请核对保证金金额",
+    "status": 400
+  }
+}

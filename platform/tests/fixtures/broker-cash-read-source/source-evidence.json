@@ -1,0 +1,12 @@
+{
+  "source": "legacy Web cash DTO projector; ledger facts explicitly supplied, not a second financial implementation",
+  "original_sha256": {
+    "brokerCash.ts": "4792bbedb92b8dd2de77d1140b5472f6a7ba64ee40975edf07395aa0ef277ec5",
+    "brokerCashRead.ts": "01bca39983663c4eb2c286c0bbdc3a5f811ce2740c8db64dde1ea715936acbfa"
+  },
+  "extracted_sha256": {
+    "cashSnapshot.ts": "a22e6960bd6add715436790728b531192405979b6d0946b8c69149008caa23c5",
+    "withdrawalCapacity.ts": "534870360b1fb8718fcf3c0f18454c468affb0f6dd24d37b0fac894b8cb3a695",
+    "cashEntries.ts": "776758ea7044b195ad3dff7a072c5a98f9c2ea0f7ed20358b9fbc9bdf28de1f6"
+  }
+}

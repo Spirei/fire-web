@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "lib/countryCatalog.ts",
+  "sourceSha256": "abeb0b134d960bb0856385837f04e7c05119f8443a6df1725a00a6ccd440bcf2",
+  "route": "app/api/countries/route.ts",
+  "routeSha256": "1e20622377e8d891ecf15f643b32a836434c50dd5e361f1093bf770dd9f7e687",
+  "node": "22.23.3",
+  "icu": "78.3",
+  "cldr": "48.0",
+  "dataSha256": "e2d85f9e6b50f33da13f0eb381156d3c12ab7e34d06295b1d3960e5837349f80",
+  "countryCount": 250
+}

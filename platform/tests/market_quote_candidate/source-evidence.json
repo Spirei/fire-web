@@ -1,0 +1,37 @@
+{
+  "source_sha256": {
+    "app/api/quotes/route.ts": "dc8fbab01ab2e492f17bc40c005e23d5bd2f39b5d2ce983357bfac69762186c0",
+    "app/api/v1/quotes/route.ts": "70d615796050664a9b619d2868e7d585efcade4b78a40eaae00af91957f56286",
+    "app/api/v2/quotes/route.ts": "10f96c686ca852ee4d7264b7f00450d8c32f03daf1c7df84859d5219b414d88f",
+    "lib/marketResponse.ts": "b116802c76d322a54d2f1577c42841cbb022fe6f713576f13ae1f94502b96ea7",
+    "lib/appApiV2.ts": "f8c412125604f46b8de52943987a633e26bc7d9ec83bdfaa9bbd9f26880ade40",
+    "lib/appApiV2Policy.ts": "167d060f4d5fd66e1033afa2cf30509fad8dcac706cece674af8821479efa881",
+    "lib/api.ts": "c331cf264a31b1a4bdb65b60b6f28dc8ecd7812a592490b5e10f89e13ada71d6",
+    "lib/store.ts": "9b1185be6d7d3cf89000e0560ca7192e087cad11f95664ce1071db9c52b504c2",
+    "lib/quotes.ts": "721eb5495ddfeae30ecf9022d28fcac03d706cc13a882c063f3586d153971310",
+    "lib/marketCode.ts": "1d4cd1553afc0e8dc4f47c98b9ceb4c7b966ff6c1895a301cbea6ecb3959bf1c"
+  },
+  "ios_sha256": {
+    "StockLog/Models/Models.swift": "28dcac620235b617085442428abfa34d6f31989cd6e55644c40c1b720c451ef9"
+  },
+  "old_methods": [
+    {
+      "id": "45ce681c7d408502",
+      "method": "POST",
+      "path": "/api/quotes"
+    },
+    {
+      "id": "35f329bea08f2776",
+      "method": "POST",
+      "path": "/api/v1/quotes"
+    },
+    {
+      "id": "3f94a0547a261860",
+      "method": "POST",
+      "path": "/api/v2/quotes"
+    }
+  ],
+  "public_nonempty_policy": "pending_approved_public_source_not_owner_data",
+  "implicit_demand_on_quote_read": false,
+  "new_provider": false
+}

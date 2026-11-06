@@ -1,127 +1,73 @@
 import fs from "node:fs";
 import path from "node:path";
-
-const root = process.cwd();
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const ghcrCompose = read("docker-compose.ghcr.yml");
-const dockerfile = read("Dockerfile");
-const entrypoint = read("scripts/entrypoint.sh");
-const uploadRoute = read("app/uploads/[...path]/route.ts");
-const assetsModule = read("lib/assets.ts");
-const dockerignore = read(".dockerignore");
-
+const read = (file) => fs.readFileSync(path.join(process.cwd(), file), "utf8");
 const failures = [];
-function requireText(label, text, needles) {
-  for (const needle of needles) {
-    if (!text.includes(needle)) failures.push(`${label} 缺少：${needle}`);
-  }
+function requireText(file, needles) {
+  const text = read(file);
+  for (const needle of needles)
+    if (!text.includes(needle)) failures.push(`${file}: 缺少 ${needle}`);
+  return text;
 }
-
-const sharedCompose = [
+const compose = requireText("docker-compose.ghcr.yml", [
   '"${HOST_PORT:-3000}:3000"',
-  "NODE_ENV: production",
-  "HOSTNAME: 0.0.0.0",
-  "PORT: 3000",
-  "path: .env",
-  "${DATA_DIR:-./data}:/app/data",
+  "FIRE_PYTHON: /platform/.venv/bin/python",
+  "${FIRE_PRIVATE_DIR:?请填写私有运行目录}:/private",
   "${UPLOADS_DIR:-./uploads}:/app/public/uploads",
-  // 自定义素材仍由运行时挂载提供，FIRE 鱼素材独立随镜像提供。
   "${IMAGES_DIR:-./images}:/app/public/images:ro",
   "${FONTS_DIR:-./fonts}:/app/public/fonts:ro",
   "${ICONS_DIR:-./icons}:/app/public/icons:ro",
   "${SHARE_DIR:-./share}:/app/public/share:ro",
-  "http://127.0.0.1:3000/api/settings/public"
-];
-requireText("GHCR Compose", ghcrCompose, sharedCompose);
-requireText("GHCR 受限容器更新", ghcrCompose, [
   "containrrr/watchtower:1.7.1",
-  "WATCHTOWER_HTTP_API_UPDATE: \"true\"",
   "WATCHTOWER_HTTP_API_TOKEN:",
-  "WATCHTOWER_LABEL_ENABLE: \"true\"",
   "WATCHTOWER_SCOPE: fire",
-  "DOCKER_CONFIG: /config",
-  "com.centurylinklabs.watchtower.enable: \"true\"",
-  "com.centurylinklabs.watchtower.scope: \"fire\"",
-  "/var/run/docker.sock:/var/run/docker.sock",
-  "${DOCKER_CONFIG_DIR:-/root/.docker}:/config:ro"
+  "${DOCKER_CONFIG_DIR:-/root/.docker}:/config:ro",
+  "/health/ready",
+  "external: true",
+  "${FIRE_NETWORK:?请填写数据库所在网络}",
 ]);
-
-const updaterBlock = ghcrCompose.split("  fire-updater:")[1] || "";
-if (/^\s{4}ports:/m.test(updaterBlock)) failures.push("Watchtower 不得映射宿主机端口");
-
-requireText("生产镜像", dockerfile, [
-  "COPY --from=build --chown=node:node /app/docs/api-spec.md /app/docs/api-spec-v2.md ./docs/",
-  "COPY --from=build /app/public/uploads /app/resource-default",
-  "/app/public-cache-default/asset-quotes-cache.json",
-  "/app/public-cache-default/celebs-cache.json",
-  "/app/public-cache-default/earnings-cache/",
-  "python3 python3-venv",
-  "pip install --no-cache-dir -r /app/scripts/requirements-futu.txt",
-  'ENV PATH="/opt/futu-venv/bin:${PATH}"',
-  'ENTRYPOINT ["sh", "/app/entrypoint.sh"]'
+if (
+  /^\s{4}ports:/m.test(
+    compose.split("  fire-updater:")[1]?.split("\nnetworks:")[0] || "",
+  )
+)
+  failures.push("更新器不得映射公开端口");
+if (/\/volume\d+\//.test(compose)) failures.push("部署配置含个人绝对路径");
+requireText("Dockerfile", [
+  "COPY platform/pyproject.toml platform/uv.lock",
+  "uv sync --frozen --no-dev --no-editable --extra futu",
+  "postgresql-client-$PG_MAJOR",
+  "COPY --from=web /app/public/uploads resource-default",
+  "RUN test -s public/fire-assets/clownfish-family.png",
+  "COPY platform/migrations platform/migrations",
+  "USER 1000:1000",
+  "/health/ready",
+  'CMD ["npm", "start"]',
 ]);
-const fishFile = "public/fire-assets/clownfish-family.png";
-const fishPath = path.join(root, fishFile);
-if (!fs.existsSync(fishPath) || fs.readFileSync(fishPath).subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
-  failures.push(`FIRE 必需鱼素材缺失或不是 PNG：${fishFile}`);
-}
-requireText("FIRE 素材构建检查", dockerfile, [`RUN test -s ${fishFile}`]);
-requireText("FIRE 独立素材路径", read("components/views/FireView.tsx"), ["/fire-assets/clownfish-family.png"]);
-// System illustrations must not depend on optional deployer-owned media volumes.
-requireText("安全插图系统兜底", read("next.config.mjs"), [
-  'source: "/icons/security-check.svg"', 'destination: "/api/system-assets/security-check"'
+requireText("scripts/fire.mjs", [
+  '"scripts/platform.py"',
+  '"serve"',
+  '"worker"',
+  "FIRE_PLATFORM_SOCKET: socket",
+  "fs.chmodSync(runtime, 0o700)",
+  '"SIGTERM"',
 ]);
-requireText("安全插图内置响应", read("app/api/system-assets/security-check/route.ts"), [
-  'import { SECURITY_CHECK_SVG }', '"image/svg+xml; charset=utf-8"', '"public, max-age=0, must-revalidate"'
+requireText(".github/workflows/docker-publish.yml", [
+  'cron: "7 16 * * *"',
+  "npm run audit:deploy",
 ]);
-requireText("安全检查内置矢量", read("components/SecurityCheck.tsx"), ['<svg className="security-check-illustration"']);
-requireText("启动脚本", entrypoint, [
-  // 校验的是「镜像内路径必须被启动脚本引用」这一不变式；路径已改为带默认值的变量，
-  // 因此断言路径本身，不再断言具体某行 shell 写法。
-  "/app/resource-default",
-  "/app/public/uploads",
-  "/app/public-cache-default",
-  "seed-trading-square.mjs",
-  // 部署素材缺失必须有一条日志线索，不能只靠肉眼发现「图不见了」。
-  "缺少部署素材",
-  "docs/synology-deploy.md"
+requireText(".dockerignore", [
+  "platform/.venv",
+  "platform/.local",
+  "**/.env",
+  "public/uploads/**",
 ]);
-requireText("Docker 构建上下文", dockerignore, [
-  "!data/asset-quotes-cache.json",
-  "!data/celebs-cache.json",
-  "!data/earnings-cache/*.json"
-]);
-requireText("上传资源路由", uploadRoute, ["resource-default", "defaultAbs", "fs.createReadStream(source)"]);
-requireText("素材播种", assetsModule, ["resource-default", "ensureBrokerAssets", "ensureCategoryAssets"]);
-
-requireText("部署者自行提供素材", dockerignore, ["public/uploads/**", "!public/uploads/.gitkeep"]);
-requireText("通行密钥系统插图打包", dockerignore, ["!public/uploads/feature/passkey/passkey.png"]);
-requireText("通行密钥系统副本优先", read("app/api/system-assets/passkey/route.ts"), ['["resource-default", "public/uploads"]', '"no-store"']);
-requireText("非 root 运行", dockerfile, ["USER node", "chmod -R 750"]);
-
-for (const [label, file] of [
-  ["交易广场段永平缓存", "data/duan-posts.json"],
-  ["交易广场特朗普缓存", "data/trump-posts.json"],
-  ["全球市值排行缓存", "data/top-stocks-cache.json"],
-  ["加密货币与贵金属行情缓存", "data/asset-quotes-cache.json"],
-  ["名人持仓缓存", "data/celebs-cache.json"]
-]) {
-  const full = path.join(root, file);
-  if (!fs.existsSync(full) || fs.statSync(full).size < 3) failures.push(`${label}缺失或为空：${file}`);
-}
-const earningsDir = path.join(root, "data/earnings-cache");
-const earningsCount = fs.existsSync(earningsDir)
-  ? fs.readdirSync(earningsDir).filter((file) => file.endsWith(".json")).length
-  : 0;
-if (earningsCount === 0) failures.push("财报日历公开缓存缺失");
-
-if (/\/volume\d+\//.test(ghcrCompose)) failures.push("GHCR Compose 含群晖个人绝对路径");
-if (/\b(?:16000|3001):3000\b/.test(ghcrCompose)) failures.push("GHCR Compose 含写死的宿主机端口");
-
+const fish = fs.readFileSync("public/fire-assets/clownfish-family.png");
+if (fish.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a")
+  failures.push("Fire 内置鱼素材无效");
 if (failures.length) {
-  console.error(`部署一致性审计失败（${failures.length} 项）：`);
-  for (const failure of failures) console.error(`- ${failure}`);
+  console.error("部署配置审计失败：\n" + failures.join("\n"));
   process.exit(1);
 }
-
-console.log("部署一致性审计通过：GHCR Compose、Dockerfile、默认资源和富途运行时约定一致。");
+console.log(
+  "部署配置审计通过：Fire 单一入口、内部后端、PG 工具、素材副本与更新流程。此结果不代表镜像已构建或线上已部署。",
+);

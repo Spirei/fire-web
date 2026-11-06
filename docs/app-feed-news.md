@@ -1,3 +1,5 @@
+> 历史实现记录：文中的 Node/SQLite 内部实现和旧测试命令已退出；当前运行、接口清理与验证入口见 [Fire 迁移说明](fire-api-migration.md)。本文保留来源和旧客户端合约，不作为当前部署步骤。
+
 # App 动态 · news 接入合约（修订 1）
 
 App 本轮只实现新闻信息组。服务端保留 Web 已有的 `people` 行为，App 不展示名人组、人物筛选或原帖卡，也不将既有名人组改成新闻组。字段类型以 [feedTypes.ts](../lib/feedTypes.ts) 为准，业务与 Web 共用 [动态服务](../app/api/v1/feed/[[...action]]/route.ts) 和数据库。

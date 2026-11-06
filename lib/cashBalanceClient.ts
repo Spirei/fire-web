@@ -1,6 +1,6 @@
 import { FUND_CURRENCIES, type FundCurrency } from "./fundCurrencies";
 
-export type CashState = { balances: Record<FundCurrency, number>; cardCash: Record<string, number> };
+export type CashState = { balances: Record<FundCurrency, number|null>; cardCash: Record<string, number|null> };
 export const cashAmountText = (value: number) => Number(value.toFixed(8)).toString();
 
 export function cashEditPreview(amount: string, balance: unknown, frozen: number, edited: boolean) {

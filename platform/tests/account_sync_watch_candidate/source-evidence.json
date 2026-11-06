@@ -1,0 +1,71 @@
+{
+  "old_methods": [
+    {
+      "method": "GET",
+      "path": "/api/v2/account-sync",
+      "status": "canonical_partial_legacy_pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/app-state",
+      "status": "pending_watch_and_fee_domain_projection"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/app-state",
+      "status": "pending_domain_validation_preview_CAS_receipt"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/app-state/operations/{requestId}",
+      "status": "pending_original_UUID_receipt_adapter"
+    }
+  ],
+  "source_sha256": {
+    "app/api/v2/account-sync/route.ts": "7b557e7ce6f03f212789169360911e239f9316d905211a2461e09a98ec3298f8",
+    "app/api/v2/app-state/route.ts": "321819b261338374d130baedc20d79eeec2d80b606da448fa11061138a658b8e",
+    "app/api/v2/app-state/operations/[requestId]/route.ts": "948c2d2e6a2bff511e89691e23814d49a0f601aa291244774c81d0b374030ec4",
+    "lib/appSync.ts": "0186b1529a47560cad463e601001a8b151e5250028551f31cb31092f7df7877c",
+    "lib/appSyncSchema.ts": "c98744e5c293e4686b6a047c3fdc455ad31e37fb976246a64f6dfebfbaee4f1e",
+    "lib/appApiV2.ts": "f8c412125604f46b8de52943987a633e26bc7d9ec83bdfaa9bbd9f26880ade40",
+    "lib/api.ts": "c331cf264a31b1a4bdb65b60b6f28dc8ecd7812a592490b5e10f89e13ada71d6"
+  },
+  "ios_sha256": {
+    "StockLog/Models/AlcorAccountSync.swift": "07a62813cacefd5883402ccf32c11421147342d75cd896f075606a334ada7128",
+    "StockLog/Networking/AlcorAccountSyncAPI.swift": "31c8bba8707236707a690c542caa28039ccbe5a54caabde2e57b9f94fc1b3f92",
+    "StockLog/Support/AlcorAccountStateStore.swift": "52ed3364cd14306233822f1178061eb711ea42b1f6e7ab9198df9978f7002410",
+    "StockLog/Support/AlcorWatchDisplay.swift": "fe1310c236add37b45a873a5adf5f7ec8d401445fa4bdb8a956660581de885f7",
+    "StockLog/Support/AlcorPersonalFeeStore.swift": "7d617b5eae29fada19f176d13897f74d3f690693e5972c3c808af53d4fb26a8e"
+  },
+  "namespaces": [
+    "watch",
+    "fees"
+  ],
+  "watch_field_roots": [
+    "hidden",
+    "pinned",
+    "groups",
+    "orders",
+    "notes",
+    "aliases",
+    "moved"
+  ],
+  "fee_field_roots": [
+    "plan/",
+    "history/"
+  ],
+  "domains": [
+    "profile",
+    "portfolio",
+    "watch",
+    "brokers",
+    "alerts",
+    "resources",
+    "feed",
+    "settings",
+    "authorization"
+  ],
+  "accepted_methods_added": 0,
+  "legacy_methods_local_verified_added": 0,
+  "ios_adapted": false
+}

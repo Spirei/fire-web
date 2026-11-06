@@ -89,4 +89,13 @@ public/maps-world.json
 
 app/favicon.ico
 
-# 独立本地模型工具，不进入网站构建与镜像
+**/.git
+**/.env
+**/.env.local
+**/.env.*.local
+platform/.venv
+platform/.local
+platform/data
+platform/apps
+platform/tests
+platform/docs

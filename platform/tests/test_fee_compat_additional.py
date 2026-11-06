@@ -1,0 +1,5 @@
+from legacy_fee_source_fixture import old_pg
+from legacy_fee_compat_cases import (
+    test_changed_record_or_expired_attribution_proof_has_durable_failure_and_no_posting,
+    test_original_cancelled_and_all_other_nonfilled_orders_keep_versions_and_never_become_fills,
+)

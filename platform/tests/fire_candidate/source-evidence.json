@@ -1,0 +1,7 @@
+{
+  "source_sha256": {
+    "app/api/v1/fire-settings/route.ts": "c005609e404b3aed12cdb07669f6336cf175a72bf6da8ae0585b429d3e653590",
+    "app/api/v2/fire-settings/route.ts": "1717a28c847803fb8225285331a4300c027730f8dfc6a117fbc038b85f0581ca"
+  },
+  "boundary": "Original route bodies executed with isolated framework/auth/storage; actual native PG behavior and historical merge tested separately; no old-source data import."
+}

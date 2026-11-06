@@ -1,0 +1,28 @@
+{
+  "old_methods": [
+    {
+      "id": "9bcff55b1016d782",
+      "method": "POST",
+      "path": "/api/v2/quote-subscriptions"
+    },
+    {
+      "id": "16eaa9cc314cf2ce",
+      "method": "DELETE",
+      "path": "/api/v2/quote-subscriptions"
+    }
+  ],
+  "source_sha256": {
+    "app/api/v2/quote-subscriptions/route.ts": "fe61966e8dab7b2d0318d759b278965fead7ef71c468c6b2a9b4a1123f15e89e",
+    "lib/quoteSubscriptionsStore.ts": "02f202bb1fcbdb77dac295f6f7ff8e476c4527753d166b0d1b173ce6cd5fc7ad",
+    "lib/quoteSubscriptionService.ts": "294c4e249a39ab91284a130c844f4aeb5d7798f60988db1216bc576ac3058834",
+    "lib/quoteSubscriptionsSchema.ts": "3321e1ea7874d5984201d2b6a1d9d18b55fc942e01850daeb0be24541a00c4c9",
+    "lib/quoteDemand.ts": "3d080fbf61682ff227ada4b9b2c96ee015df68c5bdecd71cb80c0954ada8dbe5",
+    "lib/marketCode.ts": "1d4cd1553afc0e8dc4f47c98b9ceb4c7b966ff6c1895a301cbea6ecb3959bf1c",
+    "lib/appApiV2Policy.ts": "167d060f4d5fd66e1033afa2cf30509fad8dcac706cece674af8821479efa881",
+    "lib/quoteSubscriptionRequests.ts": "5b34a613ea5b644e9a6165dfde72dd47da2e83a5161719eececa17876fb90e91"
+  },
+  "legacy_no_UUID": "nonfinancial desired-state lease; server generated UUID exposed, caller UUID exact replay supported",
+  "quote_read_automatic_registration": false,
+  "stock_pool_retired": false,
+  "real_provider_calls": 0
+}

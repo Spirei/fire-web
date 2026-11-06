@@ -13,7 +13,7 @@ import { cashAmountText as amountText, cashEditPreview, requestCashState, type C
 export default function CashBalanceEditor({ preferredCurrency, frozenByCurrency, onSaved }: {
   preferredCurrency: string;
   frozenByCurrency: Partial<Record<FundCurrency, number>>;
-  onSaved: (balances: Record<FundCurrency, number>, cardCash: Record<string, number>) => void;
+  onSaved: (balances: Record<FundCurrency, number|null>, cardCash: Record<string, number|null>) => void;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);

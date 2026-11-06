@@ -1,0 +1,2524 @@
+{
+  "revision": 2,
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/api/activities",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/activities/daily-summary",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/api-docs",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/api-docs",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/app-packages",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/app-packages",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/app-packages/download/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/asset-image/[key]",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/assets",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assets",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/add-by-search",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/backfill",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/check-delisted",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/cleanup",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assets/search",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assets/sync",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/sync",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/email-verification/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/email-verification/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/me",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/passkeys/config",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/auth/passkeys/config",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password-reset/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password-reset/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password-reset/verify",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/auth/profile",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register/email/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register/email/request",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/setup-status",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/auth/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/backup",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/backup",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/backup",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cards/amounts",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/amounts",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cards/amounts",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cards/custom",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/custom",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cards/custom",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/holdings",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cards/holdings",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cards/recognize",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/tags",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cards/tags",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cards/wallet",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/wallet",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cards/wallet",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cards/wallet",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/celebs",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/celebs",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/celebs",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/celebs",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/celebs/avatar",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/celebs/manage",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/celebs/returns",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/celebs/stock-icon",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/charts",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/clipboard",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/company-profile",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/countries",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-status",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deploy-status",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deploy-status/config",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-status/config",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deploy-status/config",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-status/container-update",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deploy-status/container-update",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-status/github/callback",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-status/github/start",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/earnings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/financials",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/connections/[kind]",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/connections/[kind]",
+      "method": "PUT",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/connections/[kind]/receipts/[id]",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/connections/[kind]/test",
+      "method": "POST",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/connections/reauthenticate",
+      "method": "POST",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fire/funds",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/session",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/system/api-migration",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/system/overview",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/tasks",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/tasks",
+      "method": "POST",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/tasks/[id]",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/tasks/[id]/cancel",
+      "method": "POST",
+      "owner": "platform"
+    },
+    {
+      "path": "/api/fire/tasks/receipts/[id]",
+      "method": "GET",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fonts",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fonts",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/futu/quota",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/futu/test",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/indices",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/kline",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/kline/five-day",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/kline/full",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/kline/session-day",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/managed-upload/[...path]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/private-reports/[...path]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pwa-icon",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/quote-pool",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/quotes",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/rates",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/records",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/records",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/records",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/records/batch-delete",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/records/import-apply",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/records/import-image",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/request-logs",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/request-logs/events",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings/mail-templates",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/settings/mail-templates",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/settings/mail-templates/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/settings/mail-test",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/settings/model-icon",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings/model-test",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/settings/model-test",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings/public",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/settings/xueqiu-cookie",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/simple-app/tool/export",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/simple-app/tool/import",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/site-favicon",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/system-assets/mail-banner",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/system-assets/passkey",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/system-assets/security-check",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ticker",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/top-stocks",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/trading-square/duan",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/trading-square/feed",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/trading-square/trump",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/upload",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/upload-files/[...path]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/users/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/users/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/users/[id]/disable-totp",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/users/[id]/reset-password",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/fee-repairs",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/fee-repairs/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/fee-repairs/submissions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/instruments/[recordId]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/account-assets/instruments/[recordId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/orders",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/orders/cancellations",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/positions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/summary",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/account-assets/trading",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/trading/corrections",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/trading/corrections/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/account-assets/trading/orders/[orderId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/trading/orders/[orderId]/observations",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/trading/orders/[orderId]/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/trading/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/account-assets/trading/submissions",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/assets",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/assets",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/assets/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/assets/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/assets/lookup",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/authorize",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/config",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/delete-account",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/devices",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/devices",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/auth/email",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-change/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-change/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-change/verify",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/email-verification",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-verification/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/email-verification/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/mail-templates",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-change/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-change/verify",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/verify",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/auth/profile",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/revoke",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/security-devices",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/security-devices",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/setup-status",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/token",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/backup-codes",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/disable",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/totp/setup",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/broker-accounts/[accountId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/[accountId]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/broker-accounts/[accountId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/[accountId]/bindings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/[accountId]/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/[accountId]/cash/entries",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/broker-accounts/[accountId]/connection",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/[accountId]/connection",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/broker-accounts/[accountId]/connection",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/broker-accounts/[accountId]/holding-source",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/broker-accounts/[accountId]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/[accountId]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/[accountId]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/[accountId]/statements/apply",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/[accountId]/statements/fetch",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/[accountId]/statements/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/[accountId]/unbindings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/cash/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/broker-accounts/cash/submissions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/broker-accounts/presets",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/brokers",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/brokers",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/brokers",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/celebs",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/celebs/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/celebs/[id]/returns",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/chart-series",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/charts",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/company-profile",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/data/export",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/data/import",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dividends",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dividends",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/earnings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/feed/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/feed/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/feed/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/financial-reports",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/financial-reports",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/financial-reports/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/fire-settings",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/fire-settings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/funds",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/funds",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/funds/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/index-kline",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/indices",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/kline",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/kline-sessions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/market-ranking",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/orders",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/orders",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/orders/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/orders/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/orders/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/orders/export",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/orders/import",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/overview",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/personal-profile",
+      "owner": "platform"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/personal-profile",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/personal-profile/background",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/personal-profile/background",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/personal-profile/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/portfolio-series",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/price-alerts",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/price-alerts/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/price-alerts/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/price-alerts/telegram-link",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/quotes",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rates",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/records",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/records",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/records/group-assign",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/records/group-reorder",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/records/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/resource-library/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/resource-library/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/resource-library/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/settings/public",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/simple-ledger",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/simple-ledger",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/social-channels",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/stock-detail",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/upload",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/watch-groups",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/watch-groups",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/watch-groups/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/watch-groups/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/watch-groups/[id]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/watch-groups/reorder",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/fee-repairs",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/fee-repairs/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/fee-repairs/submissions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/instruments/[recordId]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/account-assets/instruments/[recordId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/orders",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/orders/cancellations",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/positions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/summary",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-assets/trading",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/trading/corrections",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/trading/corrections/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/account-assets/trading/orders/[orderId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/trading/orders/[orderId]/observations",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/trading/orders/[orderId]/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/trading/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/account-assets/trading/submissions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/account-sync",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/app-state",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/app-state",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/app-state/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/assets",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/assets/lookup",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/config",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/consent",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/consent",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/auth/email",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-change/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-change/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-change/verify",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/email-verification",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-verification/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/email-verification/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/login",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/login/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/mail-templates",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/me",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/passkeys",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-change/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-change/verify",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-reset/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-reset/request",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/password-reset/verify",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/permissions",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/auth/profile",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/revoke",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/auth/security-devices",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/security-devices",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/token",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/auth/totp",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/backup-codes",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/confirm",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/disable",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/totp/setup",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/broker-accounts/[accountId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/[accountId]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/broker-accounts/[accountId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/[accountId]/bindings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/[accountId]/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/[accountId]/cash/entries",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/broker-accounts/[accountId]/connection",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/[accountId]/connection",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/broker-accounts/[accountId]/connection",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/broker-accounts/[accountId]/holding-source",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/broker-accounts/[accountId]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/[accountId]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/[accountId]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/[accountId]/statements/apply",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/[accountId]/statements/fetch",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/[accountId]/statements/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/[accountId]/unbindings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/cash",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/cash/preview",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/broker-accounts/cash/submissions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/broker-accounts/presets",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/brokers",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/celebs",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/celebs/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/celebs/[id]/returns",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/chart-series",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/charts",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/company-profile",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/earnings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/feed/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/feed/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/feed/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/fire-settings",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/fire-settings",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/funds",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/funds",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/funds/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/index-kline",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/indices",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/kline",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/kline-sessions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/market-calendar",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/market-calendar/batch",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/market-ranking",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/orders",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/orders/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/orders/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/overview",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/personal-profile",
+      "owner": "platform"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v2/personal-profile",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/personal-profile/background",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/personal-profile/background",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/personal-profile/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/price-alerts",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/price-alerts/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/price-alerts/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/price-alerts/telegram-link",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/quote-subscriptions",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/quote-subscriptions",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/quote-subscriptions",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/quotes",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/rates",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/records",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/records",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/records/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/records/group-assign",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/records/group-reorder",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/records/operations/[requestId]",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/resource-library/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/resource-library/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/resource-library/[[...action]]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/search",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/settings/public",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/simple-ledger",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/simple-ledger",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/social-channels",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/stock-detail",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/upload",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/watch-groups",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/watch-groups",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v2/watch-groups/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v2/watch-groups/[id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/watch-groups/[id]/icon",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/watch-groups/reorder",
+      "owner": "platform"
+    }
+  ],
+  "retirements": [
+    {
+      "method": "GET",
+      "path": "/api/migration-export",
+      "owner": "platform",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "POST",
+      "path": "/api/migration-export",
+      "owner": "platform",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migration-export/[id]",
+      "owner": "platform",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "GET",
+      "path": "/api/migration-export/[id]/download",
+      "owner": "platform",
+      "reason": "旧 PG 桥专用导出并入同一联合备份和任务回执",
+      "replacement": "/api/fire/backups"
+    },
+    {
+      "method": "GET",
+      "path": "/api/simple-app/dev-version",
+      "owner": "platform",
+      "reason": "移除每700毫秒的开发专用轮询，采用框架开发更新",
+      "replacement": "Next.js Fast Refresh"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/passkeys/register-options",
+      "owner": "platform",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/passkeys/register-verify",
+      "owner": "platform",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/passkeys/register-options",
+      "owner": "platform",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/auth/passkeys/register-verify",
+      "owner": "platform",
+      "reason": "移除始终不可用的原生登记空壳；网页登记、原生读取与撤销保留",
+      "replacement": "/api/auth/passkeys"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fire/showcase/budget/[category]",
+      "owner": "platform",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "GET",
+      "path": "/api/showcase/model-files/[file]",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "GET",
+      "path": "/api/showcase/models",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "POST",
+      "path": "/api/showcase/models",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/showcase/models/[id]",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/showcase/models/[id]",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/showcase/models/[id]",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/showcase/models/cover",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "POST",
+      "path": "/api/showcase/models/cover",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "POST",
+      "path": "/api/showcase/models/gpu-upload",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "GET",
+      "path": "/api/showcase/models/inspect",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/showcase/models/order",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "POST",
+      "path": "/api/showcase/models/preview-upload",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/showcase/models/process",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "GET",
+      "path": "/api/showcase/models/process",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "POST",
+      "path": "/api/showcase/models/process",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    },
+    {
+      "method": "POST",
+      "path": "/api/showcase/models/upload",
+      "owner": "fire",
+      "reason": "沿用主分支已完成的3D展示迁出，清理展示台专用接口",
+      "replacement": "/global"
+    }
+  ]
+}

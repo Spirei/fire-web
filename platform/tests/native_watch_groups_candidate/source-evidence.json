@@ -1,0 +1,73 @@
+{
+  "old_methods": [
+    {
+      "id": "fc9b57ff0a4ae0de",
+      "method": "POST",
+      "path": "/api/v1/watch-groups/[id]/icon"
+    },
+    {
+      "id": "8769d563737aa9b4",
+      "method": "DELETE",
+      "path": "/api/v1/watch-groups/[id]"
+    },
+    {
+      "id": "2adfaaef8556e3b6",
+      "method": "PUT",
+      "path": "/api/v1/watch-groups/[id]"
+    },
+    {
+      "id": "07d07ef37abec74c",
+      "method": "GET",
+      "path": "/api/v1/watch-groups"
+    },
+    {
+      "id": "f3014949cca132cb",
+      "method": "POST",
+      "path": "/api/v1/watch-groups"
+    },
+    {
+      "id": "d1a83e8010fd8144",
+      "method": "POST",
+      "path": "/api/v2/watch-groups/[id]/icon"
+    },
+    {
+      "id": "93b70d732a18625b",
+      "method": "DELETE",
+      "path": "/api/v2/watch-groups/[id]"
+    },
+    {
+      "id": "c11036c71586058c",
+      "method": "PUT",
+      "path": "/api/v2/watch-groups/[id]"
+    },
+    {
+      "id": "a7dcb66267860222",
+      "method": "GET",
+      "path": "/api/v2/watch-groups"
+    },
+    {
+      "id": "884d85f56b02b4e3",
+      "method": "POST",
+      "path": "/api/v2/watch-groups"
+    }
+  ],
+  "source_sha256": {
+    "app/api/v1/watch-groups/route.ts": "2f7f9ba6df17d348f0324fc1e1c4cd222e5a065a0d8b9f6b4f16e97ed07684a0",
+    "app/api/v2/watch-groups/route.ts": "1b5b1924494b15836bfce76e553a3df4e1ebc5f8d392ae97058511dea2c7772d",
+    "app/api/v1/watch-groups/[id]/route.ts": "7a45e0f008682731bdbfa78337107bcb7b94eb18d8222ba4659004706a2b9995",
+    "app/api/v2/watch-groups/[id]/route.ts": "f23ca260a7b0fba49b9d521083ea564191ba13729e0550cd3b5d7bb8adf2542c",
+    "app/api/v1/watch-groups/[id]/icon/route.ts": "768542418a8cc678a48288d183ed7918053373923db2d7e1616ba0926ed6a34e",
+    "app/api/v2/watch-groups/[id]/icon/route.ts": "a8eba42f72409502065da221ac96789363dd39d5d17d387e64c91c49a4de219c",
+    "lib/watchGroupsStore.ts": "759a4b64285c3b113aeef9cd8f069497c68dc06429a60ce733dc087e1d06bc9c",
+    "lib/upload.ts": "947a5614da4e17c7f8bcfd474f56b5c066d79ebbd7795d9483a40d4dc022d7bd",
+    "lib/appApiV2Policy.ts": "167d060f4d5fd66e1033afa2cf30509fad8dcac706cece674af8821479efa881"
+  },
+  "ios_sha256": {
+    "StockLog/Models/Models.swift": "28dcac620235b617085442428abfa34d6f31989cd6e55644c40c1b720c451ef9",
+    "StockLog/Networking/APIClient.swift": "c4fcd4208a825bac82433834a2fdfa93c50dbecdae389ee2946188435051330d"
+  },
+  "implicit_GET_initialization_and_legacy_broker_name_migration": "not_copied;explicit_initialize_and_verified_source_mapping_required",
+  "icon_methods_and_PUT_icon_branch": "pending_user_owned_file_authority;not_shared_admin_assets",
+  "new_SQL": false,
+  "source_repository_changed": false
+}

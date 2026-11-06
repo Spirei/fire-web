@@ -1,0 +1,286 @@
+{
+  "sourceHashes": {
+    "lib/attachments.ts": "e31d445dec6b3c62a56a0b8c2e5db794c4b44214e1fdf644479ea15c34664a1b"
+  },
+  "treeComparison": "Active virtual directories and exact original-byte hex; timestamps intentionally excluded",
+  "cases": [
+    {
+      "name": "rename-sanitized-file",
+      "files": {
+        "report.txt": "original"
+      },
+      "dirs": [],
+      "action": "rename",
+      "source": "report.txt",
+      "nameInput": " new:report?.md ",
+      "expected": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "path": "new_report_.md"
+        },
+        "tree": {
+          "directories": [],
+          "files": {
+            "new_report_.md": "6f726967696e616c"
+          }
+        }
+      }
+    },
+    {
+      "name": "same-directory-copy-keep-both",
+      "files": {
+        "source.txt": "original"
+      },
+      "dirs": [],
+      "action": "copy",
+      "source": "source.txt",
+      "targetDir": "",
+      "conflict": "keep-both",
+      "expected": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "path": "source (1).txt"
+        },
+        "tree": {
+          "directories": [],
+          "files": {
+            "source (1).txt": "6f726967696e616c",
+            "source.txt": "6f726967696e616c"
+          }
+        }
+      }
+    },
+    {
+      "name": "same-file-default-conflict",
+      "files": {
+        "source.txt": "original"
+      },
+      "dirs": [],
+      "action": "copy",
+      "source": "source.txt",
+      "targetDir": "",
+      "expected": {
+        "status": 409,
+        "body": {
+          "error": "同名文件或目录已存在",
+          "code": "ATTACHMENT_EXISTS",
+          "path": "source.txt"
+        },
+        "tree": {
+          "directories": [],
+          "files": {
+            "source.txt": "6f726967696e616c"
+          }
+        }
+      }
+    },
+    {
+      "name": "same-file-replace-refused",
+      "files": {
+        "source.txt": "original"
+      },
+      "dirs": [],
+      "action": "move",
+      "source": "source.txt",
+      "targetDir": "",
+      "conflict": "replace",
+      "expected": {
+        "status": 400,
+        "body": {
+          "error": "不能把目录移动或复制到自身内部"
+        },
+        "tree": {
+          "directories": [],
+          "files": {
+            "source.txt": "6f726967696e616c"
+          }
+        }
+      }
+    },
+    {
+      "name": "recursive-copy-create-parents",
+      "files": {
+        "tree/nested/data.bin": "one",
+        "tree/zero.bin": ""
+      },
+      "dirs": [
+        "tree/empty"
+      ],
+      "action": "copy",
+      "source": "tree",
+      "targetDir": "new/parent",
+      "expected": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "path": "new/parent/tree"
+        },
+        "tree": {
+          "directories": [
+            "new",
+            "new/parent",
+            "new/parent/tree",
+            "new/parent/tree/empty",
+            "new/parent/tree/nested",
+            "tree",
+            "tree/empty",
+            "tree/nested"
+          ],
+          "files": {
+            "new/parent/tree/nested/data.bin": "6f6e65",
+            "new/parent/tree/zero.bin": "",
+            "tree/nested/data.bin": "6f6e65",
+            "tree/zero.bin": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "move-file-replaces-directory",
+      "files": {
+        "item.txt": "source",
+        "dest/item.txt/nested.bin": "old"
+      },
+      "dirs": [],
+      "action": "move",
+      "source": "item.txt",
+      "targetDir": "dest",
+      "conflict": "replace",
+      "expected": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "path": "dest/item.txt"
+        },
+        "tree": {
+          "directories": [
+            "dest"
+          ],
+          "files": {
+            "dest/item.txt": "736f75726365"
+          }
+        }
+      }
+    },
+    {
+      "name": "copy-directory-replaces-file",
+      "files": {
+        "tree/nested.bin": "source",
+        "dest/tree": "old"
+      },
+      "dirs": [
+        "tree/empty"
+      ],
+      "action": "copy",
+      "source": "tree",
+      "targetDir": "dest",
+      "conflict": "replace",
+      "expected": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "path": "dest/tree"
+        },
+        "tree": {
+          "directories": [
+            "dest",
+            "dest/tree",
+            "dest/tree/empty",
+            "tree",
+            "tree/empty"
+          ],
+          "files": {
+            "dest/tree/nested.bin": "736f75726365",
+            "tree/nested.bin": "736f75726365"
+          }
+        }
+      }
+    },
+    {
+      "name": "cannot-copy-directory-inside-self",
+      "files": {
+        "tree/nested.bin": "source"
+      },
+      "dirs": [],
+      "action": "copy",
+      "source": "tree",
+      "targetDir": "tree/new",
+      "expected": {
+        "status": 400,
+        "body": {
+          "error": "不能把目录移动或复制到自身内部"
+        },
+        "tree": {
+          "directories": [
+            "tree"
+          ],
+          "files": {
+            "tree/nested.bin": "736f75726365"
+          }
+        }
+      }
+    },
+    {
+      "name": "directory-rename-keep-both",
+      "files": {
+        "one/nested.bin": "source",
+        "two/preserved.bin": "old"
+      },
+      "dirs": [],
+      "action": "rename",
+      "source": "one",
+      "nameInput": "two",
+      "conflict": "keep-both",
+      "expected": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "path": "two (1)"
+        },
+        "tree": {
+          "directories": [
+            "two",
+            "two (1)"
+          ],
+          "files": {
+            "two/preserved.bin": "6f6c64",
+            "two (1)/nested.bin": "736f75726365"
+          }
+        }
+      }
+    },
+    {
+      "name": "move-directory-create-parents",
+      "files": {
+        "tree/nested/data.bin": "source"
+      },
+      "dirs": [
+        "tree/empty"
+      ],
+      "action": "move",
+      "source": "tree",
+      "targetDir": "new/parent",
+      "expected": {
+        "status": 200,
+        "body": {
+          "ok": true,
+          "path": "new/parent/tree"
+        },
+        "tree": {
+          "directories": [
+            "new",
+            "new/parent",
+            "new/parent/tree",
+            "new/parent/tree/empty",
+            "new/parent/tree/nested"
+          ],
+          "files": {
+            "new/parent/tree/nested/data.bin": "736f75726365"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,10 +1,12 @@
 "use client";
+import {IconLayoutDashboard,IconClipboardList,IconApi} from "@tabler/icons-react";
 
 /**
  * 导航默认图标（主侧栏 / 移动端标签 / 设置-导航菜单预览共用）。
  * 素材库 icon 类目上传自定义图标后，按 tab key（大写）全局替换显示。
  */
 export const NAV_ICONS: Record<string, React.ReactNode> = {
+ "system-overview":<IconLayoutDashboard size={18}/>,"background-tasks":<IconClipboardList size={18}/>,"api-migration":<IconApi size={18}/>,
   "quote-pool": (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
       <path d="M3 9 7 4h10l4 5v11H3Z" /><path d="M3 9h5l2 4h4l2-4h5M9 6h6" />

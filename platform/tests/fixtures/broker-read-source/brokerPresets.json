@@ -1,0 +1,121 @@
+[
+  {
+    "id": "longbridge",
+    "name": "长桥证券",
+    "aliases": [
+      "长桥證券",
+      "长桥证劵",
+      "Longbridge",
+      "Longport"
+    ],
+    "defaultCurrency": "HKD"
+  },
+  {
+    "id": "ibkr",
+    "name": "盈透证券",
+    "aliases": [
+      "盈透證券",
+      "IBKR",
+      "Interactive Brokers"
+    ],
+    "defaultCurrency": "USD"
+  },
+  {
+    "id": "futu",
+    "name": "富途证券",
+    "aliases": [
+      "富途牛牛",
+      "富途證券",
+      "Futu"
+    ],
+    "defaultCurrency": "HKD"
+  },
+  {
+    "id": "tiger",
+    "name": "老虎证券",
+    "aliases": [
+      "老虎證券",
+      "Tiger Brokers",
+      "Tiger Trade"
+    ],
+    "defaultCurrency": "USD"
+  },
+  {
+    "id": "trading212",
+    "name": "Trading 212",
+    "aliases": [
+      "Trading212"
+    ],
+    "defaultCurrency": "GBP"
+  },
+  {
+    "id": "moomoo",
+    "name": "Moomoo",
+    "aliases": [
+      "Moomoo Securities"
+    ],
+    "defaultCurrency": "USD"
+  },
+  {
+    "id": "robinhood",
+    "name": "罗宾汉",
+    "aliases": [
+      "Robinhood",
+      "羅賓漢"
+    ],
+    "defaultCurrency": "USD"
+  },
+  {
+    "id": "huatai",
+    "name": "华泰证券",
+    "aliases": [
+      "华泰證券",
+      "华泰证劵",
+      "HTSC",
+      "Huatai Securities",
+      "涨乐财富通"
+    ],
+    "defaultCurrency": "CNY"
+  },
+  {
+    "id": "schwab",
+    "name": "嘉信理财",
+    "aliases": [
+      "嘉信理財",
+      "Schwab",
+      "Charles Schwab"
+    ],
+    "defaultCurrency": "USD"
+  },
+  {
+    "id": "usmart",
+    "name": "盈立证券",
+    "aliases": [
+      "盈立證券",
+      "盈立",
+      "uSMART",
+      "uSmart Securities"
+    ],
+    "defaultCurrency": "HKD"
+  },
+  {
+    "id": "eastmoney",
+    "name": "东方财富",
+    "aliases": [
+      "東方財富",
+      "东方",
+      "Eastmoney",
+      "East Money"
+    ],
+    "defaultCurrency": "CNY"
+  },
+  {
+    "id": "ths",
+    "name": "同花顺",
+    "aliases": [
+      "同花順",
+      "THS"
+    ],
+    "defaultCurrency": "CNY"
+  }
+]

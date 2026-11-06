@@ -1,0 +1,32 @@
+// Exact frozen old routes/auth/step-up over memory SQLite and actual Node crypto.
+// External quote/resource/notification callbacks are recorded boundaries, not executed services.
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),crypto=require('node:crypto');
+const {stripTypeScriptTypes}=require('node:module'),{DatabaseSync}=require('node:sqlite');
+const root=process.argv[2],input=JSON.parse(fs.readFileSync(0,'utf8')),sqlite=new DatabaseSync(':memory:');
+sqlite.exec(`PRAGMA foreign_keys=ON;
+CREATE TABLE users(id TEXT PRIMARY KEY,username TEXT,nickname TEXT DEFAULT '',uid TEXT,email TEXT DEFAULT '',avatar TEXT DEFAULT '',role TEXT,created_at TEXT,is_test INTEGER DEFAULT 0,totp_enabled INTEGER DEFAULT 0,password_hash TEXT);
+CREATE TABLE records(id TEXT PRIMARY KEY,user_id TEXT REFERENCES users(id) ON DELETE CASCADE);
+CREATE TABLE sessions(token TEXT PRIMARY KEY,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,expires_at INTEGER,authenticated_at INTEGER);
+CREATE TABLE verified_emails(user_id TEXT,email TEXT);
+CREATE TABLE passkeys(id TEXT,user_id TEXT REFERENCES users(id) ON DELETE CASCADE);
+CREATE TABLE passkey_challenges(id TEXT,user_id TEXT REFERENCES users(id) ON DELETE CASCADE);`);
+for(const name of ['email_verification_tokens','password_reset_tokens','password_reset_codes','password_reset_totp','totp_tickets'])sqlite.exec(`CREATE TABLE ${name}(user_id TEXT);`);
+const events=[],factorCalls=[],codes=new Set(['123456']);
+let depth=0;
+const db={prepare:q=>sqlite.prepare(q),transaction(fn){const run=()=>{const n=depth++,save='s'+n;sqlite.exec(n?'SAVEPOINT '+save:'BEGIN IMMEDIATE');try{const r=fn();sqlite.exec(n?'RELEASE '+save:'COMMIT');return r;}catch(e){sqlite.exec(n?'ROLLBACK TO '+save:'ROLLBACK');throw e;}finally{depth--;}};run.immediate=run;return run;}};
+const context=vm.createContext({Buffer,Error,Request,Response,URL,console});
+async function load(relative,deps){const m=new vm.SourceTextModule(stripTypeScriptTypes(fs.readFileSync(path.join(root,relative),'utf8'),{mode:'transform'}),{context});await m.link(async name=>{if(!(name in deps))throw Error('Forbidden dependency '+name);const obj=deps[name];return new vm.SyntheticModule(Object.keys(obj),function(){for(const k of Object.keys(obj))this.setExport(k,obj[k]);},{context});});await m.evaluate();return m.namespace;}
+(async()=>{
+ const password=await load('lib/password.ts',{'crypto':crypto});
+ for(const u of input.users){const salt='synthetic-golden-salt';const hash=salt+':'+crypto.scryptSync('Synthetic9Pass',salt,64).toString('hex');sqlite.prepare('INSERT INTO users(id,username,nickname,uid,email,avatar,role,created_at,is_test,totp_enabled,password_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(u.id,u.username,u.nickname??'',u.uid??null,u.email??'',u.avatar??'',u.role,'2026-01-01T00:00:00Z',u.is_test??0,u.totp_enabled??0,hash);if(u.emailVerified)sqlite.prepare('INSERT INTO verified_emails VALUES(?,?)').run(u.id,u.email);if(u.online){const token=u.id==='admin'?'a'.repeat(64):'b'.repeat(64);sqlite.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(crypto.createHash('sha256').update(token).digest('hex'),u.id,Date.now()+60000,Date.now());}}
+ const auth=await load('lib/auth.ts',{'./appSyncSchema':{bumpAppSync(){throw Error('Forbidden unrelated sync');}},'./resourceLibrary':{purgeResourceUser:id=>events.push(['resource-purge',id])},'crypto':crypto,'./db':{getDb:()=>db},'./password':password,'./emailVerification':{emailVerified:(id,email)=>!!sqlite.prepare('SELECT 1 FROM verified_emails WHERE user_id=? AND email=?').get(id,email)},'./appAuth':{appIdentity:()=>({user_id:'admin',username:'Admin',nickname:'',uid:'1',email:'',avatar:'',role:'admin',is_test:0}),revokeAppToken:id=>events.push(['revoke-token',id]),revokeUserAppGrants:id=>events.push(['revoke-app-grants',id])},'./quoteSubscriptionRequests':{releaseUserQuoteSubscriptions:id=>events.push(['release-quotes',id])}});
+ const totp={userTotpEnabled:id=>!!sqlite.prepare('SELECT totp_enabled FROM users WHERE id=?').get(id)?.totp_enabled,consumeTotpFactor:(id,code)=>{factorCalls.push({id,code});if(!codes.has(code))return false;codes.delete(code);return true;},clearTotp:id=>sqlite.prepare('UPDATE users SET totp_enabled=0 WHERE id=?').run(id)};
+ const step=await load('lib/adminStepUp.ts',{'./auth':auth,'./password':password,'./totpAuth':totp});
+ const shared={'next/server':{NextResponse:{json:(body,opts)=>({status:opts?.status??200,body})}},'@/lib/auth':auth,'@/lib/requestBody':{readJsonBody:r=>r.json()},'@/lib/adminStepUp':step,'@/lib/rateLimit':{clientIp:()=> '198.51.100.12',rateLimit:()=>true,rateLimitGlobal:()=>true},'@/lib/securityAudit':{logSecurityEvent:(_r,id,event,detail)=>events.push(['security',id,event,detail])},'@/lib/password':password,'@/lib/totpAuth':totp,'@/lib/db':{getDb:()=>db}};
+ const routes={directory:await load('app/api/users/route.ts',shared),user:await load('app/api/users/[id]/route.ts',shared),reset:await load('app/api/users/[id]/reset-password/route.ts',shared),disable:await load('app/api/users/[id]/disable-totp/route.ts',shared)};
+ const results=[];
+ for(const c of input.commands){const headers={'origin':'http://legacy.example.invalid','cookie':'fire_session='+(c.actor==='member'?'b'.repeat(64):'a'.repeat(64))};if(c.auth==='anonymous')delete headers.cookie;if(c.auth==='app')headers.authorization='Bearer fat_'+'A'.repeat(43);if(c.auth==='legacy-bearer')headers.authorization='Bearer '+'a'.repeat(64);if(c.factorEnabled!==undefined)sqlite.prepare('UPDATE users SET totp_enabled=? WHERE id=?').run(c.factorEnabled?1:0,'admin');const request=new Request('http://legacy.example.invalid/api/users'+(c.target?'/'+c.target:''),{method:c.method,headers, ...(c.method==='GET'?{}:{body:JSON.stringify(c.body??{})})});const response=await routes[c.route][c.method](request,{params:Promise.resolve({id:c.target})});results.push(response);}
+ const users=sqlite.prepare('SELECT id,username,email,role,totp_enabled FROM users ORDER BY id').all();
+ const checks=sqlite.prepare('SELECT id,password_hash FROM users ORDER BY id').all().map(r=>({id:r.id,newPasswordValid:password.verifyPassword('ChangedSynthetic9Pass',r.password_hash)}));
+ sqlite.close();process.stdout.write(JSON.stringify({memoryOnly:true,builtInNodeOnly:true,realSourceCrypto:true,downstreamCallbacksStubbed:true,results,users,checks,events,factorCalls}));
+})().catch(e=>{console.error(e.stack);process.exitCode=1;});

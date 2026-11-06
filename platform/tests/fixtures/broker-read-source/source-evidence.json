@@ -1,0 +1,18 @@
+{
+  "source": "frozen legacy Web broker directory reads",
+  "sha256": {
+    "brokerAccounts.ts": "260b0540c2f4ae4833539d275168e0b56a5ea0750dd8812dfceffb3d96f99b73",
+    "brokerAccountsApi.ts": "130388dc6ccbc44d73225b2217f7782af35f1a231bcdb12c114dff97b444c276",
+    "brokerCurrencies.ts": "9c5f4a472b4ccc8caecd262cdc1e070467162bbe6fccbede5e524fe477560d61",
+    "brokerPresets.json": "a0020b488b26e78eaa228ac61d2e34c8fcd0f8386251c4942cb9cc4e757ec41c",
+    "brokerRequestAuth.ts": "33d6b684cae5201e053a792f7492afec12ba7fe980dcac36ebc8f2f6ffdbd1b9",
+    "assetGrant.ts": "99500385103b3718e411b3a186c489fa97a87484a72e110e63ed48b2b6b63509"
+  },
+  "authority": "owner/account ID; preset metadata is not a live provider connection; no source database opened",
+  "ios": {
+    "source": "StockLog/Models/AlcorBrokerAccount.swift",
+    "sha256": "e416ff6a198de845ce43c8deadbfe8bbea9893ea76cb50cbbe62cc1badfd9cf5",
+    "extracted_sha256": "60a60037a5977c9b01d8948545aeb242c5b88872846cf4372adc09e178a98d79",
+    "range": "struct AlcorBrokerAccount through AlcorBrokerAccountsPage; unmodified original decoder and validation"
+  }
+}

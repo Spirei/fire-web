@@ -1,0 +1,307 @@
+{
+  "sourceSha256": "a194ca2425364da69374cfb662363bc1057f12cc85a2178e7bb067e8cfbf8de3",
+  "vectors": [
+    {
+      "id": "root_rates",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "EUR": "0.92",
+          "HKD": 7.8
+        }
+      },
+      "extracted": {
+        "EUR": 0.92,
+        "HKD": 7.8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "EUR": 0.92,
+        "HKD": 7.8
+      }
+    },
+    {
+      "id": "nested_rates",
+      "body": {
+        "data": {
+          "base_code": "EUR",
+          "conversion_rates": {
+            "USD": "1.2",
+            "JPY": "180"
+          }
+        }
+      },
+      "extracted": {
+        "USD": 1.2,
+        "JPY": 180,
+        "EUR": 1
+      },
+      "usd": {
+        "USD": 1,
+        "JPY": 150,
+        "EUR": 0.8333333333333334
+      }
+    },
+    {
+      "id": "pair_quotes",
+      "body": {
+        "source": "USD",
+        "quotes": {
+          "USDHKD": 7.8,
+          "EURJPY": 160
+        }
+      },
+      "extracted": {
+        "HKD": 7.8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.8
+      }
+    },
+    {
+      "id": "flat",
+      "body": {
+        "base": "USD",
+        "HKD": 7.8
+      },
+      "extracted": {
+        "HKD": 7.8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.8
+      }
+    },
+    {
+      "id": "missing_base",
+      "body": {
+        "rates": {
+          "HKD": 7.8
+        }
+      },
+      "extracted": {
+        "HKD": 7.8
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.8
+      }
+    },
+    {
+      "id": "non_usd_missing_bridge",
+      "body": {
+        "base": "EUR",
+        "rates": {
+          "HKD": 8
+        }
+      },
+      "extracted": null,
+      "usd": null
+    },
+    {
+      "id": "root_error",
+      "body": {
+        "success": false,
+        "rates": {
+          "HKD": 7.8
+        }
+      },
+      "extracted": null,
+      "usd": null
+    },
+    {
+      "id": "nested_error",
+      "body": {
+        "data": {
+          "result": "error",
+          "rates": {
+            "HKD": 7.8
+          }
+        }
+      },
+      "extracted": null,
+      "usd": null
+    },
+    {
+      "id": "first_candidate",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "EUR": 0.9
+        },
+        "quotes": {
+          "USDHKD": 7.8
+        }
+      },
+      "extracted": {
+        "EUR": 0.9,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "EUR": 0.9
+      }
+    },
+    {
+      "id": "invalid_values",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "JPY": 0,
+          "HKD": -1,
+          "EUR": true,
+          "GBP": "",
+          "CAD": "NaN"
+        }
+      },
+      "extracted": null,
+      "usd": null
+    },
+    {
+      "id": "hex_legacy",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "HKD": "0x8"
+        }
+      },
+      "extracted": {
+        "HKD": 8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 8
+      }
+    },
+    {
+      "id": "scientific",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "JPY": "1.5e2"
+        }
+      },
+      "extracted": {
+        "JPY": 150,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "JPY": 150
+      }
+    },
+    {
+      "id": "source_date",
+      "body": {
+        "base": "USD",
+        "date": "2026-10-30",
+        "rates": {
+          "HKD": "7.8"
+        }
+      },
+      "extracted": {
+        "HKD": 7.8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.8
+      }
+    },
+    {
+      "id": "source_unknown",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "HKD": "7.8"
+        }
+      },
+      "extracted": {
+        "HKD": 7.8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.8
+      }
+    },
+    {
+      "id": "source_instant",
+      "body": {
+        "base": "USD",
+        "timestamp": "2026-10-30T12:01:02+08:00",
+        "rates": {
+          "HKD": "7.8"
+        }
+      },
+      "extracted": {
+        "HKD": 7.8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.8
+      }
+    },
+    {
+      "id": "normalized_collision",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "HKD": 7.8,
+          " hkd ": 7.9
+        }
+      },
+      "extracted": {
+        "HKD": 7.9,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.9
+      }
+    },
+    {
+      "id": "base_conflict",
+      "body": {
+        "base": "EUR",
+        "rates": {
+          "USD": 1.2,
+          "JPY": 180
+        }
+      },
+      "extracted": {
+        "USD": 1.2,
+        "JPY": 180,
+        "EUR": 1
+      },
+      "usd": {
+        "USD": 1,
+        "JPY": 150,
+        "EUR": 0.8333333333333334
+      }
+    },
+    {
+      "id": "missing_mop",
+      "body": {
+        "base": "USD",
+        "rates": {
+          "HKD": 7.8
+        }
+      },
+      "extracted": {
+        "HKD": 7.8,
+        "USD": 1
+      },
+      "usd": {
+        "USD": 1,
+        "HKD": 7.8
+      }
+    }
+  ]
+}

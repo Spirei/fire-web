@@ -1,0 +1,33 @@
+{
+  "old_methods": [
+    {
+      "id": "af5963a8a95c5cd0",
+      "method": "GET",
+      "path": "/api/quote-pool",
+      "status": "partial_client_origins_only"
+    },
+    {
+      "id": "5a56ac942483e747",
+      "method": "GET",
+      "path": "/api/v2/quote-subscriptions",
+      "status": "candidate_read_adapter"
+    }
+  ],
+  "source_sha256": {
+    "app/api/quote-pool/route.ts": "4f0c2bb48bb28f62eb1ac064791f0025d750c028471d350e91ebf5e5a9453508",
+    "app/api/v2/quote-subscriptions/route.ts": "fe61966e8dab7b2d0318d759b278965fead7ef71c468c6b2a9b4a1123f15e89e",
+    "lib/quotePoolData.ts": "ed73ff34fb9bce0ee343ba3014c172d40244ad38f8c3fb9f87a1063cefb4db52",
+    "lib/quotePoolView.ts": "0651c03f10fa48f22c7f338014065d998079d3a662a4f5605413d0e94584fd18",
+    "lib/quoteSubscriptionsStore.ts": "02f202bb1fcbdb77dac295f6f7ff8e476c4527753d166b0d1b173ce6cd5fc7ad",
+    "lib/quoteSubscriptionsSchema.ts": "3321e1ea7874d5984201d2b6a1d9d18b55fc942e01850daeb0be24541a00c4c9",
+    "lib/quoteDemand.ts": "3d080fbf61682ff227ada4b9b2c96ee015df68c5bdecd71cb80c0954ada8dbe5",
+    "lib/marketCode.ts": "1d4cd1553afc0e8dc4f47c98b9ceb4c7b966ff6c1895a301cbea6ecb3959bf1c"
+  },
+  "ios_sha256": {
+    "StockLog/Models/Models.swift": "28dcac620235b617085442428abfa34d6f31989cd6e55644c40c1b720c451ef9",
+    "StockLog/Networking/APIClient.swift": "c4fcd4208a825bac82433834a2fdfa93c50dbecdae389ee2946188435051330d"
+  },
+  "quote_pool_retired": false,
+  "actual_quote_batch_methods": "POST /api/quotes, /api/v1/quotes, /api/v2/quotes; pending next slice",
+  "actual_provider_calls": 0
+}

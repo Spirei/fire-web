@@ -11,7 +11,7 @@ import { getUserByToken, LEGACY_SESSION_COOKIE, needsSetup, SESSION_COOKIE } fro
 
 export const dynamic = "force-dynamic";
 
-export function generateMetadata(): Metadata { return { title: `登录 - ${appConnectionBrand(getSiteSettings()).siteName}` }; }
+export async function generateMetadata(): Promise<Metadata> { return { title: `登录 - ${appConnectionBrand(await getSiteSettings()).siteName}` }; }
 
 export default async function LoginPage({
   searchParams
@@ -21,16 +21,16 @@ export default async function LoginPage({
   const params = await searchParams;
   const authorizationLogin = params.next?.startsWith("/app/authorize?") === true;
   const destination = authorizationLogin ? params.next! : params.next === "/app/devices" ? "/app/devices" : "/global";
-  if (needsSetup() && params.skipSetup !== "1") redirect("/setup");
+  if (await needsSetup() && params.skipSetup !== "1") redirect("/setup");
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
-  if (getUserByToken(token)) redirect(destination);
-  const brand = appConnectionBrand(getSiteSettings());
+  if (await getUserByToken(token)) redirect(destination);
+  const brand = appConnectionBrand(await getSiteSettings());
   if (authorizationLogin) return <AppConnectionShell brand={brand} serverName={(await headers()).get("host") || "Alcor Api"}>
     <div className="app-connection-intro"><AppConnectionIcon src={brand.appIcon} /><h1>登录 {brand.siteName} 账户以连接 {brand.appName}</h1></div>
     <div className="app-connection-login"><LoginForm returnTo={destination} /></div>
   </AppConnectionShell>;
-  const settings = getSiteSettings();
+  const settings = await getSiteSettings();
   const logoFontCls = logoFontClass(settings.logoFont);
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-bg-gray/70 px-4 py-10 dark:bg-[#0a0e19]">

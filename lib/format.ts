@@ -22,6 +22,7 @@ export function fmtQty(n: number | "") {
 }
 
 export function fmtMoney(n: number, currency: string) {
+  if(!Number.isFinite(n))return "—";
   const sign = n < 0 ? "-" : "";
   return sign + currency + Math.abs(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

@@ -11,12 +11,23 @@ services:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: 3000
-      FIRE_UPDATER_URL: http://fire-updater:8080/v1/update
+      FIRE_PUBLIC_ORIGIN: ${FIRE_PUBLIC_ORIGIN:?请填写实际访问地址}
+      FIRE_ENVIRONMENT: ${FIRE_ENVIRONMENT:?请填写与数据库一致的环境}
+      FIRE_INSTANCE_ID: ${FIRE_INSTANCE_ID:?请先核对并填写数据库实例UUID}
+      FIRE_DATABASE_URL: ${FIRE_DATABASE_URL:?请填写实际PG连接}
+      FIRE_CONNECTION_SECRET_DIR: /private/state/connection-secrets
+      FIRE_FILE_ROOT: /private/files
+      FIRE_ASSET_ROOT: /private/assets
+      FIRE_BACKUP_DIR: /private/backups
+      FIRE_BACKUP_SECRET_DIR: /private/backup-key
+      FIRE_DEPLOYMENT_UPDATER_URL: http://fire-updater:8080/v1/update
+      FIRE_DEPLOYMENT_RUNNER_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:?请填写独立更新器令牌}
+      FIRE_PYTHON: /platform/.venv/bin/python
     env_file:
       - path: .env
-        required: false
+        required: true
     volumes:
-      - ${DATA_DIR:-./data}:/app/data
+      - ${FIRE_PRIVATE_DIR:?请填写私有运行目录}:/private
       - ${UPLOADS_DIR:-./uploads}:/app/public/uploads
       # 插图 / 字体 / 图标 / 分享图不进仓库也不进镜像（见 ASSETS.md），由部署者放在宿主机目录后挂进来。
       # 少了这些目录不会影响服务运行，但自定义插图、字体与图标会是 404；FIRE 必需鱼素材独立随镜像提供。
@@ -28,14 +39,18 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.scope: "fire"
+    networks:
+      - platform
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/settings/public').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 60s
       timeout: 10s
       retries: 5
       start_period: 40s
 
   fire-updater:
+    networks:
+      - platform
     image: containrrr/watchtower:1.7.1
     container_name: fire-updater
     restart: unless-stopped
@@ -53,3 +68,8 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "false"
       com.centurylinklabs.watchtower.scope: "fire"
+
+networks:
+  platform:
+    external: true
+    name: ${FIRE_NETWORK:?请填写数据库所在网络}

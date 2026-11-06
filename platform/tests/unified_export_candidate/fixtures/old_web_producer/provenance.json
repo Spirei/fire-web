@@ -1,0 +1,12 @@
+{
+  "purpose": "Minimal actual producer fragments, synthetic inputs only; not full old repository/history",
+  "sourceFiles": {
+    "lib/migrationExportSnapshot.ts": "7c962b815a69edf05099dfac6dd28f45ec84e98a95f0d453009c25984a3670b3",
+    "lib/migrationExport.ts": "e06b5e545b8355849011b64fea060b3b89e195f9e39628b64e689b9106fc9d4c"
+  },
+  "fragments": {
+    "run-tool.ts": "fb4206b94f097d58b65dc71660db799a29d34c61063f1e1eeb01e7fb3896a34e",
+    "manifest-encryption.ts": "f39deff6970903c8fdc573c088100029b48fcd13d61268af18c10d5042aff8a5",
+    "export-id.ts": "9206c00b56abefb617847ce78af82d3e1a2329933537f06d847a5a4d953806b6"
+  }
+}

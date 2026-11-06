@@ -1,104 +1,50 @@
 # syntax=docker/dockerfile:1
-# =====================================================================
-# Alcor 投资记实 —— 纯净生产版镜像（Node 22 + SQLite + sharp）
-# 目标：运行镜像只含生产依赖 + .next 产物 + 静态资源，无源码/dev 依赖/构建工具。
-# 私有数据与上传走 volume；镜像仅携带公开只读缓存种子，确保新部署首屏与本地一致。
-# 富途 OpenD 桥接（scripts/futu_quotes.py）随生产镜像提供 Python + futu-api，
-# 未配置或不可达时行情自动回退腾讯/雅虎（腾讯源已支持美股/港股/A股）。
-# =====================================================================
-
-# ---------- 1. 依赖：全量安装（供构建用），含原生模块编译工具 ----------
-FROM node:22-slim AS deps
+FROM node:22-bookworm-slim AS web
 WORKDIR /app
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
-    rm -rf /var/lib/apt/lists/*
-COPY package.json package-lock.json* ./
-RUN (test -f package-lock.json && npm ci && echo "LOCK_OK") || npm install
-
-# ---------- 2. 生产依赖：只保留 dependencies（剔除 devDependencies）----------
-FROM node:22-slim AS prod-deps
-WORKDIR /app
-# better-sqlite3 等原生模块需 node-gyp 从源码编译（预编译二进制拉不到时回退），
-# 需 python3/make/g++；该工具链在本阶段安装，仅其 node_modules 被 COPY 到 runner，
-# 不会进入最终运行镜像，仍是纯净生产版。
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
-    rm -rf /var/lib/apt/lists/*
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
-# 兜底：若 npm ci --omit=dev 因 lockfile 失败则用 prune 清理
-RUN (test -d node_modules && npm prune --omit=dev >/dev/null 2>&1 || true)
-
-# ---------- 3. 构建：生成 .next 生产产物 ----------
-FROM node:22-slim AS build
-WORKDIR /app
-ARG FIRE_BUILD_SHA=unknown
-ENV FIRE_BUILD_SHA=${FIRE_BUILD_SHA}
-ENV NEXT_TELEMETRY_DISABLED=1
-COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
-RUN test -s public/fire-assets/clownfish-family.png
-RUN npm run build
+RUN test -s public/fire-assets/clownfish-family.png && npm run build
 
-# ---------- 4. 运行：纯净精简镜像 ----------
-FROM node:22-slim AS runner
+FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
+FROM python:3.12-slim-bookworm AS backend
+COPY --from=uv /uv /usr/local/bin/uv
+WORKDIR /platform
+COPY platform/pyproject.toml platform/uv.lock ./
+COPY platform/backend backend
+RUN uv sync --frozen --no-dev --no-editable --extra futu
+
+FROM python:3.12-slim-bookworm AS runtime
+ARG PG_MAJOR=17
+ARG FIRE_BUILD_SHA=""
+RUN case "$PG_MAJOR" in 16|17|18) ;; *) exit 1 ;; esac \
+    && apt-get update && apt-get install -y --no-install-recommends libstdc++6 libcairo2 ca-certificates curl gnupg \
+    && curl --fail --silent --show-error --proto '=https' --tlsv1.2 https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/keyrings/postgresql.asc \
+    && gpg --show-keys --with-colons /usr/share/keyrings/postgresql.asc | grep -q '^fpr:::::::::B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8:' \
+    && echo 'deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends "postgresql-client-$PG_MAJOR" \
+    && apt-get purge -y --auto-remove curl gnupg && rm -rf /var/lib/apt/lists/*
+ENV ALCOR_PG_TOOLS_DIR=/usr/lib/postgresql/${PG_MAJOR}/bin
+COPY --from=web /usr/local/bin/node /usr/local/bin/node
+COPY --from=web /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 WORKDIR /app
-ARG FIRE_BUILD_SHA=unknown
-ENV NODE_ENV=production
-ENV FIRE_BUILD_SHA=${FIRE_BUILD_SHA}
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# 只带运行必需：生产 node_modules + .next 产物 + 静态 + 配置 + 仓库脚本(futu 桥接脚本文件)
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/public ./public
-COPY --from=build /app/public/uploads /app/resource-default
-# 公开展示缓存作为首次启动种子；运行期仍写入挂载的 /app/data，且按 ID / 时间戳合并，绝不覆盖较新数据。
-RUN mkdir -p /app/public-cache-default/earnings-cache
-COPY --from=build /app/data/duan-posts.json /app/public-cache-default/duan-posts.json
-COPY --from=build /app/data/trump-posts.json /app/public-cache-default/trump-posts.json
-COPY --from=build /app/data/trump-translations.json /app/public-cache-default/trump-translations.json
-COPY --from=build /app/data/top-stocks-cache.json /app/public-cache-default/top-stocks-cache.json
-COPY --from=build /app/data/asset-quotes-cache.json /app/public-cache-default/asset-quotes-cache.json
-COPY --from=build /app/data/celebs-cache.json /app/public-cache-default/celebs-cache.json
-COPY --from=build /app/data/earnings-cache/ /app/public-cache-default/earnings-cache/
-COPY --from=build /app/scripts ./scripts
-COPY --from=build /app/lib ./lib
-COPY --from=build /app/server-tools ./server-tools
-COPY --from=build --chown=node:node /app/docs/api-spec.md /app/docs/api-spec-v2.md ./docs/
-COPY package.json ./
-COPY next.config.mjs ./
-COPY scripts/entrypoint.sh /app/entrypoint.sh
-# OpenD 桥接依赖必须随 GHCR 生产镜像提供；否则线上容器虽能连通 11111，
-# Node spawn("python3") 仍会因运行时缺少 Python 直接报 ENOENT。
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 python3-venv && \
-    python3 -m venv /opt/futu-venv && \
-    /opt/futu-venv/bin/pip install --no-cache-dir -r /app/scripts/requirements-futu.txt && \
-    rm -rf /var/lib/apt/lists/*
-ENV PATH="/opt/futu-venv/bin:${PATH}"
-# Complete migration exports use native PG 17 tools; no database server is installed.
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gpg && \
-    mkdir -p /usr/share/postgresql-common/pgdg && \
-    curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc && \
-    gpg --show-keys --with-colons /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc | grep -q 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' && \
-    . /etc/os-release && \
-    printf 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt %s-pgdg main\n' "$VERSION_CODENAME" > /etc/apt/sources.list.d/pgdg.list && \
-    apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 && \
-    /usr/lib/postgresql/17/bin/pg_dump --version && /usr/lib/postgresql/17/bin/pg_restore --version && \
-    rm -rf /var/lib/apt/lists/*
-ENV ALCOR_PG_BIN="/usr/lib/postgresql/17/bin"
-RUN chmod +x /app/entrypoint.sh
-
-# 运行期数据与上传占位（由 compose volume 挂载覆盖）
-RUN mkdir -p /app/data /app/public/uploads /app/.next/cache && chown -R node:node /app/data /app/public/uploads /app/.next/cache && chmod -R 750 /app/data /app/public/uploads /app/.next/cache
-USER node
-
+COPY --from=web /app/node_modules node_modules
+COPY --from=web /app/.next .next
+COPY --from=web /app/public public
+COPY --from=web /app/public/uploads resource-default
+COPY --from=web /app/package.json package.json
+COPY --from=web /app/next.config.mjs next.config.mjs
+COPY --from=web /app/scripts scripts
+COPY --from=web /app/contracts contracts
+COPY --from=backend /platform/.venv /platform/.venv
+COPY platform/pyproject.toml platform/uv.lock platform/
+COPY platform/backend platform/backend
+COPY platform/migrations platform/migrations
+COPY platform/contracts platform/contracts
+RUN groupadd -g 1000 fire && useradd -u 1000 -g fire -M fire && mkdir -p /app/run /app/public/uploads /app/.next/cache && chown -R fire:fire /app/run /app/public/uploads /app/.next/cache
+ENV NODE_ENV=production PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 FIRE_PYTHON=/platform/.venv/bin/python TMPDIR=/app/run FIRE_BUILD_SHA=${FIRE_BUILD_SHA}
+USER 1000:1000
+HEALTHCHECK --interval=30s --timeout=6s --start-period=60s CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 EXPOSE 3000
-ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
-
-ENTRYPOINT ["sh", "/app/entrypoint.sh"]
-CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]
+CMD ["npm", "start"]

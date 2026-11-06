@@ -315,13 +315,6 @@ export interface SiteSettings {
   tradingSquareDuanRefreshMinutes: number;
   xueqiuCookie: string;
   xueqiuCookieConfigured?: boolean;
-  dbType: "sqlite" | "postgres";
-  pgHost: string;
-  pgPort: string;
-  pgDatabase: string;
-  pgUser: string;
-  pgPassword: string;
-  pgPasswordConfigured?: boolean;
   smtpHost: string;
   smtpPort: string;
   smtpSecure: boolean;

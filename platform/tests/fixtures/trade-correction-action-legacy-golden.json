@@ -1,0 +1,94 @@
+{
+  "source": "frozen exact pure functions only; no legacy DB/config imports",
+  "sha256": {
+    "tradeCorrections.ts": "3c77af683723f72db59ad6c626602f90d20a4cbfcae591fdcdf2b25a15280b63",
+    "tradeAccounting.ts": "d6366848273b13e489ccf365ded0720f2589260de45b62d8c86bb7184916ad4e",
+    "portfolioLedger.ts": "b85f2467118bff5886c2802bde23e20c49ae700b97552edfd4283d4d0032302f",
+    "feeDecimal.ts": "f90e719910879d16c2ab2ab2166cac8622c0b8957e4e3a23bee8d41a0a35c283",
+    "recordsContract.ts": "82ee9640b71ec6b7bfe0e176aae73a0d898ce75a3e11f3f6944c632ff6effa17"
+  },
+  "vectors": {
+    "before": {
+      "qty": 20,
+      "cost": 15.15,
+      "updates": [
+        {
+          "id": "first",
+          "beforeQty": 0,
+          "beforeCost": 0,
+          "qty": 10,
+          "cost": 10.1,
+          "realized": null
+        },
+        {
+          "id": "second",
+          "beforeQty": 10,
+          "beforeCost": 10.1,
+          "qty": 20,
+          "cost": 15.15,
+          "realized": null
+        }
+      ],
+      "realized": 0
+    },
+    "merged": {
+      "qty": 20,
+      "cost": 15.125,
+      "updates": [
+        {
+          "id": "first",
+          "beforeQty": 0,
+          "beforeCost": 0,
+          "qty": 20,
+          "cost": 15.125,
+          "realized": null
+        }
+      ],
+      "realized": 0
+    },
+    "later": {
+      "qty": 15,
+      "cost": 10.167,
+      "updates": [
+        {
+          "id": "first",
+          "beforeQty": 0,
+          "beforeCost": 0,
+          "qty": 20,
+          "cost": 15.125,
+          "realized": null
+        },
+        {
+          "id": "sale",
+          "beforeQty": 20,
+          "beforeCost": 15.125,
+          "qty": 15,
+          "cost": 10.167,
+          "realized": 74.375
+        }
+      ],
+      "realized": 74.375
+    },
+    "deleted_sale": {
+      "qty": 20,
+      "cost": 15.125,
+      "updates": [
+        {
+          "id": "first",
+          "beforeQty": 0,
+          "beforeCost": 0,
+          "qty": 20,
+          "cost": 15.125,
+          "realized": null
+        }
+      ],
+      "realized": 0
+    },
+    "all_deleted": {
+      "qty": 0,
+      "cost": 0,
+      "updates": [],
+      "realized": 0
+    }
+  }
+}

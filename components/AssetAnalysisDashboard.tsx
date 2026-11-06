@@ -364,9 +364,9 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   /** 银行卡现金（借记卡 / 预付卡余额，按卡币种）：用来解释可用现金里有多少来自银行卡 */
   const [cardCash, setCardCash] = useState<Record<string, number>>({});
   const [cachedEffectiveBalances, setCachedEffectiveBalances] = useState<Record<FundCurrency, number> | null>(null);
-  const handleFundBalances = useCallback((balances: Record<FundCurrency, number>, nextCardCash: Record<string, number>) => {
-    setFundBalances(balances);
-    setCardCash(nextCardCash || {});
+  const handleFundBalances = useCallback((balances: Record<FundCurrency, number|null>, nextCardCash: Record<string, number|null>) => {
+    setFundBalances(Object.fromEntries(Object.entries(balances).map(([key,value])=>[key,typeof value==='number'&&Number.isFinite(value)?value:NaN])) as Record<FundCurrency,number>);
+    setCardCash(Object.fromEntries(Object.entries(nextCardCash||{}).map(([key,value])=>[key,typeof value==='number'&&Number.isFinite(value)?value:NaN])));
     setFundBalancesReady(true);
   }, []);
 

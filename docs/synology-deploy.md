@@ -1,164 +1,44 @@
-# Alcor 投资记实 —— 群晖（Docker）部署
+# Fire 部署
 
-面向 **群晖 x86_64（Docker / Container Manager）** 的单机部署。
-镜像不含数据：SQLite 数据库与上传素材通过 `volume` 挂载到宿主机目录，镜像可随时替换重建而不丢数据。
+Fire 的网页、App 接入和后台管理使用同一份源码与镜像。内置后端通过私有 Unix socket 接入，不另设 AlcorApi 站点。当前使用 PostgreSQL；未来可按实际需求重新评估数据库。SQLite、存储切换和旧同步 PG 桥接已退出。
 
-## 打包内容
-- `Dockerfile` —— 多阶段（deps → build → runner），Node 22-slim；`next start` 运行。
-- `docker-compose.ghcr.yml` —— 群晖唯一 Compose 入口（拉 GHCR 镜像）；端口和持久化目录读取 `.env` 的 `HOST_PORT`、`DATA_DIR`、`UPLOADS_DIR`，未配置时默认 `3000`、`./data`、`./uploads`。
-- `.dockerignore` —— 排除 node_modules / .next / data / uploads / .env / .git。
+## 切换前
 
-## 部署步骤
+核对实际数据库、实例 ID、迁移版本、完整备份和原件目录，并准备可验证的恢复方案。现有数据库与文件不会由新版启动命令自动导入、初始化、迁移或删除。数据库不匹配时停止启动，不能通过新建空库或回退存储继续运行。
 
-### 1. 把项目目录拷到群晖
-用 SMB / WebDAV / Git 把整个 `fire-web/` 目录放到群晖指定共享文件夹（例如 `docker/fire`）。
-> 只拷源码，**不含** `node_modules`、`.next`、`data`、`public/uploads`（镜像内重建，数据走挂载）。
+此份源码目前提供迁移候选实现；通过本地测试、发布镜像、替换容器与线上验收是不同步骤。接口迁移清单中的后端登记状态也不代表页面或 App 已验收。
 
-### 1b. 手动放置卡面素材（重要）
-卡面素材（`public/uploads/cards/`，430 张卡、约 313MB）**不在 Git 仓库、也不在镜像里**，
-因为体积太大会拖慢仓库克隆与镜像构建。部署后需要手动放一次：
+## 配置
 
-1. 在宿主机（群晖）的 uploads 目录下建好 `cards/`，例如 `UPLOADS_DIR` 默认是 `./uploads`，
-   即 `/volume1/docker/fire/uploads/cards/`；容器内对应 `/app/public/uploads/cards/`。
-2. 把本机 `fire-web/public/uploads/cards/` 整个目录（含 `manifest.json` 与各地区子目录）
-   用 SMB / File Station / `scp -r` 传上去。
-3. 刷新「卡面库」即可看到素材；`manifest.json` 是索引，缺了它卡面库会显示为空。
+参考根目录 `.env.example`，在部署环境保存真实配置，禁止提交到仓库。
 
-> 以后素材库新增卡片，同样在本地跑一次抓取脚本后重传这个目录即可，不需要重新构建镜像。
+PG 和 Redis 连接只接受服务器环境配置。系统总览展示当前脱敏连接并允许测试，不能在线保存另一份地址或密码；旧连接配置、加密启动覆盖文件不会覆盖 `.env`，也不会被源码更新删除。修改连接后重新创建容器或重启对应本地服务生效。业务数据、日常偏好和任务回执仍在 PG。
 
-> 四色门侧栏的 4 个素材（`public/uploads/feature/four-door/{window,dial,pointer,cursor-hand}.png`）**已随镜像提供**，
-> 首次启动由容器启动脚本自动播种到 uploads 卷，不需要手动传；如果侧栏入口"闪一下就消失"，说明这四个文件缺失
-> （老镜像 + 手动挂载的 uploads 目录里没有它们），重新 `up -d --force-recreate` 让 entrypoint 播种即可。
+- `FIRE_PUBLIC_ORIGIN`：用户实际访问的完整地址，包含非标准端口。
+- `FIRE_DATABASE_URL`、`FIRE_INSTANCE_ID`：已核实的当前数据库及实例身份。
+- `FIRE_REDIS_URL`：可选缓存连接；缺少缓存配置不会显示假连接状态。
+- `FIRE_CONNECTION_SECRET_DIR`、`FIRE_BACKUP_DIR`、`FIRE_BACKUP_SECRET_DIR`、`FIRE_FILE_ROOT`、`FIRE_ASSET_ROOT`：分别设置在私有挂载目录下，保持秘密、备份和文件的边界。目录须允许容器用户 1000 访问。
+- `FIRE_WORKER=on`：启用独立后台任务进程；关闭时任务保持排队，不伪造心跳。
+- `FIRE_PRIVATE_DIR`：私有数据的宿主机目录，挂载到容器 `/private`。
+- `FIRE_NETWORK`：数据库所在的现有私有容器网络。
+- `GHCR_IMAGE`、`IMAGE_TAG`、`HOST_PORT`：已验收镜像与可配置宿主机端口。
 
-### 1c. 挂载目录属主必须是 1000:1000（重要）
-容器自 v0.1.31 起以**非 root** 运行（容器内的 `node` 用户 = **uid 1000 / gid 1000**），
-而 `DATA_DIR`、`UPLOADS_DIR` 是宿主机 bind mount —— 挂载会覆盖镜像里的属主，最终以**宿主机目录权限**为准。
-所以部署/升级后请执行一次（把路径换成 `.env` 里的真实值）：
+`docker-compose.ghcr.yml` 保留 Fire 和受限更新器，沿用主分支已经完成的 3D 展示迁出。更新器不开放宿主机端口；自定义图片、字体、图标、分享图继续使用各自挂载目录。
 
-```bash
-cd /volume1/docker/fire
-chown -R 1000:1000 data uploads
-chmod -R u+rwX  data uploads
-```
+镜像包含匹配的 PG 客户端工具，可在构建时通过 `PG_MAJOR` 选择 16、17 或 18，须与实际备份恢复要求核对。容器内不安装数据库服务器。
 
-- 这两条命令只需执行一次，属主会随卷保留，之后重建容器、升级镜像都不用再改。
-- DSM 的 File Station 里这些文件会显示成 UID `1000`（DSM 没有这个用户），但 admin 有特权，照样能浏览和编辑。
-- 只改 `uploads` 不改 `data` 不够：SQLite 的建库、WAL 与临时文件都在 `data/` 下。
+## 验收
 
-### 1d. FIRE 鱼素材与自定义插图 / 字体 / 图标
+检查 `/health/ready`、系统总览中的实际 PG/Redis 探测、Worker 心跳、后台任务及原请求回执，再核对网页和 App 的具体使用流程。`/api/health` 的 `buildSha` 应与运行镜像对应；仅看到镜像已发布或更新请求已受理，不能当作线上替换成功。
 
-自 v0.1.56 起，FIRE 小丑鱼素材 `public/fire-assets/clownfish-family.png` 已随镜像提供，
-构建时会检查文件存在。它位于独立目录，不会被宿主机的 `images` 挂载覆盖，不需要手动上传。
-升级后验证（应返回 `200`）：
+源代码更新后的首次生产数据迁移、镜像发布和线上切换须按已核实的目标另行执行。此前 SQLite 和 Node PG 桥接的部署步骤不再适用。
 
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/fire-assets/clownfish-family.png
-```
+## 配置核对与 UUID
 
-其他自定义插图、字体、图标与分享图仍由部署者自行提供（见 `ASSETS.md`）。在宿主机准备
-`images`、`fonts`、`icons`、`share` 目录，放入对应文件后由 Compose 挂载。旧版鱼素材路径为
-`/images/fire/clownfish-family.png`，继续使用旧镜像时需在 `images/fire/` 提供该文件并挂载目录。
+`npm run platform:config` 检查配置字段；`npm run platform:inspect` 只读检查库中的实例标识。已登记实例沿用其 UUID 和环境，更新时不生成新身份。旧库非空但没有平台标识时，只报告待迁移状态，不能将它作为空库初始化。
 
-```bash
-cd /volume1/docker/fire
-mkdir -p images fonts icons share
+首次空库需先选定 UUID、填入 `FIRE_INSTANCE_ID`，再在目标已核实后显式执行 `npm run platform:migrate -- --database EXACT_NAME --initialize-empty`。已有正确标识的库去掉 `--initialize-empty`；迁移前仍需核对备份。启动命令不执行这些操作，`npm run platform:check` 只读核对迁移校验和。
 
-# 从 Mac 按需上传到宿主机对应目录：
-#   scp -r public/images/fire  <群晖账号>@<群晖IP>:/volume1/docker/fire/images/
-#   scp    public/fonts/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/fonts/
-#   scp    public/icons/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/icons/
-#   scp    public/share/*      <群晖账号>@<群晖IP>:/volume1/docker/fire/share/
+YAML 固定容器中的私有目录，`.env` 的对应路径供本地启动使用。宿主机目录须预先创建并授予 UID/GID 1000、权限 0700。备份密钥与连接密钥分目录保存，`backup.key` 另留安全副本。身份邮件默认关闭，启用时同时配置 SMTP 和精确出站策略，由 Worker 投递；恢复白名单默认空。
 
-chown -R 1000:1000 images fonts icons share
-docker compose -f docker-compose.ghcr.yml up -d --force-recreate
-```
-
-- 这四个目录是只读挂载（`:ro`），与数据卷独立。
-- 路径可用 `.env` 覆盖：`IMAGES_DIR` / `FONTS_DIR` / `ICONS_DIR` / `SHARE_DIR`。
-- 自定义目录为空或未挂载时，对应资源返回 404；入口脚本会提示缺少部署素材。
-- 宿主机素材不会被后续镜像升级覆盖。FIRE 小丑鱼则由新镜像自行提供。
-
-### 2. 准备生产环境变量
-在项目根目录创建 `.env`（复制 `.env.example` 后填写）：
-```bash
-cd /volume1/docker/fire
-cp .env.example .env
-# 编辑 .env，至少填写首次建库的管理员（密码 8-128 位且含字母+数字）：
-#   INITIAL_ADMIN_USERNAME=admin
-#   INITIAL_ADMIN_PASSWORD=你的强密码
-```
-其余为可选：`STOCKLOG_PROXY`（出站代理）、`DEEPSEEK_API_KEY`（截图导入走云端 OCR，不配则回退本地识别）。
-
-### 3a. 命令行拉取并启动（SSH / 计划任务）
-```bash
-cd /volume1/docker/fire
-docker compose -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.ghcr.yml up -d --force-recreate
-```
-- 看日志 `docker compose -f docker-compose.ghcr.yml logs -f fire`，出现监听 3000 即成功。
-- 详细镜像登录与更新步骤见 `docs/github-ghcr-deploy.md`。
-
-### 3b. 或用群晖 Container Manager（图形界面）
-1. Container Manager → **项目** → **新增**。
-2. 名称 `fire`，来源选「上传 docker-compose.ghcr.yml」或指向项目目录。
-3. 启动后，项目状态为「运行中」。
-
-### 4. 访问
-- 浏览器打开 `http://群晖IP:3000`。
-- 用 `.env` 里 `INITIAL_ADMIN_USERNAME/PASSWORD` 登录（仅首次空库时创建管理员）。
-- 如果端口 3000 被占用，在 `.env` 设置 `HOST_PORT=3001`，无需修改 Compose 文件。
-
-## 数据持久化与备份
-- **SQLite 数据库 / 附件 / 备份 / 缓存** → `/volume1/docker/fire/data/`（挂载到 `/app/data`）。
-- **上传素材**（图标 / 头像 / 截图）→ `/volume1/docker/fire/uploads/`（挂载到 `/app/public/uploads`）。
-- **插图 / 字体 / 图标 / 分享图** → `/volume1/docker/fire/{images,fonts,icons,share}/`（只读挂载到 `/app/public/` 下同名目录，见「1d」）。
-- 备份：直接打包 `data/` 目录，或用「设置 → 个人信息 → 网站数据导出」生成 JSON 备份文件。
-- 升级：`docker compose -f docker-compose.ghcr.yml pull && docker compose -f docker-compose.ghcr.yml up -d --force-recreate`，数据不动。
-
-## 排查：升级镜像后容器无限重启，日志只有 EACCES
-
-症状：`docker ps` 里容器总是刚起来又重建（`RestartCount` 持续增长），日志末尾是
-
-```
-Error: EACCES: permission denied, open '/app/data/duan-posts.json.<pid>.tmp'
-    at file:///app/scripts/seed-trading-square.mjs:30:5
-```
-
-原因：挂载目录属主不是容器内的 uid 1000（见「1c. 挂载目录属主必须是 1000:1000」）。
-**v0.1.31 之前的镜像以 root 运行，所以从来不会暴露这个问题**，升级到非 root 之后才第一次出现。
-
-处理：
-
-```bash
-cd /volume1/docker/fire
-chown -R 1000:1000 data uploads && chmod -R u+rwX data uploads
-docker restart fire
-docker logs --tail 20 fire          # 期望看到 Next.js 的 ✓ Ready，不再有 EACCES
-docker inspect fire --format 'status={{.State.Status}} restarts={{.RestartCount}}'
-```
-
-现版本启动脚本已内置自检：数据目录不可写时会直接打印上面那行 `chown` 命令再退出；
-公开缓存种子（`seed-trading-square.mjs`）失败只告警、不再阻塞启动，因此不会因为种子问题变成无限重启。
-若该共享启用了 Windows ACL 导致 `chown` 不生效，可临时在 `.env` 里把 `IMAGE_TAG` 钉到升级前的
-`sha-…` 标签回滚，再按上面的方式处理权限。
-
-## 排查：FIRE 页面的小丑鱼不见了 / 图片、字体、图标 404
-
-先确认使用的镜像版本和页面请求的素材路径：
-
-- v0.1.56 起，小丑鱼使用 `/fire-assets/clownfish-family.png`，应直接由镜像返回 `200`。
-  若仍请求旧路径，确认容器已更新并刷新页面；若新路径返回 `404`，确认运行镜像包含本次素材修复。
-- 旧镜像使用 `/images/fire/clownfish-family.png`。该素材此前被 Git 和构建规则排除，
-  必须补齐宿主机 `images/fire/` 并挂载到 `/app/public/images`，或升级到含本次修复的镜像。
-- 其他 `/images/...`、`/fonts/...`、`/icons/...` 的 404，按「1d」检查宿主机文件和只读挂载。
-- 系统开启减少动态效果时，新版会保留静止的小丑鱼。
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/fire-assets/clownfish-family.png
-```
-
-## 说明 / 注意
-- **富途 OpenD 桥接**（`scripts/futu_quotes.py`）已由共用 `Dockerfile` 打包 Python 运行时与 `futu-api`。生产容器按设置连接 OpenD；本地 `next dev` 默认跳过（`STOCKLOG_FUTU=on` 可开启），避免抢免费额度的唯一连接。未配置或不可达时行情自动回退腾讯 / 雅虎（腾讯源已支持美股 / 港股 / A股 / 日股 / 韩股）。在设置→股票设置→交易·富途里把 OpenD 主机填写为纯 IP/主机名（如 `192.168.x.x`，不要带 `http://`），端口通常为 `11111`，并确保容器能访问该端口。
-- **资源**：默认不写死 CPU / 内存限制，请在 Container Manager 中按自己的 NAS 配置设置。
-- **健康检查**：每 60s 请求 `/api/settings/public`，失败 5 次标记 unhealthy（不影响运行）。
-- 默认 `CMD` 为 `npx next start -H 0.0.0.0 -p 3000`；若后续需要自定义启动（如迁移数据、预建库），可改为挂载自定义 `entrypoint.sh`。
+配置参考 Alcor-api 的公开 `.env.example`，按 Fire 单一入口调整。仓库、镜像、OAuth 回调及私有目录指向 Fire；内置后端不需要独立的对外端口或代理 IP 白名单。

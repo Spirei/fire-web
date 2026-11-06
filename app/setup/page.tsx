@@ -11,10 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default async function SetupPage() {
-  if (!needsSetup()) {
+  if (!await needsSetup()) {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
-    redirect(getUserByToken(token) ? "/global" : "/login");
+    redirect(await getUserByToken(token) ? "/global" : "/login");
   }
   return (
     <div style={{ minHeight: "100dvh", background: "#0b0f16" }}>

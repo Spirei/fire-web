@@ -14,7 +14,7 @@ import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
-import UnifiedMigrationExport from "@/components/UnifiedMigrationExport";
+import PlatformBackups from "@/components/PlatformBackups";
 import { lockScroll } from "@/lib/overlayLifecycle";
 import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
@@ -66,7 +66,7 @@ const DEFAULT_TICKER: TickerConfig = {
 };
 
 interface Props {
-  user: { username: string; nickname?: string; uid?: string; email?: string; emailVerified?: boolean; avatar?: string; role?: string };
+  user: { id: string; username: string; nickname?: string; uid?: string; email?: string; emailVerified?: boolean; avatar?: string; role?: string };
   recordsCount: number;
   onExport: () => void;
   onClearAll: (password: string) => Promise<boolean>;
@@ -141,14 +141,14 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
   return mounted ? createPortal(content, document.body) : content;
 }
 
-const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "authorizations", "database", "cron", "social", "about"] as const;
+const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "authorizations", "cron", "social", "about"] as const;
 type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
 function isSettingsSub(value: string | undefined | null): value is SubKey {
   return Boolean(value && (SETTINGS_SUB_KEYS as readonly string[]).includes(value));
 }
 
 // 仅管理员可见的设置子项
-const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "database", "cron", "social"]);
+const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "cron", "social"]);
 
 /** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
 type SettingsSearchItem = { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string; adminOnly?: boolean };
@@ -179,7 +179,6 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
   { sub: "authorizations", anchor: "authorizations", label: "应用授权", groupLabel: "账号", keywords: "Alcor Api App iOS iPhone 网页授权 连接 地址 公网 配置 测试 调试 名称 图标 设备 权限 撤销 断开" },
   { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
-  { sub: "database", anchor: "database", label: "数据库", groupLabel: "系统", keywords: "数据库 sqlite postgres 连接 存储" },
   { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
   { sub: "social", anchor: "wechat", label: "企业微信", groupLabel: "通知", keywords: "微信 企业微信 AgentId Secret Token 通知", adminOnly: true },
   { sub: "social", anchor: "telegram", label: "Telegram", groupLabel: "通知", keywords: "telegram 电报 机器人 bot 通知", adminOnly: true },
@@ -204,12 +203,12 @@ const SETTINGS_CATEGORIES = [
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
   { key: "social", label: "通知与配置", icon: "social", desc: "配置企业微信、Telegram、飞书、QQ、Discord、WebPush 和邮件。", anchors: ["wechat", "telegram", "feishu", "qq", "discord", "webpush", "mail", "mail-templates"] },
-  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "database", "cron", "backups", "danger", "delete-account"] },
+  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "cron", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
 const SOURCE_DETAIL_ANCHORS = new Set(["sources", "source-reports", "source-icons", "source-content"]);
-const EDITABLE_DETAIL_ANCHORS = new Set(["appearance", "ticker", "nav", "app-nav", "groups", "market-badges", ...SOURCE_DETAIL_ANCHORS, "translation", "trade", "profile", "database", "trading-square"]);
+const EDITABLE_DETAIL_ANCHORS = new Set(["appearance", "ticker", "nav", "app-nav", "groups", "market-badges", ...SOURCE_DETAIL_ANCHORS, "translation", "trade", "profile", "trading-square"]);
 
 function persistSettingsAnchor(sub: SubKey, anchor: string): boolean {
   const anchors = SETTINGS_SEARCH_INDEX.filter((item) => item.sub === sub);
@@ -242,7 +241,6 @@ const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
   passkeys: "passkeys",
   authorizations: "authorizations",
   "passkey-config": "passkey-config",
-  database: "database",
   cron: "cron",
   mail: "mail",
   "mail-templates": "mail-templates",
@@ -341,7 +339,6 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   {
     label: "系统",
     items: [
-      { key: "database", label: "数据库存储", desc: "SQLite / PostgreSQL 业务读写与事务" },
       { key: "cron", label: "定时任务", desc: "汇率刷新、数据缓存与自动更新" },
       { key: "api", label: "API 开发接口", desc: "后端接口一览与鉴权说明" },
       { key: "about", label: "关于", desc: "网站技术栈、数据源与版本信息" }
@@ -566,12 +563,6 @@ const DEFAULT_SETTINGS: SiteSettings = {
   tradingSquareDuanRefreshMinutes: 5,
   xueqiuCookie: "",
   translationEnabled: true,
-  dbType: "sqlite",
-  pgHost: "",
-  pgPort: "5432",
-  pgDatabase: "",
-  pgUser: "",
-  pgPassword: "",
   smtpHost: "",
   smtpPort: "587",
   smtpSecure: false,
@@ -667,13 +658,6 @@ function ModelProviderIcon({ provider, icon, className = "h-10 w-10" }: { provid
   );
 }
 
-interface DbStatus {
-  type: string;
-  file: string;
-  sizeBytes: number;
-  tables: string[];
-  configuredType: string;
-}
 
 // 股票来源接口的卡片元数据（顺序即展示顺序）
 const SOURCE_FIELDS: {
@@ -868,17 +852,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const settingsSaveGeneration = useRef(0);
   const [tabs, setTabs] = useState<TabConfig[]>(initialSettings?.tabs ?? DEFAULT_TABS);
   const [stockGroups, setStockGroups] = useState<GroupConfig[]>(initialSettings?.groups ?? []);
-  const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
-  const [dbStatusLoading, setDbStatusLoading] = useState(false);
-  const [dbStatusError, setDbStatusError] = useState("");
-  const [dbStatusRetry, setDbStatusRetry] = useState(0);
   const [blockSaving, setBlockSaving] = useState<Record<string, boolean>>({});
   const [blockMsg, setBlockMsg] = useState<Record<string, { type: "ok" | "err"; text: string } | undefined>>({});
-  const [dbMsg, setDbMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [dbSaving, setDbSaving] = useState(false);
-  const [dbTesting, setDbTesting] = useState(false);
   // Keep the unsaved password out of settings refreshes and saved/redacted snapshots.
-  const [dbPasswordDraft, setDbPasswordDraft] = useState("");
   const icoRef = useRef<HTMLInputElement>(null);
   const pwaIconRef = useRef<HTMLInputElement>(null);
   const [pwaUploading, setPwaUploading] = useState(false);
@@ -964,30 +940,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       });
   }, []);
 
-  useEffect(() => {
-    if (sub !== "database") return;
-    let cancelled = false;
-    setDbStatusLoading(true);
-    setDbStatusError("");
-    fetch("/api/db/status")
-      .then(async (res) => {
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.status) throw new Error(data?.error || "数据库状态加载失败");
-        return data.status as DbStatus;
-      })
-      .then((status) => {
-        if (!cancelled) setDbStatus(status);
-      })
-      .catch((error) => {
-        if (!cancelled) setDbStatusError(error instanceof Error ? error.message : "数据库状态加载失败");
-      })
-      .finally(() => {
-        if (!cancelled) setDbStatusLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sub, dbStatusRetry]);
 
   async function uploadSiteFile(kind: "ico" | "background", file: File, target?: "pwaIcon" | "appDisplayIcon"): Promise<string> {
     if (target) setPwaUploading(true);
@@ -1499,10 +1451,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingFutu, setEditingFutu] = useState(false);
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
-  const [editingDb, setEditingDb] = useState(false);
-  useEffect(() => {
-    setDbPasswordDraft("");
-  }, [editingDb, site.pgHost, site.pgPort, site.pgDatabase, site.pgUser]);
   const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
     : activeAnchor === "info" ? editingSiteInfo
     : activeAnchor === "appearance" ? editingAppearance
@@ -1515,7 +1463,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               : activeAnchor === "translation" ? editingModel
               : activeAnchor === "trade" ? editingFutu
                 : activeAnchor === "profile" ? editingProfile
-                  : activeAnchor === "database" ? editingDb
                     : false;
   const activePageMeta = SETTINGS_SEARCH_INDEX.find((item) => item.sub === sub && item.anchor === activeAnchor);
 
@@ -1532,7 +1479,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "translation") setEditingModel(true);
     else if (activeAnchor === "trade") setEditingFutu(true);
     else if (activeAnchor === "profile") setEditingProfile(true);
-    else if (activeAnchor === "database") setEditingDb(true);
   }
   useEffect(() => {
     const onEditActive = () => beginActiveEdit();
@@ -1593,9 +1539,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         if (ok) setEditingFutu(false);
       } else if (activeAnchor === "profile") {
         await saveProfile();
-      } else if (activeAnchor === "database") {
-        const ok = await saveDb();
-        if (ok) setEditingDb(false);
+
       }
     } finally {
       savingEditRef.current = false;
@@ -1615,7 +1559,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "market-badges") setEditingMarketBadges(false);
     else if (activeAnchor === "groups") setEditingStockGroups(false);
     else if (activeAnchor === "profile") setEditingProfile(false);
-    else if (activeAnchor === "database") setEditingDb(false);
   }
   function cancelActiveEdit() {
     setCookieDraft({ value: "", dirty: false });
@@ -1785,71 +1728,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       showToast(message, "err");
     } finally {
       setGroupSaving(false);
-    }
-  }
-
-  async function saveDb(): Promise<boolean> {
-    setDbSaving(true);
-    setDbMsg(null);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dbType: site.dbType,
-          pgHost: site.pgHost,
-          pgPort: site.pgPort,
-          pgDatabase: site.pgDatabase,
-          pgUser: site.pgUser,
-          pgPassword: dbPasswordDraft
-        })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "保存失败");
-      setSite({ ...DEFAULT_SETTINGS, ...data.settings });
-      setDbPasswordDraft("");
-      captureSaved(data.settings);
-      setDbMsg({ type: "ok", text: `数据库配置已保存（当前类型：${data.settings.dbType === "postgres" ? "PostgreSQL" : "SQLite"}）` });
-      showToast("数据库配置已保存");
-      return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "数据库配置保存失败";
-      setDbMsg({ type: "err", text: message });
-      showToast(message, "err");
-      return false;
-    } finally {
-      setDbSaving(false);
-    }
-  }
-
-  async function testDb() {
-    setDbTesting(true);
-    setDbMsg(null);
-    try {
-      const res = await fetch("/api/db/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          host: site.pgHost,
-          port: site.pgPort,
-          database: site.pgDatabase,
-          pgUser: site.pgUser,
-          password: dbPasswordDraft
-        })
-      });
-      const data = await res.json().catch(() => null);
-      const message = res.ok ? `数据库连接成功：${data?.version ?? "已建立连接"}` : (data?.error ?? "数据库连接失败，请检查地址、端口和账号");
-      setDbMsg({
-        type: res.ok ? "ok" : "err",
-        text: message
-      });
-      showToast(message, res.ok ? "ok" : "err");
-    } catch {
-      const message = "数据库连接失败，请检查网络与服务器配置";
-      setDbMsg({ type: "err", text: message });
-      showToast(message, "err");
-    } finally {
-      setDbTesting(false);
     }
   }
 
@@ -3641,7 +3519,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                   </SettingsManagedPane>
-                  {user.role === "admin" && <SettingsManagedPane name="unified-export" title="统一迁移导出" summary="完整数据库与原件 · 管理员"><UnifiedMigrationExport /></SettingsManagedPane>}
+                  {user.role === "admin" && <SettingsManagedPane name="joint-backup" title="联合备份" summary="完整数据库与原件 · 独立恢复密钥"><PlatformBackups ownerId={user.id}/></SettingsManagedPane>}
                   <SettingsManagedPane name="import" title="导入网站数据" summary="从 Alcor 备份文件恢复数据">
                   <p className="settings-managed-note">选择 Alcor 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
                   <div className="sw-row">
@@ -3767,132 +3645,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             )}
 
             {/* ===== 数据库增强 ===== */}
-            {sub === "database" && isAdminUser && (
-              <div id="database" className="flex flex-col gap-6">
-                {/* 类型选择 */}
-                <SettingsSection
-                  icon="database"
-                  title="数据库"
-                  desc="选择本地或远程存储。"
-                  titleAction={!editingDb ? (
-                    <button type="button" onClick={() => setEditingDb(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑数据库" aria-label="编辑数据库">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                    </button>
-                  ) : undefined}
-                  action={editingDb ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
-                >
-                  <SettingsManagedGroup scope="database" inline headings={false} editing={editingDb}>
-                  <SettingsManagedPane name="type" title="存储方式" summary={site.dbType === "sqlite" ? "SQLite · 本地文件" : "PostgreSQL · 远程数据库"}>
-                  <div className="subhead">数据库类型</div>
-                  <div className="settings-db-types">
-                    {([
-                      { type: "sqlite" as const, title: "SQLite", desc: "本地文件，无需配置" },
-                      { type: "postgres" as const, title: "PostgreSQL", desc: "远程数据库，适合多人使用" }
-                    ]).map((opt) => (
-                      <button
-                        key={opt.type}
-                        type="button"
-                        disabled={!editingDb}
-                        onClick={() => setSite({ ...site, dbType: opt.type })}
-                        aria-pressed={site.dbType === opt.type}
-                        className={`settings-db-type ${site.dbType === opt.type ? "is-selected" : ""}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold text-ink">{opt.title}</span>
-                          <span className={`settings-choice-radio ${site.dbType === opt.type ? "is-selected" : ""}`}>
-                            {site.dbType === opt.type && (
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m5 13 4 4L19 7" /></svg>
-                            )}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-muted">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-
-                  </SettingsManagedPane>
-                  <SettingsManagedPane name="connection" title={site.dbType === "sqlite" ? "数据库状态" : "连接配置"} summary={site.dbType === "sqlite" ? dbStatus ? `${(dbStatus.sizeBytes / 1024).toFixed(1)} KB · ${dbStatus.tables.length} 张表` : dbStatusError || "读取中…" : `${site.pgHost || "未设置主机"}:${site.pgPort || "5432"} · ${dbStatus?.type === "postgres" ? "已启用" : "尚未切换业务存储"}`}>
-                {/* SQLite 信息 */}
-                {site.dbType === "sqlite" && (
-                  <>
-                    <div className="subhead">SQLite 状态</div>
-                    {dbStatus ? (
-                      <div className="settings-db-status-list">
-                        <div className="settings-db-stat">
-                          <span className="block text-xs text-muted">数据库文件</span>
-                          <span className="block break-all font-mono text-xs text-ink-2">{dbStatus.file}</span>
-                        </div>
-                        <div className="settings-db-stat">
-                          <span className="block text-xs text-muted">文件大小</span>
-                          <span className="text-sm font-semibold tabular-nums">
-                            {(dbStatus.sizeBytes / 1024).toFixed(1)} KB
-                          </span>
-                        </div>
-                        <details className="settings-db-tables"><summary>数据表<span>{dbStatus.tables.length} 张</span></summary><p>{dbStatus.tables.join("、")}</p></details>
-                      </div>
-                    ) : dbStatusError ? (
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300">
-                        <span>{dbStatusError}</span>
-                        <button type="button" onClick={() => setDbStatusRetry((value) => value + 1)} className="rounded-lg border border-current/25 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-red-100 dark:hover:bg-red-500/15">重试</button>
-                      </div>
-                    ) : dbStatusLoading ? (
-                      <div className="settings-inline-state" role="status" aria-live="polite">
-                        <span className="settings-state-dot" aria-hidden="true" />
-                        <span>正在读取数据库状态</span>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-faint">暂无数据库状态</p>
-                    )}
-                  </>
-                )}
-
-                {/* PostgreSQL 连接配置 */}
-                {site.dbType === "postgres" && (
-                  <>
-                    <div className="subhead">PostgreSQL 连接配置</div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                        主机地址
-                        <input value={site.pgHost} readOnly={!editingDb} onChange={(e) => setSite({ ...site, pgHost: e.target.value })} placeholder="如：localhost 或 db.example.com" className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
-                      </label>
-                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                        端口
-                        <input value={site.pgPort} readOnly={!editingDb} onChange={(e) => setSite({ ...site, pgPort: e.target.value })} placeholder="5432" className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
-                      </label>
-                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                        数据库名
-                        <input value={site.pgDatabase} readOnly={!editingDb} onChange={(e) => setSite({ ...site, pgDatabase: e.target.value })} placeholder="如：fire" className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
-                      </label>
-                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-                        用户名
-                        <input value={site.pgUser} readOnly={!editingDb} onChange={(e) => setSite({ ...site, pgUser: e.target.value })} placeholder="如：postgres" className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
-                      </label>
-                      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2 md:col-span-2">
-                        密码
-                        <PasswordInput type="password" value={dbPasswordDraft} readOnly={!editingDb} onChange={(e) => setDbPasswordDraft(e.target.value)} placeholder={site.pgPasswordConfigured ? "已保存 · 留空复用" : "数据库密码"} className={`h-[42px] rounded-[10px] border border-edge-strong px-3 outline-none transition-shadow focus:border-edge-strong focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)] ${editingDb ? "" : "!border-transparent !bg-transparent !shadow-none"}`} />
-                      </label>
-                    </div>
-                    {dbMsg && (
-                      <p className={`rounded-[10px] px-3.5 py-2.5 text-[13px] break-all ${dbMsg.type === "ok" ? "bg-bg-gray text-ink" : "bg-up-bg text-up"}`}>
-                        {dbMsg.text}
-                      </p>
-                    )}
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button type="button" disabled={dbTesting} onClick={testDb} className="btn btn-ghost btn-sm disabled:opacity-60">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4 12 14.01l-3-3" />
-                        </svg>
-                        {dbTesting ? "测试中…" : "测试连接"}
-                      </button>
-                    </div>
-                  </>
-                )}
-                  </SettingsManagedPane>
-                  </SettingsManagedGroup>
-                </SettingsSection>
-              </div>
-            )}
-
             {sub === "social" && isAdminUser && (
               <div className="flex flex-col gap-6">
                 <SettingsSection id="wechat" icon="wechat" title="企业微信">
@@ -4092,8 +3844,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效 · KTX2/UASTC 纹理压缩 · zxcvbn-ts（本地密码强度）</span>
                   </div>
                   <div className="sw-row">
-                    <div className="sw-row-label"><b>数据与服务</b><span>SQLite 本地存储或 PostgreSQL 共享业务存储</span></div>
-                    <span className="settings-detail-value">Node.js · SQLite · PostgreSQL · PostgreSQL Client 17（完整迁移导出）· ExcelJS · saxes（SVG / RSS 校验）· SimpleWebAuthn（通行密钥）</span>
+                    <div className="sw-row-label"><b>数据与服务</b><span>PostgreSQL 统一业务存储</span></div>
+                    <span className="settings-detail-value">PostgreSQL · Redis · Worker</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>

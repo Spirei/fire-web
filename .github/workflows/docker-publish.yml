@@ -1,4 +1,5 @@
-name: Build and publish Alcor image
+name: Build and publish Fire image
+run-name: "${{ (github.event_name == 'push' || github.event_name == 'pull_request' || inputs.verify_only) && 'Fire 检查' || 'Fire 构建发布' }} · ${{ inputs.request_id || github.sha }}"
 
 on:
   push:
@@ -9,6 +10,20 @@ on:
     # 香港时间每天 00:07（UTC 前一日 16:07）检查；有新提交才发布，避开整点调度高峰。
     - cron: "7 16 * * *"
   workflow_dispatch:
+    inputs:
+      request_id:
+        description: 原请求 UUID 回执
+        required: false
+        type: string
+      expected_revision:
+        description: 本次确认的 main 提交，变化时停止
+        required: false
+        type: string
+      verify_only:
+        description: 仅执行完整构建检查，不发布
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   # 保留队列中的推送，避免连续提交时互相取消并产生大量失败/取消记录。
@@ -25,21 +40,10 @@ env:
 
 jobs:
   test:
-    name: TypeScript check
+    name: 完整平台检查
     needs: scheduled-change-gate
     if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true')
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17.6
-        env:
-          POSTGRES_USER: alcor_ci
-          POSTGRES_PASSWORD: isolated-ci-only
-          POSTGRES_DB: alcor_cutover_test_c1
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U alcor_ci -d alcor_cutover_test_c1"
-          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -57,43 +61,42 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.sha }}
         run: npm run check:commit-title -- "${PR_BASE_SHA:-$BEFORE_SHA}" "$HEAD_SHA"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.23'
+          enable-cache: true
+          cache-dependency-glob: platform/uv.lock
+      - name: Install internal backend dependencies
+        working-directory: platform
+        run: uv sync --frozen --python 3.12
+      - name: Install isolated cache and image runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y redis-server libcairo2
+      - name: Complete internal PostgreSQL and Worker regression
+        working-directory: platform
+        env:
+          FIRE_TEST_REDIS_BINARY: /usr/bin/redis-server
+        run: uv run pytest -q
       - name: Install dependencies
         run: npm ci
       - name: Public repository safety audit
         run: npm run audit:public
       - name: Image publication regression
-        run: node tests/deploy-publication.mjs && node tests/deploy-status.cjs
+        run: node tests/deploy-publication.mjs
       - name: Local and GHCR deployment parity audit
         run: npm run audit:deploy
       - name: Security and site regression
         run: npm run test:review
-      - name: PostgreSQL business transaction regression
-        env:
-          ALCOR_PG_TEST_CONFIG: /tmp/alcor-pg-ci.json
-          CI_PG_PASSWORD: isolated-ci-only
-        run: |
-          node -e "require('fs').writeFileSync(process.env.ALCOR_PG_TEST_CONFIG,JSON.stringify({host:'127.0.0.1',port:5432,database:'alcor_cutover_test_c1',user:'alcor_ci',password:process.env.CI_PG_PASSWORD,schema:'ledger',ssl:false}),{mode:0o600})"
-          node tests/postgres-business.cjs
       - name: TypeScript check
         run: npx tsc --noEmit
       - name: Production build check
         run: npm run build
-      - name: Start app and run public smoke
-        env:
-          NODE_ENV: production
-          STOCKLOG_FUTU: "off"
+      - name: Build Linux candidate without publishing
+        run: docker build --build-arg FIRE_BUILD_SHA=${{ github.sha }} --tag fire-candidate:check .
+      - name: Verify packaged Python, SVG, Node and PG tools
         run: |
-          mkdir -p data
-          npx next start -H 127.0.0.1 -p 3000 &
-          echo $! > /tmp/fire-smoke.pid
-          for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:3000/api/auth/setup-status >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          bash scripts/smoke-ci.sh
-          kill "$(cat /tmp/fire-smoke.pid)" 2>/dev/null || true
+          docker run --rm --entrypoint /platform/.venv/bin/python fire-candidate:check -c 'import fastapi, psycopg, redis, futu; from cairosvg import svg2png; assert svg2png(bytestring=b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>").startswith(b"\x89PNG")'
+          docker run --rm --entrypoint node fire-candidate:check -e 'require("next/package.json")'
+          docker run --rm --entrypoint /usr/lib/postgresql/17/bin/pg_dump fire-candidate:check --version
 
   scheduled-change-gate:
     name: Check scheduled source changes
@@ -104,6 +107,9 @@ jobs:
       contents: read
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
+      version: ${{ steps.gate.outputs.version }}
+      schema: ${{ steps.gate.outputs.schema }}
+      image: ${{ steps.gate.outputs.image }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -115,19 +121,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           CURRENT_SHA: ${{ github.sha }}
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          VERIFY_ONLY: ${{ inputs.verify_only }}
         run: node scripts/check-image-published.mjs
 
   publish:
     name: Publish linux/amd64 image
     needs: [test, scheduled-change-gate]
     # 提交/PR 只检查；定时和手动任务仅在当前 main 尚无镜像时发布。
-    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && needs.scheduled-change-gate.outputs.should_publish == 'true'
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && !inputs.verify_only && needs.scheduled-change-gate.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       attestations: write
       id-token: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -158,6 +169,7 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build and push
+        id: image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -172,3 +184,35 @@ jobs:
             FIRE_BUILD_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    name: 发布不可变版本清单
+    needs: [scheduled-change-gate, publish]
+    if: github.ref == 'refs/heads/main' && needs.publish.result == 'success' && !inputs.verify_only
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Write immutable release identity
+        env:
+          IMAGE: ${{ needs.scheduled-change-gate.outputs.image }}@${{ needs.publish.outputs.digest }}
+          VERSION: ${{ needs.scheduled-change-gate.outputs.version }}
+          SCHEMA: ${{ needs.scheduled-change-gate.outputs.schema }}
+          REVISION: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          value={'version':os.environ['VERSION'],'image':os.environ['IMAGE'],'revision':os.environ['REVISION'],'schema_hash':os.environ['SCHEMA']}
+          assert re.fullmatch(r'ghcr.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}',value['image'])
+          assert re.fullmatch(r'[a-f0-9]{40}',value['revision']) and re.fullmatch(r'[a-f0-9]{64}',value['schema_hash'])
+          assert re.fullmatch(r'\d+\.\d+\.\d+',value['version'])
+          Path('release-manifest.json').write_text(json.dumps(value))
+          PY
+      - name: Publish immutable release manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.scheduled-change-gate.outputs.version }}
+          REVISION: ${{ github.sha }}
+        run: gh release create "fire-v${VERSION}-${REVISION}" --target "$REVISION" --title "Fire ${VERSION}" --notes-file release-manifest.json --latest

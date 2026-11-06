@@ -1,3 +1,5 @@
+> 历史实现记录：文中的 Node/SQLite 内部实现和旧测试命令已退出；当前运行、接口清理与验证入口见 [Fire 迁移说明](fire-api-migration.md)。本文保留来源和旧客户端合约，不作为当前部署步骤。
+
 # App 资产合约 v1（2026-10-05，冻结；发布状态按提交分别核对）
 
 完整联调样本：[fixtures/account-assets-v1.json](fixtures/account-assets-v1.json)。该文件由本仓库真实计算服务在隔离临时数据库中生成，包含两个虚构持仓市场、两笔虚构成交及虚构现金；不是用户账户，不含密码、Token或真实邮件信息。`schemaVersion:1` 的 data 结构在 v1/v2 相同，样本外层包含标准成功信封。

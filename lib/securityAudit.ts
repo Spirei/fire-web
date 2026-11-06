@@ -1,20 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { getDb } from "@/lib/db";
-import { clientIp } from "@/lib/rateLimit";
-
-export function logSecurityEvent(request: Request, userId: string, event: string, detail = "") {
-  try {
-    getDb().prepare(
-      "INSERT INTO security_audit (id,user_id,event,detail,ip,created_at) VALUES (?,?,?,?,?,?)"
-    ).run(
-      `sec-${randomBytes(10).toString("hex")}`,
-      userId,
-      event.slice(0, 80),
-      detail.slice(0, 2000),
-      clientIp(request).slice(0, 64),
-      new Date().toISOString()
-    );
-  } catch {
-    /* 审计日志失败不应泄露细节或掩盖主操作结果 */
-  }
+import {platformJson,platformRequest} from './platformTransport';
+export async function logSecurityEvent(request:Request,_userId:string,event:string,detail=''){
+ const cookie=request.headers.get('cookie')||'';
+ const {csrf}=await platformJson<{csrf:string}>('/api/fire/session',{cookie});
+ const response=await platformRequest('/api/fire/showcase/audit',{method:'POST',internal:true,headers:{cookie,'x-csrf-token':csrf,'content-type':'application/json'},body:new Response(JSON.stringify({event,detail})).body});
+ if(!response.ok)throw new Error('上传审计未完成');
 }

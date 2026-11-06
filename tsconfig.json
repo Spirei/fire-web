@@ -42,6 +42,7 @@
     ".next",
     ".next-qa",
     "data",
-    "public"
+    "public",
+    "platform"
   ]
 }

@@ -1,0 +1,7 @@
+{
+  "files": {
+    "lib/mailTemplateModel.ts": "aa62e453352b64499a77818ed72feeb007ef26d84c2eeab66af2e4ebd39207f0",
+    "lib/mailTemplateRenderer.ts": "7936537d2bd2238a67f55f3e1ece7ce7cc3c5e955763b0a2f86d2dd509051610"
+  },
+  "golden_sha256": "380246d85882ec7f30f5874f2df9dbb89eda3e462646b118c237918a7ebc8597"
+}

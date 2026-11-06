@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default async function SimpleAppPage() {
   const incoming = await headers();
   const request = new Request("http://localhost/simple-app", { headers: incoming });
-  const user = getAuthUser(request);
+  const user = await getAuthUser(request);
   if (!user) redirect("/login?next=%2Fsimple-app");
   return <SimpleAppClient userId={user.id} />;
 }

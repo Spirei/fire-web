@@ -1,0 +1,1589 @@
+{
+  "source": "lib/types.ts:SiteSettings",
+  "source_sha256": "d510df5523c63b19ca3e0676e0e2fba00de228bc4304def9a5b11c12f1923629",
+  "declared_fields": 137,
+  "fields": [
+    {
+      "field": "domain",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "title",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "ico",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "pwaIcon",
+      "scope": "additional-brand",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "PWA/app identity needs registered-version asset policy and independent client consumption"
+      }
+    },
+    {
+      "field": "homepageBg",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "loginSideImage",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "tabs",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "mobileNavigationOrder",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "groups",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "homeNav",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "markets",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "marketLabels",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "marketBadges",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "marketBadgesVisible",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "assetMarketOrder",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "assetAnalysisOrder",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "indicesOrder",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "holdingColumns",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "allowRegister",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "stockIconCdn",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    },
+    {
+      "field": "siteLogo",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "appDisplayName",
+      "scope": "additional-brand",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "PWA/app identity needs registered-version asset policy and independent client consumption"
+      }
+    },
+    {
+      "field": "appDisplayIcon",
+      "scope": "additional-brand",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "PWA/app identity needs registered-version asset policy and independent client consumption"
+      }
+    },
+    {
+      "field": "logoText",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "logoFont",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "quoteSource",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "futuHost",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "futuPort",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "footerDesc",
+      "scope": "public-brand",
+      "status": "implemented_platform_only",
+      "authority_review": {
+        "authority": "site_settings singleton and registered system_asset_versions",
+        "decision": "project_reviewed_public_fields",
+        "remaining": "legacy data import and client adaptation not verified"
+      }
+    },
+    {
+      "field": "quoteApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "searchApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "chartApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "currencyApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "fx_provider_revisions has redacted URL, actual URL sealed separately",
+        "decision": "omit",
+        "remaining": "never return /[redacted] as functional currencyApiUrl or unseal credential for settings read"
+      }
+    },
+    {
+      "field": "currencyRefreshPattern",
+      "scope": "private-market-provider",
+      "status": "implemented_saved_platform_metadata_read_only",
+      "authority_review": {
+        "authority": "fx_config.provider_revision -> fx_provider_revisions.config.schedule",
+        "decision": "project_stored_pattern_with_explicit_timezone",
+        "remaining": "legacy server-local timezone semantics differ; no default pattern for builtin or unscheduled provider; execution not probed"
+      },
+      "authority": "fx_config current immutable fx_provider_revisions.schedule",
+      "legacy_import": "not_verified",
+      "write": "pending"
+    },
+    {
+      "field": "earningsApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "cnEarningsApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "hkEarningsApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "usLogoApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "cnLogoApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "trumpArchiveApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "translationApiUrl",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "translationEnabled",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "translationProvider",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "deepseekApiUrl",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "deepseekModel",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "deepseekApiKey",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "llmProvider",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "llmApiUrl",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "llmModel",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "llmApiKey",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "llmApiKeyConfigured",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "modelServices",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "modelServicesRevision",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "modelServicesInitialized",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "modelServicesError",
+      "scope": "private-model-services",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "requires dedicated sealed provider/destination-bound credential authority, revision CAS and operations; never public site JSON"
+      }
+    },
+    {
+      "field": "tradingSquareTrumpRefreshMinutes",
+      "scope": "worker-schedule",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "independent Worker exists but no matching Trump/Duan cadence authority; never substitute polling heartbeat or FX schedule"
+      }
+    },
+    {
+      "field": "tradingSquareDuanRefreshMinutes",
+      "scope": "worker-schedule",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "independent Worker exists but no matching Trump/Duan cadence authority; never substitute polling heartbeat or FX schedule"
+      }
+    },
+    {
+      "field": "xueqiuCookie",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "xueqiuCookieConfigured",
+      "scope": "private-market-provider",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "market_data_policies are source/license-scoped; fx_config is site-global",
+        "decision": "field_specific",
+        "remaining": "do not infer legacy gateway URLs, quote selection or cookie credentials from data observations/runtime policies"
+      }
+    },
+    {
+      "field": "dbType",
+      "scope": "private-database",
+      "status": "implemented_saved_platform_metadata_read_only",
+      "authority": "/api/connections/postgresql",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "explicit connection_settings postgresql record",
+        "decision": "metadata_read_only",
+        "remaining": "never infer from bootstrap database URL or change active platform database through settings patch"
+      }
+    },
+    {
+      "field": "pgHost",
+      "scope": "private-database",
+      "status": "implemented_saved_platform_metadata_read_only",
+      "authority": "/api/connections/postgresql",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "explicit connection_settings postgresql record",
+        "decision": "metadata_read_only",
+        "remaining": "never infer from bootstrap database URL or change active platform database through settings patch"
+      }
+    },
+    {
+      "field": "pgPort",
+      "scope": "private-database",
+      "status": "implemented_saved_platform_metadata_read_only",
+      "authority": "/api/connections/postgresql",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "explicit connection_settings postgresql record",
+        "decision": "metadata_read_only",
+        "remaining": "never infer from bootstrap database URL or change active platform database through settings patch"
+      }
+    },
+    {
+      "field": "pgDatabase",
+      "scope": "private-database",
+      "status": "implemented_saved_platform_metadata_read_only",
+      "authority": "/api/connections/postgresql",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "explicit connection_settings postgresql record",
+        "decision": "metadata_read_only",
+        "remaining": "never infer from bootstrap database URL or change active platform database through settings patch"
+      }
+    },
+    {
+      "field": "pgUser",
+      "scope": "private-database",
+      "status": "implemented_saved_platform_metadata_read_only",
+      "authority": "/api/connections/postgresql",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "explicit connection_settings postgresql record",
+        "decision": "metadata_read_only",
+        "remaining": "never infer from bootstrap database URL or change active platform database through settings patch"
+      }
+    },
+    {
+      "field": "pgPassword",
+      "scope": "private-database",
+      "status": "mapped_connections_legacy_write_pending",
+      "authority_review": {
+        "authority": "explicit connection_settings postgresql record",
+        "decision": "metadata_read_only",
+        "remaining": "never infer from bootstrap database URL or change active platform database through settings patch"
+      }
+    },
+    {
+      "field": "pgPasswordConfigured",
+      "scope": "private-database",
+      "status": "implemented_saved_platform_metadata_read_only",
+      "authority": "/api/connections/postgresql",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "explicit connection_settings postgresql record",
+        "decision": "metadata_read_only",
+        "remaining": "never infer from bootstrap database URL or change active platform database through settings patch"
+      }
+    },
+    {
+      "field": "smtpHost",
+      "scope": "private-mail",
+      "status": "implemented_runtime_metadata_read_only",
+      "authority": "runtime_identity_mail",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "IdentityMail runtime and IdentityEmail public_origin binding",
+        "decision": "field_specific",
+        "remaining": "runtime secrets remain unsealed; no From-name authority; runtime SMTP edit and legacy destination migration pending"
+      }
+    },
+    {
+      "field": "smtpPort",
+      "scope": "private-mail",
+      "status": "implemented_runtime_metadata_read_only",
+      "authority": "runtime_identity_mail",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "IdentityMail runtime and IdentityEmail public_origin binding",
+        "decision": "field_specific",
+        "remaining": "runtime secrets remain unsealed; no From-name authority; runtime SMTP edit and legacy destination migration pending"
+      }
+    },
+    {
+      "field": "smtpSecure",
+      "scope": "private-mail",
+      "status": "implemented_runtime_metadata_read_only",
+      "authority": "runtime_identity_mail",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "IdentityMail runtime and IdentityEmail public_origin binding",
+        "decision": "field_specific",
+        "remaining": "runtime secrets remain unsealed; no From-name authority; runtime SMTP edit and legacy destination migration pending"
+      }
+    },
+    {
+      "field": "smtpUser",
+      "scope": "private-mail",
+      "status": "mapped_runtime_only_legacy_write_pending",
+      "authority_review": {
+        "authority": "IdentityMail SecretStr mail_username",
+        "decision": "presence_only",
+        "remaining": "legacy exposes admin username; current conservative view omits identity value and reports sealed_present/not_set"
+      }
+    },
+    {
+      "field": "smtpPassword",
+      "scope": "private-mail",
+      "status": "mapped_runtime_only_legacy_write_pending",
+      "authority_review": {
+        "authority": "IdentityMail runtime and IdentityEmail public_origin binding",
+        "decision": "field_specific",
+        "remaining": "runtime secrets remain unsealed; no From-name authority; runtime SMTP edit and legacy destination migration pending"
+      }
+    },
+    {
+      "field": "smtpPasswordConfigured",
+      "scope": "private-mail",
+      "status": "implemented_runtime_metadata_read_only",
+      "authority": "runtime_identity_mail",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "IdentityMail runtime and IdentityEmail public_origin binding",
+        "decision": "field_specific",
+        "remaining": "runtime secrets remain unsealed; no From-name authority; runtime SMTP edit and legacy destination migration pending"
+      }
+    },
+    {
+      "field": "smtpFromName",
+      "scope": "private-mail",
+      "status": "mapped_runtime_only_legacy_write_pending",
+      "authority_review": {
+        "authority": null,
+        "decision": "omit_unknown",
+        "remaining": "runtime sender is a validated email address, not a legacy display-name authority"
+      }
+    },
+    {
+      "field": "smtpFromEmail",
+      "scope": "private-mail",
+      "status": "implemented_runtime_metadata_read_only",
+      "authority": "runtime_identity_mail",
+      "legacy_import": "not_verified",
+      "write": "pending",
+      "authority_review": {
+        "authority": "IdentityMail runtime and IdentityEmail public_origin binding",
+        "decision": "field_specific",
+        "remaining": "runtime secrets remain unsealed; no From-name authority; runtime SMTP edit and legacy destination migration pending"
+      }
+    },
+    {
+      "field": "emailLinkOrigin",
+      "scope": "private-mail",
+      "status": "implemented_runtime_metadata_read_only",
+      "authority_review": {
+        "authority": "IdentityEmail runtime public_origin",
+        "decision": "read_exact_binding_only_if_public_https",
+        "remaining": "local/private origin omitted; brand domain saves do not mutate runtime origin"
+      },
+      "authority": "IdentityEmail settings.public_origin",
+      "legacy_import": "not_verified",
+      "write": "pending"
+    },
+    {
+      "field": "wechatEnabled",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatName",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatSmartRobot",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatCorpId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatAgentId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatSecret",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatSecretConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatProxyUrl",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatToken",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatTokenConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatAesKey",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatAesKeyConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatAdminIds",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatWebhook",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "wechatWebhookConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramEnabled",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramName",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramTypes",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramBotUsername",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramBotToken",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramBotTokenConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramChatId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramUserIds",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramAdminIds",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "telegramApiBase",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuEnabled",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuName",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuTypes",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuAppId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuAppSecret",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuAppSecretConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuOpenId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuChatId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuAdminIds",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuVerificationToken",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuVerificationTokenConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuEncryptKey",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuEncryptKeyConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuWebhook",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "feishuWebhookConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqEnabled",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqName",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqTypes",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqAppId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqAppSecret",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqAppSecretConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqUserOpenId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqGroupOpenId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "qqAdminIds",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordEnabled",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordName",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordTypes",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordBotToken",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordBotTokenConfigured",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordGuildId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordChannelId",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "discordAdminIds",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "webPushEnabled",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "webPushName",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "webPushTypes",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "webPushUsername",
+      "scope": "private-social-channels",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": "business_notification_provider_revisions and bindings are owner-scoped",
+        "decision": "not_equivalent",
+        "remaining": "global legacy bot/channel settings cannot inherit current administrator personal provider bindings"
+      }
+    },
+    {
+      "field": "ticker",
+      "scope": "client-layout",
+      "status": "pending_not_exposed",
+      "authority_review": {
+        "authority": null,
+        "decision": "pending",
+        "remaining": "old site-global layout cannot be inferred from per-account preferences or current frontend defaults"
+      }
+    }
+  ],
+  "private_route_source": "app/api/settings/route.ts",
+  "private_route_sha256": "b2dd56d5c5b776cfd7bd3b8644e290897a3226ef4929ab27976955349e3e2f0c",
+  "legacy_private_read": {
+    "status": "partial",
+    "reason": "Public brand plus explicit saved PostgreSQL, actual runtime SMTP/public-email-link binding, and global stored FX pattern with explicit timezone; secrets remain sealed and unsupported private groups omitted.",
+    "evidence": "tests/test_legacy_site_settings.py",
+    "pure_evidence": "tests/site_settings_candidate/test_site_private_authorities.py"
+  },
+  "legacy_private_write": {
+    "status": "partial",
+    "body_fields": [
+      "allowRegister",
+      "appDisplayIcon",
+      "appDisplayName",
+      "assetAnalysisOrder",
+      "assetMarketOrder",
+      "chartApiUrl",
+      "clearXueqiuCookie",
+      "cnEarningsApiUrl",
+      "cnLogoApiUrl",
+      "currencyApiUrl",
+      "currencyRefreshPattern",
+      "dbType",
+      "deepseekApiKey",
+      "deepseekApiUrl",
+      "deepseekModel",
+      "discordAdminIds",
+      "discordBotToken",
+      "discordChannelId",
+      "discordEnabled",
+      "discordGuildId",
+      "discordName",
+      "discordTypes",
+      "domain",
+      "earningsApiUrl",
+      "emailLinkOrigin",
+      "feishuAdminIds",
+      "feishuAppId",
+      "feishuAppSecret",
+      "feishuChatId",
+      "feishuEnabled",
+      "feishuEncryptKey",
+      "feishuName",
+      "feishuOpenId",
+      "feishuTypes",
+      "feishuVerificationToken",
+      "feishuWebhook",
+      "footerDesc",
+      "futuHost",
+      "futuPort",
+      "groups",
+      "hkEarningsApiUrl",
+      "holdingColumns",
+      "homeNav",
+      "homepageBg",
+      "ico",
+      "indicesOrder",
+      "llmApiKey",
+      "llmApiUrl",
+      "llmModel",
+      "llmProvider",
+      "loginSideImage",
+      "logoFont",
+      "logoText",
+      "marketBadges",
+      "marketBadgesVisible",
+      "marketLabels",
+      "markets",
+      "mobileNavigationOrder",
+      "modelServices",
+      "modelServicesRevision",
+      "pgDatabase",
+      "pgHost",
+      "pgPassword",
+      "pgPort",
+      "pgUser",
+      "pwaIcon",
+      "qqAdminIds",
+      "qqAppId",
+      "qqAppSecret",
+      "qqEnabled",
+      "qqGroupOpenId",
+      "qqName",
+      "qqTypes",
+      "qqUserOpenId",
+      "quoteApiUrl",
+      "quoteSource",
+      "searchApiUrl",
+      "siteLogo",
+      "smtpFromEmail",
+      "smtpFromName",
+      "smtpHost",
+      "smtpPassword",
+      "smtpPort",
+      "smtpSecure",
+      "smtpUser",
+      "stockIconCdn",
+      "tabs",
+      "telegramAdminIds",
+      "telegramApiBase",
+      "telegramBotToken",
+      "telegramBotUsername",
+      "telegramChatId",
+      "telegramEnabled",
+      "telegramName",
+      "telegramTypes",
+      "telegramUserIds",
+      "ticker",
+      "title",
+      "tradingSquareDuanRefreshMinutes",
+      "tradingSquareTrumpRefreshMinutes",
+      "translationApiUrl",
+      "translationEnabled",
+      "translationProvider",
+      "trumpArchiveApiUrl",
+      "usLogoApiUrl",
+      "webPushEnabled",
+      "webPushName",
+      "webPushTypes",
+      "webPushUsername",
+      "wechatAdminIds",
+      "wechatAesKey",
+      "wechatAgentId",
+      "wechatCorpId",
+      "wechatEnabled",
+      "wechatName",
+      "wechatProxyUrl",
+      "wechatSecret",
+      "wechatSmartRobot",
+      "wechatToken",
+      "wechatWebhook",
+      "xueqiuCookie"
+    ],
+    "body_field_count": 121,
+    "additional_fields": [
+      {
+        "field": "clearXueqiuCookie",
+        "scope": "private-market-provider",
+        "status": "pending_not_exposed"
+      }
+    ],
+    "side_effects": {
+      "groups_record_group_sync": "pending",
+      "model_destination_key_binding": "pending",
+      "model_revision_cas": "pending",
+      "smtp_destination_binding": "pending",
+      "social_channel_validation": "pending",
+      "replaced_asset_cleanup": "pending",
+      "registration_policy": "implemented_shared_pg_transaction"
+    },
+    "public_write_status": "implemented_guarded_extension_original_uuid_revision_stepup"
+  },
+  "nested_private_model_services": {
+    "status": "pending_not_exposed",
+    "fields": [
+      "id",
+      "name",
+      "provider",
+      "icon",
+      "icons",
+      "apiUrl",
+      "apiKey",
+      "apiKeyConfigured",
+      "models",
+      "providerConfigs"
+    ],
+    "provider_fields": [
+      "apiUrl",
+      "apiKey",
+      "apiKeyConfigured",
+      "models"
+    ]
+  }
+}

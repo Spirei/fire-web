@@ -16,7 +16,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 
 type Currency = FundCurrency;
 interface Tx { id: string; currency: Currency; type: string; amount: number; direction: 1 | -1; note: string; occurredAt: string; sourceOrderId?: string | null; stockCode?: string | null; stockName?: string | null }
-interface Summary { openingAsset: number; cashNetFlow: number; stockNetFlow: number; otherNetFlow: number }
+interface Summary { openingAsset: number|null; cashNetFlow: number|null; stockNetFlow: number|null; otherNetFlow: number|null }
 const TYPE_LABEL: Record<string, string> = { opening: "期初资金", deposit: "转入", withdrawal: "转出", adjustment: "余额调整" };
 type RecordAction = "buy" | "sell" | "dividend";
 /** 卡包「存钱 / 取钱」联动生成的流水前缀（与 lib/funds.ts 的 CARD_LINK_PREFIX 一致） */
@@ -38,14 +38,14 @@ function recordView(item: Tx): { title: string; action: RecordAction | null; act
 function RecordChip({ tone, children }: { tone: RecordAction | "code" | "auto"; children: string }) {
   return <small className={`fund-record-chip fund-record-chip--${tone}`}>{children}</small>;
 }
-const EMPTY: Record<Currency, number> = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, 0])) as Record<Currency, number>;
-const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, { openingAsset: 0, cashNetFlow: 0, stockNetFlow: 0, otherNetFlow: 0 }])) as Record<Currency, Summary>;
+const EMPTY: Record<Currency, number|null> = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, null])) as Record<Currency, number|null>;
+const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, { openingAsset: null, cashNetFlow: null, stockNetFlow: null, otherNetFlow: null }])) as Record<Currency, Summary>;
 const RECORD_PAGE_SIZE = 30;
 
-export default function FundsPanel({ holdingAssets, balanceOverrides, onBalancesChange }: { holdingAssets: Record<Currency, number>; balanceOverrides?: Partial<Record<Currency, number>>; onBalancesChange: (balances: Record<Currency, number>, cardCash: Record<string, number>) => void }) {
+export default function FundsPanel({ holdingAssets, balanceOverrides, onBalancesChange }: { holdingAssets: Record<Currency, number|null>; balanceOverrides?: Partial<Record<Currency, number|null>>; onBalancesChange: (balances: Record<Currency, number|null>, cardCash: Record<string, number|null>) => void }) {
   const rates = useRates();
   const [currency, setCurrency] = usePersistedState<Currency>("fire:funds-display-currency", "USD");
-  const [balances, setBalances] = useState<Record<Currency, number>>(EMPTY);
+  const [balances, setBalances] = useState<Record<Currency, number|null>>(EMPTY);
   const [transactions, setTransactions] = useState<Tx[]>([]);
   const [summaries, setSummaries] = useState<Record<Currency, Summary>>(EMPTY_SUMMARY);
   const [open, setOpen] = useState(false);
@@ -128,6 +128,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
     if (recordsPage > lastPage) setRecordsPage(lastPage);
   }, [recordsPage, recordsTotal]);
   const submit = async () => {
+    if(!Number.isFinite(displayedBalances[currency])) return showToast("资金来源待核对", "err");
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) return showToast("请输入有效金额", "err");
     setSaving(true);
@@ -145,10 +146,10 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
     recordsCache.current.clear();
     await load(); await loadRecords(currency, recordsPage, debouncedQuery);
   };
-  const convert = useCallback((value: number, from: Currency) => value === 0 ? 0 : convertAccountAmount(value, from, rates, currency), [currency, rates]);
+  const convert = useCallback((value: number|null, from: Currency) => typeof value!=='number'?NaN:value === 0 ? 0 : convertAccountAmount(value, from, rates, currency), [currency, rates]);
   const displayedBalances = useMemo(() => ({ ...balances, ...balanceOverrides }), [balances, balanceOverrides]);
-  const cash = useMemo(() => (Object.entries(displayedBalances) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [displayedBalances, convert]);
-  const holdings = useMemo(() => (Object.entries(holdingAssets) as [Currency, number][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [holdingAssets, convert]);
+  const cash = useMemo(() => (Object.entries(displayedBalances) as [Currency, number|null][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [displayedBalances, convert]);
+  const holdings = useMemo(() => (Object.entries(holdingAssets) as [Currency, number|null][]).reduce((sum, [iso, value]) => sum + convert(value, iso), 0), [holdingAssets, convert]);
   const currencyTransactions = transactions;
   const { openingAsset, cashNetFlow, stockNetFlow, otherNetFlow } = useMemo(() => (Object.entries(summaries) as [Currency, Summary][]).reduce((total, [iso, summary]) => ({
     openingAsset: total.openingAsset + convert(summary.openingAsset, iso),
@@ -194,7 +195,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
         <button type="button" onClick={() => { setRecordsPage(0); setRecordsOpen(true); }} className="fund-records-link">资金记录<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button>
       </div>
     </div>
-    {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={displayedBalances[currency] || 0} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
+    {open && <FundEntryDialog currency={currency} setCurrency={setCurrency} direction={direction} setDirection={setDirection} type={type} setType={setType} amount={amount} setAmount={setAmount} occurredAt={occurredAt} setOccurredAt={setOccurredAt} note={note} setNote={setNote} currentBalance={displayedBalances[currency] ?? NaN} saving={saving} onClose={() => setOpen(false)} onSubmit={() => void submit()} />}
     {recordsOpen && <AppModal title="资金记录" desc={`折算为 ${currency} · 共 ${recordsTotal} 笔 · 当前余额 ${fmtMoney(cash, fundCurrencySymbol(currency))}`} size="md" className="fund-records-modal" onClose={() => setRecordsOpen(false)} headerActions={<label className="relative block"><IconSearch size={14} stroke={1.8} className={`pointer-events-none absolute left-3 top-1/2 z-20 -translate-y-1/2 text-muted ${recordsLoading ? "animate-pulse" : ""}`} /><RainbowTextInput autoFocus value={recordsQuery} onChange={(event) => setRecordsQuery(event.target.value)} placeholder="名称、代码、拼音、买入/卖出" className="h-9 w-full rounded-xl border border-edge bg-bg-gray pl-8 pr-8 text-[11px] text-ink outline-none transition-colors focus-within:border-[#3297f6]/60 focus-within:bg-white dark:focus-within:bg-white/5" />{recordsQuery && <button type="button" onClick={() => setRecordsQuery("")} className="absolute right-1.5 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-white hover:text-ink dark:hover:bg-white/10" aria-label="清空搜索">×</button>}</label>}>
       <div className="fund-records-list -mx-3 max-h-[min(380px,42dvh)] overflow-y-auto px-1 sm:-mx-2 sm:max-h-[520px]">
         {recordsLoading && currencyTransactions.length === 0 ? <div className="space-y-2 px-2 py-1">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex animate-pulse items-center gap-3 rounded-[14px] px-3 py-2.5"><span className="flex-1"><i className="block h-3 w-2/5 rounded bg-bg-gray" /><i className="mt-2 block h-2.5 w-1/4 rounded bg-bg-gray" /></span><i className="h-3 w-20 rounded bg-bg-gray" /></div>)}</div> : currencyTransactions.length ? currencyTransactions.map((item) => {

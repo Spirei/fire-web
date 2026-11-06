@@ -1,0 +1,16 @@
+{
+  "route.ts": {
+    "source": "app/api/v1/auth/delete-account/route.ts",
+    "sha256": "d3287a6c1f6934b0e6e9b41a016a5bd715d548bdf632469d43097b9dfeeeeff0"
+  },
+  "password.ts": {
+    "source": "lib/password.ts",
+    "sha256": "0d74db62035d426f0d8555d3b1077230625cf5bc9be74c3a87e6ec86e8d6f8ed"
+  },
+  "legacy-client-close.ts": {
+    "source": "components/views/SettingsView.tsx:doDeleteAccount",
+    "sha256": "c0a814d7c9cc2173ebad84f325cde4c76a1b37a572c3a3d69183cf9f32b07acb",
+    "whole_source_sha256": "d978928263cb1e7d168a6540b817b092299c0e664cf26b419da66ee8c30829da",
+    "capture": "exact_named_function_slice"
+  }
+}

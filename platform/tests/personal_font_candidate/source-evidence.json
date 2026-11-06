@@ -1,0 +1,21 @@
+{
+  "purpose": "Actual original GET/POST and font storage validation golden; only generated test files, never old user fonts",
+  "files": [
+    {
+      "path": "app/api/fonts/route.ts",
+      "sha256": "6e536bcd01f8f972a38f2447065ee5365c536612282a58693987006a8ea14fea"
+    },
+    {
+      "path": "lib/customFonts.ts",
+      "sha256": "750b1a2bca65254e3b447b1d4b207fe4c763c9c79130903ad2e62bdfed4c9e5d"
+    },
+    {
+      "path": "lib/typography.ts",
+      "sha256": "f869a279d854f43390dc51624b3c745a7caf76ebd5d65934f49d2b6e1edfe57d"
+    },
+    {
+      "path": "components/TypographySettings.tsx",
+      "sha256": "a491070b7698878d58586781d352c45eda9ad2504e2ba55b0bf60a190ce75f1d"
+    }
+  ]
+}

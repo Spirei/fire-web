@@ -126,27 +126,6 @@ export default function SimpleAppClient({ userId }: { userId: string }) {
   }, []);
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    let current = "";
-    let stopped = false;
-    const check = async () => {
-      try {
-        const response = await fetch("/api/simple-app/dev-version", { cache: "no-store" });
-        const next = await response.text();
-        if (stopped) return;
-        if (current && next && next !== current) location.reload();
-        current = next;
-      } catch {}
-    };
-    void check();
-    const timer = window.setInterval(check, 700);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  useEffect(() => {
     const scroller = document.getElementById("app");
     if (!scroller) return;
     const isMobile = () => window.matchMedia("(max-width: 760px) and (pointer: coarse)").matches;

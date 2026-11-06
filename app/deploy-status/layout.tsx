@@ -7,6 +7,6 @@ export const dynamic = "force-dynamic";
 export default async function DeployStatusLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
-  if (!isAdmin(getUserByToken(token))) notFound();
+  if (!isAdmin(await getUserByToken(token))) notFound();
   return children;
 }

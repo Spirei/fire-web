@@ -1,0 +1,205 @@
+[
+  {
+    "kind": "read",
+    "namespace": "watch"
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000001",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "[\"hidden\",\"US.B\"]",
+          "revision": 0,
+          "value": true
+        },
+        {
+          "key": "[\"pinned\",\"US.A\"]",
+          "revision": 0,
+          "value": true
+        },
+        {
+          "key": "[\"groups\",\"opaque-group\",\"US.A\"]",
+          "revision": 0,
+          "value": true
+        },
+        {
+          "key": "[\"orders\",\"__all\"]",
+          "revision": 0,
+          "value": [
+            "US.A",
+            "US.B"
+          ]
+        },
+        {
+          "key": "[\"notes\",\"US.A\"]",
+          "revision": 0,
+          "value": "备注"
+        },
+        {
+          "key": "[\"aliases\",\"US.A\"]",
+          "revision": 0,
+          "value": "Alias"
+        },
+        {
+          "key": "[\"moved\",\"US.B\"]",
+          "revision": 0,
+          "value": "opaque-target"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000001",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "[\"hidden\",\"US.B\"]",
+          "revision": 0,
+          "value": true
+        },
+        {
+          "key": "[\"pinned\",\"US.A\"]",
+          "revision": 0,
+          "value": true
+        },
+        {
+          "key": "[\"groups\",\"opaque-group\",\"US.A\"]",
+          "revision": 0,
+          "value": true
+        },
+        {
+          "key": "[\"orders\",\"__all\"]",
+          "revision": 0,
+          "value": [
+            "US.A",
+            "US.B"
+          ]
+        },
+        {
+          "key": "[\"notes\",\"US.A\"]",
+          "revision": 0,
+          "value": "备注"
+        },
+        {
+          "key": "[\"aliases\",\"US.A\"]",
+          "revision": 0,
+          "value": "Alias"
+        },
+        {
+          "key": "[\"moved\",\"US.B\"]",
+          "revision": 0,
+          "value": "opaque-target"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "read",
+    "namespace": "watch"
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000002",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "[\"notes\",\"US.A\"]",
+          "revision": 1,
+          "value": "Updated"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000003",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "[\"notes\",\"US.A\"]",
+          "revision": 1,
+          "value": "Conflict"
+        },
+        {
+          "key": "[\"hidden\",\"US.C\"]",
+          "revision": 0,
+          "value": true
+        }
+      ]
+    }
+  },
+  {
+    "kind": "receipt",
+    "requestId": "00000000-0000-4000-8000-000000000001"
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000004",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "[\"pinned\",\"US.A\"]",
+          "revision": 1,
+          "value": null
+        }
+      ]
+    }
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000005",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "[\"hidden\",\"US.B\"]",
+          "revision": 1,
+          "value": false
+        }
+      ]
+    }
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000006",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "opaque-deleted-field",
+          "revision": 0,
+          "value": null
+        }
+      ]
+    }
+  },
+  {
+    "kind": "receipt",
+    "requestId": "00000000-0000-4000-8000-000000000003"
+  },
+  {
+    "kind": "read",
+    "namespace": "watch"
+  },
+  {
+    "kind": "submit",
+    "body": {
+      "requestId": "00000000-0000-4000-8000-000000000001",
+      "namespace": "watch",
+      "changes": [
+        {
+          "key": "[\"notes\",\"US.A\"]",
+          "revision": 0,
+          "value": "collision"
+        }
+      ]
+    }
+  }
+]

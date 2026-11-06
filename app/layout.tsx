@@ -17,8 +17,6 @@ import FileDropAnywhere from "@/components/FileDropAnywhere";
 import { PrefsProvider } from "@/lib/prefsContext";
 import { PREFS_COOKIE, parsePrefsCookie } from "@/lib/prefsCookie";
 import SiteFavicon from "@/components/SiteFavicon";
-import { initialSiteFavicon } from "@/lib/siteFavicon";
-import { pwaArtwork, pwaIconUrl } from "@/lib/pwaIcon";
 import PaletteProvider from "@/components/PaletteProvider";
 import { PALETTE_KEY, paletteVariables, resolvePalette } from "@/lib/palettes";
 import "@/styles/palettes.css";
@@ -40,8 +38,8 @@ import "@/styles/api-version.css";
 import "@/styles/market-calendar.css";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = getSiteSettings();
-  const icon = await initialSiteFavicon(settings.ico);
+  const settings = await getSiteSettings();
+  const icon = settings.ico || "/site-icon.svg";
   return {
     title: settings.title,
     description: "一个轻量的股票记录网站：记录自选与持仓，自动汇总盈亏，数据保存在服务端。",
@@ -59,9 +57,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const prefs = parsePrefsCookie(cookieStore.get(PREFS_COOKIE)?.value);
   const themeMode = resolveThemeMode(prefs[THEME_MODE_KEY], cookieTheme);
   const dark = (themeMode === "system" ? cookieTheme : themeMode) === "dark";
-  const settings = getSiteSettings();
+  const settings = await getSiteSettings();
   const palette = resolvePalette(prefs[PALETTE_KEY]);
-  const pwaIcon = await pwaArtwork(settings.pwaIcon || settings.ico);
+
   return (
     /* 禁止整页翻译：翻译器会在水合前改写服务端 HTML（连 title 属性都会改，比如把「繁體」改成「繁体」），
        客户端水合时读到的还是原文，于是报 "Hydration failed because the server rendered text didn't match the client"。
@@ -95,7 +93,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content={settings.logoText || "Alcor"} />
-        <link rel="apple-touch-icon" sizes="180x180" href={pwaIconUrl(pwaIcon.version, 180)} />
+        <link rel="apple-touch-icon" sizes="180x180" href={"/api/pwa-icon?size=180"} />
         {/* 旧品牌本地缓存迁移 + 主题防闪兜底 */}
         <script
           dangerouslySetInnerHTML={{

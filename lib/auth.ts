@@ -1,403 +1,46 @@
-import { bumpAppSync } from "./appSyncSchema";
-import { purgeResourceUser } from "./resourceLibrary";
-import { createHash, randomBytes } from "crypto";
-import { getDb } from "./db";
-import { hashPassword, verifyPassword } from "./password";
+import { headers } from "next/headers";
+import {
+  platformJson,
+  PlatformError,
+  platformConfig,
+} from "./platformTransport";
 import type { User } from "./types";
-import { emailVerified } from "./emailVerification";
-import { appIdentity, revokeAppToken, revokeUserAppGrants } from "./appAuth";
-import { releaseUserQuoteSubscriptions } from "./quoteSubscriptionRequests";
-
 export const SESSION_COOKIE = "fire_session";
 export const LEGACY_SESSION_COOKIE = "sto" + "cklog_session";
-const SESSION_DAYS = 7;
-const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(24).toString("hex"));
-
-interface UserRow {
-  id: string;
-  username: string;
-  nickname: string;
-  uid: string;
-  password_hash: string;
-  email: string;
-  avatar: string;
-  role: string;
-  created_at: string;
-  is_test: number;
-}
-
-export function findUserByUsername(username: string): UserRow | undefined {
-  return getDb().prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?)").get(username) as UserRow | undefined;
-}
-
-/** Usernames and emails share a case-insensitive login namespace. Ambiguity fails closed. */
-export function findUserByLogin(login: string): UserRow | undefined {
-  const rows = getDb().prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?) OR (email != '' AND LOWER(email) = LOWER(?)) LIMIT 2").all(login, login) as UserRow[];
-  return rows.length === 1 ? rows[0] : undefined;
-}
-
-function loginNameTaken(value: string, exceptId = "") {
-  return Boolean(value && getDb().prepare("SELECT 1 FROM users WHERE id != ? AND (LOWER(username) = LOWER(?) OR (email != '' AND LOWER(email) = LOWER(?))) LIMIT 1").get(exceptId, value, value));
-}
-
-/** 按邮箱（大小写不敏感）查用户，用于注册邮箱唯一校验 */
-export function findUserByEmail(email: string): UserRow | undefined {
-  return getDb()
-    .prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)")
-    .get(email.trim().toLowerCase()) as UserRow | undefined;
-}
-
-export function findUserById(id: string): UserRow | undefined {
-  return getDb().prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
-}
-
-/** 恒定走一次 scrypt，减少用户名枚举时的响应时间差。管理员身份完全由数据库 role 决定，不绑定任何固定用户 ID。 */
-export function authenticateUser(username: string, password: string): UserRow | null {
-  const row = findUserByLogin(username);
-  const valid = verifyPassword(password, row?.password_hash ?? DUMMY_PASSWORD_HASH);
-  if (!row || !valid) return null;
-  return row;
-}
-
-function toUser(
-  row: Pick<UserRow, "id" | "username" | "nickname" | "uid" | "email" | "avatar" | "role" | "is_test">
-): User {
-  return {
-    id: row.id,
-    username: row.username,
-    nickname: row.nickname ?? "",
-    uid: row.uid ?? "",
-    email: row.email ?? "",
-    emailVerified: emailVerified(row.id, row.email ?? ""),
-    avatar: row.avatar ?? "",
-    role: row.role === "admin" ? "admin" : "user",
-    isTest: row.is_test === 1
-  };
-}
-
-export function createUser(username: string, password: string, isTest = false, email = ""): User {
-  const db = getDb();
-  const id = "u-" + randomBytes(8).toString("hex");
-  const hash = hashPassword(password);
-  const now = new Date().toISOString();
-  const normalizedEmail = email.trim().toLowerCase();
-  let uid = "";
-  if (isTest) {
-    // 测试账号不占用 UID（uid 为 NULL），可多个并存
-    db.transaction(() => {
-      if (loginNameTaken(username)) throw new Error("duplicate username");
-      db.prepare("INSERT INTO users (id, username, password_hash, created_at, email, avatar, role, nickname, uid, is_test) VALUES (?, ?, ?, ?, '', '', 'user', '', NULL, 1)").run(id, username, hash, now);
-    }).immediate();
-    return { id, username, nickname: "", uid, email: "", avatar: "", role: "user", isTest: true };
-  }
-  // 首个非测试注册用户自动成为管理员，后续注册均为普通用户。
-  // 测试账号不占位（is_test=1 不参与判断）；若 seed 已用 INITIAL_ADMIN_* 建过管理员，
-  // 这里会因已有非测试用户而判定为普通用户。
-  let role: "admin" | "user" = "user";
-  // IMMEDIATE 事务让“首个用户”和 UID 分配在多进程下也只有一个赢家。
-  db.transaction(() => {
-    if (loginNameTaken(username)) throw new Error("duplicate username");
-    if (loginNameTaken(normalizedEmail)) throw new Error("email already bound");
-    role = needsSetup() ? "admin" : "user";
-    const last = db.prepare("SELECT MAX(CAST(uid AS INTEGER)) AS uid FROM users WHERE uid GLOB '[0-9]*'").get() as { uid: number | null };
-    const next = String((Number(last.uid) || 0) + 1);
-    db.prepare(
-      "INSERT INTO users (id, username, password_hash, created_at, email, avatar, role, nickname, uid) VALUES (?, ?, ?, ?, ?, '', ?, '', ?)"
-    ).run(id, username, hash, now, normalizedEmail, role, next);
-    uid = next;
-  }).immediate();
-  return { id, username, nickname: "", uid, email: normalizedEmail, avatar: "", role };
-}
-
-/** 没有任何非测试用户时，需要走首次管理员设置。 */
-export function needsSetup(): boolean {
-  return !getDb().prepare("SELECT 1 FROM users WHERE is_test = 0 LIMIT 1").get();
-}
-
-export function updatePassword(userId: string, newPassword: string): boolean {
-  const db = getDb();
-  const hash = hashPassword(newPassword);
-  return db.transaction(() => {
-    const result = db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, userId);
-    // Keeping Web sessions never keeps pre-change App consent or token families.
-    if (result.changes) {
-      revokeUserAppGrants(userId);
-      // A pending second factor only proves the password used before this change.
-      db.prepare("DELETE FROM totp_tickets WHERE user_id = ?").run(userId);
-    }
-    return result.changes > 0;
-  }).immediate();
-}
-
-export function createSession(userId: string, passkeyId?: string): string {
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
-  const db = getDb();
-  db.transaction(() => {
-    db.prepare("INSERT INTO sessions (token, user_id, expires_at, auth_method, passkey_id, authenticated_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(sessionDbToken(token), userId, expiresAt, passkeyId ? "passkey" : "password", passkeyId ?? null, Date.now());
-    // 限制单账号最多 20 个并发会话，避免凭据泄露后无限堆积长期有效的登录态。
-    db.prepare(`DELETE FROM sessions WHERE user_id = ? AND token NOT IN (
-      SELECT token FROM sessions WHERE user_id = ? ORDER BY expires_at DESC LIMIT 20
-    )`).run(userId, userId);
-  })();
-  return token;
-}
-
-/** 数据库只保存会话令牌摘要，数据库或备份泄露时不能直接劫持在线会话。 */
-function sessionDbToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-export function getUserByToken(token: string | null): User | null {
-  if (!token) return null;
-  const db = getDb();
-  const lookup = db.prepare(`
-    SELECT s.expires_at, u.id, u.username, u.nickname, u.uid, u.email, u.avatar, u.role, u.is_test
-    FROM sessions s JOIN users u ON u.id = s.user_id
-    WHERE s.token = ?
-  `);
-  const digest = sessionDbToken(token);
-  // Never fall back to matching the supplied value directly. Old plaintext
-  // tokens and current digests have the same shape; that fallback would make
-  // every digest from a database or backup usable as a login credential.
-  const row = lookup.get(digest) as { expires_at: number; id: string; username: string; nickname: string; uid: string; email: string; avatar: string; role: string; is_test: number } | undefined;
-  if (!row) return null;
-  if (row.expires_at <= Date.now()) {
-    db.prepare("DELETE FROM sessions WHERE token = ?").run(digest);
-    return null;
-  }
-  return toUser(row);
-}
-
-export function deleteSession(token: string | null) {
-  if (!token) return;
-  if (token.startsWith("fat_") || token.startsWith("frt_")) { revokeAppToken(token); return; }
-  getDb().prepare("DELETE FROM sessions WHERE token = ?").run(sessionDbToken(token));
-}
-
-export function getCookie(request: Request, name: string): string | null {
-  const header = request.headers.get("cookie");
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    const key = part.slice(0, eq).trim();
-    if (key === name) {
-      try {
-        return decodeURIComponent(part.slice(eq + 1).trim());
-      } catch {
-        return part.slice(eq + 1).trim();
-      }
-    }
-  }
-  return null;
-}
-
-export function getSessionToken(request: Request): string | null {
-  // 兼容两种认证方式：Web 端 httpOnly Cookie 会话；移动端（Swift / Android）Authorization: Bearer <token>
-  const cookieToken = getCookie(request, SESSION_COOKIE) || getCookie(request, LEGACY_SESSION_COOKIE);
-  const authHeader = request.headers.get("authorization") ?? "";
-  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  // Bearer 是显式认证，优先于浏览器可能残留的过期 Cookie。
-  if (bearer) return bearer;
-  if (cookieToken && !isTrustedMutationRequest(request)) return null;
-  return cookieToken || null;
-}
-
-export function getAuthUser(request: Request): User | null {
-  const bearer = request.headers.get("authorization")?.match(/^Bearer (fat_[A-Za-z0-9_-]{43})$/)?.[1];
-  if (bearer) {
-    const row = appIdentity(bearer, request);
-    return row ? { ...toUser({ ...row, id: row.user_id, role: "user" }), role: "user" } : null;
-  }
-  // v2 has no Cookie or legacy Web-session Bearer fallback, even during a second check.
-  if (new URL(request.url).pathname.startsWith("/api/v2/")) return null;
-  return getUserByToken(getSessionToken(request));
-}
-
-/** Renewal extends login lifetime, never the time of actual password/passkey authentication. */
-export function hasRecentAuthentication(request: Request, userId: string): boolean {
-  const token = getSessionToken(request);
-  if (!token) return false;
-  const row = getDb().prepare("SELECT authenticated_at, expires_at FROM sessions WHERE token = ? AND user_id = ?")
-    .get(sessionDbToken(token), userId) as { authenticated_at: number; expires_at: number } | undefined;
-  const now = Date.now();
-  return !!row && row.expires_at > now && row.authenticated_at > now - 15 * 60_000 && row.authenticated_at <= now;
-}
-
-/**
- * Cookie 认证的写请求必须来自同源页面，阻断跨站请求伪造。
- * 原生客户端使用 Bearer，不受 Origin 限制；curl 等无浏览器来源头的服务端调用继续兼容。
- */
-export function isTrustedMutationRequest(request: Request): boolean {
-  if (["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) return true;
-  const origin = request.headers.get("origin");
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (!origin) return fetchSite !== "cross-site";
+export async function getAuthUser(request: Request): Promise<User | null> {
   try {
-    const originUrl = new URL(origin);
-    const host = (request.headers.get("host") ?? new URL(request.url).host).toLowerCase();
-    return (originUrl.protocol === "http:" || originUrl.protocol === "https:") && originUrl.host.toLowerCase() === host;
-  } catch {
-    return false;
+    return (
+      await platformJson<{ user: User }>("/api/fire/session", {
+        cookie: request.headers.get("cookie") || "",
+      })
+    ).user;
+  } catch (error) {
+    if (error instanceof PlatformError && [401, 403].includes(error.status))
+      return null;
+    throw error;
   }
 }
-
-export function isAdmin(user: User | null): boolean {
-  return user?.role === "admin";
+export async function getUserByToken(
+  token: string | null,
+): Promise<User | null> {
+  return token
+    ? getAuthUser(
+        new Request("http://presentation.invalid", {
+          headers: {
+            cookie:
+              (await headers()).get("cookie") ||
+              `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
+          },
+        }),
+      )
+    : null;
 }
-
-export function deleteOtherSessions(userId: string, keepToken: string | null) {
-  revokeUserAppGrants(userId);
-  const db = getDb();
-  if (keepToken) {
-    db.prepare("DELETE FROM sessions WHERE user_id = ? AND token != ?").run(userId, sessionDbToken(keepToken));
-  } else {
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
-  }
+export const isAdmin = (user: User | null | undefined) =>
+  user?.role === "admin";
+export async function needsSetup() {
+  return (await platformJson<{ first_user: boolean }>("/api/auth/registration"))
+    .first_user;
 }
-
-export function sessionCookieMaxAge() {
-  return SESSION_DAYS * 24 * 60 * 60;
-}
-
-/** 浏览器使用期间最多每天续期一次；原子条件保证已过期/撤销的会话不能复活。 */
-export function renewSessionIfNeeded(token: string): boolean {
-  const now = Date.now();
-  const expiresAt = now + sessionCookieMaxAge() * 1000;
-  return getDb().prepare(`UPDATE sessions SET expires_at = ?
-    WHERE token = ? AND expires_at > ? AND expires_at <= ?`)
-    .run(expiresAt, sessionDbToken(token), now, expiresAt - 24 * 60 * 60 * 1000).changes > 0;
-}
-
-export function applySessionCookie(res: { cookies: { set: (name: string, value: string, options: { httpOnly: boolean; sameSite: "lax"; path: string; maxAge: number; secure: boolean }) => void } }, token: string, request: Request) {
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: sessionCookieMaxAge(),
-    secure: sessionCookieSecure(request)
-  });
-  res.cookies.set(LEGACY_SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0, sameSite: "lax", secure: false });
-}
-
-/** 判断当前请求是否通过 HTTPS 访问，用于决定 session cookie 是否带 Secure 标志。
- * 局域网 http://IP:port 部署时若带 Secure，浏览器不保存/不发送 cookie，登录后会无限跳回登录页。
- * 仅当反向代理转发 x-forwarded-proto: https 或原生 https 时才返回 true。 */
-export function sessionCookieSecure(request: Request): boolean {
-  const proto = request.headers.get("x-forwarded-proto") || new URL(request.url).protocol.replace(":", "");
-  return proto === "https";
-}
-
-/* ---------- 个人资料与用户管理 ---------- */
-
-export function updateProfile(
-  userId: string,
-  patch: { username?: string; email?: string; nickname?: string }
-): User | null {
-  const db = getDb();
-  return db.transaction(() => {
-    // Read after acquiring the write lock: another client may have just changed
-    // an unpatched field, which a nickname-only save must never overwrite.
-    const row = findUserById(userId);
-    if (!row) return null;
-    const username = patch.username !== undefined ? patch.username.trim() : row.username;
-    const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
-    const nickname = patch.nickname !== undefined ? patch.nickname.trim() : (row.nickname ?? "");
-    if (patch.username !== undefined) {
-      if (loginNameTaken(username, userId)) return null;
-    }
-    if (patch.email !== undefined && loginNameTaken(email, userId)) return null;
-    db.prepare("UPDATE users SET username = ?, email = ?, nickname = ? WHERE id = ?").run(username, email, nickname, userId);
-    if (email.toLowerCase() !== (row.email || "").toLowerCase()) invalidateEmailRecovery(userId);
-    return toUser(findUserById(userId)!);
-  }).immediate();
-}
-
-export function updateUserAvatar(userId: string, avatar: string) {
-  const db=getDb();
-  db.transaction(()=>{db.prepare("UPDATE users SET avatar = ? WHERE id = ?").run(avatar, userId);bumpAppSync(db,userId,"profile");}).immediate();
-}
-
-export interface AdminUser extends User {
-  createdAt: string;
-  recordsCount: number;
-  online: boolean;
-  totpEnabled: boolean;
-}
-
-export function listUsers(): AdminUser[] {
-  const now = Date.now();
-  const rows = getDb().prepare(`
-    SELECT u.id, u.username, u.nickname, u.uid, u.email, u.avatar, u.role, u.created_at, u.is_test, u.totp_enabled,
-      (SELECT COUNT(*) FROM records r WHERE r.user_id = u.id) AS records_count,
-      EXISTS(SELECT 1 FROM sessions s WHERE s.user_id = u.id AND s.expires_at > ?) AS online
-    FROM users u
-    ORDER BY (u.uid IS NULL OR u.uid = '') ASC, CAST(u.uid AS INTEGER) ASC
-  `).all(now) as (UserRow & { records_count: number; online: number })[];
-  return rows.map((r) => ({
-    ...toUser(r),
-    createdAt: r.created_at,
-    recordsCount: r.records_count,
-    online: !!r.online,
-    totpEnabled: Boolean((r as UserRow & { totp_enabled?: number }).totp_enabled)
-  }));
-}
-
-export function updateUserById(
-  userId: string,
-  patch: { username?: string; email?: string; role?: string }
-): User | null {
-  const db = getDb();
-  return db.transaction(() => {
-    const row = findUserById(userId);
-    if (!row) return null;
-    const username = patch.username !== undefined ? patch.username.trim() : row.username;
-    const email = patch.email !== undefined ? patch.email.trim() : (row.email ?? "");
-    const role = patch.role === "admin" || patch.role === "user" ? patch.role : row.role;
-
-    if (email) {
-      const conflict = findUserByEmail(email);
-      if (conflict && conflict.id !== userId) return null;
-    }
-
-    if (row.role === "admin" && role === "user") {
-      const admins = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number };
-      if (admins.n <= 1) return null;
-    }
-
-    if (patch.username !== undefined) {
-      if (loginNameTaken(username, userId)) return null;
-    }
-    if (patch.email !== undefined && loginNameTaken(email, userId)) return null;
-    db.prepare("UPDATE users SET username = ?, email = ?, role = ? WHERE id = ?").run(username, email, role, userId);
-    if (email.toLowerCase() !== (row.email || "").toLowerCase()) invalidateEmailRecovery(userId);
-    return toUser(findUserById(userId)!);
-  }).immediate();
-}
-
-export function deleteUserById(userId: string): boolean {
-  const db = getDb();
-  const row = findUserById(userId);
-  if (!row) return false;
-  if (row.role === "admin") {
-    const admins = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number };
-    if (admins.n <= 1) return false;
-  }
-  purgeResourceUser(userId);
-  // The foreign key also cascades on DELETE; update a running shared pool immediately.
-  releaseUserQuoteSubscriptions(userId);
-  return db.prepare("DELETE FROM users WHERE id = ?").run(userId).changes > 0;
-}
-
-export function resetUserPassword(userId: string, newPassword: string): boolean {
-  return updatePassword(userId, newPassword);
-}
-
-function invalidateEmailRecovery(userId: string) {
-  const db = getDb();
-  for (const table of ["verified_emails", "email_verification_tokens", "password_reset_tokens", "password_reset_codes", "password_reset_totp"]) {
-    db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(userId);
-  }
+export function isTrustedMutationRequest(request: Request) {
+  return request.headers.get("origin") === platformConfig().publicOrigin.origin;
 }

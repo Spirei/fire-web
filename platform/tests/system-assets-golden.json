@@ -1,0 +1,219 @@
+{
+  "sourceHashes": {
+    "lib/imageSecurity.ts": "3783dc75cb81828dd0777aa3f73a8a9b8b163f8b6e4ab92b58d43e04c157310e",
+    "lib/assetNaming.cjs": "9540c6c41b02aee0dbabc03dd1b6c8ddc517a5f715915eae5c896d278cbbe8cc"
+  },
+  "images": [
+    {
+      "name": "svg-0",
+      "ext": "svg",
+      "input": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0wIDAiLz48L3N2Zz4=",
+      "valid": true,
+      "output": "PCEtLSBieSBhbGNvciAtLT4KPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0wIDAiLz48L3N2Zz4="
+    },
+    {
+      "name": "svg-1",
+      "ext": "svg",
+      "input": "77u/PD94bWwgdmVyc2lvbj0iMS4wIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgImlkIiAiaHR0cHM6Ly9leGFtcGxlLmludmFsaWQvbm8tZmV0Y2guZHRkIj48IS0tIGJ5IFRyYWRpbmdWaWV3IC0tPjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMSIvPjwvc3ZnPg==",
+      "valid": true,
+      "output": "PCEtLSBieSBhbGNvciAtLT4KPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIi8+PC9zdmc+"
+    },
+    {
+      "name": "svg-2",
+      "ext": "svg",
+      "input": "PHN2Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiPjxzdG9wIG9mZnNldD0iMSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxwYXRoIGZpbGw9InVybCgjYSkiLz48L3N2Zz4=",
+      "valid": true,
+      "output": "PCEtLSBieSBhbGNvciAtLT4KPHN2Zz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiPjxzdG9wIG9mZnNldD0iMSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxwYXRoIGZpbGw9InVybCgjYSkiLz48L3N2Zz4="
+    },
+    {
+      "name": "svg-3",
+      "ext": "svg",
+      "input": "PHN2Zz48dXNlIGhyZWY9IiNsb2NhbCIvPjwvc3ZnPg==",
+      "valid": true,
+      "output": "PCEtLSBieSBhbGNvciAtLT4KPHN2Zz48dXNlIGhyZWY9IiNsb2NhbCIvPjwvc3ZnPg=="
+    },
+    {
+      "name": "svg-4",
+      "ext": "svg",
+      "input": "PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc+",
+      "valid": false
+    },
+    {
+      "name": "svg-5",
+      "ext": "svg",
+      "input": "PHN2Zz48cGF0aCBvbmNsaWNrPSJhbGVydCgxKSIvPjwvc3ZnPg==",
+      "valid": false
+    },
+    {
+      "name": "svg-6",
+      "ext": "svg",
+      "input": "PHN2Zz48dXNlIGhyZWY9Imh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL3ByaXZhdGUiLz48L3N2Zz4=",
+      "valid": false
+    },
+    {
+      "name": "svg-7",
+      "ext": "svg",
+      "input": "PHN2Zz48cGF0aCBmaWxsPSJ1cmwoaHR0cHM6Ly9leGFtcGxlLmludmFsaWQvYSkiLz48L3N2Zz4=",
+      "valid": false
+    },
+    {
+      "name": "svg-8",
+      "ext": "svg",
+      "input": "PHN2ZyB4bWxuczp4PSJ1cm46ZXZpbCI+PHg6cGF0aC8+PC9zdmc+",
+      "valid": false
+    },
+    {
+      "name": "svg-9",
+      "ext": "svg",
+      "input": "PHN2Zz48c3R5bGU+cGF0aHtmaWxsOnJlZH08L3N0eWxlPjwvc3ZnPg==",
+      "valid": false
+    },
+    {
+      "name": "svg-10",
+      "ext": "svg",
+      "input": "PCFET0NUWVBFIHN2ZyBbPCFFTlRJVFkgeCAiZXhwYW5kZWQiPl0+PHN2Zz48dGV4dD4meDs8L3RleHQ+PC9zdmc+",
+      "valid": false
+    },
+    {
+      "name": "svg-11",
+      "ext": "svg",
+      "input": "PHN2Zz48cGF0aCBmaWxsPSJ1cmwoJnF1b3Q7I2lkJykiLz48L3N2Zz4=",
+      "valid": false
+    },
+    {
+      "name": "svg-12",
+      "ext": "svg",
+      "input": "PCEtLSBicm9rZW48c3ZnLz4=",
+      "valid": false
+    },
+    {
+      "name": "svg-13",
+      "ext": "svg",
+      "input": "PD94bWwtc3R5bGVzaGVldCBocmVmPSJodHRwczovL2V4YW1wbGUuaW52YWxpZC9hIj8+PHN2Zy8+",
+      "valid": false
+    },
+    {
+      "name": "png-14",
+      "ext": "png",
+      "input": "iVBORw0KGgo=",
+      "valid": true,
+      "output": "iVBORw0KGgo="
+    },
+    {
+      "name": "jpeg-15",
+      "ext": "jpeg",
+      "input": "/9j/AA==",
+      "valid": true,
+      "output": "/9j/AA=="
+    },
+    {
+      "name": "gif-16",
+      "ext": "gif",
+      "input": "R0lGODlhUkFX",
+      "valid": true,
+      "output": "R0lGODlhUkFX"
+    },
+    {
+      "name": "webp-17",
+      "ext": "webp",
+      "input": "UklGRjAwMDBXRUJQcmF3",
+      "valid": true,
+      "output": "UklGRjAwMDBXRUJQcmF3"
+    },
+    {
+      "name": "ico-18",
+      "ext": "ico",
+      "input": "AAABAAE=",
+      "valid": true,
+      "output": "AAABAAE="
+    },
+    {
+      "name": "png-19",
+      "ext": "png",
+      "input": "R0lGODlh",
+      "valid": false
+    }
+  ],
+  "names": [
+    {
+      "name": "苹果公司",
+      "code": "AAPL",
+      "market": "US",
+      "type": "stock",
+      "ext": "png",
+      "expected": "AAPL.png"
+    },
+    {
+      "name": "中国",
+      "code": "CN",
+      "market": "",
+      "type": "flag",
+      "ext": "png",
+      "expected": "cn.png"
+    },
+    {
+      "name": "市场",
+      "code": "",
+      "market": "HK",
+      "type": "market",
+      "ext": "png",
+      "expected": "HK.png"
+    },
+    {
+      "name": "模型服务",
+      "code": "OpenAI-01",
+      "market": "",
+      "type": "icon",
+      "ext": "png",
+      "expected": "openai-01.png"
+    },
+    {
+      "name": "中文卡面",
+      "code": "",
+      "market": "",
+      "type": "card",
+      "ext": "png",
+      "expected": "card-2f3032ae4880.png"
+    },
+    {
+      "name": "My Broker Name",
+      "code": "",
+      "market": "",
+      "type": "broker",
+      "ext": "png",
+      "expected": "My-Broker-Name.png"
+    },
+    {
+      "name": "",
+      "code": "",
+      "market": "",
+      "type": "",
+      "ext": "png",
+      "expected": "asset-e3b0c44298fc.png"
+    },
+    {
+      "name": "点.号",
+      "code": "A:B",
+      "market": "",
+      "type": "group",
+      "ext": "png",
+      "expected": "AB.png"
+    },
+    {
+      "name": "NonLatin👀",
+      "code": "",
+      "market": "",
+      "type": "crypto",
+      "ext": "png",
+      "expected": "crypto-6a48e02d353d.png"
+    },
+    {
+      "name": ".hidden name",
+      "code": "",
+      "market": "",
+      "type": "asset",
+      "ext": "png",
+      "expected": "hidden-name.png"
+    }
+  ]
+}

@@ -9,8 +9,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false }
 };
 
-export default function NotFound() {
-  const settings = getSiteSettings();
+export default async function NotFound() {
+  const settings = await getSiteSettings();
 
   return (
     <main className="relative isolate min-h-[100svh] overflow-hidden bg-[#fafafa] text-ink dark:bg-[#0a0e19] dark:text-[#edf0f5]">

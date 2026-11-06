@@ -1,25 +1,105 @@
-import assert from 'node:assert/strict';
-import { findPublishedRun, publicationOutcome, isImageRun, PUBLISH_JOB } from '../lib/deployPublication.mjs';
-const release = (id, sha = 'same') => ({ id, head_sha: sha, path: '.github/workflows/docker-publish.yml', event: 'schedule', status: 'completed', conclusion: 'success' });
-const jobs = conclusion => ({ jobs: [{ name: PUBLISH_JOB, conclusion }] });
-assert.equal(publicationOutcome(release(1), jobs('skipped').jobs), 'reused');
-assert.equal(publicationOutcome(release(1), jobs('success').jobs), 'published');
-assert.equal(publicationOutcome(release(1), []), 'unknown');
-assert.equal(publicationOutcome({ ...release(1), conclusion: 'failure' }, jobs('success').jobs), 'failed');
-assert.equal(publicationOutcome({ ...release(1), status: 'queued' }, []), 'pending');
-assert.equal(isImageRun({ ...release(1), path: 'another.yml' }), false);
-let requested = [];
-const result = await findPublishedRun(async path => {
-  requested.push(path);
-  if (path.includes('/jobs?')) return jobs(path.includes('/101/') ? 'success' : 'skipped');
-  if (path.includes('page=2')) return { workflow_runs: [release(101)] };
-  return { workflow_runs: Array.from({ length: 100 }, (_, i) => ({ ...release(i + 1), event: i === 0 ? 'schedule' : 'push' })) };
-}, 'same');
-assert.equal(result.id, 101);
-assert(requested.some(p => p.includes('page=2')));
-assert.equal(await findPublishedRun(async path => path.includes('/jobs?') ? jobs('skipped') : { workflow_runs: [release(1)] }, 'same'), null);
-assert.equal(await findPublishedRun(async () => ({ workflow_runs: [release(1, 'other')] }), 'same'), null);
-await assert.rejects(findPublishedRun(async () => { throw new Error('GitHub unavailable'); }), /unavailable/);
-await assert.rejects(findPublishedRun(async () => ({})), /不完整/);
-await assert.rejects(findPublishedRun(async path => path.includes('/jobs?') ? {} : { workflow_runs: [release(1)] }), /不完整/);
-console.log('PASS deploy publication: actual publish, skipped reuse, unknown/failure, pagination, matching SHA and API failure');
+import assert from "node:assert/strict";
+import {
+  confirmRevision,
+  findPublishedRelease,
+  releaseIdentity,
+} from "../lib/deployReleaseManifest.mjs";
+const expected = {
+  version: "0.1.76",
+  revision: "a".repeat(40),
+  schema_hash: "b".repeat(64),
+  image: "ghcr.io/synthetic/fire-web",
+};
+const body = {
+  ...expected,
+  image: expected.image + "@sha256:" + "c".repeat(64),
+};
+const record = (value = body, extra = {}) => ({
+  body: JSON.stringify(value),
+  target_commitish: expected.revision,
+  draft: false,
+  prerelease: false,
+  ...extra,
+});
+assert.deepEqual(
+  await findPublishedRelease(async () => [record()], expected),
+  body,
+);
+assert.equal(await findPublishedRelease(async () => [], expected), null);
+for (const extra of [
+  { draft: true },
+  { prerelease: true },
+  { target_commitish: "d".repeat(40) },
+])
+  assert.equal(
+    await findPublishedRelease(async () => [record(body, extra)], expected),
+    null,
+  );
+for (const invalid of [
+  { ...body, version: "0.1.1" },
+  { ...body, schema_hash: "e".repeat(64) },
+  { ...body, revision: "e".repeat(40) },
+  { ...body, image: "ghcr.io/other/fire@sha256:" + "c".repeat(64) },
+  { ...body, image: expected.image + ":latest" },
+  { ...body, image: null },
+  { ...body, extra: true },
+  null,
+])
+  await assert.rejects(() =>
+    findPublishedRelease(async () => [record(invalid)], expected),
+  );
+await assert.rejects(() =>
+  findPublishedRelease(
+    async () => [record(body, { body: "not a manifest" })],
+    expected,
+  ),
+);
+await assert.rejects(() =>
+  findPublishedRelease(async () => ({ items: [] }), expected),
+);
+let pages = 0;
+assert.deepEqual(
+  await findPublishedRelease(
+    async () =>
+      ++pages === 1
+        ? Array.from({ length: 100 }, () =>
+            record(body, { target_commitish: "d".repeat(40) }),
+          )
+        : [record()],
+    expected,
+  ),
+  body,
+);
+assert.equal(pages, 2);
+pages = 0;
+await assert.rejects(
+  () =>
+    findPublishedRelease(async () => {
+      pages++;
+      return Array.from({ length: 100 }, () =>
+        record(body, { target_commitish: "d".repeat(40) }),
+      );
+    }, expected),
+  /完整/,
+);
+assert.equal(pages, 20);
+await assert.rejects(
+  () =>
+    findPublishedRelease(async () => {
+      throw Error("network failure");
+    }, expected),
+  /network/,
+);
+confirmRevision(expected.revision, expected.revision);
+assert.throws(() => confirmRevision("f".repeat(40), expected.revision));
+assert.throws(() => confirmRevision("bad", expected.revision));
+const identity = releaseIdentity(
+  process.cwd(),
+  "Synthetic/Fire-Web",
+  expected.revision,
+);
+assert.equal(identity.image, "ghcr.io/synthetic/fire-web");
+assert.match(identity.schema_hash, /^[a-f0-9]{64}$/);
+console.log(
+  "PASS immutable publication: exact commit/version/schema/image digest, full pagination, incomplete evidence rejection and confirmed-source guard",
+);

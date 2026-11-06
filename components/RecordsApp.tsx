@@ -74,7 +74,9 @@ const FourDoorNavigator = lazy(() => import("@/components/FourDoorNavigator"));
 // 预览也按需下载：关闭时不把插图代码打入主页面；开启时与交互代码并行加载。
 const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"));
 
-type TabKey = "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "library" | "cards" | "settings" | "pnl";
+import SystemView from '@/components/views/SystemView';
+
+type TabKey = "system-overview" | "background-tasks" | "api-migration" | "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -103,7 +105,9 @@ const DEFAULT_TABS: TabConfig[] = [
 ];
 
 // 保证 FIRE 页签始终存在且固定在「资产分析」下方（即使数据库里的导航菜单未包含它）。
+const SYSTEM_TABS:TabConfig[]=[{key:'system-overview',label:'系统总览',url:'/system-overview'},{key:'background-tasks',label:'后台任务',url:'/background-tasks'},{key:'api-migration',label:'接口迁移',url:'/api-migration'}];
 function withFireTab(tabs: TabConfig[]): TabConfig[] {
+  tabs=[...tabs.filter(tab=>!SYSTEM_TABS.some(item=>item.key===tab.key)),...SYSTEM_TABS];
   if (tabs.some((t) => t.key === "fire")) return tabs;
   const idx = tabs.findIndex((t) => t.key === "assets");
   const fireTab: TabConfig = { key: "fire", label: "FIRE", url: "/fire" };
@@ -145,7 +149,7 @@ export default function RecordsApp({
   initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
-  initialFundBalances: Record<string, number>;
+  initialFundBalances: Record<string, number|null>;
   initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
@@ -931,7 +935,7 @@ export default function RecordsApp({
   const sidebarTabs = useMemo(
     () =>
       navTabs
-        .filter((t) => (user?.role === "admin") || (t.key !== "users" && t.key !== "library"))
+        .filter((t) => (user?.role === "admin") || (t.key !== "users" && t.key !== "library" && !SYSTEM_TABS.some(item=>item.key===t.key)))
         .map((t) => {
           // SSR 与客户端水合首帧必须使用同一份服务端快照；本地缓存只在水合完成后补充。
           const key = t.key.toUpperCase();
@@ -1043,6 +1047,7 @@ export default function RecordsApp({
       <div className={settingsSubReady ? "h-full" : "hidden h-full"} aria-hidden={!settingsSubReady}>
         {settingsSub === "palette" ? <PlatformAppearance /> : settingsSub === "profile-home" ? <PersonalHome user={user} onEdit={() => navigateTo("settings", "profile")} /> : <SettingsView
           user={{
+            id: user.id,
             username: user?.username ?? "",
             nickname: user?.nickname ?? "",
             uid: user?.uid ?? "",
@@ -1213,6 +1218,7 @@ export default function RecordsApp({
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} initialData={initialCelebs} />}
           {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
           {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
+          {(['system-overview','background-tasks','api-migration'] as string[]).includes(activeTab) && (user?.role==='admin'?<SystemView ownerId={initialUser.id} mode={activeTab==='system-overview'?'overview':activeTab==='background-tasks'?'tasks':'migration'} onNavigate={navigateWorkspace}/>:<NoPermission/>)}
           {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
             <SettingsWindow version={initialVersion}>{settingsPanel}</SettingsWindow>

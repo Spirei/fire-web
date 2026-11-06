@@ -31,7 +31,7 @@ export async function GET(
     return new NextResponse("Bad Request", { status: 400 });
   }
   const privateReport = ["reports", "alcor-test"].includes(segs[0].toLowerCase());
-  if (privateReport) { const user = getAuthUser(request); if (!user || !isAdmin(user)) return new NextResponse("Forbidden", { status: 403 }); }
+  if (privateReport) { const user = await getAuthUser(request); if (!user || !isAdmin(user)) return new NextResponse("Forbidden", { status: 403 }); }
   const normalized = path.normalize(rel);
   const abs = path.join(ROOT, normalized);
   const defaultAbs = path.join(DEFAULT_ROOT, normalized);

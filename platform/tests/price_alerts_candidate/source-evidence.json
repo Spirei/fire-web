@@ -1,0 +1,14 @@
+{
+  "source_sha256": {
+    "lib/priceAlerts.ts": "b10eb52a0e5a589d9869c7ceef8e707ca31720ca40be5bd7cb470473376171e8",
+    "lib/priceAlertsApi.ts": "64c80b0c4ebe2f85c023d87a480788bb7718c6655963ec0bb79214733f7dc515",
+    "lib/priceAlertsSchema.ts": "e19cc9c6323296af4651b681825d8a129684654550f4976689a891798478819e",
+    "lib/priceAlertWorker.ts": "9a063fa0ec883b2daebdbcc56edb613b12e1a217a3f25ccba227ac9cd2a45ff2",
+    "lib/priceAlertWecom.ts": "565b33d795041592c40570bbb2eac794e1517612490070b93e68a11d1df4df25",
+    "lib/priceAlertMessengers.ts": "83c631321d876f7b4b217581617affe1c69d7b14e3585e758be7ef9086dfbcaf",
+    "lib/socialChannels.ts": "27c6ce16a45312db45466f52e2720da1f4de2932da9b83b11b65e0d9ba59c383",
+    "lib/mail.ts": "1ffbaedb28f98d177682498e8f0abd7c5a205f65ba0d79780fd3c3e344f7b78a",
+    "tests/price-alerts.cjs": "2b6578ba350874941e59de9a8232fb2bde2ae131874234542a39d2bb7ff840ae",
+    "lib/marketCode.ts": "1d4cd1553afc0e8dc4f47c98b9ceb4c7b966ff6c1895a301cbea6ecb3959bf1c"
+  }
+}

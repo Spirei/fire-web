@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const {DatabaseSync}=require('node:sqlite'),{stripTypeScriptTypes}=require('node:module');
+const root=process.argv[2],context=vm.createContext({Date});
+const db=new DatabaseSync(':memory:');
+db.exec('CREATE TABLE assets(id TEXT,type TEXT,market TEXT,code TEXT,name TEXT,url TEXT,url_dark TEXT,market_cap REAL,price REAL,change_pct REAL,source TEXT,last_checked_at TEXT,board TEXT,created_at TEXT,updated_at TEXT)');
+const input=JSON.parse(fs.readFileSync(0,'utf8'));
+for(const [code,name] of input.records)db.prepare('INSERT INTO assets(id,type,market,code,name,url,url_dark,board) VALUES(?,?,?,?,?,?,?,?)').run('stock:US:'+code,'stock','US',code,name,'','','');
+(async()=>{const deps={'./db':{getDb:()=>db},'./fileCleanup':{isLocalUrl:()=>false,removeFileIfUnused(){throw Error('No cleanup')},sameLocalFile:()=>false},fs:{default:{statSync(){throw Error('No real files')},existsSync:()=>false}},path:{default:path},'./relatedEtfs':{RELATED_ETF_MAIN_STOCK:{}},'./settings':{getSiteSettings:()=>({})},'./stockIconKey':{applyRelatedEtfMainStockIcons:x=>x,stockIconLookupCodes:(m,c)=>[c]},'./managedAssetImages':{managedImageUrl:(id,url)=>url}};
+const m=new vm.SourceTextModule(stripTypeScriptTypes(fs.readFileSync(path.join(root,'assets.ts'),'utf8'),{mode:'transform'}),{context});await m.link(key=>new vm.SyntheticModule(Object.keys(deps[key]),function(){for(const n of Object.keys(deps[key]))this.setExport(n,deps[key][n])},{context}));await m.evaluate();
+console.log(JSON.stringify(input.queries.map(q=>{const r=m.namespace.getAssetsPage({type:'stock',query:q.q,sort:q.sort||'code',dir:q.dir||'asc',page:Number(q.page||1),pageSize:Number(q.pageSize||10)});return {codes:r.assets.map(a=>a.code),page:r.page,pageSize:r.pageSize,total:r.total}})));db.close()})().catch(e=>{console.error(e.stack||e);process.exit(1)});

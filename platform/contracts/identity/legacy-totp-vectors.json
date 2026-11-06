@@ -1,0 +1,34 @@
+{
+  "source": "fire-web/lib/totp.ts",
+  "secret": "JBSWY3DPEHPK3PXP",
+  "cases": [
+    {
+      "time": 0,
+      "code": "282760"
+    },
+    {
+      "time": 59,
+      "code": "996554"
+    },
+    {
+      "time": 1111111109,
+      "code": "071271"
+    },
+    {
+      "time": 1111111111,
+      "code": "358462"
+    },
+    {
+      "time": 1234567890,
+      "code": "742275"
+    },
+    {
+      "time": 2000000000,
+      "code": "890699"
+    }
+  ],
+  "backup": {
+    "code": "ABCD-1234-5678-90EF",
+    "digest": "v2:6cda66d6abbe82fee30465c1e963feb26abd9d656894134eb04084c6ae088521"
+  }
+}

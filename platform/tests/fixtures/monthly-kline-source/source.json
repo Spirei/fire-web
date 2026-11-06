@@ -1,0 +1,12 @@
+{
+  "source_files": {
+    "web.ts": "app/api/kline/route.ts",
+    "v1.ts": "app/api/v1/kline/route.ts",
+    "v2.ts": "app/api/v2/kline/route.ts"
+  },
+  "fixtures_sha256": {
+    "web.ts": "8c000e7b015bf4cab95d1d50417683ab9a2411ad7a06496106af1a435aaf58e6",
+    "v1.ts": "8526437d333afe09719ff356ece90e1e7eb548277ad2d7b420f45a286b6aa3ca",
+    "v2.ts": "dc40ff739eec30a3f2c474579811db680890059d85feb2b8c483cf28f02d88fa"
+  }
+}

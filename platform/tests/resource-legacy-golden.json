@@ -1,0 +1,348 @@
+{
+  "source": "lib/resourceLibrary.ts#classify",
+  "source_sha256": "7ac616fcd9fc3d3c7e5ec08df30501994e1465d6e2077c07208c075867e364a6",
+  "vectors": [
+    {
+      "name": "ok.jpg",
+      "base64": "/9j/eA==",
+      "result": {
+        "kind": "image",
+        "mime": "image/jpeg"
+      }
+    },
+    {
+      "name": "ok.jpeg",
+      "base64": "/9j/eA==",
+      "result": {
+        "kind": "image",
+        "mime": "image/jpeg"
+      }
+    },
+    {
+      "name": "ok.png",
+      "base64": "iVBORw0KGgp4",
+      "result": {
+        "kind": "image",
+        "mime": "image/png"
+      }
+    },
+    {
+      "name": "ok.gif",
+      "base64": "R0lGODdheA==",
+      "result": {
+        "kind": "image",
+        "mime": "image/gif"
+      }
+    },
+    {
+      "name": "ok.gif",
+      "base64": "R0lGODlheA==",
+      "result": {
+        "kind": "image",
+        "mime": "image/gif"
+      }
+    },
+    {
+      "name": "ok.webp",
+      "base64": "UklGRnh4eHhXRUJQeA==",
+      "result": {
+        "kind": "image",
+        "mime": "image/webp"
+      }
+    },
+    {
+      "name": "ok.heic",
+      "base64": "eHh4eGZ0eXBoZWlj",
+      "result": {
+        "kind": "image",
+        "mime": "image/heic"
+      }
+    },
+    {
+      "name": "ok.heif",
+      "base64": "eHh4eGZ0eXBtaWYx",
+      "result": {
+        "kind": "image",
+        "mime": "image/heif"
+      }
+    },
+    {
+      "name": "ok.mp4",
+      "base64": "eHh4eGZ0eXB4eHh4",
+      "result": {
+        "kind": "video",
+        "mime": "video/mp4"
+      }
+    },
+    {
+      "name": "ok.mov",
+      "base64": "eHh4eGZ0eXB4eHh4",
+      "result": {
+        "kind": "video",
+        "mime": "video/quicktime"
+      }
+    },
+    {
+      "name": "ok.webm",
+      "base64": "GkXfo3g=",
+      "result": {
+        "kind": "video",
+        "mime": "video/webm"
+      }
+    },
+    {
+      "name": "ok.mp3",
+      "base64": "SUQzeA==",
+      "result": {
+        "kind": "audio",
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "name": "ok.mp3",
+      "base64": "/+A=",
+      "result": {
+        "kind": "audio",
+        "mime": "audio/mpeg"
+      }
+    },
+    {
+      "name": "ok.m4a",
+      "base64": "eHh4eGZ0eXB4eHh4",
+      "result": {
+        "kind": "audio",
+        "mime": "audio/mp4"
+      }
+    },
+    {
+      "name": "ok.aac",
+      "base64": "//E=",
+      "result": {
+        "kind": "audio",
+        "mime": "audio/aac"
+      }
+    },
+    {
+      "name": "ok.wav",
+      "base64": "UklGRnh4eHhXQVZFeA==",
+      "result": {
+        "kind": "audio",
+        "mime": "audio/wav"
+      }
+    },
+    {
+      "name": "ok.ogg",
+      "base64": "T2dnU3g=",
+      "result": {
+        "kind": "audio",
+        "mime": "audio/ogg"
+      }
+    },
+    {
+      "name": "ok.flac",
+      "base64": "ZkxhQ3g=",
+      "result": {
+        "kind": "audio",
+        "mime": "audio/flac"
+      }
+    },
+    {
+      "name": "ok.pdf",
+      "base64": "JVBERi14",
+      "result": {
+        "kind": "document",
+        "mime": "application/pdf"
+      }
+    },
+    {
+      "name": "ok.txt",
+      "base64": "77u/dGV4dA0K",
+      "result": {
+        "kind": "document",
+        "mime": "text/plain"
+      }
+    },
+    {
+      "name": "ok.md",
+      "base64": "IyBIaQ==",
+      "result": {
+        "kind": "document",
+        "mime": "text/markdown"
+      }
+    },
+    {
+      "name": "ok.csv",
+      "base64": "YSxiDQo=",
+      "result": {
+        "kind": "document",
+        "mime": "text/csv"
+      }
+    },
+    {
+      "name": "ok.json",
+      "base64": "77u/eyJhIjowfQ==",
+      "result": {
+        "kind": "document",
+        "mime": "application/json"
+      }
+    },
+    {
+      "name": "ok.docx",
+      "base64": "UEsDBHg=",
+      "result": {
+        "kind": "document",
+        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      }
+    },
+    {
+      "name": "ok.xlsx",
+      "base64": "UEsFBng=",
+      "result": {
+        "kind": "document",
+        "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    },
+    {
+      "name": "ok.pptx",
+      "base64": "UEsHCHg=",
+      "result": {
+        "kind": "document",
+        "mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      }
+    },
+    {
+      "name": "ok.zip",
+      "base64": "UEsDBHg=",
+      "result": {
+        "kind": "archive",
+        "mime": "application/zip"
+      }
+    },
+    {
+      "name": "ok.gz",
+      "base64": "H4t4",
+      "result": {
+        "kind": "archive",
+        "mime": "application/gzip"
+      }
+    },
+    {
+      "name": "ok.7z",
+      "base64": "N3q8rycceA==",
+      "result": {
+        "kind": "archive",
+        "mime": "application/x-7z-compressed"
+      }
+    },
+    {
+      "name": "ok.rar",
+      "base64": "UmFyIRoHeA==",
+      "result": {
+        "kind": "archive",
+        "mime": "application/vnd.rar"
+      }
+    },
+    {
+      "name": ".txt",
+      "base64": "/wA=",
+      "result": {
+        "kind": "other",
+        "mime": "application/octet-stream"
+      }
+    },
+    {
+      "name": ".png",
+      "base64": "bm90IGFuIGltYWdl",
+      "result": {
+        "kind": "other",
+        "mime": "application/octet-stream"
+      }
+    },
+    {
+      "name": "..txt",
+      "base64": "b2s=",
+      "result": {
+        "kind": "document",
+        "mime": "text/plain"
+      }
+    },
+    {
+      "name": "...",
+      "base64": "dW5rbm93bg==",
+      "result": {
+        "kind": "other",
+        "mime": "application/octet-stream"
+      }
+    },
+    {
+      "name": "a.",
+      "base64": "dW5rbm93bg==",
+      "result": {
+        "kind": "other",
+        "mime": "application/octet-stream"
+      }
+    },
+    {
+      "name": "a..txt",
+      "base64": "b2s=",
+      "result": {
+        "kind": "document",
+        "mime": "text/plain"
+      }
+    },
+    {
+      "name": "uppercase.PNG",
+      "base64": "iVBORw0KGgo=",
+      "result": {
+        "kind": "image",
+        "mime": "image/png"
+      }
+    },
+    {
+      "name": "x.html",
+      "base64": "PHNjcmlwdD5vcmlnaW5hbDwvc2NyaXB0Pg==",
+      "result": {
+        "kind": "other",
+        "mime": "application/octet-stream"
+      }
+    },
+    {
+      "name": "x.py",
+      "base64": "cHJpbnQoMSk=",
+      "result": {
+        "kind": "other",
+        "mime": "application/octet-stream"
+      }
+    },
+    {
+      "name": "x.json",
+      "base64": "TmFO",
+      "status": 415
+    },
+    {
+      "name": "x.json",
+      "base64": "ew==",
+      "status": 415
+    },
+    {
+      "name": "x.txt",
+      "base64": "/w==",
+      "status": 415
+    },
+    {
+      "name": "x.txt",
+      "base64": "AA==",
+      "status": 415
+    },
+    {
+      "name": "x.png",
+      "base64": "bm90IHBuZw==",
+      "status": 415
+    },
+    {
+      "name": "x.docx",
+      "base64": "bm90IHppcA==",
+      "status": 415
+    }
+  ]
+}

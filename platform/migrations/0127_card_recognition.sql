@@ -1,0 +1,7 @@
+-- Private recognition input/output; this never mutates card wallet balances.
+CREATE TABLE card_recognition_operations(owner_id text NOT NULL REFERENCES users(id),request_id uuid NOT NULL,input_sha256 text NOT NULL,target_id text NOT NULL,target_fingerprint text NOT NULL,license_revision text NOT NULL,origin_instance uuid NOT NULL,input_raw bytea NOT NULL CHECK(octet_length(input_raw)<=8388608),input_media_type text NOT NULL,result jsonb,created_at timestamptz NOT NULL DEFAULT clock_timestamp(),PRIMARY KEY(owner_id,request_id));
+CREATE FUNCTION retain_card_recognition() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+ IF TG_OP='DELETE' OR (to_jsonb(NEW)-'result') IS DISTINCT FROM (to_jsonb(OLD)-'result') OR OLD.result IS NOT NULL THEN RAISE EXCEPTION 'recognition evidence retained' USING ERRCODE='23514'; END IF; RETURN NEW; END $$;
+CREATE TRIGGER retain_card_recognition BEFORE UPDATE OR DELETE ON card_recognition_operations FOR EACH ROW EXECUTE FUNCTION retain_card_recognition();
+CREATE TABLE card_recognition_pages(owner_id text NOT NULL,id uuid NOT NULL,request_id uuid NOT NULL,raw bytea NOT NULL CHECK(octet_length(raw)<=1048576),raw_sha256 text NOT NULL,http_status integer,complete boolean NOT NULL,received_at timestamptz NOT NULL DEFAULT clock_timestamp(),PRIMARY KEY(owner_id,id),UNIQUE(owner_id,request_id),FOREIGN KEY(owner_id,request_id) REFERENCES card_recognition_operations(owner_id,request_id));
+CREATE TRIGGER retain_card_recognition_page BEFORE UPDATE OR DELETE ON card_recognition_pages FOR EACH ROW EXECUTE FUNCTION immutable_trade_ledger();

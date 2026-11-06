@@ -1,15 +1,2 @@
-import { backgroundMode } from "./lib/backgroundMode";
-
-export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { installRequestInstrumentation } = await import("./lib/apiRequestInstrumentation");
-    installRequestInstrumentation();
-    if (backgroundMode() !== "embedded") return;
-    const { startFeedScheduler } = await import("./lib/feedGeneration");
-    startFeedScheduler();
-    const { startPriceAlertWorker } = await import("./lib/priceAlertWorker");
-    startPriceAlertWorker();
-    const { startOrderExecutionWorker } = await import("./lib/orderExecutionWorker");
-    startOrderExecutionWorker();
-  }
-}
+// Fire 的业务采集、任务和请求记录由内置 PG 后端及独立 Worker 执行。
+export async function register() {}

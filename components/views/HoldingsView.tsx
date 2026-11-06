@@ -61,7 +61,7 @@ interface Props {
   marketOptions: MarketOption[];
   onMarketsChange?: (markets: string[], labels: { key: string; label: string; flag: string }[]) => void;
   onOrdersChanged?: () => void;
-  initialFundBalances: Record<string, number>;
+  initialFundBalances: Record<string, number|null>;
   valuationReady: boolean;
 }
 
@@ -257,7 +257,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
   // 是否有「上一次成功」的汇率：有则秒开真实值；没有则不展示猜测值，等服务端返回
   const [ratesReady, setRatesReady] = useState(false);
-  const [fundBalances, setFundBalances] = useState<Record<string, number>>(() => ({ ...emptyFundBalances(), ...initialFundBalances }));
+  const [fundBalances, setFundBalances] = useState<Record<string, number|null>>(() => ({ ...initialFundBalances }));
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   // 市场盈亏卡片拖动顺序（本地记忆）
@@ -302,9 +302,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     try {
       const res = await sharedRead("/api/v1/funds?limit=1");
       const json = res.ok ? await res.json() : null;
-      if (json?.data?.balances) setFundBalances((current) => ({ ...current, ...json.data.balances }));
+      if (json?.data?.balances) setFundBalances(json.data.balances); else setFundBalances({});
     } catch {
-      /* 资金服务异常时保留上一次余额，避免总资产闪回持仓市值 */
+      setFundBalances({});
     }
   }, []);
 
@@ -483,11 +483,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const totalCur = active === "TOTAL" ? displayCur : cur;
   // 总资产货币符号（ISO 码 → 符号；市场盈亏卡片仍用 USD$/HKD$/CNY¥ 规范标识）
   const totalCurLabel = CURRENCY_SYMBOLS[totalCur as keyof typeof CURRENCY_SYMBOLS] || totalCur;
-  const cashInUsd = useMemo(() => (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => sum + value / (rates[iso] || 1), 0), [fundBalances, rates]);
+  const cashInUsd = useMemo(() => Object.keys(fundBalances).length && Object.values(fundBalances).every(value=>typeof value==='number'&&Number.isFinite(value)) ? (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => Number.isFinite(rates[iso])&&rates[iso]>0 ? sum+value/rates[iso] : NaN,0) : NaN, [fundBalances, rates]);
   const allMarketsNetAsset = useMemo(() => (positions.reduce((sum, r) => sum + toUsd(r.market, livePrice(r) * (Number(r.qty) || 0)), 0) + cashInUsd) * (rates[displayCur] ?? 1), [positions, livePrice, rates, cashInUsd, displayCur]);
   const displayedNetAsset = active === "TOTAL"
     ? (metrics.mv + cashInUsd) * totalFactor
-    : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD")] || 0);
+    : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD")] ?? NaN);
   const pageUsesCompactMoney = useMemo(() => {
     const values = [
     displayedNetAsset,
@@ -1066,7 +1066,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           </svg>
           总资产
           <span className={`text-xs tabular-nums ${active === "TOTAL" ? "opacity-80" : "text-faint"}`}>
-            {metricsReady ? compactMoney(allMarketsNetAsset, CURRENCY_SYMBOLS[displayCur] || displayCur) : "…"}
+            {metricsReady ? Number.isFinite(allMarketsNetAsset)?compactMoney(allMarketsNetAsset, CURRENCY_SYMBOLS[displayCur] || displayCur):"—" : "…"}
           </span>
         </button>
         {displayedTabs.map((m, i) => {
@@ -1127,7 +1127,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       <div data-workspace-reveal className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">净资产（{totalCurLabel}）</span>
-          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? compactMoney(displayedNetAsset, totalCurLabel) : "…"}</strong>
+          <strong className="mt-1 block text-lg font-extrabold tabular-nums">{metricsReady ? Number.isFinite(displayedNetAsset)?compactMoney(displayedNetAsset, totalCurLabel):"—" : "…"}</strong>
         </div>
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">当日盈亏</span>

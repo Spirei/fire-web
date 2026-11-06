@@ -1,0 +1,25 @@
+{
+  "old_methods": [
+    {
+      "id": "af5963a8a95c5cd0",
+      "method": "GET",
+      "path": "/api/quote-pool",
+      "status": "partial_strict_background_DTO_and_client_lifecycle_adaptation_pending"
+    }
+  ],
+  "old_pool_POST_DELETE": "not_present;not_invented",
+  "source_sha256": {
+    "app/api/quote-pool/route.ts": "4f0c2bb48bb28f62eb1ac064791f0025d750c028471d350e91ebf5e5a9453508",
+    "lib/quotePoolData.ts": "ed73ff34fb9bce0ee343ba3014c172d40244ad38f8c3fb9f87a1063cefb4db52",
+    "lib/quotePoolView.ts": "0651c03f10fa48f22c7f338014065d998079d3a662a4f5605413d0e94584fd18",
+    "lib/useQuotePoolSnapshot.ts": "f80d504404c810503958c53e88d05fb7074663848b2ff09b0de7b00f8ef89954",
+    "components/views/QuotePoolView.tsx": "7f7d2fda81d8bad248b365792cd5cdd398127cbd09dec01a993288f6121e1548",
+    "lib/quoteDemand.ts": "3d080fbf61682ff227ada4b9b2c96ee015df68c5bdecd71cb80c0954ada8dbe5",
+    "lib/marketCode.ts": "1d4cd1553afc0e8dc4f47c98b9ceb4c7b966ff6c1895a301cbea6ecb3959bf1c"
+  },
+  "old_web_repository_modified": false,
+  "canonical_client_write_path": "/api/market/subscriptions",
+  "canonical_source_read_path": "/api/market/pool",
+  "public_backend_source_is_client_cancellable": false,
+  "real_provider_calls": 0
+}

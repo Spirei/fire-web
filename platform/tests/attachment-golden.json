@@ -1,0 +1,108 @@
+{
+  "sourceHashes": {
+    "app/api/attachments/route.ts": "b2ffcacbc176f1c43006fe34c4ac92a34da3ea45208ab00d89d67c31dced99dd",
+    "lib/attachments.ts": "e31d445dec6b3c62a56a0b8c2e5db794c4b44214e1fdf644479ea15c34664a1b"
+  },
+  "names": [
+    {
+      "input": " a:b?.txt ",
+      "expected": "a_b_.txt"
+    },
+    {
+      "input": "foo/bar\\baz?.CSV",
+      "expected": "foo_bar_baz_.CSV"
+    },
+    {
+      "input": "中文原件.pdf",
+      "expected": "中文原件.pdf"
+    },
+    {
+      "input": ".env",
+      "expected": ".env"
+    },
+    {
+      "input": "nfc-é.bin",
+      "expected": "nfc-é.bin"
+    },
+    {
+      "input": "  ",
+      "expected": "file-1700000000000"
+    },
+    {
+      "input": "quote\"file.txt",
+      "expected": "quote_file.txt"
+    }
+  ],
+  "paths": [
+    {
+      "input": "a/b",
+      "expected": "a/b"
+    },
+    {
+      "input": "/a/b",
+      "expected": "a/b"
+    },
+    {
+      "input": "\\a\\b",
+      "expected": "a/b"
+    },
+    {
+      "input": " a/b ",
+      "expected": "a/b"
+    },
+    {
+      "input": "../x",
+      "error": true
+    },
+    {
+      "input": "a//b",
+      "error": true
+    },
+    {
+      "input": "a/./b",
+      "error": true
+    },
+    {
+      "input": "a/../b",
+      "error": true
+    },
+    {
+      "input": "a/",
+      "error": true
+    },
+    {
+      "input": "",
+      "error": true
+    }
+  ],
+  "mime": [
+    {
+      "input": "a.png",
+      "expected": "image/png"
+    },
+    {
+      "input": "a.SVG",
+      "expected": "image/svg+xml"
+    },
+    {
+      "input": "a.html",
+      "expected": "text/plain; charset=utf-8"
+    },
+    {
+      "input": "a.md",
+      "expected": "text/markdown; charset=utf-8"
+    },
+    {
+      "input": "a.pdf",
+      "expected": "application/pdf"
+    },
+    {
+      "input": "a.bin",
+      "expected": "application/octet-stream"
+    },
+    {
+      "input": "empty",
+      "expected": "application/octet-stream"
+    }
+  ]
+}

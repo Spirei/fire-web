@@ -1,0 +1,15 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const {stripTypeScriptTypes} = require('node:module');
+const root = process.argv[2];
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const chart = fs.readFileSync(path.join(root, 'lib/chartSeries.ts'), 'utf8');
+const kline = fs.readFileSync(path.join(root, 'lib/kline.ts'), 'utf8');
+const zones = chart.slice(chart.indexOf('const zones:'), chart.indexOf('\nexport function chartSeriesSymbols'));
+const normalize = chart.slice(chart.indexOf('export function normalizeChartRows'), chart.indexOf('\nconst entries =')).replace('export ', '');
+const aggregate = kline.slice(kline.indexOf('function aggregatePeriods('), kline.indexOf('\n/**', kline.indexOf('function aggregatePeriods(')));
+const ctx = {input};
+vm.createContext(ctx);
+vm.runInContext(stripTypeScriptTypes(zones + '\n' + normalize + '\n' + aggregate, {mode:'strip'}) + '\nthis.result={series:normalizeChartRows(input.stamps,input.prices,"US","AAPL",1,"synthetic",input.now),period:aggregatePeriods(input.rows,"WEEK")};', ctx, {timeout:1000});
+process.stdout.write(JSON.stringify(ctx.result));

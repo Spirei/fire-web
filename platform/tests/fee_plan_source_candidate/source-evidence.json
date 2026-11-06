@@ -1,0 +1,14 @@
+{
+  "ios_sha256": {
+    "StockLog/Models/AlcorPersonalFeePlan.swift": "0c73fa2231f1c66060cff999681e09d6bcba6d6a7dd85424556e3cd966e5e187",
+    "StockLog/Models/AlcorAccountSync.swift": "07a62813cacefd5883402ccf32c11421147342d75cd896f075606a334ada7128",
+    "Tests/AlcorPersonalFeeTests.swift": "2f738b61d2fd2c8a06c283793b78293f502b7dde048f041a050791896153908f",
+    "StockLog/Models/AlcorCalculatedOrderFee.swift": "599ec193a9d35b18913f462b27030c55bf437049d37e1008ebb4c32bd9524695",
+    "StockLog/Models/AlcorTradeFeeSuggestion.swift": "8e3ef4f0f72c3066953a6ea16eced1ed849c8dc76895009c123ec1b942aae644"
+  },
+  "runtime_golden": [
+    "StockLog/Models/AlcorPersonalFeePlan.swift",
+    "StockLog/Models/AlcorAccountSync.swift"
+  ],
+  "scope": "user_confirmed_plan_configuration_not_actual_charges"
+}

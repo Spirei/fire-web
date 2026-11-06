@@ -87,3 +87,10 @@ public/uploads/cards/
 /node_modules
 /.next
 /.next-integration
+
+**/__pycache__/
+**/*.py[cod]
+platform/.venv/
+platform/.local/
+platform/.pytest_cache/
+platform/.ruff_cache/
