@@ -48,7 +48,7 @@ export default function PlatformAppearance() {
     const { palette, choose, accent, chooseAccent } = useSitePalette(), { mode, choose: chooseMode } = useThemePreference();
     const [prefs, set] = usePersistedState(KEY, defaults);
     const [advanced, setAdvanced] = useState(false);
-    const [dark, setDark] = useState(false);
+    const [dark, setDark] = useState(mode === "dark");
     useEffect(() => { const sync = () => setDark(document.documentElement.classList.contains('dark')); sync(); const o = new MutationObserver(sync); o.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] }); return () => o.disconnect(); }, []);
     const update = (key: keyof typeof defaults, value: string | number | boolean) => set(p => ({ ...p, [key]: value }));
     const theme = SITE_PALETTES.find(p => p.id === palette)!;
