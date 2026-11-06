@@ -9,8 +9,8 @@
 
 ## 项目
 
-- 技术栈：Next.js 15（App Router）+ React 19 + TypeScript + Tailwind CSS，SQLite（better-sqlite3）。
-- 常用命令：开发 `npm run dev`（固定监听 `0.0.0.0:3000`，禁止临时切换端口）；构建 `npm run build`。首次本地测试运行 `npm run smoke:account` 注册独立普通测试账号，凭据放忽略 Git 的 `data/smoke-account.json`（0600）；之后 `./scripts/smoke-test.sh` / `npm run smoke` 复用此账号只读巡检，不依赖 demo，也不重置账号密码。管理员页面按真实权限验证。业务写入和管理员功能回归使用 `npm run test:review` 的临时数据库；禁止向真实实例写入测试业务数据。
+- 技术栈：Next.js 15（App Router）+ React 19 + TypeScript + Tailwind CSS，内置 FastAPI + PostgreSQL + Redis；当前数据库方案为 PG，未来可评估更合适的数据库。SQLite 与旧 Node PG 桥接已移除。
+- 常用命令：开发 `npm run dev`（端口由 `PORT` 或 `--port` 指定，默认 3000；端口占用时可选择空闲端口，不影响现有服务）；构建 `npm run build`。只在独立 PG 测试实例预置普通账号，使用 `SMOKE_ACCOUNT_FILE` 指定该实例的凭据文件（0600）； `./scripts/smoke-test.sh` / `npm run smoke` 复用此账号只读巡检，不依赖 demo，也不重置账号密码。管理员页面按真实权限验证。业务写入和管理员功能回归使用 `platform/tests` 的隔离 PG 与 `npm run test:review` 的前端回归；禁止向真实实例写入测试业务数据。
 
 ## 收尾 Review 规范（重要）
 
@@ -140,7 +140,7 @@ Review 自查清单（按项目实际走一遍）：
 - 2026-09-30 用户要求：素材 URL 使用短 ASCII 文件名，非必要不得含中文。市场 `US.svg`、股票 `AAPL.png`、加密货币 `BTC.svg`；旗帜和 UI 图标保留小写代码。无代码时使用稳定的短哈希，不拼接长中文名称。规则集中在 `lib/assetNaming.cjs`。
 - A 股、港股的中文股票名称和既有中文股票文件名可以保留；任何市场的显示名称与素材存储名分离，不擅自改持仓名称。
 - 卡面路径可能是钱包逻辑标识，只迁移图片 URL，不改卡片 ID、持有关系和金额；新导入卡面通过独立 `url` 字段保存短图片地址。
-- 存量短地址迁移由容器入口及本地启动钩子自动执行一次，先备份、复制和校验，再事务更新引用；完成标记随数据库保存。不得把日常换图变成用户手动执行 SQL / SSH 的操作。诊断可用 `node scripts/rename-assets.mjs --dry-run`；禁止通过 SMB 修改运行中的 SQLite。
+- 存量短地址数据通过显式迁移核对原件、摘要与事务引用；新平台启动不自动改写历史数据。日常换图使用现有共享素材事务与版本回执。
 - 素材图片展示优先使用 `imageUrl` / `imageUrlDark` 固定 ID 地址，原 `url` 用于编辑；换图保留 ID、旧地址自动映射，内容版本和 ETag 防止旧缓存。同名覆盖自动重新校验；磁盘纯改名仅凭已登记的内容指纹找回，不猜测同时改名和改内容的文件。
 - 同图国旗共享同一 URL，禁止 SSR 内嵌 data URI、客户端文件地址与市场文件地址混用。仅内容一致才合并，保留自定义图标。
 - 装饰组件必须按真实可见条件挂载，不能只靠 CSS 隐藏。四色门限宽度至少 1280、高度至少 801、主输入支持悬停及精细指针的非平板；Windows 的附加触屏不能禁用桌面增强，手机、平板和短屏不加载。

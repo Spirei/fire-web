@@ -67,6 +67,16 @@
       "owner": "platform"
     },
     {
+      "method": "GET",
+      "path": "/api/assets/catalog",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/catalog",
+      "owner": "platform"
+    },
+    {
       "method": "POST",
       "path": "/api/assets/check-delisted",
       "owner": "platform"
@@ -177,6 +187,26 @@
       "owner": "platform"
     },
     {
+      "method": "GET",
+      "path": "/api/auth/personal-activity",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/personal-home",
+      "owner": "platform"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/auth/personal-home",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/personal-home",
+      "owner": "platform"
+    },
+    {
       "method": "PUT",
       "path": "/api/auth/profile",
       "owner": "platform"
@@ -194,6 +224,21 @@
     {
       "method": "POST",
       "path": "/api/auth/register/email/request",
+      "owner": "platform"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/search-history",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/search-history",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/search-history",
       "owner": "platform"
     },
     {
@@ -774,6 +819,11 @@
     {
       "method": "POST",
       "path": "/api/users/[id]/disable-totp",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/[id]/passkeys",
       "owner": "platform"
     },
     {

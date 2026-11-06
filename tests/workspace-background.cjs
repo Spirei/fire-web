@@ -22,7 +22,7 @@ function timers() {
 }
 
 module.exports = async function workspaceBackground() {
-  const api = 'components/ApiRequests.tsx', library = 'components/views/AssetLibraryView.tsx', activities = 'components/views/ActivitiesView.tsx';
+  const api = 'components/ApiRequests.tsx', library = 'components/views/AssetCatalogView.tsx', activities = 'components/views/ActivitiesView.tsx';
   const apiCode = slice(api, '  const refresh = useCallback', '  useEffect(() => {', '\nexports.refresh=refresh;exports.scheduleRefresh=scheduleRefresh;');
   const net = network(), clock = timers(), commits = [];
   const apiContext = { exports: {}, ...net, ...clock, AbortController, Date, document: { hidden: false }, foreground: true, foregroundRef: ref(true), filtersRef: ref({ q: 'first' }), filterParams: value => new URLSearchParams(value), flight: ref(null), flightKey: ref(''), changedDuringRead: ref(false), confirmed: ref({ key: '', at: 0 }), queueRefresh: ref(null), timer: ref(null), loadingShape: ref({}), useCallback: fn => fn, setRefreshing() {}, setResult: value => commits.push(value), setError() {}, setBlocked() {}, setCheckedAt() {} };
@@ -92,36 +92,19 @@ module.exports = async function workspaceBackground() {
   assert.equal([...logClock.pending.values()][0].delay, 0, 'SSR user logs cannot suppress the first system read'); logEffects.pop()();
   console.log('PASS activity reads await the parent, share manual clicks, pause, preserve freshness and load unseeded system logs');
 
-  const syncNet = network(), progress = [], syncEffects = [], syncIntervals = new Map();
-  const sync = { exports: {}, ...syncNet, AbortController, document: { hidden: false }, foreground: true, foregroundRef: ref(true), settingsOpen: true, syncRead: ref(null), setSyncStatus: value => progress.push(value), useEffect: fn => syncEffects.push(fn()), window: { setInterval: fn => { syncIntervals.set(1, fn); return 1; }, clearInterval: id => syncIntervals.delete(id) } };
-  vm.runInNewContext(slice(library, '  function refreshSyncStatus', '  async function startSync', '\nexports.refresh=refreshSyncStatus;'), sync);
-  const syncing = sync.exports.refresh(); assert.equal(syncing, sync.exports.refresh()); assert.equal(syncNet.requests.length, 1);
-  const forced = sync.exports.refresh(true), newest = sync.syncRead.current;
-  assert(syncNet.requests[0].signal.aborted); syncNet.requests[0].resolve({ status: 'old' }); await syncing; assert.equal(sync.syncRead.current, newest); assert.equal(progress.length, 0);
-  syncNet.requests[1].resolve({ status: 'current' }); await forced; assert.equal(progress[0], 'current');
-  vm.runInNewContext(slice(library, '  // 弹窗打开期间轮询同步进度', '  async function saveMarketIcon'), sync);
-  syncIntervals.get(1)(); syncIntervals.get(1)(); assert.equal(syncNet.requests.length, 3);
-  sync.foregroundRef.current = false; syncEffects.pop()(); assert.equal(syncIntervals.size, 0); assert(syncNet.requests[2].signal.aborted);
-  syncNet.requests[2].resolve({ status: 'late' }); await settle(); assert.equal(progress.length, 1);
-  console.log('PASS sync progress has one in-flight read, supersedes pre-write status and stops with its hidden modal');
+  const assetNet=network(),assetCommits=[],assetCleanups=[];
+  const assets={exports:{},...assetNet,AbortController,URLSearchParams,Date,document:{hidden:false},foreground:true,foregroundRef:ref(true),readKey:'stock|US',current:ref('stock|US'),type:'stock',market:'US',query:'',page:1,removed:false,tick:0,seenTick:ref(0),pageCache:ref(new Map()),ownerId:'fixture-owner',marketCountCache:ref(new Map()),setListing:data=>assetCommits.push(data),setLoadedKey(){},setLoading(){},setError(){},setSelection(){},useEffect:fn=>assetCleanups.push(fn())};
+  const effect=slice(library,'  useEffect(() => {\n    if (!foreground) return;','  useEffect(() => {\n    const controller = new AbortController();');
+  vm.runInNewContext(effect,assets);assert.equal(assetNet.requests.length,1);
+  assetCleanups.pop()();assets.readKey='stock|HK';assets.current.current=assets.readKey;assets.market='HK';vm.runInNewContext(effect,assets);assert(assetNet.requests[0].signal.aborted);
+  assetNet.requests[0].resolve({assets:[{id:'wrong'}]});await settle();assert.equal(assetCommits.length,0);
+  assetNet.requests[1].resolve({assets:[{id:'hk'}]});await settle();assert.equal(assetCommits.at(-1).assets[0].id,'hk');
+  assetCleanups.pop()();vm.runInNewContext(effect,assets);assert.equal(assetNet.requests.length,2,'fresh category cache avoids another transport');assert.equal(assetCommits.at(-1).assets[0].id,'hk');
+  assets.tick++;vm.runInNewContext(effect,assets);assert.equal(assetNet.requests.length,3,'manual refresh still fetches');
+  assets.document.hidden=true;assetNet.requests[2].resolve({assets:[{id:'hidden'}]});await settle();assert.equal(assetCommits.at(-1).assets[0].id,'hk');assetCleanups.pop()();
+  assets.foreground=false;vm.runInNewContext(effect,assets);assert.equal(assetNet.requests.length,3);
+  assert(!source(library).includes('/api/quotes'));assert(!source(library).includes('/api/rates'));assert(!source(library).includes('/api/assets/sync'));
+  console.log('PASS shared material browser caches categories, refreshes explicitly, rejects superseded/hidden reads and never loads quotes');
 
-  const retryClock = timers(); let retries = 0;
-  const retry = { ...retryClock, foreground: true, tab: 'crypto', quoteRetried: ref(false), assetRows: [{ type: 'crypto', price: null, marketCap: null }], loadAssets: () => ++retries, useEffect: fn => fn() };
-  const retryCode = slice(library, '  useEffect(() => {\n    if (!foreground || quoteRetried', '  // 加密货币 / 贵金属排序');
-  vm.runInNewContext(retryCode, retry); retryClock.run(); assert.equal(retries, 1);
-  retry.assetRows = [{ type: 'crypto', price: null, marketCap: null }]; vm.runInNewContext(retryCode, retry); assert.equal(retryClock.pending.size, 0, 'missing prices do not create an endless 2.2s retry loop');
-  retry.foreground = false; retry.quoteRetried.current = false; vm.runInNewContext(retryCode, retry); assert.equal(retryClock.pending.size, 0);
-  console.log('PASS missing crypto/metal quotes get one supplemental read per foreground category entry');
-
-  const assetNet = network(), assetCommits = [], notices = [];
-  const assets = { exports: {}, ...assetNet, AbortController, URLSearchParams, document: { hidden: false }, foregroundRef: ref(true), assetRead: ref(null), assetRequestRef: ref(0), tab: 'icon', topPage: 1, setAssets: value => assetCommits.push(value), setAssetTotal() {}, setAssetsLoading() {}, setMarketRows() {}, setAssetRows() {}, marketMeta: () => ({}), NON_TRADABLE_MARKETS: new Set(), customMarkets: ref(new Set()), BASE_ASSETS: [], showToast: value => notices.push(value) };
-  vm.runInNewContext(slice(library, '  async function loadAssets', '  useEffect(() => {', '\nexports.load=loadAssets;'), assets);
-  const old = assets.exports.load(), next = assets.exports.load(); assert(assetNet.requests[0].signal.aborted);
-  assetNet.requests[0].resolve({ assets: [] }); await old; assert.equal(assetCommits.length, 0); assert.equal(notices.length, 0);
-  assetNet.requests[1].resolve({ assets: [] }); await next; assert.equal(assetCommits.length, 1);
-  assets.foregroundRef.current = false; await assets.exports.load(); assert.equal(assetNet.requests.length, 2);
-  assets.foregroundRef.current = true; const hiddenResult = assets.exports.load(); assets.document.hidden = true;
-  assetNet.requests[2].resolve({ assets: [] }); await hiddenResult; assert.equal(assetCommits.length, 1, 'visibility changes reject a response even before effect cleanup');
-  console.log('PASS superseded asset queries abort transport, ignore late results and do not toast cancellation');
 };
 if (require.main === module) module.exports().catch(error => { console.error(error); process.exitCode = 1; });

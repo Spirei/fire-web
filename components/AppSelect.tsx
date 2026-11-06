@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { IconCheck, IconChevronDown } from "@tabler/icons-react";
 import { selectPopoverPlacement } from "@/lib/selectPopover";
 
 export type AppSelectOption = { value: string; label: string; disabled?: boolean };
 
-export default function AppSelect({ value, options, onChange, className = "", menuClassName = "", ariaLabel, disabled = false }: {
+export default function AppSelect({ value, options, onChange, className = "", menuClassName = "", ariaLabel, disabled = false, triggerContent }: {
   value: string | number;
   options: AppSelectOption[];
   onChange: (value: string) => void;
@@ -15,6 +15,7 @@ export default function AppSelect({ value, options, onChange, className = "", me
   menuClassName?: string;
   ariaLabel?: string;
   disabled?: boolean;
+  triggerContent?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0, width: 0, maxWidth: 300, maxHeight: 300, above: false });
@@ -113,7 +114,7 @@ export default function AppSelect({ value, options, onChange, className = "", me
 
   return <>
     <button ref={buttonRef} type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} onClick={() => open ? close() : show()} onKeyDown={event => { if (["ArrowDown", "ArrowUp"].includes(event.key)) { event.preventDefault(); show(event.key === "ArrowUp" ? "last" : undefined); } }} className={`app-select-trigger inline-flex items-center justify-between gap-2 text-left outline-none disabled:cursor-not-allowed disabled:opacity-50 ${className}`}>
-      <span className="min-w-0 truncate">{selected?.label ?? String(value)}</span><IconChevronDown className={`h-4 w-4 flex-none text-muted transition-transform duration-150 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+      {triggerContent ?? <><span className="min-w-0 truncate">{selected?.label ?? String(value)}</span><IconChevronDown className={`h-4 w-4 flex-none text-muted transition-transform duration-150 motion-reduce:transition-none ${open ? "rotate-180" : ""}`} /></>}
     </button>
     {open && createPortal(<>
       <button type="button" tabIndex={-1} aria-label="关闭选择菜单" className="fixed inset-0 z-[11990] cursor-default" onMouseDown={event => event.preventDefault()} onClick={() => close()} />

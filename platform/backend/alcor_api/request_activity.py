@@ -99,7 +99,7 @@ class CountAccountRequests:
         self.app, self.activity = app, activity
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not scope.get("path", "").startswith("/api/"):
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/api/") or scope.get("path") == "/api/auth/personal-activity":
             return await self.app(scope, receive, send)
         holder = {}
         token = _account.set(holder)

@@ -12,7 +12,6 @@
     "audit:deploy": "node scripts/audit-deploy-parity.mjs",
     "check:commit-title": "node scripts/check-commit-title.mjs",
     "smoke": "bash scripts/smoke-test.sh",
-    "smoke:account": "node scripts/smoke-account.mjs --create",
     "smoke:ci": "bash scripts/smoke-ci.sh",
     "backup:source": "python3 scripts/backup-project.py",
     "test:source-backup": "python3 tests/source-backup.py",

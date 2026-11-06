@@ -325,6 +325,5 @@ html:root[data-palette] .platform-child.fire-sidebar-item-active { background:rg
 html:root[data-palette] .platform-appearance.is-active { background:rgb(var(--site-accent)); color:#fff; }
 html:root[data-palette] .platform-status-dot { box-shadow:0 0 0 3px color-mix(in srgb,rgb(var(--site-bg)) 62%,rgb(var(--site-surface))); }
 html:root.dark[data-palette="muse"] .platform-status-dot { box-shadow:0 0 0 3px #1d1f22; }
-html:root[data-palette] .user-role-pill,html:root[data-palette] .user-current-pill { background:rgb(var(--site-accent) / .12)!important; color:rgb(var(--site-accent))!important; border-color:rgb(var(--site-accent) / .2)!important; font-weight:500; }
 html:root[data-palette] .users-page { font-size:14px; font-weight:400; }
 html:root[data-palette] .users-page b { font-weight:500; }

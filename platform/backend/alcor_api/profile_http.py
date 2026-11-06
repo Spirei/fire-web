@@ -18,6 +18,8 @@ async def bounded_body(request, limit):
 
 
 def body_budget(path):
+    if path == "/api/auth/personal-home":
+        return 8 * 1024 * 1024 + 65536
     if path.startswith("/api/agent-runtime/"):
         return 1048576
     if path in {'/api/simple-app/tool/import', '/api/account/simple-ledger/tool/import'}:

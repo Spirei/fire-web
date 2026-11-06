@@ -20,6 +20,7 @@ from .native_app_auth import CLIENT, REDIRECT, BASE_SCOPE, SCOPES, authenticate,
 WEB_COOKIE='fire_session'
 OLD_COOKIE='stocklog_session'
 LEGACY_WEB_PATHS = {
+    "/api/assets/catalog", "/api/auth/personal-home", "/api/auth/personal-activity", "/api/auth/search-history",
     "/api/auth/profile", "/api/upload", "/api/auth/avatar",
     "/api/auth/password-reset/request",
     "/api/auth/password-reset/verify",

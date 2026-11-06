@@ -19,6 +19,7 @@ import { lockScroll } from "@/lib/overlayLifecycle";
 import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
+import { SETTINGS_SUB_KEYS, ADMIN_SUB_KEYS, SETTINGS_SEARCH_INDEX, type SubKey } from "@/lib/settingsCatalog";
 import { resolveSettingsLocation } from "@/lib/settingsNavigation";
 import { readLimitedResponseJson } from "@/lib/requestBody";
 import { resetModelProvider, switchModelProvider, updateModelEndpoint } from "@/lib/modelServiceDrafts";
@@ -141,57 +142,9 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
   return mounted ? createPortal(content, document.body) : content;
 }
 
-const SETTINGS_SUB_KEYS = ["site", "palette", "features", "stocks", "api", "profile", "totp", "passkeys", "authorizations", "cron", "social", "about"] as const;
-type SubKey = (typeof SETTINGS_SUB_KEYS)[number];
 function isSettingsSub(value: string | undefined | null): value is SubKey {
   return Boolean(value && (SETTINGS_SUB_KEYS as readonly string[]).includes(value));
 }
-
-// 仅管理员可见的设置子项
-const ADMIN_SUB_KEYS = new Set<SubKey>(["site", "features", "stocks", "cron", "social"]);
-
-/** ⌘K 命令搜索索引：关键词 → 子分类 + 锚点 */
-type SettingsSearchItem = { sub: SubKey; anchor: string; label: string; groupLabel: string; keywords: string; adminOnly?: boolean };
-const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
-  { sub: "palette", anchor: "palette", label: "外观", groupLabel: "配色", keywords: "字体 字重 加粗 苹果 SF Pro Diatype Arial 配色 主题 颜色 模式 浅色 深色 跟随系统 四色门 侧栏 快捷导航 Meta Liquid Glass 玻璃 海盐 松林 琥珀 暮光" },
-  { sub: "site", anchor: "info", label: "站点信息", groupLabel: "网站", keywords: "网站 标题 域名 注册 页脚 简介" },
-  { sub: "site", anchor: "appearance", label: "网站形象", groupLabel: "网站", keywords: "图标 logo 字体 背景 形象 favicon 图片" },
-  { sub: "site", anchor: "ticker", label: "首页指数", groupLabel: "网站", keywords: "指数 轮换 首页 ticker 行情条" },
-  { sub: "site", anchor: "nav", label: "首页导航", groupLabel: "网站", keywords: "导航 菜单 首页 入口" },
-  { sub: "site", anchor: "app-nav", label: "应用导航", groupLabel: "网站", keywords: "后台 侧栏 移动端 默认页 图标 顺序" },
-  { sub: "site", anchor: "mobile-nav", label: "手机导航", groupLabel: "网站", keywords: "手机 底部 胶囊 更多 导航 顺序 排序" },
-  { sub: "features", anchor: "trading-square", label: "公开动态来源", groupLabel: "功能", keywords: "交易广场 特朗普 段永平 更新 刷新 频率 缓存" },
-  { sub: "stocks", anchor: "groups", label: "券商分组", groupLabel: "股票", keywords: "券商 分组 别名 持仓" },
-  { sub: "stocks", anchor: "market-badges", label: "市场色块", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 显示 US HK A股 上证 深证 加密" },
-  { sub: "stocks", anchor: "translation", label: "模型服务", groupLabel: "智能服务", keywords: "模型服务 AI 大模型 账户助手 翻译 DeepSeek OpenAI API" },
-  { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
-  { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
-  { sub: "stocks", anchor: "sources", label: "行情与汇率接口", groupLabel: "股票", keywords: "股票来源 接口 行情 搜索 分时 汇率 url 数据源" },
-  { sub: "stocks", anchor: "source-reports", label: "财报接口", groupLabel: "股票", keywords: "美股 A股 港股 财报 日历 接口 数据源" },
-  { sub: "stocks", anchor: "source-icons", label: "公司图标接口", groupLabel: "股票", keywords: "美股 A股 公司 图标 logo 接口 数据源" },
-  { sub: "stocks", anchor: "source-content", label: "公开内容接口", groupLabel: "股票", keywords: "交易广场 特朗普 动态 翻译 接口 数据源" },
-  { sub: "profile", anchor: "profile", label: "个人信息", groupLabel: "账号", keywords: "头像 昵称 邮箱" },
-  { sub: "profile", anchor: "password", label: "更改密码", groupLabel: "账号", keywords: "密码 登录 安全" },
-  { sub: "profile", anchor: "data", label: "导入与导出", groupLabel: "数据", keywords: "备份 持仓 导出 导入 数据" },
-  { sub: "profile", anchor: "danger", label: "清空投资数据", groupLabel: "数据", keywords: "清空 删除 持仓 自选 订单 投资 数据" },
-  { sub: "profile", anchor: "delete-account", label: "注销账号", groupLabel: "数据", keywords: "注销 永久删除 账号 数据" },
-  { sub: "totp", anchor: "totp", label: "双重验证", groupLabel: "账号", keywords: "2FA 二次验证 TOTP 验证器 备用码 谷歌验证 Google Authenticator 安全" },
-  { sub: "passkeys", anchor: "passkeys", label: "通行密钥", groupLabel: "账号", keywords: "Passkey WebAuthn iCloud Bitwarden 1Password Face ID Touch ID 无密码 登录 安全 通行密匙" },
-  { sub: "authorizations", anchor: "authorizations", label: "应用授权", groupLabel: "账号", keywords: "Alcor Api App iOS iPhone 网页授权 连接 地址 公网 配置 测试 调试 名称 图标 设备 权限 撤销 断开" },
-  { sub: "passkeys", anchor: "passkey-config", label: "通行密钥域名", groupLabel: "账号", keywords: "Passkey WebAuthn HTTPS 域名 站点名称 登录配置", adminOnly: true },
-  { sub: "cron", anchor: "cron", label: "定时任务", groupLabel: "系统", keywords: "定时 汇率 缓存 自动更新 财报" },
-  { sub: "social", anchor: "wechat", label: "企业微信", groupLabel: "通知", keywords: "微信 企业微信 AgentId Secret Token 通知", adminOnly: true },
-  { sub: "social", anchor: "telegram", label: "Telegram", groupLabel: "通知", keywords: "telegram 电报 机器人 bot 通知", adminOnly: true },
-  { sub: "social", anchor: "feishu", label: "飞书", groupLabel: "通知", keywords: "飞书 Lark App ID Secret Open ID 通知", adminOnly: true },
-  { sub: "social", anchor: "qq", label: "QQ", groupLabel: "通知", keywords: "QQ 机器人 AppID AppSecret OpenID 通知", adminOnly: true },
-  { sub: "social", anchor: "discord", label: "Discord", groupLabel: "通知", keywords: "Discord Bot Token 服务器 频道 通知", adminOnly: true },
-  { sub: "social", anchor: "webpush", label: "WebPush", groupLabel: "通知", keywords: "WebPush 网页推送 登录用户 通知", adminOnly: true },
-  { sub: "social", anchor: "mail", label: "邮件服务", groupLabel: "通知", keywords: "SMTP 邮件 密码 找回 重置 邮箱", adminOnly: true },
-  { sub: "social", anchor: "mail-templates", label: "邮件模板", groupLabel: "通知", keywords: "邮件 模板 预览 验证码 密码 找回 邮箱", adminOnly: true },
-  { sub: "cron", anchor: "backups", label: "自动备份", groupLabel: "系统", keywords: "数据库 定时 备份 保留 立即备份" },
-  { sub: "api", anchor: "api", label: "API 接口", groupLabel: "系统", keywords: "api 接口 开发 文档 鉴权" },
-  { sub: "about", anchor: "about", label: "关于", groupLabel: "系统", keywords: "关于 版本 技术栈 数据源 更新" }
-];
 
 function defaultAnchorFor(sub: SubKey): string {
   return SETTINGS_SEARCH_INDEX.find((item) => item.sub === sub)?.anchor || "info";
@@ -215,45 +168,7 @@ function persistSettingsAnchor(sub: SubKey, anchor: string): boolean {
   return anchors.length > 1 && anchor !== anchors[0].anchor;
 }
 
-const SETTINGS_ANCHOR_ICONS: Record<string, string> = {
-  info: "site",
-  appearance: "image",
-  ticker: "stocks",
-  nav: "home",
-  "app-nav": "app-nav",
-  "mobile-nav": "mobile-nav",
-  "trading-square": "features",
-  groups: "tag",
-  "market-badges": "badges",
-  translation: "model",
-  sources: "plug",
-  "source-reports": "source-reports",
-  "source-icons": "source-icons",
-  "source-content": "source-content",
-  trade: "trade",
-  "currency-display": "currency",
-  password: "password",
-  data: "data",
-  danger: "danger",
-  "delete-account": "delete-account",
-  profile: "profile",
-  totp: "totp",
-  passkeys: "passkeys",
-  authorizations: "authorizations",
-  "passkey-config": "passkey-config",
-  cron: "cron",
-  mail: "mail",
-  "mail-templates": "mail-templates",
-  wechat: "wechat",
-  telegram: "telegram",
-  feishu: "feishu",
-  qq: "qq",
-  discord: "discord",
-  webpush: "webpush",
-  backups: "backups",
-  api: "api",
-  about: "about"
-};
+
 
 /** 网站形象素材：只读时保持 Meta 式摘要行，进入编辑后再显示上传、移除与链接输入。 */
 function BrandAssetRow({
@@ -809,15 +724,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const visibleGroups = SUB_GROUPS
     .map((g) => ({ ...g, items: g.items.filter((it) => isAdminUser || !ADMIN_SUB_KEYS.has(it.key)) }))
     .filter((g) => g.items.length > 0);
-  // 细粒度侧栏导航：与 ⌘K 搜索索引一致（站点信息/网站形象/首页指数…，各占一项）
-  const navGroups = SETTINGS_SEARCH_INDEX
-    .filter((it) => isAdminUser || (!ADMIN_SUB_KEYS.has(it.sub) && !it.adminOnly))
-    .reduce<{ label: string; items: { sub: SubKey; anchor: string; label: string; groupLabel: string }[] }[]>((acc, it) => {
-      const g = acc.find((x) => x.label === it.groupLabel);
-      if (g) g.items.push({ sub: it.sub, anchor: it.anchor, label: it.label, groupLabel: it.groupLabel });
-      else acc.push({ label: it.groupLabel, items: [{ sub: it.sub, anchor: it.anchor, label: it.label, groupLabel: it.groupLabel }] });
-      return acc;
-    }, []);
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const initialLocation = resolveSettingsLocation(new URLSearchParams(searchParams.toString()), SETTINGS_SEARCH_INDEX.filter((item) => isAdminUser || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly)), SETTINGS_CATEGORIES);
@@ -1983,8 +1889,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     if (categoryPage === key) return;
     setCategoryPage(key);
     setDetailOrigin(null);
-    setCmdQuery("");
-    setCmdOpen(false);
     const url = new URL(window.location.href);
     url.searchParams.delete("sub");
     url.searchParams.delete("panel");
@@ -1996,75 +1900,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     contentScrollRef.current?.scrollTo({ top: 0 });
   }
 
-  /* ---------- ⌘K / 侧栏搜索 ---------- */
-  const cmdRef = useRef<HTMLInputElement | null>(null);
-  const sidebarSearchRef = useRef<HTMLInputElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
-  const [cmdOpen, setCmdOpen] = useState(false);
-  const [cmdQuery, setCmdQuery] = useState("");
-  const [cmdIndex, setCmdIndex] = useState(0);
-
-  function openCmdPalette() {
-    setCmdIndex(0);
-    if (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches) {
-      sidebarSearchRef.current?.focus();
-      sidebarSearchRef.current?.select();
-      return;
-    }
-    setCmdOpen(true);
-    setTimeout(() => cmdRef.current?.focus(), 0);
-  }
-
-  const cmdResults = useMemo(() => {
-    const q = cmdQuery.trim().toLowerCase();
-    if (!q) return [];
-    return SETTINGS_SEARCH_INDEX.filter((item) => {
-      if (!isAdminUser && ADMIN_SUB_KEYS.has(item.sub)) return false;
-      const hay = `${item.label} ${item.groupLabel} ${item.keywords}`.toLowerCase();
-      return [...q].every((ch) => hay.includes(ch)) || hay.includes(q);
-    });
-  }, [cmdQuery, isAdminUser]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        openCmdPalette();
-      } else if (e.key === "Escape") {
-        setCmdOpen(false);
-        setCmdQuery("");
-        cmdRef.current?.blur();
-        sidebarSearchRef.current?.blur();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // 标题栏搜索按钮通过事件唤起 ⌘K 命令搜索（按钮已移至窗口标题栏，由 SettingsWindow 触发）
-  useEffect(() => {
-    window.addEventListener("fire:settings-cmd-open", openCmdPalette);
-    return () => window.removeEventListener("fire:settings-cmd-open", openCmdPalette);
-  }, []);
-
-  const visibleNavGroups = useMemo(() => {
-    const q = cmdQuery.trim().toLowerCase();
-    if (!q) return navGroups;
-    const matched = new Set(
-      SETTINGS_SEARCH_INDEX.filter((item) => {
-        const hay = `${item.label} ${item.groupLabel} ${item.keywords}`.toLowerCase();
-        return hay.includes(q);
-      }).map((item) => item.sub + item.anchor)
-    );
-    return navGroups
-      .map((group) => ({ ...group, items: group.items.filter((item) => matched.has(item.sub + item.anchor)) }))
-      .filter((group) => group.items.length > 0);
-  }, [navGroups, cmdQuery]);
 
   function jumpTo(item: { sub: SubKey; anchor: string; label: string }) {
     if (!isAdminUser && ADMIN_SUB_KEYS.has(item.sub)) return;
-    setCmdOpen(false);
-    setCmdQuery("");
     setDetailOrigin(categoryPage || detailOrigin);
     setCategoryPage(null);
     setSub(item.sub);
@@ -2141,120 +1980,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         </div>,
         document.body
       )}
-      {/* 侧栏：搜索 + 分组导航，对齐 Orca 设置语言 */}
       <aside className="sw-sidebar relative hidden w-[248px] flex-none flex-col border-r md:flex">
         <div className="sc-brand"><h1>账户设置</h1></div>
-        <div className="sw-search-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="sw-search-icon" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
-            ref={sidebarSearchRef}
-            value={cmdQuery}
-            onChange={(e) => { setCmdQuery(e.target.value); setCmdIndex(0); }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && visibleNavGroups[0]?.items[0]) {
-                e.preventDefault();
-                jumpTo(visibleNavGroups[0].items[0]);
-              }
-            }}
-            placeholder="搜索设置"
-            aria-label="搜索设置"
-            className="sw-search-input"
-          />
-          {cmdQuery === "" ? <span className="sw-search-kbd">⌘K</span> : null}
-        </div>
         <div className="sw-sidebar-nav">
-        {!cmdQuery.trim() && <nav aria-label="设置分类" className="sc-settings-nav">
-          {[{ key: "home", label: "首页", icon: "home" }, ...categories].map((category) => <button type="button" key={category.key} onClick={() => openCategory(category.key)} aria-current={(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "page" : undefined} className={`sc-nav-link ${(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "is-active" : ""}`}><SubNavIcon name={category.icon} className="h-5 w-5"/><span>{category.label}</span></button>)}
-        </nav>}
-        {cmdQuery.trim() && visibleNavGroups.map((g) => (
-          <div key={g.label} className="sw-nav-group">
-            <p className="sw-nav-group-title">{g.label}</p>
-            {g.items.map((item) => (
-              <button
-                key={item.sub + item.anchor}
-                type="button"
-                onClick={() => jumpTo(item)}
-                className={`sw-nav-item ${sub === item.sub && activeAnchor === item.anchor ? "is-active" : ""}`}
-              >
-                <SubNavIcon name={SETTINGS_ANCHOR_ICONS[item.anchor] || item.sub} className="h-4 w-4" />
-                <span className="truncate">{item.label}</span>
-                {item.sub === "api" && (
-                  <span
-                    role="link"
-                    title="打开 API 规范文档"
-                    onClick={(e) => { e.stopPropagation(); window.open("/api-docs", "_blank"); }}
-                    className="sw-nav-ext"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 5h5v5" /><path d="m19 5-8 8" /></svg>
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        ))}
-        {cmdQuery.trim() && visibleNavGroups.length === 0 ? (
-          <p className="sw-search-empty">没有匹配的设置项</p>
-        ) : null}
+          <nav aria-label="设置分类" className="sc-settings-nav">
+            {[{ key: "home", label: "首页", icon: "home" }, ...categories].map((category) => <button type="button" key={category.key} onClick={() => openCategory(category.key)} aria-current={(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "page" : undefined} className={`sc-nav-link ${(homeIsBackground ? category.key === "home" : currentCategory?.key === category.key) ? "is-active" : ""}`}><SubNavIcon name={category.icon} className="h-5 w-5"/><span>{category.label}</span></button>)}
+          </nav>
         </div>
       </aside>
-
-      {cmdOpen && createPortal(
-        <div
-          role="dialog"
-          aria-label="搜索设置"
-          className="sw-cmd-pop sc-command fixed right-4 top-[72px] z-[200] w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-2xl border shadow-pop"
-          style={{ borderColor: "rgb(var(--site-edge))", background: "rgb(var(--site-surface))", color: "rgb(var(--site-ink))" }}
-        >
-          <div className="flex items-center gap-2 border-b px-3 py-2" style={{ borderColor: "var(--sv-border)" }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-[13px] w-[13px] flex-none opacity-60"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-            <input
-              ref={cmdRef}
-              value={cmdQuery}
-              autoFocus
-              onChange={(e) => { setCmdQuery(e.target.value); setCmdIndex(0); }}
-              onBlur={() => setTimeout(() => setCmdOpen(false), 160)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowDown" && cmdResults.length > 0) { e.preventDefault(); setCmdIndex((i) => Math.min(i + 1, cmdResults.length - 1)); }
-                else if (e.key === "ArrowUp") { e.preventDefault(); setCmdIndex((i) => Math.max(i - 1, 0)); }
-                else if (e.key === "Enter" && cmdResults[cmdIndex]) { e.preventDefault(); jumpTo(cmdResults[cmdIndex]); }
-              }}
-              role="combobox"
-              aria-label="搜索设置项"
-              aria-controls="fire-settings-command-results"
-              aria-expanded="true"
-              aria-autocomplete="list"
-              aria-activedescendant={cmdResults[cmdIndex] ? `fire-settings-command-option-${cmdIndex}` : undefined}
-              placeholder="搜索设置…"
-              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:opacity-50"
-              style={{ color: "var(--sv-text)" }}
-            />
-          </div>
-          <div id="fire-settings-command-results" role="listbox" className="max-h-[min(240px,calc(100vh-110px))] overflow-y-auto py-1">
-            {cmdResults.length === 0 ? (
-              <p className="px-3 py-2 text-[11px] opacity-60">{cmdQuery.trim() ? "没有匹配的设置项" : "输入名称查找设置项"}</p>
-            ) : cmdResults.map((item, i) => (
-              <button
-                id={`fire-settings-command-option-${i}`}
-                key={item.sub + item.anchor}
-                type="button"
-                onPointerDown={(e) => { e.preventDefault(); jumpTo(item); }}
-                onPointerEnter={() => setCmdIndex(i)}
-                role="option"
-                aria-selected={i === cmdIndex}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px]"
-                style={i === cmdIndex ? { background: "var(--sv-hover-bg)" } : undefined}
-              >
-                <SubNavIcon name={SETTINGS_ANCHOR_ICONS[item.anchor] || item.sub} className="h-3.5 w-3.5 opacity-70" />
-                <span className="font-semibold">{item.label}</span>
-                <span className="ml-auto text-[10px] opacity-60">{item.groupLabel}</span>
-              </button>
-            ))}
-          </div>
-        </div>, document.body
-      )}
 
       <div className="sw-content flex min-w-0 flex-1 flex-col">
         {/* 内容头部 */}
@@ -2264,9 +1997,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             {!homeIsBackground && <button type="button" className="sc-back sc-category-back" onClick={() => openCategory(categoryPage ? "home" : detailOrigin || currentCategory?.key || "home")}><span aria-hidden="true">←</span> {categoryPage ? "设置首页" : currentCategory?.label || "设置首页"}</button>}
             <h2>{homeIsBackground ? <><span className="hidden md:inline">首页</span><span className="md:hidden">账户设置</span></> : currentCategory?.label || "账户设置"}</h2>
             <p>{homeIsBackground ? "管理个人信息与账户安全。" : currentCategory?.desc}</p>
-          </div>
-          <div className="sc-head-actions">
-            <button type="button" className="sc-search-button" onClick={openCmdPalette} aria-label="搜索设置"><SubNavIcon name="list"/></button>
           </div>
         </div>
 
@@ -3519,7 +3249,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                   </SettingsManagedPane>
-                  {user.role === "admin" && <SettingsManagedPane name="joint-backup" title="联合备份" summary="完整数据库与原件 · 独立恢复密钥"><PlatformBackups ownerId={user.id}/></SettingsManagedPane>}
+                  {user.role === "admin" && <SettingsManagedPane name="platform-backup" title="联合备份" summary="数据库与私有原件"><PlatformBackups ownerId={user.id} /></SettingsManagedPane>}
                   <SettingsManagedPane name="import" title="导入网站数据" summary="从 Alcor 备份文件恢复数据">
                   <p className="settings-managed-note">选择 Alcor 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
                   <div className="sw-row">
@@ -3844,8 +3574,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效 · KTX2/UASTC 纹理压缩 · zxcvbn-ts（本地密码强度）</span>
                   </div>
                   <div className="sw-row">
-                    <div className="sw-row-label"><b>数据与服务</b><span>PostgreSQL 统一业务存储</span></div>
-                    <span className="settings-detail-value">PostgreSQL · Redis · Worker</span>
+                    <div className="sw-row-label"><b>数据与服务</b><span>统一后端与 PostgreSQL 业务存储</span></div>
+                    <span className="settings-detail-value">Node.js · FastAPI · PostgreSQL · Redis · PostgreSQL Client 17（联合备份）· ExcelJS · saxes · SimpleWebAuthn（客户端）</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>部署运行</b><span>容器镜像与受限更新</span></div>

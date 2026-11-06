@@ -1,5 +1,7 @@
 "use client";
 
+import { IconPencil, IconKey, IconShieldLock, IconFingerprint } from "@tabler/icons-react";
+import { CapsuleBadge, IconButton } from "@/components/Capsule";
 import PasswordInput from "@/components/PasswordInput";
 
 import { useEffect, useLayoutEffect, useState } from "react";
@@ -87,6 +89,10 @@ export default function UsersView() {
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [resetUser, setResetUser] = useState<AdminUser | null>(null);
+  const [passkeyUser,setPasskeyUser]=useState<AdminUser|null>(null);
+  const [passkeyKeys,setPasskeyKeys]=useState<{id:string;name:string;rpID:string;createdAt:number;lastUsedAt:number|null}[]|null>(null);
+  const [passkeyError,setPasskeyError]=useState("");
+  useEffect(()=>{if(!passkeyUser)return;const c=new AbortController();setPasskeyKeys(null);setPasskeyError("");fetch(`/api/users/${encodeURIComponent(passkeyUser.id)}/passkeys`,{signal:c.signal,cache:"no-store"}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||"读取失败");return d;}).then(d=>{if(!c.signal.aborted)setPasskeyKeys(d.keys);}).catch(e=>{if(!c.signal.aborted)setPasskeyError(e.message);});return()=>c.abort();},[passkeyUser]);
   const [busy, setBusy] = useState(false);
   const onlineCount = users.filter((u) => u.online).length;
   const adminCount = users.filter((u) => u.role === "admin").length;
@@ -266,20 +272,20 @@ export default function UsersView() {
           </div>
         ) : (
         <div>
-          <div className="hidden grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_148px] items-center gap-4 border-b border-edge bg-bg-gray/65 px-4 py-2.5 text-[11px] font-semibold text-muted lg:grid dark:bg-white/[.025]">
+          <div className="users-table-head">
             <span>用户</span><span>邮箱</span><span>权限</span><span>注册时间</span><span className="text-right">记录</span><span className="text-right">操作</span>
           </div>
           <div className="divide-y divide-edge">
               {users.map((u) => (
-                <div key={u.id} className="grid gap-3 px-4 py-3.5 transition-colors hover:bg-[#fafbfc] sm:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(220px,1.5fr)_minmax(170px,1fr)_100px_140px_64px_148px] lg:items-center lg:gap-4 dark:hover:bg-[#1a212e]">
-                  <div className="min-w-0">
+                <div key={u.id} className="users-table-row">
+                  <div className="users-identity min-w-0">
                     <div className="flex min-w-0 items-center gap-3">
                       <UserAvatar user={u} />
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-2">
                           <b className="truncate font-semibold text-ink">{u.nickname || u.username}</b>
                           {u.online && <span className="h-1.5 w-1.5 flex-none rounded-full bg-down shadow-[0_0_0_3px_rgba(15,160,123,.12)]" title="在线" />}
-                          {u.id === me && <span className="user-current-pill flex-none rounded-full bg-brand-light px-2 py-0.5 text-[10px] font-semibold text-brand-deep">当前</span>}
+                          {u.id === me && <CapsuleBadge className="user-current-pill">当前</CapsuleBadge>}
                           {u.totpEnabled && <span className="flex-none rounded-full border border-edge px-2 py-0.5 text-[10px] font-semibold text-ink-2">二次验证</span>}
                           {u.isTest && <span className="flex-none rounded-full border border-dashed border-edge px-2 py-0.5 text-[10px] font-semibold text-muted">测试</span>}
                         </div>
@@ -291,31 +297,18 @@ export default function UsersView() {
                       </div>
                     </div>
                   </div>
-                  <div className="min-w-0 text-xs text-muted sm:col-span-2 lg:col-span-1"><span className="lg:hidden text-faint">邮箱 · </span><span className="break-all">{u.email || "未绑定"}</span></div>
-                  <div className="sm:col-start-2 sm:row-start-1 sm:self-start sm:justify-self-end lg:col-start-auto lg:row-start-auto lg:self-auto lg:justify-self-start">
-                    <span className={`user-role-pill inline-flex rounded-full border px-2.5 py-[3px] text-[11px] font-medium ${u.role === "admin" ? "border-edge-strong/30 bg-brand-light text-brand-deep" : "border-edge bg-bg-gray text-ink-2 dark:bg-white/[.04]"}`}>
-                      {u.role === "admin" ? "管理员" : "普通用户"}
-                    </span>
+                  <div className="users-email min-w-0 text-xs text-muted"><span className="users-mobile-label text-faint">邮箱 · </span><span className="break-all">{u.email || "未绑定"}</span></div>
+                  <div className="users-role">
+                    <CapsuleBadge className="user-role-pill">{u.role === "admin" ? "管理员" : "普通用户"}</CapsuleBadge>
                   </div>
-                  <div className="text-[11px] text-faint"><span className="lg:hidden">注册于 </span>{fmtDateTime(u.createdAt)}</div>
-                  <div className="text-xs tabular-nums text-muted lg:text-right"><span className="lg:hidden">{u.recordsCount} 条记录</span><span className="hidden lg:inline">{u.recordsCount}</span></div>
-                  <div className="flex gap-1.5 sm:col-start-2 sm:row-start-3 sm:justify-self-end lg:col-start-auto lg:row-start-auto lg:justify-end">
-                      <button type="button" onClick={() => setEditUser(u)} aria-label={`编辑 ${u.username}`} title="编辑资料" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
-                      <button type="button" onClick={() => setResetUser(u)} aria-label={`重置 ${u.username} 的密码`} title="重置密码" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/><circle cx="12" cy="12" r="2.25"/><path d="m13.6 13.6 2.4 2.4"/></svg></button>
-                      {u.totpEnabled && (
-                        <button type="button" onClick={() => disableUserTotp(u)} aria-label={`关闭 ${u.username} 的二次验证`} title="关闭二次验证" className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:bg-[#1c222d] dark:hover:bg-white/10">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 3a9 9 0 0 0-9 9c0 4.2 3 7.7 7 8.7V13H8v-3h2V8.5A3.5 3.5 0 0 1 13.5 5H16v3h-2.2c-.4 0-.8.4-.8.8V10h3l-.4 3H13v7.7c4-.9 7-4.5 7-8.7a9 9 0 0 0-8-8.9Z"/><path d="m4 4 16 16"/></svg>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={u.id === me}
-                        onClick={() => removeUser(u)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-white bg-bg-gray text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:bg-[#1c222d] dark:text-white/70 dark:hover:border-white/40 dark:hover:bg-white/10 dark:hover:text-white"
-                        title={u.id === me ? "不能删除自己的账号" : "删除用户"}
-                      >
-                        <DeleteIcon size={15} />
-                      </button>
+                  <div className="users-created text-[11px] text-faint"><span className="users-mobile-label">注册于 </span>{fmtDateTime(u.createdAt)}</div>
+                  <div className="users-records text-xs tabular-nums text-muted"><span>{u.recordsCount}<span className="users-mobile-label"> 条记录</span></span></div>
+                  <div className="users-actions" role="group" aria-label={`${u.nickname || u.username}的操作`}>
+                    <IconButton size="sm" framed label={`编辑 ${u.username}`} title="编辑资料" onClick={() => setEditUser(u)}><IconPencil size={17} stroke={1.7}/></IconButton>
+                    <IconButton size="sm" framed label={`重置 ${u.username} 的密码`} title="重置密码" onClick={() => setResetUser(u)}><IconKey size={17} stroke={1.7}/></IconButton>
+                    <IconButton size="sm" framed label={`关闭 ${u.username} 的二次验证`} title="关闭二次验证" disabled={!u.totpEnabled} onClick={() => disableUserTotp(u)}><IconShieldLock size={17} stroke={1.7}/></IconButton>
+                    <IconButton size="sm" framed label={`查看 ${u.username} 的通行密钥`} title="通行密钥" onClick={() => { setPasskeyKeys(null); setPasskeyError(""); setPasskeyUser(u); }}><IconFingerprint size={18} stroke={1.7}/></IconButton>
+                    <IconButton size="sm" framed label={`删除用户 ${u.username}`} title={u.id === me ? "不能删除自己的账号" : "删除用户"} disabled={u.id === me} onClick={() => removeUser(u)}><DeleteIcon size={16}/></IconButton>
                   </div>
                 </div>
               ))}
@@ -324,6 +317,7 @@ export default function UsersView() {
         )}
       </div>
 
+      {passkeyUser&&<AppModal title={`${passkeyUser.nickname||passkeyUser.username}的通行密钥`} onClose={()=>setPasskeyUser(null)}>{passkeyError?<p role="alert">{passkeyError}</p>:passkeyKeys===null?<p role="status">正在读取</p>:passkeyKeys.length?passkeyKeys.map(k=><div key={k.id} className="user-passkey-row"><IconFingerprint size={20}/><div><strong>{k.name||"通行密钥"}</strong><small>{k.rpID}</small><small>创建于 {fmtDateTime(new Date(k.createdAt).toISOString())}</small></div></div>):<p>尚未添加通行密钥</p>}{passkeyUser.id===me&&<button className="btn" type="button" onClick={()=>{setPasskeyUser(null);window.dispatchEvent(new CustomEvent("fire:navigate",{detail:{tab:"settings",sub:"passkeys"}}));}}>管理我的通行密钥</button>}</AppModal>}
       {/* 编辑弹窗 */}
       {editUser && (
         <AppModal title="编辑用户" desc={`修改「${editUser.username}」的资料`} onClose={() => setEditUser(null)}>

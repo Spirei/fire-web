@@ -99,9 +99,16 @@ class PersonalProfiles:
                 raise HTTPException(404, "背景图不存在")
             return await self.media.read(conn, who.id, row["background_object_id"])
 
-    async def mutate(self, who, raw, path, request_id, background=None):
+    async def mutate(self, who, raw, path, request_id, background=None, *, nickname=None):
         if not isinstance(raw, dict) or set(raw) - {"requestId", "revision", "changes", "migration"}:
             raise HTTPException(400, "请求无效")
+        if nickname is not None:
+            if not isinstance(nickname, str) or len(nickname) > 20 or re.search(r"[\x00-\x1f\x7f]", nickname):
+                raise HTTPException(400, "昵称最多20个字符")
+            try:
+                nickname.encode("utf-8")
+            except UnicodeError:
+                raise HTTPException(400, "昵称包含无效字符") from None
         rid = identifier(raw.get("requestId"))
         revision = raw.get("revision")
         migration = raw.get("migration", False)
@@ -180,6 +187,8 @@ class PersonalProfiles:
                             initialized,
                         ),
                     )
+                    if nickname is not None:
+                        await conn.execute("UPDATE user_profiles SET display_name=%s WHERE user_id=%s", (nickname, who.id))
                     data = await self.current(conn, who.id)
                     await conn.execute(
                         "INSERT INTO audit_events(actor_id,action,request_id) VALUES(%s,'profile.personal.updated',%s)",

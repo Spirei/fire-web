@@ -35,3 +35,40 @@ const hidden = renderToStaticMarkup(React.createElement(result.Detail,props));
 assert(hidden.includes('display:none')&&hidden.includes('aria-hidden="true"'));
 assert(hidden.includes('retained draft'),'hiding the portal must retain its draft subtree');
 console.log('PASS settings detail: inactive workspace hides the actual shell and retains its draft');
+const navigationIcons=require('../lib/navIcons.tsx').NAV_ICONS;
+for(const key of ['profile-home','palette']) assert(renderToStaticMarkup(navigationIcons[key]).includes('<svg'),key+' has a registered icon');
+const searchSource=fs.readFileSync(path.join(root,'components/PlatformSidebarHeader.tsx'),'utf8');
+assert(!/key: "(?:profile-home|palette)"[^\n]*icon: null/.test(searchSource));
+console.log('PASS search destinations share registered profile and appearance icons');
+// Exercise the actual search component's state and actions without a browser or server writes.
+const previousLoad=Module._load,previousDocument=global.document,previousHTMLElement=global.HTMLElement;
+let searchStates=[],searchRefs=[],stateCursor=0,refCursor=0,historyActions=[],selected=[];
+const historyItems=[{id:'one',query:'外观'},{id:'two',query:'市场色块'}];
+Module._load=function(id,parent,...rest){
+ if(parent?.filename.endsWith('/components/PlatformSidebarHeader.tsx')){
+  if(id==='react')return {...React,useState(initial){const i=stateCursor++;if(!(i in searchStates))searchStates[i]=initial;return[searchStates[i],v=>{searchStates[i]=typeof v==='function'?v(searchStates[i]):v;}];},useRef(initial){const i=refCursor++;return searchRefs[i]??=( {current:initial});},useId:()=>':search:',useEffect(){}};
+  if(id==='react-dom')return{createPortal:child=>child};
+  if(id==='@/lib/useSearchHistory')return{useSearchHistory:()=>({items:historyItems,error:'',loading:false,busy:false,record:q=>historyActions.push(['record',q]),remove:id=>historyActions.push(['remove',id]),clear:()=>historyActions.push(['clear']),refresh(){}})};
+ }
+ return previousLoad.call(this,id,parent,...rest);
+};
+global.document={body:{},activeElement:null};global.HTMLElement=class{};
+try{
+ const Search=require('../components/PlatformSidebarHeader.tsx').default;
+ const props={collapsed:false,onToggle(){},ownerId:'fixture',admin:true,items:[{key:'users',label:'用户管理',icon:navigationIcons.users}],onSelect:key=>selected.push(key),onSettings:(sub,anchor)=>selected.push([sub,anchor])};
+ const flatten=node=>Array.isArray(node)?node.flatMap(flatten):node&&typeof node==='object'?[node,...flatten(node.props?.children)]:[];
+ const view=(extra={})=>{stateCursor=0;refCursor=0;return flatten(Search({...props,...extra}));};
+ let tree=view();tree.find(n=>n.props?.['aria-label']==='搜索功能').props.onClick();tree=view();
+ assert(!tree.some(n=>n.props?.className==='platform-search-results'),'empty input must not show every destination');
+ assert(tree.some(n=>n.props?.['aria-label']==='搜索历史'));
+ tree.find(n=>n.props?.label==='删除搜索：外观').props.onClick();tree.find(n=>n.props?.children==='清空历史').props.onClick();
+ assert.deepEqual(historyActions,[['remove','one'],['clear']]);
+ let input=tree.find(n=>n.type==='input');input.props.onChange({target:{value:'市场色块'}});tree=view();
+ let results=tree.find(n=>n.props?.className==='platform-search-results');assert.equal(results.props.children[0].length,1);results.props.children[0][0].props.onClick();
+ assert.deepEqual(historyActions.at(-1),['record','市场色块']);assert.deepEqual(selected.at(-1),['stocks','market-badges']);
+ searchStates=[true,'市场色块'];assert(!view({admin:false}).some(n=>n.props?.className==='platform-search-results'&&n.props.children[0].length),'ordinary users cannot search administrator settings');
+ searchStates=[true,'不存在的功能'];tree=view();input=tree.find(n=>n.type==='input');input.props.onKeyDown({key:'Enter',nativeEvent:{isComposing:false},preventDefault(){}});assert.deepEqual(historyActions.at(-1),['record','不存在的功能']);
+ input.props.onChange({target:{value:'正在输入'}});assert.deepEqual(historyActions.at(-1),['record','不存在的功能'],'typing never writes history');
+ const settings=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');assert(!settings.includes('placeholder="搜索设置"')&&!settings.includes('fire:settings-cmd-open'));
+ console.log('PASS global search: input first, history delete/clear, completed queries only, exact settings destination and permissions');
+}finally{Module._load=previousLoad;global.document=previousDocument;global.HTMLElement=previousHTMLElement;}

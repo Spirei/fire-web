@@ -10,6 +10,8 @@ PASS=0
 FAIL=0
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export BASE
+# 浏览器同源请求的 Origin；独立后端不接受缺少来源的网页登录写入。
+curl() { command curl -H "Origin: $BASE" "$@"; }
 trap 'rm -f "$JAR_ACCOUNT" "$LOGIN_BODY" "$WRONG_BODY"' EXIT
 SMOKE_USERNAME=$(node "$SCRIPT_ROOT/scripts/smoke-account.mjs" --login-body "$LOGIN_BODY" --wrong-body "$WRONG_BODY") || exit 1
 
@@ -64,9 +66,10 @@ fi
 # 登录后页面巡检：逐页确认服务端渲染没有异常（曾出现 /trading 因 SSR 访问
 # localStorage 直接 500 而测试没发现的情况，这里把主要页面都跑一遍）
 echo "== 页面巡检（登录后） =="
-for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /attachments /users /library /cards /settings /asset-analysis /api-docs /api-requests /simple-app; do
+for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activities /users /library /cards /settings /asset-analysis /api-docs /api-requests /simple-app; do
   check "GET ${PAGE}（登录后）" 200 "$(code -b "$JAR_ACCOUNT" "$BASE$PAGE")"
 done
+check "Retired attachments page" 404 "$(code -b "$JAR_ACCOUNT" "$BASE/attachments")"
 DEPLOY_STATUS_EXPECT=404
 if [ "$ACCOUNT_ROLE" = admin ]; then DEPLOY_STATUS_EXPECT=200; fi
 check "部署状态页按账号权限访问" "$DEPLOY_STATUS_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/deploy-status")"
@@ -83,6 +86,7 @@ done
 
 # 公开数据接口：交易广场 / 行情 / 分时 / 汇率（交易广场页面曾整页 500，接口也要有兜底检查）
 echo "== 公开数据接口 =="
+if [ "${SMOKE_PROVIDERS:-1}" = 1 ]; then
 for API in /api/trading-square/feed /api/trading-square/duan /api/trading-square/trump; do
   check "GET ${API}" 200 "$(code "$BASE$API")"
 done
@@ -98,12 +102,16 @@ check "个股详情接口" 200 "$(code --max-time 40 "$BASE/api/v1/stock-detail?
 check "汇率接口（登录后）" 200 "$(code -b "$JAR_ACCOUNT" "$BASE/api/rates")"
 check "汇率以美元为基准" 1 "$(curl -s -b "$JAR_ACCOUNT" "$BASE/api/rates" | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("rates") or {}; print(1 if r.get("USD")==1 else 0)')"
 
+else
+  echo "SKIP 外部行情、公开内容与汇率：隔离实例未接入真实数据源，来源策略由后端回归验证。"
+fi
+
 for API in /api/records /api/activities /api/settings /api/cards/holdings /api/cards/amounts /api/cards/wallet; do
   check "${API} 未登录拒绝" 401 "$(code "$BASE$API")"
   check "${API} 登录读取" 200 "$(code -b "$JAR_ACCOUNT" "$BASE$API")"
 done
 check "资金分页小数参数" 200 "$(code -b "$JAR_ACCOUNT" "$BASE/api/v1/funds?recordsOnly=1&limit=1.5&offset=0.5")"
-check "退出测试会话" 200 "$(code -b "$JAR_ACCOUNT" -X POST "$BASE/api/auth/logout" -H "Origin: $BASE")"
+check "退出测试会话" 200 "$(code -b "$JAR_ACCOUNT" -X POST "$BASE/api/auth/logout" )"
 echo "只读巡检结果: PASS=${PASS} FAIL=${FAIL}；写入回归使用 npm run test:review 的临时数据库。"
 [ "$FAIL" -eq 0 ]
 exit $?

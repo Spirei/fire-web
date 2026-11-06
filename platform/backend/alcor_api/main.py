@@ -201,8 +201,7 @@ def create_app(settings: Settings | None = None):
         public_asset_key = bool(re.fullmatch(r"/api/asset-image/[a-f0-9]{24}", request.url.path)) and request.method in {"GET", "HEAD"} and response.status_code in {200, 206, 304, 416}
         if request.url.path.startswith(("/api", "/health")) and not (public_calendar or public_fixed or public_asset_key):
             cache_control = response.headers.get("Cache-Control", "")
-            private_template = request.url.path.startswith("/api/settings/mail-templates") or request.url.path == "/api/system/mail-templates/preview"
-            if not private_template or "no-store" not in {value.strip().lower() for value in cache_control.split(",")}:
+            if "no-store" not in {value.strip().lower() for value in cache_control.split(",")}:
                 response.headers["Cache-Control"] = "no-store"
         if settings.secure_cookie:
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
@@ -812,6 +811,8 @@ def create_app(settings: Settings | None = None):
     app.include_router(fire_web_router)
     from .fire_app_packages import router as fire_packages_router
     app.include_router(fire_packages_router)
+    from .fire_current_web import router as fire_current_web_router
+    app.include_router(fire_current_web_router)
 
     # Unknown legacy APIs remain unavailable. SPA fallback must never turn an API 404 into HTML/200.
     @app.api_route(

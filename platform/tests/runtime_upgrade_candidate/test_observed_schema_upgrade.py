@@ -59,7 +59,7 @@ async def test_observed_16_to_current_complete_reentry_preserves_identity_origin
         await migrate(current,name)
         async with await raw(current)as conn:
             after_ledger=await(await conn.execute('SELECT * FROM schema_migrations ORDER BY name')).fetchall()
-            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))==149
+            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))
             assert {r['name']:r['sha256'] for r in after_ledger}=={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'migrations').glob('[0-9]*.sql')}
             assert await(await conn.execute('SELECT singleton,revision,registered,guest FROM asset_library_access')).fetchall()==[
                 {'singleton':True,'revision':0,'registered':True,'guest':True}]

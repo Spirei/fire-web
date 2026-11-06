@@ -1,9 +1,9 @@
 "use client";
 
+import { Capsule } from "@/components/Capsule";
 import { useState } from "react";
 
-const btnCls =
-  "inline-flex h-[34px] min-w-[34px] items-center justify-center rounded-full border border-edge-strong bg-white px-2.5 text-xs font-semibold text-brand-deep transition-all duration-200 hover:bg-brand-hover hover:text-ink active:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#16181d] dark:hover:bg-white/10";
+const btnCls = "pagination-control";
 
 export default function Pagination({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
   const [jump, setJump] = useState("");
@@ -25,31 +25,35 @@ export default function Pagination({ page, total, onChange }: { page: number; to
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-      <button type="button" disabled={safe <= 1} onClick={() => onChange(safe - 1)} className={btnCls}>
+      <Capsule type="button" disabled={safe <= 1} onClick={() => onChange(safe - 1)} className={btnCls}>
         上一页
-      </button>
+      </Capsule>
       {items.map((it, i) =>
         it === "…" ? (
           <span key={`d${i}`} className="px-1 text-xs text-faint">
             …
           </span>
         ) : (
-          <button
+          <Capsule
             key={it}
             type="button"
             onClick={() => onChange(it)}
-            className={`${btnCls} ${it === safe ? "bg-white text-ink-2 border border-edge-strong shadow-sm hover:bg-brand-hover hover:text-ink" : ""}`}
+            className={btnCls}
+            selected={it === safe}
+            aria-current={it === safe ? "page" : undefined}
+            aria-label={`第 ${it} 页`}
           >
             {it}
-          </button>
+          </Capsule>
         )
       )}
-      <button type="button" disabled={safe >= total} onClick={() => onChange(safe + 1)} className={btnCls}>
+      <Capsule type="button" disabled={safe >= total} onClick={() => onChange(safe + 1)} className={btnCls}>
         下一页
-      </button>
+      </Capsule>
       <span className="ml-1 flex items-center gap-1 text-xs text-muted">
         共 {total} 页 · 跳至
         <input
+          aria-label="跳转页码"
           value={jump}
           onChange={(e) => setJump(e.target.value.replace(/\D/g, ""))}
           onKeyDown={(e) => {

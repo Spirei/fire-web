@@ -99,7 +99,7 @@ class AssetManagement:
             raise HTTPException(409, "公共图片原件缺失或尚未核对")
         return str(row["id"])
 
-    async def write(self, who, request_id, expected, raw, *, restore=False, rename=False, connection=None):
+    async def write(self, who, request_id, expected, raw, *, restore=False, rename=False, connection=None, broker_market_scope=("US", "HK", "CN")):
         if rename and connection is None:
             # Same identity -> catalog -> system image lock order as camera uploads.
             from .system_assets import SystemAssets
@@ -107,7 +107,7 @@ class AssetManagement:
                 if str(raw.get("id", "")).startswith("card:") or self.legacy_card_directory is not None:
                     await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('card-catalog',0))")
                 async with SystemAssets(self.catalog.db).context(who, True, connection=conn):
-                    return await self.write(who, request_id, expected, raw, restore=restore, rename=True, connection=conn)
+                    return await self.write(who, request_id, expected, raw, restore=restore, rename=True, connection=conn, broker_market_scope=broker_market_scope)
         if not isinstance(raw, dict) or set(raw) - {
             "id",
             "type",
@@ -231,7 +231,7 @@ class AssetManagement:
                     (who.id, request_id, aid),
                 )
             broker_markets = raw.get("brokerMarkets")
-            if broker_markets is not None and (kind != "broker" or not isinstance(broker_markets, list) or len(broker_markets) > 3 or any(v not in ("US", "HK", "CN") for v in broker_markets) or len(set(broker_markets)) != len(broker_markets)):
+            if broker_markets is not None and (kind != "broker" or not isinstance(broker_markets, list) or len(broker_markets) > len(broker_market_scope) or any(v not in broker_market_scope for v in broker_markets) or len(set(broker_markets)) != len(broker_markets)):
                 raise HTTPException(400, "券商市场分类无效")
             entry = {
                 "id": aid,
@@ -432,10 +432,12 @@ class AssetManagement:
         sort=None,
         direction="asc",
         deleted=False,
+        connection=None,
+        directory=None,
     ):
         from .card_catalog import published_card_assets
 
-        async with self.catalog.context() as conn:
+        async with self.catalog.context(connection=connection) as conn:
             removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
             rows = await (
                 await conn.execute(
@@ -480,6 +482,23 @@ class AssetManagement:
                     key = aid.removeprefix('market:')
                     if aid.startswith('market:') and key in MARKET_NAMES and key not in represented:
                         records.append(({'id':aid,'type':'market','market':key,'code':key,'name':MARKET_NAMES[key],'imageUrl':'','readOnly':True},'placeholder'))
+            market_counts, removed_count = {}, 0
+            if directory is not None:
+                removed_count = (await (await conn.execute("SELECT count(*) AS n FROM asset_catalog_tombstones t JOIN asset_catalog_entries e ON e.id=t.asset_id WHERE t.restored_at IS NULL AND e.type=%s", (kind,))).fetchone())["n"]
+                registered_ids = {r["id"] for r in await (await conn.execute("SELECT id FROM asset_catalog_entries WHERE type=%s", (kind,))).fetchall()}
+                if self.legacy_directory is not None:
+                    removed_count += sum(1 for r in await self.legacy_directory.entries() if r["type"] == kind and r["id"] in removed and r["id"] not in registered_ids)
+                if kind == "card":
+                    removed_count += (await (await conn.execute("SELECT count(*) AS n FROM card_catalog_public_index WHERE deleted_at IS NOT NULL")).fetchone())["n"]
+                if kind == "stock" and not deleted:
+                    image_budget = {"bytes": 0, "verified": set()}
+                    for row, source in records:
+                        projected = await self.legacy_directory.project(row, image_budget) if source == "legacy-file" else await self.catalog.project(conn, row, {}, image_budget)
+                        if projected.get("imageUrl"):
+                            market_counts[row["market"]] = market_counts.get(row["market"], 0) + 1
+                selected_market = directory.get("market", "ALL")
+                if selected_market != "ALL":
+                    records = [(r, source) for r, source in records if selected_market in r.get("material_state", {}).get("brokerMarkets", r.get("brokerMarkets", []))] if kind == "broker" else [(r, source) for r, source in records if r["market"] == selected_market]
             query = trim(q)
             if sort is not None:
                 from .asset_web_paging import sqlite_like_contains
@@ -507,6 +526,16 @@ class AssetManagement:
                 from .legacy_asset_directory import REGION_NAMES
                 order = {code:index for index,code in enumerate(REGION_NAMES)}
                 records.sort(key=lambda pair: order.get(pair[0]['code'].upper(), len(order)))
+            if directory is not None and kind == "broker":
+                positions = {aid: i for i, aid in enumerate(directory.get("brokerOrder", []))}
+                records.sort(key=lambda pair: (positions.get(pair[0]["id"], len(positions)), pair[0]["name"].casefold()))
+            if directory is not None and kind == "market":
+                positions = {}
+                for code in directory.get("marketOrder", []):
+                    positions.setdefault(code, len(positions))
+                records.sort(key=lambda pair: positions.get(pair[0]["market"], len(positions)))
+            elif directory is not None and kind != "broker":
+                records.sort(key=lambda pair: pair[0]["code"])
             total = len(records)
             if clamp:
                 page = min(page, max(1, math.ceil(total / page_size)))
@@ -535,6 +564,7 @@ class AssetManagement:
             ]
             return {
                 "assets": assets,
+                **({"marketCounts": market_counts, "removedCount": removed_count} if directory is not None else {}),
                 "excludedMarkets": sorted(aid[7:] for aid in removed if aid.startswith("market:")),
                 "total": total,
                 "page": page,

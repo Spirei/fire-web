@@ -7,6 +7,16 @@ import {IconLayoutDashboard,IconClipboardList,IconApi} from "@tabler/icons-react
  */
 export const NAV_ICONS: Record<string, React.ReactNode> = {
  "system-overview":<IconLayoutDashboard size={18}/>,"background-tasks":<IconClipboardList size={18}/>,"api-migration":<IconApi size={18}/>,
+  "profile-home": (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
+      <circle cx="12" cy="12" r="9" /><circle cx="12" cy="9" r="3" /><path d="M5.5 18.3a7 7 0 0 1 13 0" />
+    </svg>
+  ),
+  palette: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
+      <path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z" /><circle cx="7" cy="10" r=".7" /><circle cx="11" cy="7" r=".7" /><circle cx="16" cy="8" r=".7" />
+    </svg>
+  ),
   "quote-pool": (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">
       <path d="M3 9 7 4h10l4 5v11H3Z" /><path d="M3 9h5l2 4h4l2-4h5M9 6h6" />

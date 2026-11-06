@@ -5,6 +5,7 @@ import {getSiteSettings} from '@/lib/settings';
 import {getAuthUser,isAdmin,needsSetup} from '@/lib/auth';
 import {platformJson} from '@/lib/platformTransport';
 import type {StockRecord} from '@/lib/types';
+import GlobalSearchTrigger from '@/components/GlobalSearchTrigger';
 import RecordsApp from '@/components/RecordsApp';
 import UserMenu from '@/components/UserMenu';
 import SiteLogo from '@/components/SiteLogo';
@@ -61,6 +62,7 @@ export default async function SlugLayout({params}:{params:Promise<{slug?:string[
           </Link>
           <WorkspaceTicker />
           <div className="workspace-header-account ml-auto flex flex-none items-center gap-2.5">
+            <GlobalSearchTrigger />
             <UserMenu initialUser={user} initialAvatar={initialAvatar} />
           </div>
         </div>

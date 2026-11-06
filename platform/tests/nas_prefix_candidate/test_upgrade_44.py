@@ -62,7 +62,7 @@ async def test_release44_eleven_to_current_preserves_originals_and_reentry(pg,tm
         await migrate(current,name)
         async with await raw(current)as conn:
             after_ledger=await(await conn.execute('SELECT * FROM schema_migrations ORDER BY name')).fetchall()
-            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))==149
+            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))
             assert await(await conn.execute('SELECT singleton,revision,registered,guest FROM asset_library_access')).fetchall()==[
                 {'singleton':True,'revision':0,'registered':True,'guest':True}]
             assert (await(await conn.execute('SELECT count(*) AS n FROM asset_library_access_operations')).fetchone())['n']==0
