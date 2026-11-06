@@ -77,7 +77,7 @@ export function localReferences(rowJson: string, origin: string): string[] {
       if (/^https?:\/\//i.test(local)) {
         const url = new URL(local); if (url.origin !== origin) continue; local = url.pathname;
       }
-      if (!/^\/(uploads|images|fonts|icons|share|fire-assets|feature|mclaren)\//.test(local)) continue;
+      if (!/^\/(uploads|images|fonts|icons|share|fire-assets|feature)\//.test(local)) continue;
       try { local = decodeURIComponent(local.split(/[?#]/)[0]); } catch { throw fail(); }
       if (local.includes("\\") || local.includes("\0") || local.split("/").some(part => part === ".." || part === ".")) throw fail();
       found.add("public" + local);

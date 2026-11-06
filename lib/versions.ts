@@ -5044,7 +5044,8 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     {kind:"feature", title:"独立后台运行入口", desc:"新增独立任务进程和显式运行模式，复用既有金融与提醒规则；启动前核对 PG 标识，不自动切换运行实例。"},
     {kind:"fix", title:"返回时撤下设置浮层", desc:"离开设置时隐藏详情浮层并释放滚动锁，保留草稿；再次进入时继续原详情。"},
     { kind: "feature", title: "投资账本放进全球预览", desc: "首页、登录和原后台入口直接打开全球预览中的投资账本。账户持仓、成本和盈亏仍用原来的持仓数据。市值排行、汇率换算、休市日历和股票池留在同一页的其他分区。简化版与完整版之间的时光机穿越已移除。" },
-    { kind: "feature", title: "迈凯轮展示台独立迁出", desc: "3D 展示台、车型画册、导入页、车型接口、模型处理容器和随仓库分发的车型素材已从本站移除，改由独立的 McLaren 项目维护。本站不再提供 /api/showcase 车型接口。" }
+    { kind: "feature", title: "迈凯轮展示台独立迁出", desc: "3D 展示台、车型画册、导入页、车型接口、模型处理容器和随仓库分发的车型素材已从本站移除，改由独立的 McLaren 项目维护。本站不再提供 /api/showcase 车型接口。" },
+    { kind: "fix", title: "去掉车型路径的导出和上传类型", desc: "迁移导出不再把 /mclaren 当作站点资源目录。上传服务去掉只给车型使用的 GLB、HDR 和 KTX2 类型。uploads/mclaren 仍整目录跳过孤立文件清理，避免误删卷上还没搬走的模型。" }
   ]
 };
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;

@@ -8,9 +8,6 @@ const MIME: Record<string, string> = {
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
   gif: "image/gif", svg: "image/svg+xml", ico: "image/x-icon", json: "application/json", mp4: "video/mp4", webm: "video/webm",
   html: "text/html", txt: "text/plain", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf", pdf: "application/pdf",
-  // 首页 3D 车型与隧道环境贴图（手动放进 uploads 卷，不进仓库也不进镜像）
-  glb: "model/gltf-binary", gltf: "model/gltf+json", bin: "application/octet-stream",
-  hdr: "image/vnd.radiance", ktx2: "image/ktx2",
   mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", wav: "audio/wav"
 };
 
