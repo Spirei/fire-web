@@ -13,7 +13,7 @@ const source = ts.createSourceFile(
   true,
   ts.ScriptKind.TSX,
 );
-let effect, readTasks;
+let effect, readTasks, load;
 function visit(node) {
   if (
     ts.isCallExpression(node) &&
@@ -26,6 +26,7 @@ function visit(node) {
     node.name.getText(source) === "readTasks"
   )
     readTasks = node.initializer;
+  if (ts.isVariableDeclaration(node) && node.name.getText(source) === "load" && ts.isCallExpression(node.initializer)) load = node.initializer.arguments[0];
   ts.forEachChild(node, visit);
 }
 visit(source);
@@ -155,6 +156,24 @@ function harness(active = true) {
       (row) => row.options.headers["x-csrf-token"] === "synthetic",
     ),
   );
+  const stale = [], observations = [];
+  let unavailable = true;
+  const probe = {
+    exports: {}, document: { hidden: false }, generation: { current: 0 },
+    csrf: { current: "" }, instance: { current: "" }, ownerId: "owner", mode: "overview", filter: "",
+    visibleTaskCount: { current: 25 }, clear(){}, fail(){}, setLoading(){}, setError(){},
+    setMigration(){}, setTasks(){}, setCursor(){}, setReceipt(){},
+    setOverview: value => observations.push(value), setOverviewStale: value => stale.push(value),
+    json: async url => {
+      if (url === "/api/fire/session") return { user: { id: "owner", role: "admin" }, csrf: "csrf", instance_id: "instance" };
+      if (url.startsWith("/api/fire/tasks")) return { items: [], next_cursor: null };
+      if (unavailable) throw Error("temporary outage");
+      return { services: [], task_counts: {} };
+    }
+  };
+  vm.runInNewContext(compile(load), probe);
+  await probe.exports.run(); assert.equal(stale.at(-1), true); assert.equal(observations.length, 0, "failed probe retains last observation rather than inventing a new one");
+  unavailable = false; await probe.exports.run(); assert.equal(stale.at(-1), false); assert.equal(observations.length, 1);
   console.log(
     "PASS system refresh: visible-only polling, dialog/mutation pause, cleanup and retained task pagination",
   );

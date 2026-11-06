@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppModal from "./AppModal";
+import { platformRequest as read } from "@/lib/platformRequest";
 import {
   useWorkspaceActive,
   useWorkspaceLocationGuard,
@@ -34,20 +35,6 @@ const states: Record<string, string> = {
   cancelled: "已取消",
   cancel_requested: "取消中",
 };
-async function read<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, { cache: "no-store", ...init });
-  const v = await r.json();
-  if (!r.ok)
-    throw Object.assign(
-      new Error(
-        typeof v.error === "string"
-          ? v.error
-          : v.error?.message || v.detail || "读取失败",
-      ),
-      { status: r.status },
-    );
-  return v;
-}
 export default function PlatformBackups({ ownerId }: { ownerId: string }) {
   const active = useWorkspaceActive(),
     canUseLocation = useWorkspaceLocationGuard();

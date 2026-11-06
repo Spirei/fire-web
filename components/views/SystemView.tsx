@@ -10,7 +10,11 @@ import {
   IconApi,
   IconX,
 } from "@tabler/icons-react";
-import { useWorkspaceActive } from "@/lib/workspacePanel";
+import { useWorkspaceActive, useWorkspaceLocationGuard, useWorkspaceSearchParams } from "@/lib/workspacePanel";
+import { createPortal } from "react-dom";
+import AppSelect from "@/components/AppSelect";
+import { lockScroll } from "@/lib/overlayLifecycle";
+import { platformRequest as json } from "@/lib/platformRequest";
 import PasswordInput from "@/components/PasswordInput";
 import { ServiceIllustration } from "@/components/ServiceIllustration";
 
@@ -62,29 +66,6 @@ const labels: Record<string, string> = {
   unconfigured: "未配置",
 };
 const status = (value: string) => labels[value] || value;
-function errorText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value && typeof value === "object") {
-    const o = value as Record<string, unknown>;
-    return errorText(o.message || o.detail || o.error);
-  }
-  return "请求失败";
-}
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { cache: "no-store", ...init });
-  const value = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = new Error(errorText(value)) as Error & {
-      status: number;
-      reauthentication: boolean;
-    };
-    error.status = response.status;
-    error.reauthentication =
-      response.headers.get("x-alcor-reauthentication") === "required";
-    throw error;
-  }
-  return value as T;
-}
 const time = (value: string) => new Date(value).toLocaleString();
 function SystemDialog({
   label,
@@ -102,12 +83,15 @@ function SystemDialog({
     const trigger = document.activeElement as HTMLElement | null;
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
+    const unlock = lockScroll();
     return () => {
       dialog?.close();
-      trigger?.focus();
+      unlock();
+      if (!document.hidden && trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
   }, []);
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <dialog
       ref={ref}
       className="system-dialog"
@@ -129,7 +113,7 @@ function SystemDialog({
       }}
     >
       {children}
-    </dialog>
+    </dialog>, document.body
   );
 }
 
@@ -146,14 +130,28 @@ export default function SystemView({
   const [overview, setOverview] = useState<Overview | null>(null),
     [tasks, setTasks] = useState<Task[]>([]),
     [migration, setMigration] = useState<Migration | null>(null);
+  const [overviewStale, setOverviewStale] = useState(false);
   const [error, setError] = useState(""),
     [loading, setLoading] = useState(false),
     [connection, setConnection] = useState<"postgresql" | "redis" | null>(null);
   const [visibleLimit, setVisibleLimit] = useState(100);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [filter, setFilter] = useState(""),
-    [query, setQuery] = useState(""),
-    [selected, setSelected] = useState<Task | null>(null);
+  const params = useWorkspaceSearchParams();
+  const canUseLocation = useWorkspaceLocationGuard();
+  const taskStatuses = ["queued", "running", "succeeded", "failed", "cancelled", "cancel_requested"];
+  const apiStatuses = ["connected", "pending", "presentation"];
+  const candidate = params.get("status") || "";
+  const filter = (mode === "tasks" ? taskStatuses : mode === "migration" ? apiStatuses : []).includes(candidate) ? candidate : "";
+  const query = mode === "migration" ? (params.get("q") || "").slice(0, 200) : "";
+  const updateQuery = (key: string, value: string) => {
+    if (!canUseLocation()) return;
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set(key, value); else next.delete(key);
+    window.history.replaceState(null, "", next.size ? `?${next}` : window.location.pathname);
+  };
+  const setFilter = (value: string) => updateQuery("status", value);
+  const setQuery = (value: string) => updateQuery("q", value);
+  const [selected, setSelected] = useState<Task | null>(null);
   const [receipt, setReceipt] = useState<{
       request_id: string;
       task?: Task;
@@ -164,25 +162,23 @@ export default function SystemView({
   const visibleTaskCount = useRef(25);
   visibleTaskCount.current = Math.max(25, tasks.length);
   useEffect(() => setVisibleLimit(100), [filter, query]);
+  const actionScope = useRef(0);
+  const detailRequest = useRef(0);
+  useEffect(() => {
+    setBusy(false);
+    return () => { actionScope.current++; };
+  }, [active, mode, ownerId, filter]);
   const csrf = useRef(""),
     generation = useRef(0),
-    instance = useRef(""),
-    drafts = useRef<
-      Partial<
-        Record<
-          "postgresql" | "redis",
-          { config: Config; revision: string | null }
-        >
-      >
-    >({});
+    instance = useRef("");
   const clear = useCallback(() => {
     csrf.current = "";
-    drafts.current = {};
     setCursor(null);
-    setFilter("");
-    setQuery("");
+    actionScope.current++;
+    setBusy(false);
     setVisibleLimit(100);
     setOverview(null);
+    setOverviewStale(false);
     setTasks([]);
     setMigration(null);
     setSelected(null);
@@ -263,6 +259,7 @@ export default function SystemView({
             { items: Task[]; next_cursor: string | null },
           ];
           setOverview(view);
+          setOverviewStale(false);
           setTasks(list.items);
           setCursor(list.next_cursor);
           setReceipt((current) => {
@@ -274,7 +271,7 @@ export default function SystemView({
           });
         }
       } catch (e) {
-        if (!signal?.aborted && ticket === generation.current) fail(e);
+        if (!signal?.aborted && ticket === generation.current) { setOverviewStale(true); fail(e); }
       } finally {
         if (ticket === generation.current) setLoading(false);
       }
@@ -312,13 +309,13 @@ export default function SystemView({
     };
   }, [active, load]);
   useEffect(() => {
-    if (!active) setConnection(null);
+    if (!active) { setConnection(null); setSelected(null); }
   }, [active]);
   async function diagnostics() {
     if (busy) return;
     setBusy(true);
     setError("");
-    const ticket = generation.current;
+    const ticket = actionScope.current;
     const pending = { request_id: crypto.randomUUID() };
     setReceipt(pending);
     try {
@@ -330,61 +327,63 @@ export default function SystemView({
         },
         body: JSON.stringify({ ...pending, kind: "system.diagnostics" }),
       });
-      if (ticket !== generation.current) return;
+      if (ticket !== actionScope.current) return;
       setReceipt({ ...pending, task });
-      await load();
+      if (ticket === actionScope.current) await load();
     } catch (e) {
-      fail(e);
+      if (ticket === actionScope.current) fail(e);
     } finally {
-      setBusy(false);
+      if (ticket === actionScope.current) setBusy(false);
     }
   }
   async function lookup() {
     if (!receipt) return;
-    const ticket = generation.current;
+    const ticket = actionScope.current;
     setBusy(true);
     try {
       const task = await json<Task>(
         "/api/fire/tasks/receipts/" + receipt.request_id,
         { headers: { "x-csrf-token": csrf.current } },
       );
-      if (ticket !== generation.current) return;
+      if (ticket !== actionScope.current) return;
       setReceipt({ ...receipt, task });
-      await load();
+      if (ticket === actionScope.current) await load();
     } catch (e) {
-      fail(e);
+      if (ticket === actionScope.current) fail(e);
     } finally {
-      setBusy(false);
+      if (ticket === actionScope.current) setBusy(false);
     }
   }
   async function cancel(task: Task) {
+    const ticket = actionScope.current;
     setBusy(true);
     try {
       await json("/api/fire/tasks/" + task.id + "/cancel", {
         method: "POST",
         headers: { "x-csrf-token": csrf.current },
       });
-      await load();
+      if (ticket === actionScope.current) await load();
     } catch (e) {
-      fail(e);
+      if (ticket === actionScope.current) fail(e);
     } finally {
-      setBusy(false);
+      if (ticket === actionScope.current) setBusy(false);
     }
   }
   async function detail(task: Task) {
-    const ticket = generation.current;
+    const ticket = actionScope.current;
+    const request = ++detailRequest.current;
     try {
       const value = await json<Task>("/api/fire/tasks/" + task.id, {
         headers: { "x-csrf-token": csrf.current },
       });
-      if (ticket === generation.current) setSelected(value);
+      if (ticket === actionScope.current && request === detailRequest.current) setSelected(value);
     } catch (e) {
-      fail(e);
+      if (ticket === actionScope.current && request === detailRequest.current) fail(e);
     }
   }
   async function more() {
     if (!cursor || busy) return;
-    const ticket = generation.current;
+    const ticket = actionScope.current;
     setBusy(true);
     try {
       const list = await json<{ items: Task[]; next_cursor: string | null }>(
@@ -393,7 +392,7 @@ export default function SystemView({
           (filter ? "&status=" + filter : ""),
         { headers: { "x-csrf-token": csrf.current } },
       );
-      if (ticket === generation.current) {
+      if (ticket === actionScope.current) {
         setTasks((current) => [
           ...current,
           ...list.items.filter(
@@ -403,9 +402,9 @@ export default function SystemView({
         setCursor(list.next_cursor);
       }
     } catch (e) {
-      if (ticket === generation.current) fail(e);
+      if (ticket === actionScope.current) fail(e);
     } finally {
-      setBusy(false);
+      if (ticket === actionScope.current) setBusy(false);
     }
   }
   const visible =
@@ -553,12 +552,12 @@ export default function SystemView({
                       {service.id === "worker" ? "Worker" : service.label}
                     </h3>
                     <p className="system-state">
-                      <i className={service.state === "up" ? "is-up" : ""} />
-                      {service.id === "worker" && service.state === "up"
+                      <i className={!overviewStale && service.state === "up" ? "is-up" : ""} />
+                      {overviewStale ? "待复查" : service.id === "worker" && service.state === "up"
                         ? "运行中"
                         : status(service.state)}
                     </p>
-                    <p className="text-sm text-muted">{service.detail}</p>
+                    <p className="text-sm text-muted">{overviewStale ? `上次结果：${service.detail}` : service.detail}</p>
                     <button
                       className="btn btn-primary"
                       onClick={() =>
@@ -605,25 +604,13 @@ export default function SystemView({
       {mode === "tasks" && (
         <>
           <div className="system-filters">
-            <select
-              aria-label="任务状态"
+            <AppSelect
+              ariaLabel="任务状态"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            >
-              <option value="">全部状态</option>
-              {[
-                "queued",
-                "running",
-                "succeeded",
-                "failed",
-                "cancelled",
-                "cancel_requested",
-              ].map((value) => (
-                <option key={value} value={value}>
-                  {status(value)}
-                </option>
-              ))}
-            </select>
+              onChange={setFilter}
+              className="system-filter-select"
+              options={[{ value: "", label: "全部状态" }, ...["queued", "running", "succeeded", "failed", "cancelled", "cancel_requested"].map(value => ({ value, label: status(value) }))]}
+            />
           </div>
           {taskTable}
         </>
@@ -679,19 +666,17 @@ export default function SystemView({
             <input
               aria-label="搜索接口"
               placeholder="搜索路径或方法"
+              maxLength={200}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <select
-              aria-label="接入状态"
+            <AppSelect
+              ariaLabel="接入状态"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            >
-              <option value="">全部接口</option>
-              <option value="connected">后端已登记</option>
-              <option value="pending">待接入</option>
-              {!!migration.summary.presentation && <option value="presentation">网页接口</option>}
-            </select>
+              onChange={setFilter}
+              className="system-filter-select"
+              options={[{ value: "", label: "全部接口" }, { value: "connected", label: "后端已登记" }, { value: "pending", label: "待接入" }, ...(migration.summary.presentation ? [{ value: "presentation", label: "网页接口" }] : [])]}
+            />
           </div>
           <div className="system-table-wrap">
             <table className="system-table">
@@ -739,7 +724,7 @@ export default function SystemView({
           </div>
         </>
       )}
-      {selected && (
+      {active && selected && (
         <SystemDialog label="任务详情" onClose={() => setSelected(null)}>
           <div className="system-heading">
             <h2>任务详情</h2>
@@ -765,17 +750,12 @@ export default function SystemView({
           )}
         </SystemDialog>
       )}
-      {connection && (
+      {active && connection && (
         <ConnectionManager
           key={connection}
           kind={connection}
           csrf={csrf.current}
-          draft={drafts.current[connection]}
-          onDraft={(draft) => {
-            drafts.current[connection] = draft;
-          }}
           onClose={() => setConnection(null)}
-          onSaved={() => void load()}
           onIdentityError={clear}
         />
       )}
@@ -805,373 +785,120 @@ type Receipt = {
   message: string;
   revision?: string;
 };
-function ConnectionManager({
-  kind,
-  csrf,
-  onClose,
-  onSaved,
-  onIdentityError,
-  draft,
-  onDraft,
-}: {
+function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
   kind: "postgresql" | "redis";
   csrf: string;
   onClose: () => void;
-  onSaved: () => void;
   onIdentityError: () => void;
-  draft?: { config: Config; revision: string | null };
-  onDraft: (draft: { config: Config; revision: string | null }) => void;
 }) {
-  const [settings, setSettings] = useState<Settings | null>(null),
-    [config, setConfig] = useState<Config>({
-      kind,
-      host: "",
-      port: kind === "postgresql" ? 5432 : 6379,
-      username: "",
-      database: kind === "postgresql" ? "" : 0,
-      ...(kind === "postgresql"
-        ? {
-            schema_name: "public",
-            ssl_mode: "require",
-            pool_size: 5,
-            pool_min_size: 0,
-            max_lifetime: 1800,
-            max_idle: 600,
-          }
-        : { tls: false, max_connections: 10 }),
-    });
-  const [password, setPassword] = useState(""),
-    [passwordMode, setPasswordMode] = useState("keep"),
-    [verifyPassword, setVerifyPassword] = useState("");
-  const [error, setError] = useState(""),
-    [receipt, setReceipt] = useState<Receipt | null>(null),
-    [requestId, setRequestId] = useState(""),
-    [busy, setBusy] = useState(false),
-    [verify, setVerify] = useState(false);
-  const mounted = useRef(true);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [error, setError] = useState("");
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [requestId, setRequestId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [verify, setVerify] = useState(false);
+  const [verifyPassword, setVerifyPassword] = useState("");
+  const lifetime = useRef<AbortController | null>(null);
+  const operation = useRef(0);
+  const pending = useRef(false);
+  const reject = useCallback((e: unknown) => {
+    const value = e as { status?: number; reauthentication?: boolean };
+    setError(e instanceof Error ? e.message : "请求失败");
+    if (value.status === 403 && value.reauthentication) setVerify(true);
+    else if (value.status === 401 || value.status === 403) onIdentityError();
+  }, [onIdentityError]);
   useEffect(() => {
     const controller = new AbortController();
-    mounted.current = true;
+    lifetime.current = controller;
+    const ticket = ++operation.current;
+    pending.current = true;
+    setBusy(true);
     json<Settings>("/api/fire/connections/" + kind, {
-      headers: { "x-csrf-token": csrf },
-      signal: controller.signal,
-    })
-      .then((value) => {
-        setSettings(
-          draft && value.source !== "environment"
-            ? { ...value, revision: draft.revision }
-            : value,
-        );
-        if (draft && value.source !== "environment") {
-          setConfig(draft.config);
-          if (draft.revision !== value.revision)
-            setError("连接已变化，请重新读取核对");
-        } else if (value.config || value.effective)
-          setConfig((value.config || value.effective)!);
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) {
-          setError(errorText(e.message));
-          if ([401, 403].includes(e.status)) onIdentityError();
-        }
-      });
-    return () => {
-      mounted.current = false;
-      controller.abort();
-    };
-  }, [kind, csrf, onIdentityError]);
-  useEffect(() => {
-    if (settings && settings.source !== "environment")
-      onDraft({ config, revision: settings.revision });
-  }, [config, settings, onDraft]);
-  async function reload() {
-    setBusy(true);
-    try {
-      const value = await json<Settings>("/api/fire/connections/" + kind, {
-        headers: { "x-csrf-token": csrf },
-      });
-      setSettings(value);
-      if (value.config || value.effective)
-        setConfig((value.config || value.effective)!);
-      setPassword("");
-      setPasswordMode("keep");
-      setError("");
-    } catch (e) {
-      setError((e as Error).message);
-      if ([401, 403].includes((e as { status: number }).status))
-        onIdentityError();
-    } finally {
-      setBusy(false);
-    }
-  }
-  useEffect(() => {
-    const keyboard = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onClose();
-    };
-    document.addEventListener("keydown", keyboard);
-    return () => document.removeEventListener("keydown", keyboard);
-  }, [busy, onClose]);
-  const change = (key: string, value: unknown) => {
-    setConfig((current) => ({ ...current, [key]: value }));
-    setReceipt(null);
-    setRequestId("");
-  };
-  async function operate(action: "test" | "save") {
-    if (busy || !settings) return;
-    setBusy(true);
-    setError("");
-    setReceipt(null);
-    const id = crypto.randomUUID();
-    setRequestId(id);
-    try {
-      const value = await json<Receipt>(
-        "/api/fire/connections/" + kind + (action === "test" ? "/test" : ""),
-        {
-          method: action === "test" ? "POST" : "PUT",
-          headers: { "content-type": "application/json", "x-csrf-token": csrf },
-          body: JSON.stringify({
-            request_id: id,
-            revision: settings.revision,
-            config,
-            password_mode: passwordMode,
-            reuse_current_password: passwordMode === "keep",
-            ...(passwordMode === "replace" ? { password } : {}),
-          }),
-        },
-      );
-      if (!mounted.current) return;
-      setReceipt(value);
-      setPassword("");
-      setPasswordMode("keep");
-      if (action === "save") {
-        const current = await json<Settings>("/api/fire/connections/" + kind, {
-          headers: { "x-csrf-token": csrf },
-        });
-        if (mounted.current) setSettings(current);
-        onSaved();
-      }
-    } catch (e) {
-      if (!mounted.current) return;
-      setError((e as Error).message);
-      if ((e as { status: number }).status === 401) onIdentityError();
-      else if ((e as { status: number }).status === 403) {
-        if ((e as { reauthentication?: boolean }).reauthentication)
-          setVerify(true);
-        else onIdentityError();
-      }
-    } finally {
-      if (mounted.current) setBusy(false);
-    }
-  }
-  async function lookup() {
-    setBusy(true);
-    try {
-      setReceipt(
-        await json("/api/fire/connections/" + kind + "/receipts/" + requestId, {
-          headers: { "x-csrf-token": csrf },
-        }),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function reauthenticate() {
+      headers: { "x-csrf-token": csrf }, signal: controller.signal,
+    }).then(value => {
+      if (ticket === operation.current) setSettings(value);
+    }).catch(e => {
+      if (!controller.signal.aborted && ticket === operation.current) reject(e);
+    }).finally(() => {
+      if (ticket === operation.current) { pending.current = false; setBusy(false); }
+    });
+    return () => { operation.current++; pending.current = false; controller.abort(); };
+  }, [kind, csrf, reject]);
+  async function run(work: (signal: AbortSignal) => Promise<void>) {
+    const controller = lifetime.current;
+    if (!controller || controller.signal.aborted || pending.current) return;
+    const ticket = ++operation.current;
+    pending.current = true;
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/fire/connections/reauthenticate", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-csrf-token": csrf },
-        body: JSON.stringify({ password: verifyPassword }),
-      });
-      if (!response.ok) throw new Error(errorText(await response.json()));
-      setVerify(false);
-      setVerifyPassword("");
+      await work(controller.signal);
     } catch (e) {
-      setError((e as Error).message);
+      if (!controller.signal.aborted && ticket === operation.current) reject(e);
     } finally {
-      setBusy(false);
+      if (ticket === operation.current) { pending.current = false; setBusy(false); }
     }
   }
+  const config = settings?.effective || settings?.config;
+  const encryption = kind === "postgresql"
+    ? ({ disable: "未启用", require: "加密传输", "verify-ca": "校验服务器证书", "verify-full": "校验证书与主机名" }[String(config?.ssl_mode)] || "—")
+    : config ? (config.tls ? "TLS 加密" : "未启用") : "—";
+  const field = (label: string, value: unknown, wide = false) => (
+    <div className={wide ? "system-connection-wide" : undefined}>
+      <dt>{label}</dt><dd>{value === undefined || value === null || value === "" ? "—" : String(value)}</dd>
+    </div>
+  );
   return (
-    <SystemDialog
-      label={kind === "postgresql" ? "PostgreSQL 连接" : "Redis 连接"}
-      onClose={onClose}
-      busy={busy}
-    >
+    <SystemDialog label={kind === "postgresql" ? "PostgreSQL 连接" : "Redis 连接"} onClose={onClose} busy={busy}>
       <div className="system-heading">
         <h2>{kind === "postgresql" ? "PostgreSQL" : "Redis"}</h2>
-        <button aria-label="关闭" disabled={busy} onClick={onClose}>
-          <IconX />
-        </button>
+        <button aria-label="关闭" disabled={busy} onClick={onClose}><IconX /></button>
       </div>
-      {settings?.source === "environment" && (
-        <p className="text-sm text-muted">
-          连接由服务器环境配置管理，更改后重启生效。
-        </p>
-      )}
-      <fieldset
-        className="system-connection-fields"
-        disabled={busy || !settings || settings.source === "environment"}
-        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-      >
-        <label>
-          主机
-          <input
-            value={config.host}
-            onChange={(e) => change("host", e.target.value)}
-          />
-        </label>
-        <label>
-          端口
-          <input
-            type="number"
-            min="1"
-            max="65535"
-            value={config.port}
-            onChange={(e) => change("port", Number(e.target.value))}
-          />
-        </label>
-        <label>
-          {kind === "postgresql" ? "数据库" : "数据库编号"}
-          <input
-            type={kind === "redis" ? "number" : "text"}
-            min="0"
-            max={kind === "redis" ? 15 : undefined}
-            value={config.database}
-            onChange={(e) =>
-              change(
-                "database",
-                kind === "redis" ? Number(e.target.value) : e.target.value,
-              )
-            }
-          />
-        </label>
-        <label>
-          用户名
-          <input
-            autoComplete="off"
-            value={config.username}
-            onChange={(e) => change("username", e.target.value)}
-          />
-        </label>
-        <label>
-          密码
-          <select
-            value={passwordMode}
-            onChange={(e) => {
-              setPasswordMode(e.target.value);
-              setPassword("");
-            }}
-          >
-            <option value="keep">
-              {settings?.password_set ? "保留当前密码" : "不设置密码"}
-            </option>
-            <option value="replace">设置新密码</option>
-            <option value="clear">清除密码</option>
-          </select>
-        </label>
-        {passwordMode === "replace" && (
-          <label>
-            新密码
-            <PasswordInput
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-            />
-          </label>
-        )}
-        {kind === "postgresql" ? (
-          <label>
-            连接加密
-            <select
-              value={String(config.ssl_mode)}
-              onChange={(e) => change("ssl_mode", e.target.value)}
-            >
-              {["disable", "require", "verify-ca", "verify-full"].map(
-                (value) => (
-                  <option key={value}>{value}</option>
-                ),
-              )}
-            </select>
-          </label>
-        ) : (
-          <label className="flex gap-2">
-            <input
-              type="checkbox"
-              checked={config.tls === true}
-              onChange={(e) => change("tls", e.target.checked)}
-            />
-            TLS 加密
-          </label>
-        )}
-      </fieldset>
-      {error && (
-        <p role="alert" className="system-error">
-          {error}
-        </p>
-      )}
+      <p className="text-sm text-muted">连接由服务器环境配置管理，更改后重启生效。</p>
+      <dl className="system-connection-summary" aria-busy={busy && !settings}>
+        {field("地址", config?.host, true)}
+        {field("端口", config?.port)}
+        {field(kind === "postgresql" ? "数据库" : "数据库编号", config?.database)}
+        {field("用户名", config?.username)}
+        {field("密码", settings ? settings.password_set ? "已配置" : "未设置" : undefined)}
+        {field("连接加密", encryption, true)}
+      </dl>
+      {error && <p role="alert" className="system-error">{error}</p>}
       {receipt && <p role="status">{receipt.message}</p>}
       {requestId && (
         <details className="system-connection-receipt">
           <summary>操作回执</summary>
-          <div className="system-receipt">
-            <code>{requestId}</code>
-            <button disabled={busy} onClick={() => void lookup()}>
-              查询回执
-            </button>
+          <div className="system-receipt"><code>{requestId}</code>
+            <button disabled={busy} onClick={() => void run(async signal => {
+              const value = await json<Receipt>("/api/fire/connections/" + kind + "/receipts/" + requestId, { headers: { "x-csrf-token": csrf }, signal });
+              if (!signal.aborted) setReceipt(value);
+            })}>查询回执</button>
           </div>
         </details>
       )}
       {verify && (
         <div className="system-reauth">
-          <label>
-            确认管理员密码
-            <PasswordInput
-              value={verifyPassword}
-              onChange={(e) => setVerifyPassword(e.target.value)}
-              autoComplete="current-password"
-            />
-          </label>
-          <button
-            className="btn btn-line"
-            disabled={busy || !verifyPassword}
-            onClick={() => void reauthenticate()}
-          >
-            验证
-          </button>
+          <label>确认管理员密码<PasswordInput value={verifyPassword} onChange={e => setVerifyPassword(e.target.value)} autoComplete="current-password" /></label>
+          <button className="btn btn-line" disabled={busy || !verifyPassword} onClick={() => void run(async signal => {
+            await json<void>("/api/fire/connections/reauthenticate", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify({ password: verifyPassword }), signal });
+            if (!signal.aborted) { setVerify(false); setVerifyPassword(""); }
+          })}>验证</button>
         </div>
       )}
       <div className="system-actions">
-        <button
-          className="btn btn-ghost"
-          disabled={busy}
-          onClick={() => void reload()}
-        >
-          重新读取
-        </button>
-        <button
-          className="btn btn-line"
-          disabled={
-            busy ||
-            !settings ||
-            (settings.source === "environment" && !settings.effective)
-          }
-          onClick={() => void operate("test")}
-        >
-          测试连接
-        </button>
-        {settings?.source !== "environment" && (
-          <button
-            className="btn btn-primary"
-            disabled={busy || !settings}
-            onClick={() => void operate("save")}
-          >
-            保存
-          </button>
-        )}
+        <button className="btn btn-ghost" disabled={busy} onClick={() => void run(async signal => {
+          const value = await json<Settings>("/api/fire/connections/" + kind, { headers: { "x-csrf-token": csrf }, signal });
+          if (!signal.aborted) setSettings(value);
+        })}>重新读取</button>
+        <button className="btn btn-line" disabled={busy || !config} onClick={() => void run(async signal => {
+          const id = crypto.randomUUID();
+          setRequestId(id); setReceipt(null);
+          const value = await json<Receipt>("/api/fire/connections/" + kind + "/test", {
+            method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, signal,
+            body: JSON.stringify({ request_id: id, revision: settings?.revision ?? null, config, password_mode: "keep", reuse_current_password: true }),
+          });
+          if (!signal.aborted) setReceipt(value);
+        })}>{busy ? "处理中…" : "测试连接"}</button>
       </div>
     </SystemDialog>
   );

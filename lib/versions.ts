@@ -8048,6 +8048,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     },
   ],
   changes: [
+  { kind: "fix", title: "系统连接与交互打磨", desc: "PG / Redis 弹窗清除旧编辑与保存分支，以只读信息展示当前连接，保留测试、二次验证和原 UUID 回执；系统筛选使用共享菜单并写入页面地址，刷新保留。连接状态读取失败时标为待复查；请求增加超时与取消处理，旧页面响应和旧任务详情不再覆盖当前状态，结果未知的操作不自动重发。" },
   {
     "kind": "feature",
     "title": "统一搜索与 PG 搜索历史",

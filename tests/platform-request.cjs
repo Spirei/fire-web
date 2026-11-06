@@ -1,0 +1,26 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const m={exports:{}};new Function('module','exports',ts.transpileModule(fs.readFileSync(require.resolve('../lib/platformRequest.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m,m.exports);
+const {platformRequest}=m.exports;
+const original=global.fetch;
+(async()=>{
+ let calls=0;
+ global.fetch=async(_,init)=>{calls++;assert.equal(init.cache,'no-store');return new Response(JSON.stringify({ok:true}),{status:200});};
+ assert.deepEqual(await platformRequest('/api/test'),{ok:true});
+ global.fetch=async()=>new Response(null,{status:204});assert.equal(await platformRequest('/api/test'),undefined);
+ global.fetch=async()=>new Response(JSON.stringify({error:{message:'请确认身份'}}),{status:403,headers:{'x-alcor-reauthentication':'required'}});
+ await assert.rejects(platformRequest('/api/test'),e=>e.status===403&&e.reauthentication&&e.message==='请确认身份');
+ global.fetch=async()=>new Response('<html>proxy unavailable</html>',{status:503});
+ await assert.rejects(platformRequest('/api/test'),e=>e.status===503&&!e.message.includes('<html>'));
+ global.fetch=async()=>new Response('not json',{status:200});await assert.rejects(platformRequest('/api/test'),/响应格式无效/);
+ global.fetch=async()=>{throw new TypeError('Failed to fetch')};
+ await assert.rejects(platformRequest('/api/test'),/网络连接中断，请重试/);
+ await assert.rejects(platformRequest('/api/test',{method:'POST'}),/核对结果后再操作/);
+ let aborted;
+ global.fetch=async(_,init)=>{calls++;aborted=init.signal;return new Promise(()=>{});};
+ const before=calls;await assert.rejects(platformRequest('/api/test',{method:'POST'},10),/请求超时/);assert(aborted.aborted);assert.equal(calls,before+1,'unknown mutation must never retry');
+ const parent=new AbortController();const pending=platformRequest('/api/test',{signal:parent.signal},1000);parent.abort();await assert.rejects(pending,e=>e.name==='AbortError');assert(aborted.aborted);
+ const stopped=new AbortController();stopped.abort();const count=calls;await assert.rejects(platformRequest('/api/test',{signal:stopped.signal}),e=>e.name==='AbortError');assert.equal(calls,count,'retired request must not start');
+ global.fetch=async(_,init)=>{aborted=init.signal;return {ok:true,status:200,headers:new Headers(),json:()=>new Promise(()=>{})};};
+ await assert.rejects(platformRequest('/api/test',{},10),/读取超时/);assert(aborted.aborted,'response body deadline is also bounded');
+ console.log('PASS platform requests: bounded reads/writes and bodies, cancellation, no replay, 204 and safe structured errors');
+})().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{global.fetch=original});
