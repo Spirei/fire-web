@@ -23,9 +23,11 @@ def fire_env(monkeypatch):
     return values
 
 
-def test_current_fire_configuration_does_not_inherit_independent_api(fire_env, monkeypatch):
+def test_current_fire_configuration_does_not_inherit_independent_api(fire_env, monkeypatch, tmp_path):
     monkeypatch.setenv("ALCOR_DATABASE_URL", "postgresql://wrong@other.invalid/other")
     monkeypatch.setenv("ALCOR_POOL_SIZE", "19")
+    monkeypatch.setenv("ALCOR_PG_TOOLS_DIR", "/wrong-independent-api-tools")
+    monkeypatch.setenv("FIRE_PG_TOOLS_DIR", str(tmp_path))
     monkeypatch.setenv("FIRE_POOL_SIZE", "7")
     monkeypatch.setenv("FIRE_LEASE_SECONDS", "45")
     monkeypatch.setenv("FIRE_MAIL_PASSWORD", "")
@@ -33,6 +35,7 @@ def test_current_fire_configuration_does_not_inherit_independent_api(fire_env, m
     assert settings.connections_from_environment is True
     assert settings.deployment_checks_workflow == "docker-publish.yml"
     assert settings.pool_size == 7 and settings.lease_seconds == 45
+    assert settings.pg_tools_dir == tmp_path
     assert settings.database_url.get_secret_value() == fire_env["FIRE_DATABASE_URL"]
     assert settings.mail_password is None
 

@@ -106,7 +106,7 @@ jobs:
       - name: Verify packaged Python, SVG, Node and PG tools
         if: matrix.shard == 0
         run: |
-          docker run --rm --entrypoint /platform/.venv/bin/python fire-candidate:check -c 'import fastapi, psycopg, redis, futu; from cairosvg import svg2png; assert svg2png(bytestring=b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>").startswith(b"\x89PNG")'
+          docker run --rm --entrypoint /platform/.venv/bin/python fire-candidate:check -c 'import os; from pathlib import Path; assert (Path(os.environ["FIRE_PG_TOOLS_DIR"])/"pg_dump").is_file(); import fastapi, psycopg, redis, futu; from cairosvg import svg2png; assert svg2png(bytestring=b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>").startswith(b"\x89PNG")'
           docker run --rm --entrypoint node fire-candidate:check -e 'require("next/package.json")'
           docker run --rm --entrypoint /usr/lib/postgresql/17/bin/pg_dump fire-candidate:check --version
 
