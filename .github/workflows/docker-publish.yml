@@ -39,10 +39,45 @@ env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
+  preflight:
+    name: 源码与启动快检
+    needs: scheduled-change-gate
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Use Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.23'
+          enable-cache: true
+          cache-dependency-glob: platform/uv.lock
+      - name: Install internal backend dependencies
+        working-directory: platform
+        run: uv sync --frozen --python 3.12
+      - name: Install image runtime library
+        run: sudo apt-get update && sudo apt-get install -y libcairo2
+      - name: Install dependencies
+        run: npm ci
+      - name: Quick source and startup checks
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: npm run check:quick
+
   test:
     name: 完整平台检查 (${{ matrix.shard }})
-    needs: scheduled-change-gate
-    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true')
+    needs: [preflight, scheduled-change-gate]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -82,21 +117,6 @@ jobs:
         env:
           FIRE_TEST_REDIS_BINARY: /usr/bin/redis-server
         run: uv run python tools/test-shard.py --index ${{ matrix.shard }} --count 8
-      - name: Public repository safety audit
-        if: matrix.shard == 0
-        run: npm run audit:public
-      - name: Image publication regression
-        if: matrix.shard == 0
-        run: node tests/deploy-publication.mjs
-      - name: Local and GHCR deployment parity audit
-        if: matrix.shard == 0
-        run: npm run audit:deploy
-      - name: Security and site regression
-        if: matrix.shard == 0
-        run: npm run test:review
-      - name: TypeScript check
-        if: matrix.shard == 0
-        run: npx tsc --noEmit
       - name: Production build check
         if: matrix.shard == 0
         run: npm run build
@@ -106,7 +126,7 @@ jobs:
       - name: Verify packaged Python, SVG, Node and PG tools
         if: matrix.shard == 0
         run: |
-          docker run --rm --entrypoint /platform/.venv/bin/python fire-candidate:check -c 'import os; from pathlib import Path; assert (Path(os.environ["FIRE_PG_TOOLS_DIR"])/"pg_dump").is_file(); import fastapi, psycopg, redis, futu; from cairosvg import svg2png; assert svg2png(bytestring=b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>").startswith(b"\x89PNG")'
+          docker run --rm --entrypoint /platform/.venv/bin/python fire-candidate:check -c 'import os, tempfile; from pathlib import Path; assert os.getuid()==1000; tempfile.TemporaryFile(dir=Path.home()).close(); assert (Path(os.environ["FIRE_PG_TOOLS_DIR"])/"pg_dump").is_file(); import fastapi, psycopg, redis, futu; from cairosvg import svg2png; assert svg2png(bytestring=b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>").startswith(b"\x89PNG")'
           docker run --rm -e FIRE_DATABASE_URL=postgresql://fixture:fixture@localhost/fixture -e FIRE_INSTANCE_ID=a1aee7e9-665a-4af1-879f-f951a21ed946 -e FIRE_ENVIRONMENT=test -e FIRE_PUBLIC_ORIGIN=http://localhost:3000 fire-candidate:check npm run platform:config
           docker run --rm --entrypoint node fire-candidate:check -e 'require("next/package.json")'
           docker run --rm --entrypoint /usr/lib/postgresql/17/bin/pg_dump fire-candidate:check --version

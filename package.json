@@ -16,6 +16,7 @@
     "backup:source": "python3 scripts/backup-project.py",
     "test:source-backup": "python3 tests/source-backup.py",
     "test:review": "node scripts/test-review.mjs",
+    "check:quick": "node scripts/check-quick.mjs",
     "clean:caches": "node scripts/clean-next-cache.mjs",
     "clean:dsstore": "find .. -name .DS_Store -not -path '*/node_modules/*' -delete && echo '已清理 .DS_Store'",
     "test:platform": "node tests/platform-gateway.cjs && node tests/platform-navigation.cjs && node tests/system-refresh.cjs",

@@ -35,6 +35,8 @@ const CHECK =
 const order = (name: string) =>
   /^(Check scheduled source changes|检查定时源码变更|核对发布条件)$/.test(name)
     ? 0
+    : name === "源码与启动快检"
+      ? 0.5
     : CHECK.test(name)
       ? 1
       : /^(Publish linux\/amd64 image|构建 linux\/amd64 镜像|发布 linux\/amd64 镜像)$/.test(
@@ -165,6 +167,7 @@ export function workflowLabel(label: string): string {
         "Post Checkout": "收尾：检出代码",
         "Post Use Node.js 22": "收尾：Node.js",
         "Check commit titles": "检查提交标题",
+        "Quick source and startup checks": "源码与启动快检",
         "Install internal backend dependencies": "安装内部后端依赖",
         "Install isolated cache and image runtime libraries":
           "准备隔离缓存与图像依赖",

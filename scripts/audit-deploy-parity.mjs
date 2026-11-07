@@ -53,7 +53,13 @@ requireText("scripts/fire.mjs", [
 ]);
 requireText(".github/workflows/docker-publish.yml", [
   'cron: "7 16 * * *"',
-  "npm run audit:deploy",
+  "npm run check:quick",
+]);
+requireText("scripts/check-quick.mjs", [
+  '"audit:deploy"', '"audit:public"', '"test:review"',
+  '"tests/deploy-publication.mjs"', '"--noEmit"',
+  '"platform/tests/test_fire_config_database.py"',
+  '"platform/tests/test_deployment_build_receipts.py"',
 ]);
 requireText(".dockerignore", [
   "platform/.venv",

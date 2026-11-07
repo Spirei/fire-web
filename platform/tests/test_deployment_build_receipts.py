@@ -98,7 +98,14 @@ def test_release_workflow_indexes_request_and_checks_confirmed_commit_before_bui
     jobs = workflow["jobs"]
     inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
     assert {"request_id", "expected_revision", "verify_only"} <= inputs.keys()
-    assert jobs["test"]["needs"] == "scheduled-change-gate"
+    assert jobs["test"]["needs"] == ["preflight", "scheduled-change-gate"]
+    assert "needs.preflight.result == 'success'" in jobs["test"]["if"]
+    assert "!cancelled()" in jobs["test"]["if"]
+    assert jobs["preflight"]["needs"] == "scheduled-change-gate"
+    assert "!cancelled()" in jobs["preflight"]["if"]
+    quick = next(step for step in jobs["preflight"]["steps"] if step.get("run") == "npm run check:quick")
+    assert "continue-on-error" not in quick and "continue-on-error" not in jobs["preflight"]
+    assert quick["env"]["HEAD_SHA"] == "${{ github.sha }}"
     assert jobs["publish"]["needs"] == ["test", "scheduled-change-gate"]
     assert jobs["release"]["needs"] == ["scheduled-change-gate", "publish"]
     guard = next(step for step in jobs["scheduled-change-gate"]["steps"] if step.get("id") == "gate")

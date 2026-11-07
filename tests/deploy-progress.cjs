@@ -30,6 +30,10 @@ const job = (id, name, status = "in_progress", conclusion = null) => ({
 const checks = Array.from({ length: 8 }, (_, i) =>
   job(i + 10, `完整平台检查 (${7 - i})`),
 );
+const withPreflight = buildStages([...checks, job(50, "源码与启动快检", "completed", "success")]);
+assert.equal(withPreflight.length, 2);
+assert.equal(withPreflight[0].name, "源码与启动快检");
+assert.equal(withPreflight[1].jobs.length, 8);
 let stages = buildStages([
   job(2, "Publish linux/amd64 image", "queued"),
   ...checks,

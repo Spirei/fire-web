@@ -18,6 +18,7 @@ STAGE_ORDER = {
     "Check scheduled source changes": 0,
     "检查定时源码变更": 0,
     "核对发布条件": 0,
+    "源码与启动快检": 0.5,
     "TypeScript check": 1,
     "TypeScript 检查": 1,
     "完整平台检查": 1,
