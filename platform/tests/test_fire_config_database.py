@@ -12,7 +12,7 @@ from psycopg import sql
 @pytest.fixture
 def fire_tools():
     spec = importlib.util.spec_from_file_location(
-        "fire_platform_tools", Path(__file__).parents[2] / "scripts/platform.py"
+        "fire_platform_tools", Path(__file__).parents[2] / "scripts/fire_platform.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
