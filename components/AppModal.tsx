@@ -6,7 +6,8 @@ import { createPortal } from "react-dom";
 import { isTopPriorityModal, lockScroll, trapModalTab } from "@/lib/overlayLifecycle";
 
 const SIZES = {
-  sm: "max-w-[400px]",
+  xs: "max-w-[320px]",
+  sm: "max-w-[380px]",
   md: "max-w-[540px]",
   lg: "max-w-[680px]",
   xl: "max-w-[880px]"
@@ -145,7 +146,7 @@ export default function AppModal({
       >
         {!hideHeader && <div className={`app-modal-header ${draggable ? "cursor-move touch-none select-none" : ""}`} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={stopDrag} onPointerCancel={stopDrag}>
           <div className="min-w-0">
-            {title && <h3 className="text-[19px] font-bold leading-snug text-ink">{title}</h3>}
+            {title && <h3 className="text-[17px] font-semibold leading-snug text-ink">{title}</h3>}
             {desc && <p className="mt-1 text-[13px] text-muted">{desc}</p>}
           </div>
           {headerActions && <div className="ml-auto min-w-0 flex-1 sm:max-w-[240px]">{headerActions}</div>}
@@ -163,4 +164,15 @@ export default function AppModal({
 
 export function ModalActions({ children, className = "" }: {children: React.ReactNode; className?: string}) {
   return <div className={`app-modal-actions ${className}`}>{children}</div>;
+}
+
+/** Compact editor layout shared by simple forms, independent of page styles. */
+export function ModalForm({ className = "", ...props }: React.FormHTMLAttributes<HTMLFormElement>) {
+  return <form {...props} className={`app-modal-form ${className}`} />;
+}
+export function ModalField({ className = "", ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
+  return <label {...props} className={`app-modal-field ${className}`} />;
+}
+export function ModalMedia({ preview, children }: { preview: React.ReactNode; children: React.ReactNode }) {
+  return <div className="app-modal-media"><span className="app-modal-preview">{preview}</span>{children}</div>;
 }

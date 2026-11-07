@@ -17,7 +17,7 @@ import {
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import MarketIcon from "@/components/MarketIcon";
-import AppModal from "@/components/AppModal";
+import AppModal, { ModalForm, ModalField, ModalMedia, ModalActions } from "@/components/AppModal";
 import CollectionToolbar from "@/components/CollectionToolbar";
 import CollectionSkeleton from "@/components/CollectionSkeleton";
 import Pagination from "@/components/Pagination";
@@ -871,26 +871,26 @@ export default function AssetCatalogView({
       {editing && (
         <AppModal
           title="编辑素材"
-          className="material-editor-modal"
+          size="xs"
           closeDisabled={busy}
           onClose={() => setEditing(null)}
         >
-          <form
-            className="material-editor"
+          <ModalForm
             onSubmit={(e) => {
               e.preventDefault();
               void save();
             }}
           >
-            <div className="material-editor-media">
-              <span className="material-editor-preview">
+            <ModalMedia
+              preview={
                 <SafeAssetImage
                   src={editing.imageUrl || editing.url}
                   fallback={<span>{editing.name.slice(0, 1)}</span>}
                   style={{ width: "100%", height: "100%" }}
                   className="h-full w-full object-contain"
                 />
-              </span>
+              }
+            >
               <div>
                 <strong>{editing.name}</strong>
                 <small>
@@ -905,7 +905,7 @@ export default function AssetCatalogView({
                 <IconUpload size={16} />
                 {busy ? "处理中" : "替换图片"}
               </Capsule>
-            </div>
+            </ModalMedia>
             <input
               ref={editorFile}
               type="file"
@@ -932,7 +932,7 @@ export default function AssetCatalogView({
                 }
               }}
             />
-            <label className="material-editor-name">
+            <ModalField>
               名称
               <input
                 data-autofocus
@@ -942,7 +942,7 @@ export default function AssetCatalogView({
                 maxLength={120}
                 onChange={(e) => setName(e.target.value)}
               />
-            </label>
+            </ModalField>
             {type === "broker" && (
               <fieldset>
                 <legend>市场分类</legend>
@@ -967,7 +967,7 @@ export default function AssetCatalogView({
                 </div>
               </fieldset>
             )}
-            <footer className="material-editor-actions">
+            <ModalActions>
               <Capsule
                 variant="secondary"
                 disabled={busy}
@@ -978,8 +978,8 @@ export default function AssetCatalogView({
               <Capsule type="submit" disabled={busy || !name.trim()}>
                 {busy ? "保存中" : type === "group" ? "完成" : "保存更改"}
               </Capsule>
-            </footer>
-          </form>
+            </ModalActions>
+          </ModalForm>
         </AppModal>
       )}
       {importRows && (
@@ -998,7 +998,7 @@ export default function AssetCatalogView({
               </p>
             ))}
           </div>
-          <footer className="material-editor-actions">
+          <ModalActions>
             <Capsule
               variant="secondary"
               disabled={busy}
@@ -1012,7 +1012,7 @@ export default function AssetCatalogView({
             >
               {busy ? "导入中" : "确认导入"}
             </Capsule>
-          </footer>
+          </ModalActions>
         </AppModal>
       )}
     </div>
