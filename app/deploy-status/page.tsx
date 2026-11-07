@@ -7,12 +7,8 @@ import {
   IconAdjustmentsHorizontal,
   IconBrandGithub,
   IconChevronRight,
-  IconCircleCheck,
-  IconCircleX,
-  IconClock,
   IconExternalLink,
   IconGitBranch,
-  IconLoader2,
   IconPackage,
   IconPackageExport,
   IconRefresh,
@@ -20,6 +16,8 @@ import {
   IconShieldCheck
 } from "@tabler/icons-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import DeploymentBuildProgress from "@/components/DeploymentBuildProgress";
+import type { ImageProgress } from "@/lib/deployProgress";
 
 type Run = {
   id: number;
@@ -34,37 +32,6 @@ type Run = {
   startedAt: string;
   updatedAt: string;
   url: string;
-};
-
-type BuildStep = {
-  number: number;
-  name: string;
-  status: string;
-  conclusion: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-};
-
-type BuildJob = {
-  id: number;
-  name: string;
-  status: string;
-  conclusion: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  url: string;
-  steps: BuildStep[];
-};
-
-type ImageProgress = {
-  id: number;
-  status: string;
-  conclusion: string | null;
-  sha: string;
-  startedAt: string;
-  updatedAt: string;
-  url: string;
-  jobs: BuildJob[];
 };
 
 type SourceVersion = { sha: string; shortSha: string; url: string };
@@ -99,54 +66,6 @@ const formatTime = (value: string) => `${new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
   hour12: false
 }).format(new Date(value))} 香港时间`;
-const formatDuration = (startedAt: string | null, completedAt: string | null, fallback: string) => {
-  if (!startedAt) return "等待中";
-  const end = new Date(completedAt || fallback).getTime();
-  const seconds = Math.max(0, Math.round((end - new Date(startedAt).getTime()) / 1000));
-  if (seconds < 60) return `${seconds} 秒`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes} 分 ${seconds % 60} 秒`;
-};
-
-function StatusIcon({ status, conclusion, size = 18 }: { status: string; conclusion: string | null; size?: number }) {
-  if (status !== "completed") {
-    if (status === "in_progress") return <IconLoader2 aria-hidden="true" className="motion-safe:animate-spin text-amber-500" size={size} stroke={2} />;
-    return <IconClock aria-hidden="true" className="text-slate-400" size={size} stroke={1.8} />;
-  }
-  if (conclusion === "success") return <IconCircleCheck aria-hidden="true" className="text-emerald-500" size={size} stroke={2} />;
-  if (conclusion === "skipped") return <IconClock aria-hidden="true" className="text-slate-400" size={size} stroke={1.8} />;
-  return <IconCircleX aria-hidden="true" className="text-red-500" size={size} stroke={2} />;
-}
-
-const buildStatusLabel = (status: string, conclusion: string | null) => {
-  if (status === "queued") return "等待中";
-  if (status === "in_progress") return "构建中";
-  if (conclusion === "success") return "已完成";
-  if (conclusion === "skipped") return "已跳过";
-  return "失败";
-};
-const translateWorkflowLabel = (label: string) => ({
-  "TypeScript check": "TypeScript 检查",
-  "Check scheduled source changes": "检查定时源码变更",
-  "Publish linux/amd64 image": "发布 linux/amd64 镜像",
-  "Set up job": "准备任务",
-  Checkout: "检出代码",
-  "Use Node.js 22": "使用 Node.js 22",
-  "Install dependencies": "安装依赖",
-  "Public repository safety audit": "公开仓库安全审计",
-  "Local and GHCR deployment parity audit": "本地与 GHCR 部署一致性审计",
-  "Skip unchanged scheduled image": "跳过无变化的定时构建",
-  "Allow manual image publish": "允许手动构建镜像",
-  "Complete job": "完成任务",
-  "Log in to GHCR": "登录 GHCR",
-  "Docker metadata": "Docker 元数据",
-  "Set up Buildx": "准备 Buildx",
-  "Build and push": "构建并推送",
-  "Post Build and push": "收尾：构建并推送",
-  "Post Set up Buildx": "收尾：Buildx",
-  "Post Log in to GHCR": "收尾：GHCR 登录",
-  "Post Checkout": "收尾：检出代码"
-} as Record<string, string>)[label] || label;
 const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
 type AutoUpdateSchedule = { key: string; deadline: number; triggered: boolean };
@@ -421,7 +340,6 @@ export default function DeployStatusPage() {
   const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
   const latestMainCheck = currentMainCheck;
   const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
-  const finishedJobCount = imageProgress?.jobs.filter((job) => job.status === "completed").length || 0;
   const imageBuilding = Boolean(imageProgress && imageProgress.status !== "completed");
   const autoUpdateEligible = Boolean(
     latest?.status === "completed" && latest.conclusion === "success" &&
@@ -535,41 +453,7 @@ export default function DeployStatusPage() {
           </div>
           {autoUpdateSeconds !== null && <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-300">镜像已构建成功，将在 {Math.floor(autoUpdateSeconds / 60)} 分 {String(autoUpdateSeconds % 60).padStart(2, "0")} 秒后自动更新容器</p>}
         </section>
-        {imageProgress && showImageProgress && <section aria-live="polite" aria-busy={imageProgress.status !== "completed"} className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
-          <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <div>
-              <h2 className="text-sm font-medium">镜像构建进度</h2>
-              <p className="mt-1 text-xs text-slate-500">{imageProgress.sha} · {finishedJobCount} / {imageProgress.jobs.length || 2} 阶段 · {formatDuration(imageProgress.startedAt, imageProgress.status === "completed" ? imageProgress.updatedAt : null, checkedAt || imageProgress.updatedAt)}</p>
-            </div>
-            <a href={imageProgress.url} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-white/[.04]">
-              <StatusIcon status={imageProgress.status} conclusion={imageProgress.conclusion} size={16} />
-              {buildStatusLabel(imageProgress.status, imageProgress.conclusion)}
-              <IconExternalLink aria-hidden="true" size={14} stroke={1.8} />
-            </a>
-          </div>
-          {imageProgress.jobs.length > 0 ? <div className="flex flex-col items-stretch gap-2 p-4 sm:flex-row sm:items-start sm:gap-3 sm:p-5">
-            {imageProgress.jobs.map((job, index) => { const currentStep = job.steps.find((step) => step.status === "in_progress") || job.steps.find((step) => step.status === "queued"); const jobTone = job.status === "in_progress" ? "border-amber-300 bg-amber-50/60 dark:border-amber-400/35 dark:bg-amber-400/[.05]" : job.status === "completed" && job.conclusion !== "success" && job.conclusion !== "skipped" ? "border-red-300 bg-red-50/60 dark:border-red-400/35 dark:bg-red-400/[.05]" : "border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-950/20"; return <div key={job.id} className="contents">
-              <details open={job.status !== "completed" ? true : undefined} className={`group min-w-0 flex-1 rounded-xl border ${jobTone} open:bg-white dark:open:bg-white/[.025]`}>
-                <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400/50 [&::-webkit-details-marker]:hidden">
-                  <StatusIcon status={job.status} conclusion={job.conclusion} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">{translateWorkflowLabel(job.name)}</span>
-                    <span className="mt-0.5 block truncate text-xs text-slate-500">{currentStep ? translateWorkflowLabel(currentStep.name) : buildStatusLabel(job.status, job.conclusion)} · {job.conclusion === "skipped" ? "已跳过" : formatDuration(job.startedAt, job.completedAt, checkedAt || imageProgress.updatedAt)}</span>
-                  </span>
-                  <IconChevronRight aria-hidden="true" className="shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-90" size={16} stroke={1.8} />
-                </summary>
-                {job.steps.length > 0 && <div className="border-t border-slate-200 px-3.5 py-2.5 dark:border-slate-800">
-                  {job.steps.map((step) => <div key={step.number} className="flex items-center gap-2.5 py-2 text-xs">
-                    <StatusIcon status={step.status} conclusion={step.conclusion} size={15} />
-                    <span className={`min-w-0 flex-1 truncate ${step.status === "in_progress" ? "font-medium text-slate-800 dark:text-slate-200" : "text-slate-500 dark:text-slate-400"}`}>{translateWorkflowLabel(step.name)}</span>
-                    <span className="shrink-0 text-slate-400">{step.conclusion === "skipped" ? "已跳过" : formatDuration(step.startedAt, step.completedAt, checkedAt || imageProgress.updatedAt)}</span>
-                  </div>)}
-                </div>}
-              </details>
-              {index < imageProgress.jobs.length - 1 && <IconChevronRight aria-hidden="true" className="mx-auto shrink-0 rotate-90 self-center text-slate-300 sm:mx-0 sm:mt-6 sm:rotate-0 dark:text-slate-700" size={18} stroke={1.8} />}
-            </div>})}
-          </div> : <p className="px-5 py-8 text-center text-sm text-slate-500">GitHub 正在创建构建任务…</p>}
-        </section>}
+        {imageProgress && showImageProgress && <DeploymentBuildProgress key={imageProgress.id} progress={imageProgress} checkedAt={checkedAt} />}
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div><div className="flex items-center gap-2.5"><span className={`h-3 w-3 shrink-0 rounded-full ${latestState.className} ring-4 ${latestState.ring} ${latest && latest.status !== "completed" ? "animate-pulse" : ""}`} /><p className="text-lg font-medium">最新发布 <span className="text-slate-400">·</span> {latestState.label}</p></div><p className="mt-1.5 pl-[22px] text-xs text-slate-500">{latest ? `${latest.sha} · ${formatTime(latest.updatedAt)}` : "等待读取 GitHub Actions"}</p></div>
           {error && <p role="alert" className="mt-4 rounded-xl bg-red-400/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{error}</p>}
