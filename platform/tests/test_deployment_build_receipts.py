@@ -9,7 +9,7 @@ def test_receipt_matches_only_original_workflow_uuid():
         "event": "workflow_dispatch",
         "path": ".github/workflows/docker-publish.yml",
         "head_branch": "main",
-        "display_title": f"构建发布 {ident}",
+        "display_title": f"Fire 手动发布：检查并构建当前版本 · {ident}",
     }
     calls = []
 
@@ -31,7 +31,13 @@ def test_release_workflow_indexes_request_and_checks_confirmed_commit_before_bui
 
     root = Path(__file__).parents[2]
     workflow = yaml.safe_load((root / ".github/workflows/docker-publish.yml").read_text())
-    assert "inputs.request_id" in workflow["run-name"]
+    title = workflow["run-name"]
+    assert "inputs.request_id" in title
+    assert "github.event.head_commit.message" in title
+    assert "github.event.pull_request.title" in title
+    assert "github.event_name == 'workflow_dispatch' && inputs.request_id" in title
+    assert "format(' · {0}', inputs.request_id)" in title
+    assert "github.sha" not in title
     jobs = workflow["jobs"]
     inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
     assert {"request_id", "expected_revision", "verify_only"} <= inputs.keys()
