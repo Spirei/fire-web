@@ -27,7 +27,7 @@ if (
 ) {
   const child = spawn(
     python,
-    [path.join(root, "scripts/platform.py"), mode, ...args],
+    [path.join(root, "scripts/fire_platform.py"), mode, ...args],
     { cwd: root, stdio: "inherit", env: process.env },
   );
   child.on("exit", (code) => process.exit(code ?? 1));
@@ -92,7 +92,7 @@ if (
     return child;
   };
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => stop(0));
-  run(python, [path.join(root, "scripts/platform.py"), "serve"]);
+  run(python, [path.join(root, "scripts/fire_platform.py"), "serve"]);
   const ready = () =>
     new Promise((resolve) => {
       const request = http.get(
@@ -120,7 +120,7 @@ if (
   if (!up) stop(1);
   else {
     if (process.env.FIRE_WORKER === "on")
-      run(python, [path.join(root, "scripts/platform.py"), "worker"]);
+      run(python, [path.join(root, "scripts/fire_platform.py"), "worker"]);
     run(process.execPath, [
       path.join(root, "node_modules/next/dist/bin/next"),
       mode,

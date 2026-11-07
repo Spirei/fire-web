@@ -7966,7 +7966,7 @@ const V0_1_75_ENTRY: VersionEntry = {
     },
   ],
 };
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_76_ENTRY: VersionEntry = {
   version: "v0.1.76",
   date: "2026-11-07",
   summary: "Fire 统一平台、完整外观与系统管理；旧接口和存储整合",
@@ -8136,10 +8136,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
 ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_76_ENTRY,
+  version: "v0.1.77",
+  date: "2026-11-08",
+  summary: "修复 Linux 容器启动失败",
+  software: V0_1_76_ENTRY.software.map(item => ({ ...item, version: "v0.1.77" })),
+  changes: [{ kind: "fix", title: "修复容器启动入口", desc: "Python 启动脚本更名，避免遮蔽标准库 platform 导致 Linux 的 uuid 导入失败；配置检查、内置后端和 Worker 使用同一新入口。" }],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_76_ENTRY,
   V0_1_75_ENTRY,
   V0_1_74_ENTRY,
   V0_1_73_ENTRY,

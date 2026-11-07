@@ -44,7 +44,7 @@ requireText("Dockerfile", [
   'CMD ["npm", "start"]',
 ]);
 requireText("scripts/fire.mjs", [
-  '"scripts/platform.py"',
+  '"scripts/fire_platform.py"',
   '"serve"',
   '"worker"',
   "FIRE_PLATFORM_SOCKET: socket",
