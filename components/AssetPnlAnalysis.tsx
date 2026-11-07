@@ -1,4 +1,5 @@
 "use client";
+import { IconButton, Capsule } from "@/components/Capsule";
 
 import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
 
@@ -621,7 +622,7 @@ export default function AssetPnlAnalysis({
       {/* 页面标题行（取消大卡片模式：普通页面流式布局，与资产分析页一致） */}
       <div className="flex items-center gap-3">
         {onBack && (
-          <button type="button" onClick={onBack} aria-label="返回资产分析" className="grid h-10 w-10 place-items-center rounded-full border border-edge bg-white shadow-sm transition hover:-translate-x-1"><BackIcon /></button>
+          <IconButton size="md" framed type="button" onClick={onBack} label="返回资产分析" className=""><BackIcon /></IconButton>
         )}
         <div><h1 className="text-xl font-bold tracking-tight">资产盈亏分析</h1><p className="mt-0.5 text-xs text-muted">更新至 {updatedAt}</p></div>
       </div>
@@ -680,7 +681,7 @@ export default function AssetPnlAnalysis({
           <div className="card flex min-h-[260px] flex-col items-center justify-center gap-3 text-center">
             <p className="text-sm font-semibold text-ink-2">{loadError}</p>
             <p className="text-xs text-muted">请检查网络或登录状态后重试</p>
-            <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="btn btn-line btn-sm">重新加载</button>
+            <Capsule variant="secondary" size="sm" type="button" onClick={() => setReloadKey((key) => key + 1)} className="">重新加载</Capsule>
           </div>
         ) : loading ? (
           <div className="grid gap-5">
@@ -727,16 +728,16 @@ export default function AssetPnlAnalysis({
                       </>
                     )}
                   </div>
-                  <button
+                  <IconButton size="md" framed
                     type="button"
                     onClick={() => void openShare()}
                     disabled={shareBusy !== null}
                     title={shareBusy === "render" ? "正在生成分享图…" : "分享截图"}
-                    aria-label="分享截图"
-                    className="grid h-9 w-9 flex-none place-items-center rounded-lg border border-edge text-muted transition hover:border-edge-strong hover:text-ink-2 disabled:opacity-50"
+                    label="分享截图"
+                    className="flex-none"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><circle cx="18" cy="5" r="2.2" /><circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="m8 11 8-5M8 13l8 5" /></svg>
-                  </button>
+                  </IconButton>
                 </div>
 
                 {/* 盈亏总额大数字 / 收益率 / 日期（居中，对齐图1） */}
@@ -974,9 +975,9 @@ export default function AssetPnlAnalysis({
         <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-card border border-edge bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-edge px-5 py-4">
             <h3 className="text-base font-bold">盈亏总额分享图</h3>
-            <button type="button" onClick={() => setShareOpen(false)} aria-label="关闭" className="grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2">
+            <IconButton size="sm" type="button" onClick={() => setShareOpen(false)} label="关闭" className="">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="m6 6 12 12M18 6 6 18" /></svg>
-            </button>
+            </IconButton>
           </div>
           <div className="flex-1 overflow-auto bg-bg-gray p-4">
             <img src={shareImage} alt="盈亏总额分享图" className="w-full rounded-xl" />

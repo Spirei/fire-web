@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconPencil, IconPhotoPlus, IconRefresh } from "@tabler/icons-react";
 import { clientRequestId } from "@/lib/randomId";
@@ -349,17 +350,17 @@ export default function PersonalHome({
             />
           </label>
           <div>
-            <button className="btn btn-brand" type="submit" disabled={busy}>
+            <Capsule variant="primary" className="" type="submit" disabled={busy}>
               保存资料
-            </button>
-            <button
-              className="btn"
+            </Capsule>
+            <Capsule variant="secondary"
+              className=""
               type="button"
               disabled={busy}
               onClick={() => setEditing(false)}
             >
               取消
-            </button>
+            </Capsule>
           </div>
         </form>
       )}

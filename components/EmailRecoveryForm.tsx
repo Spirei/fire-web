@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useRef, useState } from "react";
 import PasswordResetForm from "@/components/PasswordResetForm";
@@ -77,7 +78,7 @@ export default function EmailRecoveryForm({ initialLogin = "", fixedLogin = fals
     {challenge && <label className="flex flex-col gap-2 text-sm font-semibold text-ink-2">{backup?"备用码":method==="totp"?"验证器验证码":"邮箱验证码"}<input autoFocus type="text" inputMode={backup?"text":"numeric"} autoComplete="one-time-code" pattern={backup?undefined:"[0-9]{6}"} maxLength={backup?19:6} value={code} disabled={busy} onChange={event => setCode(backup?normalizeBackupInput(event.target.value):event.target.value.replace(/\D/g, "").slice(0, 6))} required placeholder={backup?"xxxx-xxxx-xxxx-xxxx":"6 位数字"} className={`${field} text-center text-xl font-mono ${backup?"tracking-normal":"tracking-[.3em]"}`} /></label>}
     {message && <p role="status" className="text-[13px] leading-5 text-muted">{message}</p>}
     {error && <p role="alert" className="rounded-[12px] bg-up-bg px-3.5 py-3 text-[13px] leading-5 text-up">{error}</p>}
-    <button type="submit" disabled={busy || (challenge ? !(backup?isCompleteBackupCode(code):/^\d{6}$/.test(code)) : !login.trim() || cooldown > 0)} className="btn btn-line min-h-[46px] w-full disabled:opacity-50">{busy ? "请稍候…" : challenge ? "验证并继续" : cooldown ? `${cooldown} 秒后可继续` : method==="totp"?"继续":"发送验证码"}</button>
+    <Capsule variant="primary" type="submit" disabled={busy || (challenge ? !(backup?isCompleteBackupCode(code):/^\d{6}$/.test(code)) : !login.trim() || cooldown > 0)} className="min-h-[46px] w-full disabled:opacity-50">{busy ? "请稍候…" : challenge ? "验证并继续" : cooldown ? `${cooldown} 秒后可继续` : method==="totp"?"继续":"发送验证码"}</Capsule>
     {challenge && method==="totp" && <button type="button" disabled={busy} onClick={()=>{setBackup(!backup);setCode("");setError("");}} className="text-sm text-ink">{backup?"使用验证器":"使用备用码"}</button>}
     {challenge && <div className="flex flex-wrap justify-between gap-3 text-[13px]">
       <button type="button" disabled={busy || cooldown > 0} onClick={() => void perform(false)} className="text-ink disabled:text-faint">{cooldown ? `${cooldown} 秒后可重试` : method==="totp"?"重新开始验证":"重新发送"}</button>

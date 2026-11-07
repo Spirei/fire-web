@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppModal from "./AppModal";
+import { Capsule, CapsuleLink } from "@/components/Capsule";
 import { platformRequest as read } from "@/lib/platformRequest";
 import {
   useWorkspaceActive,
@@ -260,13 +261,13 @@ export default function PlatformBackups({ ownerId }: { ownerId: string }) {
           <b>联合备份</b>
           <span>完整 PG、登记原件与加密密钥 · 独立 Worker</span>
         </div>
-        <button
+        <Capsule variant="ghost" size="sm"
           type="button"
-          className="btn btn-ghost btn-sm"
+          className=""
           onClick={() => setOpen(true)}
         >
           管理备份
-        </button>
+        </Capsule>
       </div>
       {open && (
         <AppModal
@@ -281,13 +282,13 @@ export default function PlatformBackups({ ownerId }: { ownerId: string }) {
           {data?.configured && (
             <div className="flex flex-col gap-4 text-sm">
               {!data.key_fingerprint ? (
-                <button
-                  className="btn btn-line px-4 py-3"
+                <Capsule variant="secondary"
+                  className="px-4 py-3"
                   disabled={busy}
                   onClick={() => void prepare()}
                 >
                   准备备份恢复密钥
-                </button>
+                </Capsule>
               ) : (
                 <>
                   <p className="break-all">
@@ -305,8 +306,8 @@ export default function PlatformBackups({ ownerId }: { ownerId: string }) {
                     />{" "}
                     已独立保存恢复密钥
                   </label>
-                  <button
-                    className="btn btn-primary px-4 py-3"
+                  <Capsule variant="primary"
+                    className="px-4 py-3"
                     disabled={
                       busy ||
                       !saved ||
@@ -319,7 +320,7 @@ export default function PlatformBackups({ ownerId }: { ownerId: string }) {
                     onClick={() => void start()}
                   >
                     创建完整联合备份
-                  </button>
+                  </Capsule>
                 </>
               )}
             </div>
@@ -358,9 +359,9 @@ export default function PlatformBackups({ ownerId }: { ownerId: string }) {
                       <td>{(b.bytes / 1024 / 1024).toFixed(1)} MB</td>
                       <td>
                         {b.download_available ? (
-                          <a href={`/api/fire/backups/${b.id}/download`}>
+                          <CapsuleLink size="sm" variant="secondary" href={`/api/fire/backups/${b.id}/download`}>
                             下载加密备份
-                          </a>
+                          </CapsuleLink>
                         ) : (
                           "已按保留策略清理"
                         )}

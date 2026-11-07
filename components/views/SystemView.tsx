@@ -8,12 +8,11 @@ import {
   IconActivity,
   IconClipboardList,
   IconApi,
-  IconX,
 } from "@tabler/icons-react";
 import { useWorkspaceActive, useWorkspaceLocationGuard, useWorkspaceSearchParams } from "@/lib/workspacePanel";
-import { createPortal } from "react-dom";
+import AppModal from "@/components/AppModal";
+import { Capsule, IconButton } from "@/components/Capsule";
 import AppSelect from "@/components/AppSelect";
-import { lockScroll } from "@/lib/overlayLifecycle";
 import { platformRequest as json } from "@/lib/platformRequest";
 import PasswordInput from "@/components/PasswordInput";
 import { ServiceIllustration } from "@/components/ServiceIllustration";
@@ -78,43 +77,7 @@ function SystemDialog({
   busy?: boolean;
   children: React.ReactNode;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
-    const dialog = ref.current;
-    if (dialog && !dialog.open) dialog.showModal();
-    const unlock = lockScroll();
-    return () => {
-      dialog?.close();
-      unlock();
-      if (!document.hidden && trigger?.isConnected) trigger.focus({ preventScroll: true });
-    };
-  }, []);
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <dialog
-      ref={ref}
-      className="system-dialog"
-      aria-label={label}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!busy) onClose();
-      }}
-      onClick={(event) => {
-        if (event.target !== event.currentTarget || busy) return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        if (
-          event.clientX < rect.left ||
-          event.clientX > rect.right ||
-          event.clientY < rect.top ||
-          event.clientY > rect.bottom
-        )
-          onClose();
-      }}
-    >
-      {children}
-    </dialog>, document.body
-  );
+  return <AppModal title={label} onClose={onClose} closeDisabled={busy} size="lg">{children}</AppModal>;
 }
 
 export default function SystemView({
@@ -449,13 +412,13 @@ export default function SystemView({
               <td>{task.attempts}</td>
               <td>
                 {["queued", "running"].includes(task.status) && (
-                  <button
-                    className="btn btn-ghost btn-sm"
+                  <Capsule variant="ghost" size="sm"
+                    className=""
                     disabled={busy}
                     onClick={() => void cancel(task)}
                   >
                     取消
-                  </button>
+                  </Capsule>
                 )}
               </td>
             </tr>
@@ -464,13 +427,13 @@ export default function SystemView({
       </table>
       {!tasks.length && !loading && <p className="system-empty">暂无任务</p>}
       {mode === "tasks" && cursor && (
-        <button
-          className="btn btn-line"
+        <Capsule variant="secondary"
+          className=""
           disabled={busy}
           onClick={() => void more()}
         >
           加载更多
-        </button>
+        </Capsule>
       )}
     </div>
   );
@@ -485,23 +448,16 @@ export default function SystemView({
               : "接口迁移"}
         </h1>
         <div className="flex gap-3">
-          <button
-            aria-label="刷新"
-            className="btn btn-ghost"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            <IconRefresh size={19} />
-          </button>
+          <IconButton label="刷新" busy={loading} framed onClick={() => void load()}><IconRefresh /></IconButton>
           {mode !== "migration" && (
-            <button
-              className="btn btn-primary"
+            <Capsule variant="primary"
+              className=""
               disabled={busy || !csrf.current}
               onClick={() => void diagnostics()}
             >
               <IconActivity size={19} />
               运行系统检查
-            </button>
+            </Capsule>
           )}
         </div>
       </div>
@@ -525,10 +481,8 @@ export default function SystemView({
       {mode === "overview" && overview && (
         <>
           <div className="system-segment">
-            <button aria-current="page">运行总览</button>
-            <button onClick={() => onNavigate("/background-tasks")}>
-              后台任务
-            </button>
+            <Capsule variant="secondary" aria-current="page">运行总览</Capsule>
+            <Capsule variant="secondary" onClick={() => onNavigate("/background-tasks")}>后台任务</Capsule>
           </div>
           <div className="system-section-heading">
             <h2>连接状态</h2>
@@ -558,8 +512,8 @@ export default function SystemView({
                         : status(service.state)}
                     </p>
                     <p className="text-sm text-muted">{overviewStale ? `上次结果：${service.detail}` : service.detail}</p>
-                    <button
-                      className="btn btn-primary"
+                    <Capsule variant="primary"
+                      className=""
                       onClick={() =>
                         service.id === "worker"
                           ? onNavigate("/background-tasks")
@@ -567,7 +521,7 @@ export default function SystemView({
                       }
                     >
                       {service.id === "worker" ? "管理任务" : "管理连接"}
-                    </button>
+                    </Capsule>
                   </div>
                 </article>
               );
@@ -714,24 +668,18 @@ export default function SystemView({
               </tbody>
             </table>
             {visible.length > visibleLimit && (
-              <button
-                className="btn btn-line"
+              <Capsule variant="secondary"
+                className=""
                 onClick={() => setVisibleLimit((value) => value + 100)}
               >
                 加载更多
-              </button>
+              </Capsule>
             )}
           </div>
         </>
       )}
       {active && selected && (
         <SystemDialog label="任务详情" onClose={() => setSelected(null)}>
-          <div className="system-heading">
-            <h2>任务详情</h2>
-            <button aria-label="关闭" onClick={() => setSelected(null)}>
-              <IconX />
-            </button>
-          </div>
           <p>{status(selected.status)}</p>
           <code className="break-all">{selected.id}</code>
           {selected.error_code && <p role="alert">{selected.error_code}</p>}
@@ -850,10 +798,6 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
   );
   return (
     <SystemDialog label={kind === "postgresql" ? "PostgreSQL 连接" : "Redis 连接"} onClose={onClose} busy={busy}>
-      <div className="system-heading">
-        <h2>{kind === "postgresql" ? "PostgreSQL" : "Redis"}</h2>
-        <button aria-label="关闭" disabled={busy} onClick={onClose}><IconX /></button>
-      </div>
       <p className="text-sm text-muted">连接由服务器环境配置管理，更改后重启生效。</p>
       <dl className="system-connection-summary" aria-busy={busy && !settings}>
         {field("地址", config?.host, true)}
@@ -879,18 +823,18 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
       {verify && (
         <div className="system-reauth">
           <label>确认管理员密码<PasswordInput value={verifyPassword} onChange={e => setVerifyPassword(e.target.value)} autoComplete="current-password" /></label>
-          <button className="btn btn-line" disabled={busy || !verifyPassword} onClick={() => void run(async signal => {
+          <Capsule variant="secondary" className="" disabled={busy || !verifyPassword} onClick={() => void run(async signal => {
             await json<void>("/api/fire/connections/reauthenticate", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify({ password: verifyPassword }), signal });
             if (!signal.aborted) { setVerify(false); setVerifyPassword(""); }
-          })}>验证</button>
+          })}>验证</Capsule>
         </div>
       )}
       <div className="system-actions">
-        <button className="btn btn-ghost" disabled={busy} onClick={() => void run(async signal => {
+        <Capsule variant="ghost" className="" disabled={busy} onClick={() => void run(async signal => {
           const value = await json<Settings>("/api/fire/connections/" + kind, { headers: { "x-csrf-token": csrf }, signal });
           if (!signal.aborted) setSettings(value);
-        })}>重新读取</button>
-        <button className="btn btn-line" disabled={busy || !config} onClick={() => void run(async signal => {
+        })}>重新读取</Capsule>
+        <Capsule variant="secondary" className="" disabled={busy || !config} onClick={() => void run(async signal => {
           const id = crypto.randomUUID();
           setRequestId(id); setReceipt(null);
           const value = await json<Receipt>("/api/fire/connections/" + kind + "/test", {
@@ -898,7 +842,7 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
             body: JSON.stringify({ request_id: id, revision: settings?.revision ?? null, config, password_mode: "keep", reuse_current_password: true }),
           });
           if (!signal.aborted) setReceipt(value);
-        })}>{busy ? "处理中…" : "测试连接"}</button>
+        })}>{busy ? "处理中…" : "测试连接"}</Capsule>
       </div>
     </SystemDialog>
   );

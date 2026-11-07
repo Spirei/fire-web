@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -157,13 +158,13 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "",
       return <span aria-hidden className="inline-flex h-10 w-10 flex-none rounded-full bg-bg-gray/80 dark:bg-white/10" />;
     }
     return (
-      <button
+      <Capsule variant="primary" size="sm"
         type="button"
         onClick={() => window.dispatchEvent(new Event("fire:open-login"))}
-        className="btn btn-brand btn-sm"
+        className=""
       >
         登录
-      </button>
+      </Capsule>
     );
   }
 

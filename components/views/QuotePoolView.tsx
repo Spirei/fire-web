@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { IconArrowUpRight, IconChevronLeft, IconChevronRight, IconRefresh, IconSearch, IconBox, IconX, IconChevronDown, IconChartCandle } from "@tabler/icons-react";
@@ -114,12 +115,12 @@ export default function QuotePoolView({ initial, admin, onNavigate }: { initial?
   return <div className="quote-pool-page">
     <header className="pool-page-header">
       <div><h1>股票池<span className="pool-title-dot" /></h1></div>
-      {admin && <div className="pool-scope" aria-label="查看范围">{(["shared", "mine"] as const).map(scope => <button key={scope} type="button" aria-pressed={view.scope === scope} className={`fire-cap ${view.scope === scope ? "is-active" : ""}`} onClick={() => { update({ stock: undefined, scope: scope === "shared" ? undefined : scope }); }}>{scope === "shared" ? "共享池" : "我的订阅"}</button>)}</div>}
+      {admin && <div className="pool-scope" aria-label="查看范围">{(["shared", "mine"] as const).map(scope => <Capsule variant="secondary" key={scope} type="button" aria-pressed={view.scope === scope} className={`fire-cap ${view.scope === scope ? "is-active" : ""}`} onClick={() => { update({ stock: undefined, scope: scope === "shared" ? undefined : scope }); }}>{scope === "shared" ? "共享池" : "我的订阅"}</Capsule>)}</div>}
     </header>
     <nav className="pool-markets" aria-label="股票池市场">
-      {["ALL", ...QUOTE_DEMAND_MARKETS].map(market => <button key={market} type="button" className={`fire-cap ${view.market === market ? "is-active" : ""}`} aria-pressed={view.market === market} onClick={() => { update({ stock: undefined, m: market === "ALL" ? undefined : market }); }}>
+      {["ALL", ...QUOTE_DEMAND_MARKETS].map(market => <Capsule variant="secondary" key={market} type="button" className={`fire-cap ${view.market === market ? "is-active" : ""}`} aria-pressed={view.market === market} onClick={() => { update({ stock: undefined, m: market === "ALL" ? undefined : market }); }}>
         {market !== "ALL" && market !== "ASSET" && <MarketIcon market={market} size={19} />}<span>{market === "ALL" ? "全部" : POOL_LABELS[market]}</span><small>{entries.filter(row => market === "ALL" || row.market === market).length}</small>
-      </button>)}
+      </Capsule>)}
     </nav>
     <section className="pool-collection">
       <div className="pool-collection-header"><div><span className="pool-eyebrow">THE COLLECTION</span><h2>行情收纳盒</h2></div><div className="pool-collection-actions"><span>保留 <strong>7</strong> 天</span><button type="button" onClick={() => setReplay(value => value + 1)} disabled={!filtered.some(row => row.state !== "candidate")} aria-label="重播股票入盒动效" title="重播入盒"><IconBox size={18} stroke={1.6} /></button></div></div>
@@ -158,7 +159,7 @@ export default function QuotePoolView({ initial, admin, onNavigate }: { initial?
           {expanded && <div className="pool-row-detail" id={detailId}>
             <strong>{entry.name || entry.code}</strong>
             <dl><div><dt>最近请求</dt><dd>{timeText(entry.lastRequestedAt)}</dd></div><div><dt>释放时间</dt><dd>{timeText(entry.expiresAt)}</dd></div></dl>
-            {entry.market !== "ASSET" && <button type="button" className="fire-cap" onClick={() => enter(entry)} aria-label={`查看 ${entry.name || entry.code} 详情`}>个股详情<IconArrowUpRight size={15} /></button>}
+            {entry.market !== "ASSET" && <Capsule variant="secondary" type="button" className="fire-cap" onClick={() => enter(entry)} aria-label={`查看 ${entry.name || entry.code} 详情`}>个股详情<IconArrowUpRight size={15} /></Capsule>}
           </div>}
         </div>;
       })}</div>

@@ -24,7 +24,8 @@
     "platform:inspect": "node scripts/fire.mjs inspect-database",
     "platform:check": "node scripts/fire.mjs check-schema",
     "platform:migrate": "node scripts/fire.mjs migrate",
-    "dev:pm2": "node scripts/pm2-dev.mjs"
+    "dev:pm2": "node scripts/pm2-dev.mjs",
+    "test:controls": "node tests/shared-controls.cjs && node tests/popover-interactions.cjs"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^14.0.0",

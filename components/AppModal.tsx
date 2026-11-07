@@ -1,8 +1,9 @@
 "use client";
 
+import { CloseButton } from "@/components/Capsule";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { isTopPriorityModal, lockScroll } from "@/lib/overlayLifecycle";
+import { isTopPriorityModal, lockScroll, trapModalTab } from "@/lib/overlayLifecycle";
 
 const SIZES = {
   sm: "max-w-[400px]",
@@ -23,7 +24,9 @@ export default function AppModal({
   className = "",
   draggable = false,
   closeDisabled = false,
-  priority = false
+  priority = false,
+  hideHeader = false,
+  footer
 }: {
   title?: string;
   desc?: string;
@@ -35,12 +38,15 @@ export default function AppModal({
   draggable?: boolean;
   closeDisabled?: boolean;
   priority?: boolean;
+  hideHeader?: boolean;
+  footer?: React.ReactNode;
 }) {
   const [mounted, setMounted] = useState(false);
   useLayoutEffect(() => { setMounted(true); }, []);
   const [closing, setClosing] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
+  const originalFocus = useRef<HTMLElement | null>(typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closingRef = useRef(false);
   const onCloseRef = useRef(onClose);
@@ -52,18 +58,19 @@ export default function AppModal({
   useEffect(() => {
     if (!mounted) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || e.repeat) return;
-      if (!isTopPriorityModal(panelRef.current)) return;
+      if (e.defaultPrevented || !isTopPriorityModal(panelRef.current)) return;
+      if (e.key === "Tab" && panelRef.current) { trapModalTab(e, panelRef.current); return; }
+      if (e.key !== "Escape" || e.repeat) return;
       e.preventDefault();
       e.stopPropagation();
       requestClose();
     };
     window.addEventListener("keydown", onKey);
     const unlockScroll = lockScroll();
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousFocus = originalFocus.current;
     const panel = panelRef.current;
     // Forms can place focus directly in their first required field.
-    if (isTopPriorityModal(panel)) (panel?.querySelector<HTMLElement>("[data-autofocus]") || panel)?.focus({ preventScroll: true });
+    if (isTopPriorityModal(panel) && !panel?.contains(document.activeElement)) (panel?.querySelector<HTMLElement>("[data-autofocus]") || panel)?.focus({ preventScroll: true });
     return () => {
       window.removeEventListener("keydown", onKey);
       unlockScroll();
@@ -74,6 +81,14 @@ export default function AppModal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !draggable) return;
+    const recenter = () => setOffset({x:0,y:0});
+    window.addEventListener("resize", recenter);
+    window.visualViewport?.addEventListener("resize", recenter);
+    return () => { window.removeEventListener("resize", recenter); window.visualViewport?.removeEventListener("resize", recenter); };
+  }, [mounted, draggable]);
 
   function requestClose() {
     if (closingRef.current || closeDisabledRef.current) return;
@@ -115,7 +130,7 @@ export default function AppModal({
   }
 
   const content = (
-    <div data-priority-modal="true" data-system-modal={priority ? "true" : undefined} className={`fixed inset-0 ${priority ? "z-[12500]" : "z-[11000]"} flex items-center justify-center p-4 sm:p-8`} role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
+    <div data-priority-modal="true" data-system-modal={priority ? "true" : undefined} className={`app-modal-layer fixed inset-0 ${priority ? "z-[12500]" : "z-[11000]"}`} role="dialog" aria-modal="true" aria-label={title || "弹窗"}>
       {/* 毛玻璃遮罩（iOS 风格），保持页面可读 */}
       <div
         className={`modal-scrim absolute inset-0 ${closing ? "modal-overlay-closing" : "modal-overlay"}`}
@@ -126,32 +141,26 @@ export default function AppModal({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={draggable ? { translate: `${offset.x}px ${offset.y}px` } : undefined}
-        className={`app-modal-panel modal-glass relative w-full ${SIZES[size]} ${className} ${headerActions ? "modal-with-header-actions" : ""} max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[26px] border border-white/60 p-6 shadow-[0_24px_64px_rgba(0,0,0,.22)] outline-none dark:border-white/10 dark:shadow-[0_24px_64px_rgba(0,0,0,.5)] sm:rounded-[28px] sm:p-7 ${
-          closing ? "modal-panel-closing" : "modal-panel"
-        }`}
+        className={`app-modal-panel modal-glass relative w-full ${SIZES[size]} ${className} ${headerActions ? "modal-with-header-actions" : ""} ${closing ? "modal-panel-closing" : "modal-panel"}`}
       >
-        <div className={`mb-5 flex items-start justify-between gap-3 ${draggable ? "cursor-move touch-none select-none" : ""}`} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={stopDrag} onPointerCancel={stopDrag}>
+        {!hideHeader && <div className={`app-modal-header ${draggable ? "cursor-move touch-none select-none" : ""}`} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={stopDrag} onPointerCancel={stopDrag}>
           <div className="min-w-0">
             {title && <h3 className="text-[19px] font-bold leading-snug text-ink">{title}</h3>}
             {desc && <p className="mt-1 text-[13px] text-muted">{desc}</p>}
           </div>
           {headerActions && <div className="ml-auto min-w-0 flex-1 sm:max-w-[240px]">{headerActions}</div>}
-          <button
-            type="button"
-            disabled={closeDisabled}
-            onClick={requestClose}
-            className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full text-muted transition-colors duration-200 hover:bg-black/5 hover:text-ink dark:hover:bg-white/10"
-            aria-label="关闭"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
-          </button>
-        </div>
+          <CloseButton disabled={closeDisabled} onClick={requestClose} />
+        </div>}
+        <div className="app-modal-body">
         {typeof children === "function" ? children(requestClose) : children}
+        </div>
+        {footer && <div className="app-modal-footer">{footer}</div>}
       </div>
     </div>
   );
   return mounted ? createPortal(content, document.body) : content;
+}
+
+export function ModalActions({ children, className = "" }: {children: React.ReactNode; className?: string}) {
+  return <div className={`app-modal-actions ${className}`}>{children}</div>;
 }

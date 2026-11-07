@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useRef, useState } from "react";
 import AppModal from "@/components/AppModal";
@@ -46,7 +47,7 @@ export default function WatchlistFileImportModal({ groups, initialGroupId, onClo
     } catch (err) { setError(err instanceof Error ? err.message : "导入失败"); } finally { setBusy(false); }
   }
 
-  return <AppModal title="导入股票" onClose={onClose} size="xl" className="!max-w-[1180px]">
+  return <AppModal closeDisabled={busy} title="导入股票" onClose={onClose} size="xl" className="!max-w-[1180px]">
     {onBack && <button type="button" onClick={onBack} className="mb-3 inline-flex items-center gap-1 rounded-full bg-bg-gray px-3 py-1.5 text-xs font-medium text-muted transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97]">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="m15 18-6-6 6-6" /></svg>
       返回编辑分组
@@ -54,13 +55,13 @@ export default function WatchlistFileImportModal({ groups, initialGroupId, onClo
     <div className="grid grid-cols-1 md:h-[min(650px,calc(100dvh-190px))] md:min-h-0 md:overflow-hidden rounded-2xl border border-edge md:grid-cols-[270px_minmax(0,1fr)_250px]">
       <section className="watch-import-source border-b border-edge p-5 md:border-b-0 md:border-r">
         <h4 className="text-base font-bold text-ink">选择导入文件</h4>
-        <button
+        <Capsule variant="secondary"
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="btn btn-line mt-4 h-11 w-full shrink-0 px-5 text-sm leading-none"
+          className="mt-4 h-11 w-full shrink-0 px-5 text-sm leading-none"
         >
           选择文件
-        </button>
+        </Capsule>
         <input ref={fileRef} type="file" accept=".txt,.csv,.sel,.ebk,.json,text/plain,text/csv,application/json" className="hidden" onChange={(e) => void readFile(e.target.files?.[0])} />
         {fileName && <p className="mt-2 truncate text-xs text-muted">{fileName}</p>}
         <ol className="mt-5 space-y-4 text-xs leading-6 text-muted">
@@ -85,8 +86,8 @@ export default function WatchlistFileImportModal({ groups, initialGroupId, onClo
         </div>
         {error && <p className="mt-3 text-xs text-down">{error}</p>}
         <div className="mt-4 flex gap-2 border-t border-edge pt-4">
-          <button type="button" onClick={onClose} className="btn btn-ghost h-10 flex-1 px-4 text-sm leading-none">取消</button>
-          <button type="button" disabled={!rows.length || busy} onClick={() => void apply()} className="btn btn-line h-10 flex-1 px-4 text-sm leading-none disabled:opacity-40">{busy ? "导入中…" : "导入"}</button>
+          <Capsule variant="ghost" type="button" onClick={onClose} className="h-10 flex-1 px-4 text-sm leading-none">取消</Capsule>
+          <Capsule variant="primary" type="button" disabled={!rows.length || busy} onClick={() => void apply()} className="h-10 flex-1 px-4 text-sm leading-none disabled:opacity-40">{busy ? "导入中…" : "导入"}</Capsule>
         </div>
       </section>
     </div>

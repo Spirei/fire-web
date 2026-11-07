@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { isTopPriorityModal, lockScroll } from "@/lib/overlayLifecycle";
+import { useRef, useState } from "react";
+import AppModal from "@/components/AppModal";
+import AppSelect from "@/components/AppSelect";
 import { CURRENT_VERSION, VERSIONS, type VersionEntry, type ChangeKind } from "@/lib/versions";
 
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
@@ -26,12 +26,6 @@ export default function VersionModal({
   const [active, setActive] = useState<VersionEntry>(
     VERSIONS.find((v) => v.version === initialVersion) ?? CURRENT_VERSION
   );
-  const [closing, setClosing] = useState(false);
-  const closingRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -43,97 +37,7 @@ export default function VersionModal({
     window.setTimeout(() => setFlash((f) => (f === kind ? null : f)), 1500);
   }
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || e.repeat || !isTopPriorityModal(panelRef.current)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      requestClose();
-    };
-    window.addEventListener("keydown", onKey);
-    const unlockScroll = lockScroll();
-    if (isTopPriorityModal(panelRef.current)) panelRef.current?.focus({ preventScroll: true });
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      unlockScroll();
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function requestClose() {
-    if (closingRef.current) return;
-    closingRef.current = true;
-    setClosing(true);
-    closeTimer.current = setTimeout(() => onCloseRef.current(), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180);
-  }
-
-  return createPortal(
-    <div
-      data-priority-modal="true"
-      className="fixed inset-0 z-[11000] flex items-center justify-center p-4 sm:p-8"
-      role="dialog"
-      aria-modal="true"
-      aria-label="版本记录"
-    >
-      <div
-        className={`modal-scrim absolute inset-0 ${closing ? "modal-overlay-closing" : "modal-overlay"}`}
-        onClick={requestClose}
-      />
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-        className={`relative w-full max-w-[720px] max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[26px] border border-black/8 bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,.22)] outline-none dark:border-white/10 dark:bg-[#1c1c1e] dark:shadow-[0_24px_64px_rgba(0,0,0,.5)] sm:p-7 ${
-          closing ? "rb-modal-closing" : "rb-modal"
-        }`}
-      >
-        <div className="mb-5 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-[19px] font-bold leading-snug text-ink">版本记录</h3>
-            <p className="mt-1 text-[13px] text-muted">Alcor · 每次更新、修复与安全加固都会记录在版本号中</p>
-          </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full text-muted transition-colors duration-200 hover:bg-black/5 hover:text-ink dark:hover:bg-white/10"
-            aria-label="关闭"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* 版本切换（未来多版本时启用） */}
-        {VERSIONS.length > 1 && (
-          <div data-glass-group className="mb-5 flex flex-wrap gap-2">
-            {VERSIONS.map((v) => (
-              <button aria-pressed={active.version === v.version}
-                key={v.version}
-                type="button"
-                onClick={() => setActive(v)}
-                className={`relative rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors duration-200 ${
-                  active.version === v.version
-                    ? "bg-white text-ink-2 border border-edge-strong shadow-sm shadow-sm active:bg-bg-gray"
-                    : "text-muted hover:bg-brand-hover hover:text-ink dark:hover:bg-white/5"
-                }`}
-              >
-                {v.version}
-                <span
-                  className={`absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none ${
-                    active.version === v.version ? "bg-white text-brand-deep shadow-sm" : "bg-white text-ink-2 border border-edge-strong shadow-sm"
-                  }`}
-                  title={`${v.changes.length} 项更新`}
-                >
-                  {v.changes.length}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
+  return <AppModal title="版本记录" desc="Alcor · 每次更新、修复与安全加固都会记录在版本号中" onClose={onClose} size="lg" headerActions={VERSIONS.length > 1 ? <AppSelect ariaLabel="版本" value={active.version} options={VERSIONS.map(v => ({value:v.version,label:`${v.version} · ${v.date}`}))} onChange={value => { const version = VERSIONS.find(v => v.version === value); if (version) setActive(version); }} className="w-full"/> : undefined}>
         {(() => {
           const countBy = (k: ChangeKind) => active.changes.filter((c) => c.kind === k).length;
           const stats = [
@@ -281,8 +185,5 @@ export default function VersionModal({
             </div>
           );
         })()}
-      </div>
-    </div>,
-    document.body
-  );
+  </AppModal>;
 }

@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { lockScroll } from "@/lib/overlayLifecycle";
 
@@ -1206,21 +1207,21 @@ function CardDetailPanel({
             </div>
           )}
           <div className="dialog-actions">
-            <button
+            <Capsule variant="secondary"
               type="button"
               onClick={() => setForm(null)}
-              className="dialog-btn dialog-btn-ghost"
+              className=""
             >
               取消
-            </button>
-            <button
+            </Capsule>
+            <Capsule variant="primary"
               type="button"
               disabled={saving}
               onClick={() => void submitEntry(form)}
-              className="dialog-btn dialog-btn-neutral"
+              className=""
             >
               {saving ? "保存中…" : "保存"}
-            </button>
+            </Capsule>
           </div>
         </AppModal>
       ) : null}
@@ -1285,21 +1286,21 @@ function CardDetailPanel({
             />
           </label>
           <div className="dialog-actions">
-            <button
+            <Capsule variant="secondary"
               type="button"
               onClick={() => setForm(null)}
-              className="dialog-btn dialog-btn-ghost"
+              className=""
             >
               取消
-            </button>
-            <button
+            </Capsule>
+            <Capsule variant="primary"
               type="button"
               disabled={saving}
               onClick={() => void submitDetails()}
-              className="dialog-btn dialog-btn-neutral"
+              className=""
             >
               {saving ? "保存中…" : "保存"}
-            </button>
+            </Capsule>
           </div>
         </AppModal>
       ) : null}

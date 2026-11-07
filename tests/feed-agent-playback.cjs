@@ -14,7 +14,8 @@ const saved={document:global.document,matchMedia:global.matchMedia,IntersectionO
 global.document={hidden:false,addEventListener(_name,fn){listeners.add(fn);},removeEventListener(_name,fn){listeners.delete(fn);}};
 media={matches:false,addEventListener(_name,fn){this.listener=fn;},removeEventListener(){this.listener=null;}};global.matchMedia=()=>media;
 global.IntersectionObserver=class{constructor(fn){this.fn=fn;observer=this;}observe(){}disconnect(){this.disconnected=true;}};
-const nodes=node=>Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...nodes(node.props?.children)]:[];
+const resolveControl=require('./helpers/shared-controls.cjs');
+const nodes=node=>{node=resolveControl(node);return Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...nodes(node.props?.children)]:[];};
 const props={image:'/local/poster.png',video:'/local/loop.mp4',name:'Alcor'};
 function render(){
   cursor=0;tree=compiled.exports.default(props);

@@ -1,4 +1,6 @@
 "use client";
+import AppModal from "@/components/AppModal";
+import { Capsule } from "@/components/Capsule";
 
 import VisibilityIcon from "@/components/VisibilityIcon";
 
@@ -1515,7 +1517,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         </div>
       </div>
     </div>
-    {maSettingsOpen && <div className="ma-settings-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMaSettingsOpen(false); }}><section className="ma-settings-dialog" role="dialog" aria-modal="true" aria-label="MA 设置"><header><button type="button" aria-label="关闭" onClick={() => setMaSettingsOpen(false)}>×</button><div><b>MA</b><span title="移动平均线周期设置">ⓘ</span></div><button type="button" className="ma-settings-done" onClick={() => setMaSettingsOpen(false)}>完成</button></header><h3>移动平均周期</h3><div className="ma-settings-list">{maConfigs.map((item, index) => <div className="ma-settings-row" key={index}><label><input type="checkbox" checked={item.enabled} onChange={(event) => updateMA(index, { enabled: event.target.checked })} /><span>MA{index + 1}</span></label><label className="ma-color-input" style={{ backgroundColor: item.color }}><input type="text" value={item.color} aria-label={`MA${index + 1} 颜色`} onChange={(event) => updateMA(index, { color: event.target.value })} /></label><div className="ma-period-stepper"><button type="button" onClick={() => updateMA(index, { period: Math.max(1, item.period - 1) })}>−</button><RainbowNumberInput allowDecimal={false} grouping={false} min={1} max={1000} value={item.period} onChange={(event) => updateMA(index, { period: Math.max(1, Math.min(1000, Number(event.target.value) || 1)) })} /><button type="button" onClick={() => updateMA(index, { period: Math.min(1000, item.period + 1) })}>＋</button></div></div>)}</div></section></div>}
+    {maSettingsOpen && <AppModal title="MA 设置" onClose={() => setMaSettingsOpen(false)} footer={<Capsule onClick={() => setMaSettingsOpen(false)}>完成</Capsule>}><h3>移动平均周期</h3><div className="ma-settings-list">{maConfigs.map((item, index) => <div className="ma-settings-row" key={index}><label><input type="checkbox" checked={item.enabled} onChange={(event) => updateMA(index, { enabled: event.target.checked })} /><span>MA{index + 1}</span></label><label className="ma-color-input" style={{ backgroundColor: item.color }}><input type="text" value={item.color} aria-label={`MA${index + 1} 颜色`} onChange={(event) => updateMA(index, { color: event.target.value })} /></label><div className="ma-period-stepper"><button type="button" onClick={() => updateMA(index, { period: Math.max(1, item.period - 1) })}>−</button><RainbowNumberInput allowDecimal={false} grouping={false} min={1} max={1000} value={item.period} onChange={(event) => updateMA(index, { period: Math.max(1, Math.min(1000, Number(event.target.value) || 1)) })} /><button type="button" onClick={() => updateMA(index, { period: Math.min(1000, item.period + 1) })}>＋</button></div></div>)}</div></AppModal>}
 
   </div>;
 }

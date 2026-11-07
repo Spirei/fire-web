@@ -1,4 +1,5 @@
 "use client";
+import { IconButton } from "@/components/Capsule";
 
 import { usePersistedState } from "@/lib/usePersistedState";
 
@@ -1661,29 +1662,29 @@ export default function CelebsView({
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold">名人持仓</h2>
             {isAdmin && (
-              <button
+              <IconButton size="sm"
                 type="button"
-                title="名人管理"
+                label="名人管理"
                 onClick={() => setManageOpen(true)}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-brand-hover hover:text-brand-deep dark:hover:bg-white/10 dark:hover:text-[#8ec2ff]"
+                className=""
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
                 </svg>
-              </button>
+              </IconButton>
             )}
             {isAdmin && (
-              <button
+              <IconButton size="sm"
                 type="button"
-                title="修改名人头像"
+                label="修改名人头像"
                 onClick={() => setAvatarPickerOpen((v) => !v)}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-brand-hover hover:text-brand-deep dark:hover:bg-white/10 dark:hover:text-[#8ec2ff]"
+                className=""
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                   <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                 </svg>
-              </button>
+              </IconButton>
             )}
           </div>
           {avatarPickerOpen && (

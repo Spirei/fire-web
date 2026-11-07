@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -63,18 +64,18 @@ export default function GroupSelect({ value, onChange, groups, brokerIcons = {} 
           placeholder="输入新券商名称"
           autoFocus
         />
-        <button
+        <Capsule variant="ghost" size="sm"
           type="button"
           onClick={() => {
             setCustomOpen(false);
             setDraft("");
             onChange("");
           }}
-          className="btn btn-ghost btn-sm flex-none"
+          className="flex-none"
           title="返回选择已有券商"
         >
           已有券商
-        </button>
+        </Capsule>
       </div>
     );
   }

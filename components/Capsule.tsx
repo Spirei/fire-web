@@ -1,21 +1,29 @@
 "use client";
+import { IconX } from "@tabler/icons-react";
 import {
   forwardRef,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
+  type AnchorHTMLAttributes,
 } from "react";
-type Variant = "primary" | "secondary";
+export type CapsuleVariant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = CapsuleVariant;
 /** Shared action/label contract: palette fill, readable ink, state and disabled treatment. */
 export const Capsule = forwardRef<
   HTMLButtonElement,
   ButtonHTMLAttributes<HTMLButtonElement> & {
     variant?: Variant;
     selected?: boolean;
+    size?: "sm" | "md" | "lg";
+    busy?: boolean;
   }
 >(function Capsule(
   {
     variant = "primary",
-    selected = false,
+    selected,
+    size = "md",
+    busy = false,
+    disabled,
     className = "",
     type = "button",
     onClick,
@@ -30,7 +38,12 @@ export const Capsule = forwardRef<
       ref={ref}
       type={type}
       className={`capsule-control ${className}`}
+      data-capsule="off"
       data-capsule-variant={variant}
+      data-size={size}
+      aria-pressed={props["aria-pressed"] ?? selected}
+      aria-busy={busy || props["aria-busy"]}
+      disabled={disabled || busy}
       data-selected={selected || undefined}
     />
   );
@@ -60,14 +73,18 @@ export const IconButton = forwardRef<
     busy?: boolean;
     size?: "sm" | "md";
     framed?: boolean;
+    tone?: "neutral" | "danger";
   }
 >(function IconButton(
   {
     label,
-    selected = false,
+    selected,
     busy = false,
     size = "md",
     framed = false,
+    tone = "neutral",
+    disabled,
+    title,
     className = "",
     type = "button",
     onClick,
@@ -82,14 +99,25 @@ export const IconButton = forwardRef<
       type={type}
       onClick={onClick}
       aria-label={label}
-      title={label}
-      aria-pressed={selected || undefined}
-      aria-busy={busy || undefined}
+      title={title ?? label}
+      aria-pressed={props["aria-pressed"] ?? selected}
+      aria-busy={busy || props["aria-busy"]}
+      disabled={disabled || busy}
       data-busy={busy || undefined}
       data-size={size}
       data-framed={framed || undefined}
+      data-tone={tone}
       data-capsule="off"
       className={`capsule-icon-control ${className}`}
     />
   );
+});
+
+/** The same close control is used by modal headers and compact overlays. */
+export function CloseButton(props: Omit<Parameters<typeof IconButton>[0], "label" | "children"> & {label?: string}) {
+  return <IconButton {...props} label={props.label || "关闭"} size={props.size || "sm"}><IconX /></IconButton>;
+}
+
+export const CapsuleLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & {href: string; variant?: Variant; size?: "sm" | "md" | "lg"}>(function CapsuleLink({href,variant="primary",size="md",className="",...props},ref){
+  return <a {...props} ref={ref} href={href} className={`capsule-control ${className}`} data-capsule-variant={variant} data-size={size}/>;
 });

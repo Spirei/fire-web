@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import AppModal from "@/components/AppModal";
@@ -149,9 +150,9 @@ export default function HoldingDividendDialog({
       draggable
       onClose={onClose}
       headerActions={
-        <button type="button" disabled={settling || !firstBuy} onClick={() => void settleMissing()} className="btn-line h-9 shrink-0 px-3 text-xs disabled:opacity-50">
+        <Capsule variant="secondary" type="button" disabled={settling || !firstBuy} onClick={() => void settleMissing()} className="h-9 shrink-0 px-3 text-xs disabled:opacity-50">
           {settling ? "补录中…" : missing ? `补充缺失 ${missing}` : "同步入账"}
-        </button>
+        </Capsule>
       }
     >
       {loading ? (

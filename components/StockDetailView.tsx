@@ -1,4 +1,5 @@
 "use client";
+import { IconButton, Capsule } from "@/components/Capsule";
 
 import { useWorkspaceSearchParams as useSearchParams } from "@/lib/workspacePanel";
 
@@ -674,7 +675,7 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
               <span className="text-[11px] text-muted">{it.label}</span>
               <div className="mt-0.5 flex min-w-0 items-center gap-1" style={{ color: it.color }}>
                 <span className="truncate text-[13px] font-semibold tabular-nums">{it.value}</span>
-                {it.dots && <button type="button" onClick={() => setShowCur(true)} className="flex h-5 w-4 flex-none items-center justify-center rounded text-muted transition-colors hover:bg-brand-hover hover:text-ink" aria-label="多币种市值" title="多币种市值"><svg viewBox="0 0 4 16" fill="currentColor" className="h-4 w-1"><circle cx="2" cy="3" r="1"/><circle cx="2" cy="8" r="1"/><circle cx="2" cy="13" r="1"/></svg></button>}
+                {it.dots && <IconButton size="sm" type="button" onClick={() => setShowCur(true)} className="flex-none" label="多币种市值" title="多币种市值"><svg viewBox="0 0 4 16" fill="currentColor" className="h-4 w-1"><circle cx="2" cy="3" r="1"/><circle cx="2" cy="8" r="1"/><circle cx="2" cy="13" r="1"/></svg></IconButton>}
               </div>
             </div>
           ))}
@@ -996,9 +997,9 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
                 {!mainStock && (
                   <div className="flex justify-center pt-3">
                     {!relatedEditorOpen ? (
-                      <button type="button" onClick={() => setRelatedEditorOpen(true)} aria-label="添加相关股票" className="grid h-9 w-9 place-items-center rounded-full border border-dashed border-edge-strong text-muted transition hover:bg-bg-gray hover:text-ink">
+                      <IconButton size="md" framed type="button" onClick={() => setRelatedEditorOpen(true)} label="添加相关股票" className="">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg>
-                      </button>
+                      </IconButton>
                     ) : (
                       <div className="grid w-full max-w-2xl grid-cols-1 gap-2 text-left sm:grid-cols-[minmax(240px,1fr)_110px_140px_auto]">
                         <StockSearch
@@ -1011,7 +1012,7 @@ export default function StockDetailView({ market, initialNow = 0, code, name, qu
                         />
                         <AppSelect value={relatedDraft.kind} onChange={(value) => setRelatedDraft((draft) => ({ ...draft, kind: value as RelatedETF["kind"] }))} options={[{ value: "long", label: "做多" }, { value: "short", label: "做空" }, { value: "income", label: "收益策略" }]} className="h-9 rounded-lg border border-edge-strong bg-white px-2 text-xs text-ink dark:bg-[#1c1c1e]" ariaLabel="关联类型" />
                         <span className="flex h-9 min-w-0 items-center truncate rounded-lg border border-edge bg-bg-gray px-3 text-xs text-muted" title={`默认关联 ${displayName} ${code}`}>正股 · {displayName} {code}</span>
-                        <div className="flex gap-2"><button type="button" onClick={addCustomRelatedEtf} className="btn btn-dark btn-sm">添加</button><button type="button" onClick={() => setRelatedEditorOpen(false)} className="btn btn-line btn-sm">取消</button></div>
+                        <div className="flex gap-2"><Capsule variant="primary" size="sm" type="button" onClick={addCustomRelatedEtf} className="">添加</Capsule><Capsule variant="secondary" size="sm" type="button" onClick={() => setRelatedEditorOpen(false)} className="">取消</Capsule></div>
                       </div>
                     )}
                   </div>

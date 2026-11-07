@@ -292,7 +292,7 @@ export default function ActivitiesView({ userLogs = [], systemLogs = [], isAdmin
             placeholder="搜索"
             className="h-8 w-[148px] rounded-lg border border-edge bg-transparent px-2.5 text-[13px] outline-none transition placeholder:text-faint focus:border-ink dark:focus:border-white sm:w-[180px]"
           />
-          {onRefresh && <RefreshButton onClick={() => void refreshLogs()} title={refreshing ? "正在刷新日志" : "刷新日志"} />}
+          {onRefresh && <RefreshButton busy={refreshing} onClick={() => void refreshLogs()} title={refreshing ? "正在刷新日志" : "刷新日志"} />}
         </div>}
       </div>
 

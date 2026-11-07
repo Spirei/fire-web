@@ -1,4 +1,5 @@
 "use client";
+import { Capsule, CloseButton } from "@/components/Capsule";
 
 import VisibilityIcon from "@/components/VisibilityIcon";
 
@@ -201,21 +202,14 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
             {totpTicket ? (useBackupCode ? "请输入一次性备用码" : "请输入验证器中的 6 位数字") : mode === "login" ? "欢迎回来，继续你的投资记录" : "创建账号，数据独立保存在服务端"}
           </p>}
         </div>
-        {!authorizationLogin && <button
-          type="button"
-          onClick={() => (onClose ? onClose() : router.push("/"))}
-          aria-label="关闭"
-          className="grid h-9 w-9 place-items-center rounded-full text-faint transition-colors hover:bg-bg-gray hover:text-ink"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M18 6 6 18M6 6l12 12" /></svg>
-        </button>}
+        {!authorizationLogin && <CloseButton onClick={() => (onClose ? onClose() : router.push("/"))} />}
       </div>}
 
       {/* 登录方式：用户名 / 邮箱 */}
       {mode === "login" && !totpTicket && !recovering && (
         <div className="mt-6 grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
           {([["username", "用户名登录"], ["email", "邮箱登录"]] as const).map(([key, label]) => (
-            <button aria-pressed={loginType === key}
+            <Capsule variant="secondary" selected={loginType === key} aria-pressed={loginType === key}
               key={key}
               type="button"
               onClick={() => { setLoginType(key); setError(""); }}
@@ -224,7 +218,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
               }`}
             >
               {label}
-            </button>
+            </Capsule>
           ))}
         </div>
       )}
@@ -339,13 +333,13 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
         {error && <p className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{error}</p>}
 
         {/* 主按钮：填写完整才可点，未填呈禁用 */}
-        <button
+        <Capsule size="lg"
           type="submit"
           disabled={loading || !formValid || retrySeconds > 0}
-          className="mt-1 h-[46px] rounded-[10px] bg-[#1FBE9E] text-[15px] font-bold text-white transition-all duration-200 hover:bg-[#17A887] active:scale-[.98] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint dark:disabled:bg-[#263040] dark:disabled:text-[#aab4c2]"
+          className="mt-1 w-full"
         >
           {retrySeconds > 0 ? (retrySeconds >= 3600 ? `${Math.ceil(retrySeconds / 3600)} 小时后重试` : retrySeconds >= 60 ? `${Math.ceil(retrySeconds / 60)} 分钟后重试` : `${retrySeconds} 秒后重试`) : loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : emailRegistration ? registrationEmail ? "验证并注册" : "获取验证码" : "注册并登录"}
-        </button>
+        </Capsule>
 
 
         {totpTicket && (

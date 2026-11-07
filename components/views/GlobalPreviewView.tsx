@@ -1,4 +1,5 @@
 "use client";
+import Pagination from "@/components/Pagination";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
@@ -391,25 +392,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
         </div>
       )}
       {pageSize && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            disabled={safePage <= 1}
-            onClick={() => setPage(safePage - 1)}
-            className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-40 dark:border-[#3b4354] dark:text-[#e7ebf1] dark:hover:bg-white/5"
-          >
-            上一页
-          </button>
-          <span className="text-xs text-muted">第 {safePage} / {totalPages} 页</span>
-          <button
-            type="button"
-            disabled={safePage >= totalPages}
-            onClick={() => setPage(safePage + 1)}
-            className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-40 dark:border-[#3b4354] dark:text-[#e7ebf1] dark:hover:bg-white/5"
-          >
-            下一页
-          </button>
-        </div>
+        <Pagination page={safePage} total={totalPages} onChange={setPage}/>
       )}
     </div>
   );

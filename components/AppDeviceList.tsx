@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useRef, useState } from "react";
 import AppModal from "@/components/AppModal";
@@ -114,8 +115,8 @@ export default function AppDeviceList({ brand, onAppearance, compact = false }: 
     {target && <AppModal title="断开连接？" desc={`撤销「${target.name}」的访问权限。`} onClose={() => { if (!inFlight.current) setTarget(null); }} closeDisabled={busy} priority>
       {revokeError && <p role="alert" className={styles.error}>{revokeError}</p>}
       <div className="mt-5 flex justify-end gap-2.5">
-        <button type="button" disabled={busy} onClick={() => setTarget(null)} className="dialog-btn dialog-btn-ghost">取消</button>
-        <button type="button" disabled={busy} onClick={() => void revoke()} className="dialog-btn dialog-btn-danger">{busy ? "正在断开…" : "断开连接"}</button>
+        <Capsule variant="secondary" type="button" disabled={busy} onClick={() => setTarget(null)} className="">取消</Capsule>
+        <Capsule variant="danger" type="button" disabled={busy} onClick={() => void revoke()} className="">{busy ? "正在断开…" : "断开连接"}</Capsule>
       </div>
     </AppModal>}
   </div>;

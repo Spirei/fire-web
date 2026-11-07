@@ -1,10 +1,11 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import VisibilityIcon from "@/components/VisibilityIcon";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { marketMeta, type StockRecord } from "@/lib/types";
-import AppModal from "@/components/AppModal";
+import AppModal, { ModalActions } from "@/components/AppModal";
 import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
 import StockSearch from "@/components/StockSearch";
@@ -499,7 +500,7 @@ export default function WatchGroupSheet({
               <div><h4 className="text-base font-bold text-ink">{activeGroup?.name ?? "全部"}</h4><p className="mt-0.5 text-xs text-muted">{activeMembers.length} 只股票</p></div>
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <button type="button" disabled={memberSelection.size === 0} onClick={() => setMoveMenuOpen((open) => !open)} className="btn btn-ghost btn-sm disabled:opacity-40">移动到分组{memberSelection.size ? ` (${memberSelection.size})` : ""}</button>
+                  <Capsule variant="ghost" size="sm" type="button" disabled={memberSelection.size === 0} onClick={() => setMoveMenuOpen((open) => !open)} className="disabled:opacity-40">移动到分组{memberSelection.size ? ` (${memberSelection.size})` : ""}</Capsule>
                   {moveMenuOpen && <div className="absolute right-0 top-full z-30 mt-2 min-w-[190px] rounded-xl border border-edge bg-white p-1.5 shadow-pop dark:bg-[#1b2230]">
                     {customGroups.filter((group) => group.id !== activeGroup?.id).map((group) => <button key={group.id} type="button" onClick={() => void moveSelectedMembers(group.id)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-muted hover:bg-brand-hover hover:text-ink">{groupIcon(group, 16)}<span className="min-w-0 flex-1 truncate">{group.name}</span></button>)}
                     {activeGroup?.kind === "custom" && <><div className="my-1 border-t border-edge"/><button type="button" onClick={() => void removeSelectedMembers()} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-muted hover:bg-down/10 hover:text-down"><DeleteIcon size={14}/>移出当前分组</button></>}
@@ -549,52 +550,14 @@ export default function WatchGroupSheet({
         </div>
       )}
 
-      {rename && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/35 p-5" role="dialog" aria-modal="true" aria-label="修改分组名称" onMouseDown={(e) => e.target === e.currentTarget && setRename(null)}>
-          <div className="w-full max-w-[380px] rounded-[22px] border border-white/70 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] dark:border-white/10 dark:bg-[#1d232e] dark:shadow-[0_28px_80px_rgba(0,0,0,.55)]">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h4 className="text-base font-bold text-ink">修改分组名称</h4>
-                <p className="mt-1 text-xs text-muted">为“{rename.label}”输入一个新名称</p>
-              </div>
-              <button type="button" onClick={() => setRename(null)} aria-label="关闭修改名称弹窗" className="grid h-8 w-8 flex-none place-items-center rounded-full text-muted transition-colors hover:bg-bg-gray hover:text-ink">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M18 6 6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <input
-              value={renameText}
-              onChange={(e) => setRenameText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") confirmRename(); if (e.key === "Escape") { e.stopPropagation(); setRename(null); } }}
-              autoFocus
-              maxLength={24}
-              placeholder="输入分组名称"
-              className="h-11 w-full rounded-xl border border-edge-strong bg-bg-gray px-3.5 text-sm font-medium text-ink outline-none transition-all placeholder:text-faint focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/10 dark:focus:bg-[#252c38]"
-            />
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setRename(null)} className="h-9 rounded-full border border-edge bg-white px-4 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10">取消</button>
-              <button type="button" onClick={confirmRename} disabled={!renameText.trim()} className="h-9 rounded-full bg-[#111] px-5 text-xs font-semibold text-white shadow-sm transition-all hover:-translate-y-px active:scale-[.98] disabled:pointer-events-none disabled:opacity-40 dark:bg-white dark:text-[#111]">保存</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {addOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[28px] bg-black/35 p-5" role="dialog" aria-modal="true" aria-label="添加分组" onMouseDown={(e) => e.target === e.currentTarget && setAddOpen(false)}>
-          <div className="w-full max-w-[380px] rounded-[22px] border border-white/70 bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,.24)] dark:border-white/10 dark:bg-[#1d232e] dark:shadow-[0_28px_80px_rgba(0,0,0,.55)]">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div><h4 className="text-base font-bold text-ink">添加分组</h4><p className="mt-1 text-xs text-muted">创建一个新的自选分组</p></div>
-              <button type="button" onClick={() => setAddOpen(false)} aria-label="关闭添加分组弹窗" className="grid h-8 w-8 flex-none place-items-center rounded-full text-muted transition-colors hover:bg-bg-gray hover:text-ink">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M18 6 6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addGroup(); if (e.key === "Escape") { e.stopPropagation(); setAddOpen(false); } }} autoFocus maxLength={24} placeholder="输入分组名称" className="h-11 w-full rounded-xl border border-edge-strong bg-bg-gray px-3.5 text-sm font-medium text-ink outline-none transition-all placeholder:text-faint focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/10 dark:focus:bg-[#252c38]" />
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setAddOpen(false)} className="h-9 rounded-full border border-edge bg-white px-4 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white/80 dark:hover:bg-white/10">取消</button>
-              <button type="button" onClick={() => void addGroup()} disabled={!newName.trim()} className="h-9 rounded-full bg-[#111] px-5 text-xs font-semibold text-white shadow-sm transition-all hover:-translate-y-px active:scale-[.98] disabled:pointer-events-none disabled:opacity-40 dark:bg-white dark:text-[#111]">添加</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {rename && <AppModal title="修改分组名称" desc={`为“${rename.label}”输入一个新名称`} onClose={() => setRename(null)}>
+        <input data-autofocus value={renameText} onChange={e => setRenameText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) confirmRename(); }} maxLength={24} placeholder="输入分组名称" className="field w-full"/>
+        <ModalActions><Capsule variant="secondary" onClick={() => setRename(null)}>取消</Capsule><Capsule onClick={confirmRename} disabled={!renameText.trim()}>保存</Capsule></ModalActions>
+      </AppModal>}
+      {addOpen && <AppModal title="添加分组" onClose={() => setAddOpen(false)}>
+        <input data-autofocus value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void addGroup(); }} maxLength={24} placeholder="输入分组名称" className="field w-full"/>
+        <ModalActions><Capsule variant="secondary" onClick={() => setAddOpen(false)}>取消</Capsule><Capsule onClick={() => void addGroup()} disabled={!newName.trim()}>添加</Capsule></ModalActions>
+      </AppModal>}
 
       <input
         ref={fileRef}

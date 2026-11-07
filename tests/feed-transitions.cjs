@@ -7,7 +7,8 @@ module.exports=async function checkTransitions(snapshot) {
   const slots=[],pending=[],requests=[],notices=[];let cursor=0,lastTree;
   let readSeen=Object.fromEntries(snapshot.peopleCatalog.map(person=>[person.id,'2000-01-01T00:00:00.000Z']));
   const persistSeen=value=>{readSeen=typeof value==='function'?value(readSeen):value;};
-  const nodes=node=>Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...nodes(node.props?.children)]:[];
+  const resolveControl=require('./helpers/shared-controls.cjs');
+  const nodes=node=>{node=resolveControl(node);return Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...nodes(node.props?.children)]:[];};
   const child=name=>nodes(lastTree).find(node=>(node.type?.name||node.type?.type?.name)===name);
   const hookReact={...React,
     useState(initial){const index=cursor++;if(!slots[index])slots[index]={value:typeof initial==='function'?initial():initial};if(!slots[index].set)slots[index].set=value=>{slots[index].value=typeof value==='function'?value(slots[index].value):value;};return [slots[index].value,slots[index].set];},
@@ -75,14 +76,14 @@ module.exports=async function checkTransitions(snapshot) {
     const queued={id:'manual-refresh-1',revision:snapshot.preferences.revision,status:'queued',added:0,error:null,createdAt:'2026-10-02T09:00:00.000Z',updatedAt:'2026-10-02T09:00:00.000Z'};
     const beforeRefresh=requests.length;refreshButton().props.onClick();refreshButton().props.onClick();
     assert.equal(requests.length,beforeRefresh+1,'two quick clicks start one manual job');assert.equal(requests.at(-1).method,'POST');
-    html=render('trump');assert(html.includes('feed-refresh-button is-working'));assert.equal(refreshButton().props['aria-busy'],true);effects();
+    html=render('trump');assert(html.includes('data-busy="true"'));assert.equal(refreshButton().props['aria-busy'],true);effects();
     requests.at(-1).resolve(queued);await settle();render('trump');effects();assert.equal(notices.length,0,'enqueue is not refresh success');
     const polling=pollTimer.fn();assert(requests.at(-1).url.endsWith('/jobs/'+queued.id));
     const completed={...queued,status:'done',added:2};requests.at(-1).resolve(completed);await polling;
     assert.equal(requests.at(-1).method,'GET');assert(requests.at(-1).url.includes('?limit='));
-    html=render('trump');effects();assert(html.includes('feed-refresh-button is-working'));assert.equal(notices.length,0,'job completion waits for the feed snapshot');
+    html=render('trump');effects();assert(html.includes('data-busy="true"'));assert.equal(notices.length,0,'job completion waits for the feed snapshot');
     requests.at(-1).resolve({...snapshot,job:completed});await settle();html=render('trump');effects();
-    assert(!html.includes('feed-refresh-button is-working'));assert.equal(refreshButton().props['aria-busy'],false);assert.deepEqual(notices,[{text:'已刷新',type:'ok'}]);
+    assert(!html.includes('data-busy="true"'));assert.equal(refreshButton().props['aria-busy'],false);assert.deepEqual(notices,[{text:'已刷新',type:'ok'}]);
     render('trump');effects();assert.equal(notices.length,1,'renders cannot repeat the success toast');
     refreshButton().props.onClick();requests.at(-1).resolve({...queued,id:'manual-superseded'});await settle();render('trump');effects();
     render('duan');effects();const newer={...queued,id:'automatic-newer',status:'searching'};
@@ -90,13 +91,13 @@ module.exports=async function checkTransitions(snapshot) {
     const supersededPoll=pollTimer.fn();assert(requests.at(-1).url.endsWith('/jobs/manual-superseded'),'poll follows the clicked job when a newer background job appears');
     requests.at(-1).resolve({...completed,id:'manual-superseded'});await supersededPoll;
     requests.at(-1).resolve({...select('duan'),job:{...newer,status:'done'}});await settle();html=render('duan');effects();
-    assert(!html.includes('feed-refresh-button is-working'));assert.deepEqual(notices.at(-1),{text:'已刷新',type:'ok'});
+    assert(!html.includes('data-busy="true"'));assert.deepEqual(notices.at(-1),{text:'已刷新',type:'ok'});
     refreshButton().props.onClick();requests.at(-1).resolve({...completed,id:'manual-partial',error:'some sources failed'});await settle();
     requests.at(-1).resolve({...snapshot,job:{...completed,id:'manual-partial',error:'some sources failed'}});await settle();html=render('duan');effects();
-    assert(!html.includes('feed-refresh-button is-working'));assert.deepEqual(notices.at(-1),{text:'部分来源未更新',type:'err'});
+    assert(!html.includes('data-busy="true"'));assert.deepEqual(notices.at(-1),{text:'部分来源未更新',type:'err'});
     refreshButton().props.onClick();requests.at(-1).resolve({...completed,id:'manual-read-failure'});await settle();
     requests.at(-1).reject(new client.FeedRequestError('snapshot unavailable'));await settle();html=render('duan');effects();
-    assert(!html.includes('feed-refresh-button is-working'));assert.deepEqual(notices.at(-1),{text:'读取刷新结果失败',type:'err'});
+    assert(!html.includes('data-busy="true"'));assert.deepEqual(notices.at(-1),{text:'读取刷新结果失败',type:'err'});
     const beforeBackground=notices.length;
     render('trump');effects();requests.at(-1).resolve({...select('trump'),job:{...completed,id:'automatic-refresh'}});await settle();render('trump');effects();
     assert.equal(notices.length,beforeBackground,'background completions stay silent');

@@ -1,7 +1,7 @@
 "use client";
 
 import { IconPencil, IconKey, IconShieldLock, IconFingerprint } from "@tabler/icons-react";
-import { CapsuleBadge, IconButton } from "@/components/Capsule";
+import { CapsuleBadge, IconButton, Capsule } from "@/components/Capsule";
 import PasswordInput from "@/components/PasswordInput";
 
 import { useEffect, useLayoutEffect, useState } from "react";
@@ -250,11 +250,11 @@ export default function UsersView() {
             <span><b className="mr-1 font-semibold text-ink">{adminCount}</b>管理员</span>
           </div>
         </div>
-        <button type="button" onClick={() => load({ force: true })} disabled={loading} aria-label="刷新用户列表" title="刷新用户列表" className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-50 dark:bg-[#151a26] dark:hover:bg-white/10">
+        <IconButton size="md" framed type="button" onClick={() => load({ force: true })} disabled={loading} label="刷新用户列表" title="刷新用户列表" className="">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
           </svg>
-        </button>
+        </IconButton>
       </div>
 
       {msg && (
@@ -317,10 +317,10 @@ export default function UsersView() {
         )}
       </div>
 
-      {passkeyUser&&<AppModal title={`${passkeyUser.nickname||passkeyUser.username}的通行密钥`} onClose={()=>setPasskeyUser(null)}>{passkeyError?<p role="alert">{passkeyError}</p>:passkeyKeys===null?<p role="status">正在读取</p>:passkeyKeys.length?passkeyKeys.map(k=><div key={k.id} className="user-passkey-row"><IconFingerprint size={20}/><div><strong>{k.name||"通行密钥"}</strong><small>{k.rpID}</small><small>创建于 {fmtDateTime(new Date(k.createdAt).toISOString())}</small></div></div>):<p>尚未添加通行密钥</p>}{passkeyUser.id===me&&<button className="btn" type="button" onClick={()=>{setPasskeyUser(null);window.dispatchEvent(new CustomEvent("fire:navigate",{detail:{tab:"settings",sub:"passkeys"}}));}}>管理我的通行密钥</button>}</AppModal>}
+      {passkeyUser&&<AppModal title={`${passkeyUser.nickname||passkeyUser.username}的通行密钥`} onClose={()=>setPasskeyUser(null)}>{passkeyError?<p role="alert">{passkeyError}</p>:passkeyKeys===null?<p role="status">正在读取</p>:passkeyKeys.length?passkeyKeys.map(k=><div key={k.id} className="user-passkey-row"><IconFingerprint size={20}/><div><strong>{k.name||"通行密钥"}</strong><small>{k.rpID}</small><small>创建于 {fmtDateTime(new Date(k.createdAt).toISOString())}</small></div></div>):<p>尚未添加通行密钥</p>}{passkeyUser.id===me&&<Capsule variant="secondary" className="" type="button" onClick={()=>{setPasskeyUser(null);window.dispatchEvent(new CustomEvent("fire:navigate",{detail:{tab:"settings",sub:"passkeys"}}));}}>管理我的通行密钥</Capsule>}</AppModal>}
       {/* 编辑弹窗 */}
       {editUser && (
-        <AppModal title="编辑用户" desc={`修改「${editUser.username}」的资料`} onClose={() => setEditUser(null)}>
+        <AppModal closeDisabled={busy} title="编辑用户" desc={`修改「${editUser.username}」的资料`} onClose={() => setEditUser(null)}>
           <form onSubmit={saveEdit} className="flex flex-col gap-4">
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
               用户名
@@ -336,8 +336,8 @@ export default function UsersView() {
               <AppSelect value={editUser.role} onChange={(role) => setEditUser((current) => current ? { ...current, role: role as "user" | "admin" } : current)} options={[{ value: "user", label: "普通用户" }, { value: "admin", label: "管理员" }]} className="field" ariaLabel="角色" />
             </label>
             <div className="mt-1 flex justify-end gap-2.5 border-t border-edge pt-4">
-              <button type="button" onClick={() => setEditUser(null)} className="btn btn-ghost btn-sm">取消</button>
-              <button type="submit" disabled={busy} className="btn btn-line btn-sm disabled:opacity-60">{busy ? "保存中…" : "保存"}</button>
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => setEditUser(null)} className="">取消</Capsule>
+              <Capsule variant="primary" size="sm" type="submit" disabled={busy} className="disabled:opacity-60">{busy ? "保存中…" : "保存"}</Capsule>
             </div>
           </form>
         </AppModal>
@@ -345,7 +345,7 @@ export default function UsersView() {
 
       {/* 重置密码弹窗 */}
       {resetUser && (
-        <AppModal title="重置密码" desc={`为「${resetUser.username}」设置新密码`} onClose={() => setResetUser(null)}>
+        <AppModal closeDisabled={busy} title="重置密码" desc={`为「${resetUser.username}」设置新密码`} onClose={() => setResetUser(null)}>
           <form onSubmit={doResetPassword} className="flex flex-col gap-4">
             <p className="rounded-[10px] bg-bg-gray px-3.5 py-2.5 text-[13px] text-muted">重置密码会同时撤销该用户的二次验证、通行密钥和所有登录会话。</p>
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
@@ -353,8 +353,8 @@ export default function UsersView() {
               <PasswordInput name="newPassword" type="password" required minLength={8} autoComplete="new-password" className="field" />
             </label>
             <div className="mt-1 flex justify-end gap-2.5 border-t border-edge pt-4">
-              <button type="button" onClick={() => setResetUser(null)} className="btn btn-ghost btn-sm">取消</button>
-              <button type="submit" disabled={busy} className="btn btn-line btn-sm disabled:opacity-60">{busy ? "提交中…" : "确认重置"}</button>
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => setResetUser(null)} className="">取消</Capsule>
+              <Capsule variant="primary" size="sm" type="submit" disabled={busy} className="disabled:opacity-60">{busy ? "提交中…" : "确认重置"}</Capsule>
             </div>
           </form>
         </AppModal>

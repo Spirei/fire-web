@@ -1,4 +1,5 @@
 "use client";
+import { IconButton } from "@/components/Capsule";
 
 import { lockScroll } from "@/lib/overlayLifecycle";
 
@@ -1671,16 +1672,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
             className={`h-11 w-full rounded-xl border border-edge bg-white pl-10 pr-11 text-[15px] text-ink placeholder:text-faint transition-all duration-200 hover:border-edge-strong sm:h-10 sm:text-sm dark:bg-[#1c222d] ${FOCUS_RING}`}
           />
           {query.length > 0 && (
-            <button
+            <IconButton size="sm"
               type="button"
               onClick={() => setQuery("")}
-              aria-label="清空搜索"
-              className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-muted transition-colors duration-200 hover:bg-bg-gray hover:text-ink-2 dark:hover:bg-white/10"
+              label="清空搜索"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>
-            </button>
+            </IconButton>
           )}
       </div>
         {/* 筛选：币种范围 / 地区 / 银行 / 卡组织 / 等级 / 主题 / 我的标签都收在这一个按钮后面 */}
@@ -2169,16 +2170,16 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   素材库里没有的卡：上传卡面 + 填卡片信息，保存后进「全部卡面」，并同步到「素材库 → 卡片」
                 </p>
               </div>
-              <button
+              <IconButton size="sm"
                 type="button"
                 onClick={() => setAddOpen(false)}
-                aria-label="关闭"
-                className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8"
+                label="关闭"
+                className="flex-none"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
                   <path d="m6 6 12 12M18 6 6 18" />
                 </svg>
-              </button>
+              </IconButton>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
@@ -2391,9 +2392,9 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                   </p>
                 )}
               </div>
-              <button type="button" onClick={() => setActive(null)} aria-label="关闭" className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted transition hover:bg-bg-gray hover:text-ink-2 sm:h-8 sm:w-8">
+              <IconButton size="sm" type="button" onClick={() => setActive(null)} label="关闭" className="flex-none">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="m6 6 12 12M18 6 6 18" /></svg>
-              </button>
+              </IconButton>
             </div>
             <div className="overflow-y-auto overscroll-contain bg-bg-gray px-4 py-4 sm:px-5 sm:py-5 dark:bg-black/20">
               <div className="group/card relative mx-auto w-full max-w-[560px]">
@@ -2725,18 +2726,18 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
                     className={`h-9 w-[112px] rounded-full border border-edge bg-white px-2.5 text-[12px] text-ink placeholder:text-faint transition-all duration-200 sm:h-7 sm:w-[100px] sm:text-[11px] dark:bg-[#1c222d] ${FOCUS_RING}`}
                   />
                 ) : (
-                  <button
+                  <IconButton size="sm" framed
                     type="button"
                     onClick={() => setTagInputOpen(true)}
                     disabled={activeUserTags.length >= 10}
-                    aria-label="添加自定义标签"
+                    label="添加自定义标签"
                     title={activeUserTags.length >= 10 ? "最多 10 个标签" : "添加自定义标签"}
-                    className="grid h-9 w-9 place-items-center rounded-full border border-dashed border-edge-strong text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-40 sm:h-7 sm:w-7"
+                    className=""
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-3.5 w-3.5">
                       <path d="M12 5v14M5 12h14" />
                     </svg>
-                  </button>
+                  </IconButton>
                 )}
               </div>
             </div>

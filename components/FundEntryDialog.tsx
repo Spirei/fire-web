@@ -1,9 +1,9 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
-import { lockScroll } from "@/lib/overlayLifecycle";
+import AppModal, { ModalActions } from "@/components/AppModal";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import CurrencySelect from "@/components/CurrencySelect";
 import { fundCurrencyOptions, fundCurrencySymbol, FUND_CURRENCY_META, type FundCurrency } from "@/lib/fundCurrencies";
 import { fmtMoneyAdaptive, localDateKey } from "@/lib/format";
@@ -60,7 +60,7 @@ function FundDatePicker({ value, onChange, max }: { value: string; onChange: (va
     </button>
     {open && <>
       <button type="button" aria-label="关闭日期选择" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-      <div className="relative z-50 mt-2 w-full rounded-2xl border border-edge-strong bg-white p-3 shadow-pop dark:border-[#343d4d] dark:bg-[#1d2430] sm:absolute sm:bottom-full sm:right-0 sm:mb-2 sm:mt-0 sm:w-[286px]">
+      <div className="relative z-50 mt-2 w-full rounded-2xl border border-edge-strong bg-white p-3 shadow-pop dark:border-[#343d4d] dark:bg-[#1d2430]">
         <div className="mb-3 flex items-center justify-between px-1">
           <button type="button" onClick={() => setMonth(new Date(year, mon - 1, 1))} className="flex h-7 w-7 items-center justify-center rounded-full text-muted hover:bg-bg-gray hover:text-ink" aria-label="上个月">‹</button>
           <strong className="text-xs tabular-nums">{year} 年 {mon + 1} 月</strong>
@@ -73,9 +73,9 @@ function FundDatePicker({ value, onChange, max }: { value: string; onChange: (va
           const disabled = date > max;
           const active = date === selected;
           const isToday = date === today;
-          return <button aria-pressed={active} key={date} type="button" disabled={disabled} onClick={() => { onChange(date); setOpen(false); }} className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-[11px] tabular-nums transition ${active ? "bg-[#3297f6] font-bold text-white shadow-sm" : disabled ? "cursor-not-allowed text-faint opacity-35" : "text-ink hover:bg-bg-gray"}`}>{day}{isToday && !active && <i className="absolute bottom-0.5 h-1 w-1 rounded-full bg-[#3297f6]" />}</button>;
+          return <button aria-pressed={active} key={date} type="button" disabled={disabled} onClick={() => { onChange(date); setOpen(false); }} className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-[11px] tabular-nums transition ${active ? "bg-[var(--capsule-fill)] font-bold text-white shadow-sm" : disabled ? "cursor-not-allowed text-faint opacity-35" : "text-ink hover:bg-bg-gray"}`}>{day}{isToday && !active && <i className="absolute bottom-0.5 h-1 w-1 rounded-full bg-[var(--capsule-fill)]" />}</button>;
         })}</div>
-        <div className="mt-3 flex items-center justify-between border-t border-edge px-1 pt-3"><span className="text-[9px] text-muted">未来日期不可选择</span><button type="button" onClick={() => { onChange(today); setMonth(new Date()); setOpen(false); }} className="text-[10px] font-semibold text-[#3297f6] hover:underline">回到今天</button></div>
+        <div className="mt-3 flex items-center justify-between border-t border-edge px-1 pt-3"><span className="text-[9px] text-muted">未来日期不可选择</span><button type="button" onClick={() => { onChange(today); setMonth(new Date()); setOpen(false); }} className="text-[10px] font-semibold text-[var(--capsule-fill)] hover:underline">回到今天</button></div>
       </div>
     </>}
   </div>;
@@ -119,26 +119,9 @@ export default function FundEntryDialog(props: Props) {
   }, [displayAmount]);
   const projectedBalance = props.currentBalance + (amountValid ? amountValue * props.direction : 0);
   const responsiveMoney = (value: number) => fmtMoneyAdaptive(value, symbol);
-  useEffect(() => {
-    const unlockScroll = lockScroll();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || event.repeat || document.querySelector("[data-priority-modal='true']")) return;
-      event.preventDefault();
-      if (!props.saving) props.onClose();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => { unlockScroll(); window.removeEventListener("keydown", closeOnEscape); };
-  }, [props.onClose, props.saving]);
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4" role="presentation" onMouseDown={(event) => { if (!props.saving && event.target === event.currentTarget) props.onClose(); }}>
-      <form onSubmit={(event) => { event.preventDefault(); if (!props.saving && amountValid && Number.isFinite(props.currentBalance)) props.onSubmit(); }} role="dialog" aria-modal="true" aria-labelledby="fund-dialog-title" className="max-h-[calc(100dvh-32px)] w-full max-w-[420px] overflow-y-auto rounded-[20px] border border-edge bg-white shadow-2xl dark:bg-[#1b2029] sm:max-h-none sm:overflow-visible">
-        <div className="flex items-start justify-between border-b border-edge px-5 py-4">
-          <div><h3 id="fund-dialog-title" className="text-base font-bold">新增资金记录</h3><p className="mt-1 text-[11px] text-muted">记录后将同步更新现金余额与账户净资产</p></div>
-          <button type="button" disabled={props.saving} onClick={props.onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-edge text-lg leading-none text-muted transition hover:bg-bg-gray hover:text-ink disabled:opacity-40" aria-label="关闭">×</button>
-        </div>
-
-        <div className="space-y-4 px-5 py-5">
+  return <AppModal title="新增资金记录" desc="记录后将同步更新现金余额与账户净资产" size="sm" onClose={props.onClose} closeDisabled={props.saving}>
+    {(requestClose) => <form onSubmit={(event) => { event.preventDefault(); if (!props.saving && amountValid && Number.isFinite(props.currentBalance)) props.onSubmit(); }}>
+        <div className="space-y-4">
           <div>
             <span className="mb-2 block text-[11px] font-semibold text-muted">资金方向</span>
             <div className="mx-auto grid w-fit grid-cols-2 gap-1 rounded-full border border-edge bg-bg-gray p-1 dark:bg-[#141a24] sm:w-full">
@@ -171,7 +154,7 @@ export default function FundEntryDialog(props: Props) {
           <div>
             <span className="mb-2 block text-[11px] font-semibold text-muted">资金类型</span>
             <div className="grid grid-cols-3 gap-2">
-              {TYPE_OPTIONS.map((option) => <button key={option.value} type="button" aria-pressed={props.type === option.value} onClick={() => props.setType(option.value)} className={`rounded-xl border px-2 py-2.5 text-left transition ${props.type === option.value ? "border-edge-strong bg-bg-gray shadow-sm dark:bg-[#252d39]" : "border-edge hover:bg-bg-gray/60"}`}><b className="block text-[11px]">{option.label}</b><small className="mt-0.5 block text-[9px] text-muted">{option.hint}</small></button>)}
+              {TYPE_OPTIONS.map((option) => <Capsule variant="secondary" selected={props.type === option.value} key={option.value} type="button" onClick={() => props.setType(option.value)} className="fund-type-choice"><b className="block text-[11px]">{option.label}</b><small className="mt-0.5 block text-[9px] text-muted">{option.hint}</small></Capsule>)}
             </div>
           </div>
 
@@ -180,12 +163,10 @@ export default function FundEntryDialog(props: Props) {
           <label className="block"><span className="mb-2 block text-[11px] font-semibold text-muted">备注 <i className="font-normal not-italic text-faint">选填</i></span><input value={props.note} onChange={(event) => props.setNote(event.target.value)} maxLength={200} placeholder="" className="h-10 w-full rounded-xl border border-edge bg-white px-3 text-sm dark:bg-[#151a23]" /></label>
         </div>
 
-        <div className="flex items-center justify-end gap-2.5 border-t border-edge px-5 py-4">
-          <button type="button" disabled={props.saving} onClick={props.onClose} className="rounded-lg px-4 py-2 text-xs font-semibold text-muted transition hover:bg-bg-gray hover:text-ink disabled:opacity-40">取消</button>
-          <button type="submit" disabled={props.saving || !amountValid || !Number.isFinite(props.currentBalance)} className="btn-line min-w-[98px] px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40">{props.saving ? "保存中…" : "确认记录"}</button>
-        </div>
-      </form>
-    </div>,
-    document.body
-  );
+        <ModalActions>
+          <Capsule variant="secondary" disabled={props.saving} onClick={requestClose}>取消</Capsule>
+          <Capsule type="submit" disabled={!amountValid || !Number.isFinite(props.currentBalance)} busy={props.saving}>{props.saving ? "保存中…" : "确认记录"}</Capsule>
+        </ModalActions>
+      </form>}
+    </AppModal>;
 }

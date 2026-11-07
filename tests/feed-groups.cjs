@@ -5,7 +5,8 @@ module.exports=async function checkGroupSwitches(snapshot) {
   const client=require('../lib/feedClient.ts'),originalLoad=Module._load,requests=[],pending=[],parents=[],seen=new Map();
   let hooks=parents,cursor=0,query=new URLSearchParams(),mounted=null,parentTree,tree,locationActive=true;
   const historyWrites=[];
-  const nodes=node=>Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...nodes(node.props?.children)]:[];
+  const resolveControl=require('./helpers/shared-controls.cjs');
+const nodes=node=>{node=resolveControl(node);return Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...nodes(node.props?.children)]:[];};
   const hookReact={...React,
     useState(initial){const target=hooks,index=cursor++;if(!target[index])target[index]={value:typeof initial==='function'?initial():initial};if(!target[index].set)target[index].set=value=>{target[index].value=typeof value==='function'?value(target[index].value):value;};return [target[index].value,target[index].set];},
     useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={current:initial};return hooks[index];},

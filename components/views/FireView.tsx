@@ -1,4 +1,5 @@
 "use client";
+import { IconButton, Capsule } from "@/components/Capsule";
 
 import { sharedRead } from "@/lib/sharedRead";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -865,15 +866,15 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             </svg>
           </button>
           <div className="relative">
-            <button
+            <IconButton size="sm" framed
               type="button"
               onClick={() => setCurrencyMenuOpen((o) => !o)}
               aria-expanded={currencyMenuOpen}
-              title="切换显示币种"
-              className="fire-currency-switch inline-flex h-8 w-8 items-center justify-center rounded-full border border-edge bg-white dark:border-edge-strong dark:bg-[#1c1c1e] dark:hover:bg-[#26282e]"
+              label="切换显示币种"
+              className=""
             >
               <CurrencyFlag market={curOption.market} size={18} />
-            </button>
+            </IconButton>
             {currencyMenuOpen && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setCurrencyMenuOpen(false)} />
@@ -1187,14 +1188,14 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                             <span title="自然年结束后，该年度数据不可再修改" className="rounded-full bg-bg-gray px-1.5 py-0.5 text-[9px] font-semibold text-muted dark:bg-white/10 dark:text-white/60">已冻结</span>
                         )}
                         {editing && !isPast && row.year !== currentYear && (
-                          <button
+                          <IconButton size="sm"
                             type="button"
                             onClick={() => removeYear(row.year)}
-                            title="删除该年"
-                            className="grid h-5 w-5 place-items-center rounded-full text-muted transition-colors hover:bg-[#e5484d]/15 hover:text-[#e5484d]"
+                            label="删除该年"
+                            className=""
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3 w-3"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                          </button>
+                          </IconButton>
                         )}
                       </span>
                     </td>
@@ -1260,14 +1261,14 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       </div>
       {/* 添加年份（默认只到 2030，点加号往后扩） */}
       <div className="fire-year-actions mt-2 flex justify-start">
-        <button
+        <Capsule variant="ghost" size="sm"
           type="button"
           onClick={addYear}
-          className="btn btn-ghost btn-sm"
+          className=""
           title="追加年份"
         >
           ＋ 添加年份
-        </button>
+        </Capsule>
       </div>
       {/* 汇率信息（右下角）：1 USD = X 显示币种 · 更新于日期 */}
       <div className="mt-3 flex justify-end">

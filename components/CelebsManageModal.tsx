@@ -1,4 +1,6 @@
 "use client";
+import AppModal from "@/components/AppModal";
+import { IconButton, Capsule } from "@/components/Capsule";
 
 import { useEffect, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
@@ -347,42 +349,9 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
           : 720
     : 24;
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="名人管理">
-      <div className="modal-scrim absolute inset-0 modal-overlay" onClick={onClose} />
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-[860px] flex-col overflow-hidden rounded-[22px] border border-black/8 bg-white shadow-[0_24px_64px_rgba(0,0,0,.22)] dark:border-white/10 dark:bg-[#1c1c1e]"
-      >
-        {/* 头部 */}
-        <div className="flex items-center justify-between border-b border-edge px-6 py-4 dark:border-[#2a3140]">
-          <div>
-            <h3 className="text-[17px] font-bold text-ink">名人管理</h3>
-            <p className="mt-0.5 text-[12px] text-muted">新增 / 编辑 / 排序名人，数据来源与持仓可维护，保存后前台立即生效</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {!draft && (
-              <button
-                type="button"
-                onClick={() => setDraft(emptyDraft())}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#e4e7ea] px-3.5 py-2 text-xs font-semibold leading-none whitespace-nowrap text-[#3f4652] transition-all duration-200 hover:-translate-y-px hover:bg-[#d7dbe0] dark:bg-[#3b4354] dark:text-white dark:hover:bg-[#4a5568]"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-3.5 w-3.5">
-                  <path d="M12 5v14" /><path d="M5 12h14" />
-                </svg>
-                新增名人
-              </button>
-            )}
-            <button type="button" onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-black/5 hover:text-ink dark:hover:bg-white/10" aria-label="关闭">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
-                <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
+  return <AppModal title="名人管理" desc="新增 / 编辑 / 排序名人，数据来源与持仓可维护，保存后前台立即生效" size="xl" onClose={onClose} closeDisabled={busy} headerActions={!draft ? <Capsule size="sm" onClick={() => setDraft(emptyDraft())}>新增名人</Capsule> : undefined}>
         {/* 内容 */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="min-w-0">
           {draft ? (
             <div className="space-y-5">
               {/* 股票图标上传（名人专属，不全局） */}
@@ -429,11 +398,11 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                   </label>
                 </div>
                 <div className="mt-3 flex items-center gap-3">
-                  <button
+                  <IconButton size="md"
                     type="button"
-                    title="上传头像"
+                    label="上传头像"
                     onClick={() => avatarRef.current?.click()}
-                    className="group relative flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-full ring-1 ring-black/10 transition-all duration-300 hover:scale-110 hover:ring-2 hover:ring-[#9aa1ab] dark:ring-white/15"
+                    className="group relative flex-none overflow-hidden"
                   >
                     {draft.avatar ? (
                       <img src={draft.avatar} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" />
@@ -446,7 +415,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                         <circle cx="12" cy="13" r="3" />
                       </svg>
                     </span>
-                  </button>
+                  </IconButton>
                   <input ref={avatarRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void uploadAvatar(f); }} />
                 </div>
               </section>
@@ -490,7 +459,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
               <section>
                 <div className="mb-2.5 flex items-center justify-between">
                   <h4 className="text-[13px] font-bold text-ink">持仓明细（SEC 拉取成功后自动替换，示例 / 手动维护用这里）</h4>
-                  <button type="button" onClick={() => patch({ holdings: [...draft.holdings, { code: "", name: "", market: "US", weight: 0, price: 0, changePct: 0, target: 0 }] })} className="btn btn-line px-3 py-1.5 text-xs">+ 添加持仓</button>
+                  <Capsule variant="secondary" type="button" onClick={() => patch({ holdings: [...draft.holdings, { code: "", name: "", market: "US", weight: 0, price: 0, changePct: 0, target: 0 }] })} className="px-3 py-1.5 text-xs">+ 添加持仓</Capsule>
                 </div>
                 <div className="data-table-scroll">
                   <div className="mb-1.5 grid min-w-[680px] grid-cols-[2.2rem_1fr_1.2fr_0.9fr_0.8fr_0.8fr_2rem] items-center gap-2 px-0.5 text-center text-[11px] font-semibold text-muted">
@@ -507,14 +476,14 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                   {draft.holdings.map((h, i) => (
                     <div key={i} className="grid grid-cols-[2.2rem_1fr_1.2fr_0.9fr_0.8fr_0.8fr_2rem] items-center gap-2">
                       {/* 股票图标：全局素材库生效（按市场:代码），无需每只股票重复上传 */}
-                      <button
+                      <IconButton size="sm"
                         type="button"
-                        title={`上传 ${h.code || "股票"} 图标（全站生效）`}
+                        label={`上传 ${h.code || "股票"} 图标（全站生效）`}
                         onClick={() => {
                           setIconMeta({ code: h.code.trim().toUpperCase(), market: (h.market || "US").toUpperCase(), name: h.name });
                           iconRef.current?.click();
                         }}
-                        className="group relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full ring-1 ring-black/10 transition-all duration-300 hover:scale-110 hover:ring-2 hover:ring-brand/60 dark:ring-white/15"
+                        className="group relative overflow-hidden"
                       >
                         {holdingIconUrl(h.code, h.market) ? (
                           <img src={holdingIconUrl(h.code, h.market)} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
@@ -529,7 +498,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                             <circle cx="12" cy="13" r="3" />
                           </svg>
                         </span>
-                      </button>
+                      </IconButton>
                       <input value={h.code} onChange={(e) => patchHolding(i, { code: e.target.value })} placeholder="AAPL" className={`${inputCls} w-full`} />
                       <input value={h.name} onChange={(e) => patchHolding(i, { name: e.target.value })} placeholder="苹果" className={`${inputCls} w-full`} />
                       <span className="flex items-center justify-center gap-1.5">
@@ -551,7 +520,7 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
               <section>
                 <div className="mb-2.5 flex items-center justify-between">
                   <h4 className="text-[13px] font-bold text-ink">近期操作（卡片左侧标签）</h4>
-                  <button type="button" onClick={() => patch({ trades: [...draft.trades, { code: "", name: "", changePct: 0, action: "买入" }] })} className="btn btn-line px-3 py-1.5 text-xs">+ 添加操作</button>
+                  <Capsule variant="secondary" type="button" onClick={() => patch({ trades: [...draft.trades, { code: "", name: "", changePct: 0, action: "买入" }] })} className="px-3 py-1.5 text-xs">+ 添加操作</Capsule>
                 </div>
                 <div className="data-table-scroll">
                   <div className="mb-1.5 grid min-w-[520px] grid-cols-[1fr_1.2fr_0.8fr_1fr_2rem] items-center gap-2 px-0.5 text-center text-[11px] font-semibold text-muted">
@@ -592,13 +561,13 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
 
               {/* 底部操作 */}
               <div className="dialog-actions border-t border-edge pt-4 dark:border-[#2a3140]">
-                <button type="button" onClick={() => setDraft(null)} className="dialog-btn dialog-btn-ghost">取消</button>
+                <Capsule variant="secondary" type="button" onClick={() => setDraft(null)} className="">取消</Capsule>
                 {draft && !celebs.find((c) => c.id === draft.id) ? (
-                  <button type="button" disabled={busy || !draftIdValid} onClick={save} className="dialog-btn dialog-btn-neutral">
+                  <Capsule variant="primary" type="button" disabled={busy || !draftIdValid} onClick={save} className="">
                     {busy ? "保存中…" : "创建名人"}
-                  </button>
+                  </Capsule>
                 ) : (
-                  <button
+                  <Capsule variant="primary"
                     type="button"
                     disabled={busy}
                     onClick={() => {
@@ -619,10 +588,10 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
                         refreshHours: draft.refreshHours
                       });
                     }}
-                    className="dialog-btn dialog-btn-neutral"
+                    className=""
                   >
                     {busy ? "保存中…" : "保存"}
-                  </button>
+                  </Capsule>
                 )}
               </div>
             </div>
@@ -685,7 +654,5 @@ export default function CelebsManageModal({ onClose, onChanged }: { onClose: () 
             </>
           )}
         </div>
-      </div>
-    </div>
-  );
+  </AppModal>;
 }

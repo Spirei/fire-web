@@ -1,4 +1,6 @@
 "use client";
+import Pagination from "@/components/Pagination";
+import { IconButton, Capsule } from "@/components/Capsule";
 
 import { usePersistedState } from "@/lib/usePersistedState";
 
@@ -918,9 +920,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         <section data-testid="holding-position-summary" className="w-full overflow-hidden rounded-[20px] border border-edge bg-white shadow-sm dark:bg-[#151a26]">
           <div className="flex items-center justify-between gap-3 border-b border-edge px-5 py-4">
             <div className="flex min-w-0 items-center gap-3">
-              <button type="button" onClick={backToHoldings} title="返回持仓" aria-label="返回持仓" className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-full border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink">
+              <IconButton size="md" framed type="button" onClick={backToHoldings} title="返回持仓" label="返回持仓" className="flex-none">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m15 18-6-6 6-6" /></svg>
-              </button>
+              </IconButton>
               {detailIcon ? (
                 <img src={detailIcon} alt="" className="h-11 w-11 flex-none rounded-full object-cover" />
               ) : (
@@ -939,7 +941,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                 </div>
               </div>
             </div>
-            <button type="button" onClick={() => openTrade(selectedHolding, "buy")} className="btn btn-line btn-sm flex-none">交易</button>
+            <Capsule variant="secondary" size="sm" type="button" onClick={() => openTrade(selectedHolding, "buy")} className="flex-none">交易</Capsule>
           </div>
 
           <div className="grid gap-4 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.55fr)]">
@@ -1014,7 +1016,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
             </div>
             <div className="mt-4 rounded-[12px] border border-edge bg-bg-gray/60 px-4 py-3 text-xs text-muted">{tradeSide === "dividend" ? "股息总额" : "成交金额"}：<strong className="text-ink">{fmtMoney((Number(tradeForm.qty) || 0) * (Number(tradeForm.price) || 0), marketMeta(tradeRecord.market).currency)}</strong>{tradeSide === "dividend" ? " · 按持仓股数 × 每股股息记为现金收入，计入已实现收益，不改变持仓数量与成本" : tradeSide === "buy" ? " · 买入后按含费用的加权成本更新" : " · 卖出回款冲减投入并摊薄剩余成本，费用计入已实现盈亏"}</div>
             {editingOrder && <p className="mt-3 text-xs leading-relaxed text-muted">更正会按成交时间重算全部订单；超卖时无法保存。</p>}
-            <div className="mt-5 flex justify-end gap-2.5"><button type="button" onClick={() => { setTradeRecord(null); setEditingOrder(null); }} className="btn btn-ghost btn-sm">取消</button><button type="button" disabled={tradeSaving} onClick={() => void submitTrade()} className="btn btn-line btn-sm disabled:opacity-60">{tradeSaving ? (editingOrder ? "保存中…" : "成交中…") : (editingOrder ? "保存更正" : "确认交易")}</button></div>
+            <div className="mt-5 flex justify-end gap-2.5"><Capsule variant="ghost" size="sm" type="button" onClick={() => { setTradeRecord(null); setEditingOrder(null); }} className="">取消</Capsule><Capsule variant="secondary" size="sm" type="button" disabled={tradeSaving} onClick={() => void submitTrade()} className="disabled:opacity-60">{tradeSaving ? (editingOrder ? "保存中…" : "成交中…") : (editingOrder ? "保存更正" : "确认交易")}</Capsule></div>
           </AppModal>
         )}
       </div>
@@ -1038,8 +1040,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         </div>
         <div className="mx-auto max-w-[520px]">
           <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="添加渠道">
-            <button type="button" aria-pressed={addChannel === "direct"} className={`pill-spring rounded-full border px-3 py-2 text-xs font-semibold ${addChannel === "direct" ? "border-edge-strong bg-white text-ink" : "border-edge bg-bg-gray text-muted hover:bg-brand-hover"}`} onClick={() => changeAddChannel("direct")}>{active === "CN" ? "普通 A 股" : "直接持有"}</button>
-            <button type="button" aria-pressed={addChannel === "stock_connect"} className={`pill-spring rounded-full border px-3 py-2 text-xs font-semibold ${addChannel === "stock_connect" ? "border-edge-strong bg-white text-ink" : "border-edge bg-bg-gray text-muted hover:bg-brand-hover"}`} onClick={() => changeAddChannel("stock_connect")}>A 股 · 港股通</button>
+            <Capsule variant="secondary" type="button" aria-pressed={addChannel === "direct"} className={`pill-spring rounded-full border px-3 py-2 text-xs font-semibold ${addChannel === "direct" ? "border-edge-strong bg-white text-ink" : "border-edge bg-bg-gray text-muted hover:bg-brand-hover"}`} onClick={() => changeAddChannel("direct")}>{active === "CN" ? "普通 A 股" : "直接持有"}</Capsule>
+            <Capsule variant="secondary" type="button" aria-pressed={addChannel === "stock_connect"} className={`pill-spring rounded-full border px-3 py-2 text-xs font-semibold ${addChannel === "stock_connect" ? "border-edge-strong bg-white text-ink" : "border-edge bg-bg-gray text-muted hover:bg-brand-hover"}`} onClick={() => changeAddChannel("stock_connect")}>A 股 · 港股通</Capsule>
           </div>
           <StockSearch key={`${active}:${addChannel}`} rainbow large securitiesOnly={addChannel === "stock_connect"} marketFilter={addChannel === "stock_connect" ? "HK" : active === "TOTAL" ? undefined : active} onSelect={match => void handleSelect(addChannel === "stock_connect" ? { ...match, accountMarket: "CN" } : match)} onCameraClick={addChannel === "stock_connect" ? undefined : () => setImportOpen(true)} placeholder={addChannel === "stock_connect" ? "港股通：腾讯 / 00700" : "输入股票名称或代码"} />
           <p className="mt-2 text-xs text-muted">{addChannel === "stock_connect" ? "港股通加入 A 股账户，人民币汇总、港币报价。" : active === "TOTAL" ? "按选中股票的市场自动归类。" : `从${labelFor(active)}市场添加。`}</p>
@@ -1049,7 +1051,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       {/* 市场按钮（可拖动排序，第一个为默认显示，加号编辑/新增市场） */}
       <div data-workspace-reveal className="mb-5 flex flex-wrap items-center gap-2">
         {/* 总资产：全市场汇总，位于最左侧 */}
-        <button aria-pressed={active === "TOTAL"}
+        <Capsule variant="secondary" aria-pressed={active === "TOTAL"}
           type="button"
           onClick={() => switchMarket("TOTAL")}
           title="总资产：全部市场汇总"
@@ -1068,12 +1070,12 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           <span className={`text-xs tabular-nums ${active === "TOTAL" ? "opacity-80" : "text-faint"}`}>
             {metricsReady ? Number.isFinite(allMarketsNetAsset)?compactMoney(allMarketsNetAsset, CURRENCY_SYMBOLS[displayCur] || displayCur):"—" : "…"}
           </span>
-        </button>
+        </Capsule>
         {displayedTabs.map((m, i) => {
           const count = holdingsPool.filter((p) => holdingAccountMarket(p) === m).length;
           const activeTab = active === m;
           return (
-            <button aria-pressed={activeTab}
+            <Capsule variant="secondary" aria-pressed={activeTab}
               key={m}
               type="button"
               draggable
@@ -1102,7 +1104,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
               <MarketIcon market={m} flag={flagFor(m)} size={18} />
               {labelFor(m)}
               <span className={`text-xs tabular-nums ${activeTab ? "opacity-80" : "text-faint"}`}>{count}</span>
-            </button>
+            </Capsule>
           );
         })}
         <button
@@ -1258,9 +1260,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                         </td>
                         <td data-mobile-column="actions" className="px-4 py-3.5">
                           <div className="flex justify-end gap-1.5">
-                          <button type="button" title="编辑" onClick={() => openEdit(r)} className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-edge bg-white text-muted transition-colors hover:bg-brand-hover hover:text-ink">
+                          <IconButton size="sm" framed type="button" label="编辑" onClick={() => openEdit(r)} className="">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
-                          </button>
+                          </IconButton>
                           <button type="button" title="删除" onClick={() => onRemove(r)} className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-white bg-bg-gray text-muted transition-colors hover:bg-brand-hover hover:text-ink dark:border-white/20 dark:bg-[#1c222d] dark:text-white/70 dark:hover:border-white/40 dark:hover:bg-white/10 dark:hover:text-white">
                             <DeleteIcon size={15} />
                           </button>
@@ -1275,12 +1277,9 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
             {/* 分页：每页 6 只 */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-edge bg-bg-gray/50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-edge px-4 py-3">
                 <span className="text-xs text-muted">共 {filtered.length} 只 · 第 {safePage} / {totalPages} 页（每页 6 只）</span>
-                <div className="flex gap-2">
-                  <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="inline-flex h-[38px] items-center justify-center gap-1.5 rounded-full border border-edge-strong bg-white px-5 text-sm font-semibold text-brand-deep whitespace-nowrap transition-all duration-200 hover:bg-brand-hover hover:text-ink active:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-40">上一页</button>
-                  <button type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="inline-flex h-[38px] items-center justify-center gap-1.5 rounded-full border border-edge-strong bg-white px-5 text-sm font-semibold text-brand-deep whitespace-nowrap transition-all duration-200 hover:bg-brand-hover hover:text-ink active:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-40">下一页</button>
-                </div>
+                <Pagination page={safePage} total={totalPages} onChange={setPage}/>
               </div>
             )}
           </>
@@ -1325,14 +1324,14 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                           className="h-8 min-w-0 flex-1 rounded-[8px] border border-edge-strong px-2 text-sm outline-none transition-shadow focus:border-edge-strong"
                           placeholder="市场名称"
                         />
-                        <button
+                        <IconButton size="sm" framed
                           type="button"
                           onClick={() => setEditingKey(null)}
-                          className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-[9px] bg-white text-ink-2 border border-edge-strong shadow-sm transition-colors hover:bg-brand-hover"
-                          title="完成编辑"
+                          className="flex-none"
+                          label="完成编辑"
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M20 6 9 17l-5-5" /></svg>
-                        </button>
+                        </IconButton>
                       </>
                     ) : (
                       <>
@@ -1349,14 +1348,14 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                             无记录 · 自动隐藏
                           </span>
                         )}
-                        <button
+                        <IconButton size="sm" framed
                           type="button"
                           onClick={() => setEditingKey(row.key)}
-                          className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-[9px] border border-edge text-muted transition-colors hover:bg-brand-light hover:text-brand-deep"
-                          title="编辑市场名称"
+                          className="flex-none"
+                          label="编辑市场名称"
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[15px] w-[15px]"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
-                        </button>
+                        </IconButton>
                       </>
                     )}
                   </div>
@@ -1380,13 +1379,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                   className="field w-[160px]"
                   placeholder="名称，如 新加坡"
                 />
-                <button type="button" onClick={addMarket} className="btn btn-ghost btn-sm">＋ 新增</button>
+                <Capsule variant="ghost" size="sm" type="button" onClick={addMarket} className="">＋ 新增</Capsule>
               </div>
             </div>
 
             <div className="mt-5 flex justify-end gap-2.5">
-              <button type="button" onClick={() => setEditorOpen(false)} className="btn btn-ghost btn-sm">取消</button>
-              <button type="button" onClick={saveMarketEditor} className="btn btn-line btn-sm">保存</button>
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => setEditorOpen(false)} className="">取消</Capsule>
+              <Capsule variant="secondary" size="sm" type="button" onClick={saveMarketEditor} className="">保存</Capsule>
             </div>
         </AppModal>
       )}
@@ -1434,10 +1433,10 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
               </label>
             </div>
             <div className="mt-5 flex justify-end gap-2.5">
-              <button type="button" onClick={() => setEditRecord(null)} className="btn btn-ghost btn-sm">取消</button>
-              <button type="button" disabled={editSaving} onClick={saveEdit} className="btn btn-line btn-sm disabled:opacity-60">
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => setEditRecord(null)} className="">取消</Capsule>
+              <Capsule variant="secondary" size="sm" type="button" disabled={editSaving} onClick={saveEdit} className="disabled:opacity-60">
                 {editSaving ? "保存中…" : "保存"}
-              </button>
+              </Capsule>
             </div>
         </AppModal>
       )}

@@ -16,7 +16,8 @@ let tree,calls=[],profile={name:'Alcor',image:null,revision:3,updatedAt:null};
 const data={agent:profile,preferences:{instructions:'',revision:1,enabled:true,intervalMinutes:5,updatedAt:null},job:null,group:{id:'default',mode:'people'},capabilities:{generate:false,search:'news-rss',avatar:{image:'',video:null}}};
 const props={data,tab:'identity',onTabChange(){},onClose(){},onProfileChange(value){data.agent=value;},onRefresh(){},refreshDisabled:false};
 function render(){index=0;effects=[];tree=Panel(props);effects.forEach(effect=>effect());index=0;effects=[];tree=Panel(props);return tree;}
-function nodes(node=tree){if(!node||typeof node!=='object')return [];return [node,...React.Children.toArray(node.props?.children).flatMap(child=>nodes(child))];}
+const resolveControl=require('./helpers/shared-controls.cjs');
+function nodes(node=tree){node=resolveControl(node);if(!node||typeof node!=='object')return [];return [node,...React.Children.toArray(node.props?.children).flatMap(child=>nodes(child))];}
 function text(node){if(typeof node==='string')return node;if(!node||typeof node!=='object')return '';return React.Children.toArray(node.props?.children).map(text).join('');}
 function button(label){const result=nodes().find(node=>node.type==='button'&&text(node)===label);assert(result,'button '+label);return result;}
 async function settle(){for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));render();}

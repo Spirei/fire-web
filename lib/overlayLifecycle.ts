@@ -24,3 +24,14 @@ export function isTopPriorityModal(panel: HTMLElement | null) {
   const top = layers.filter(layer => layer.dataset.systemModal === "true").at(-1) ?? layers.at(-1);
   return Boolean(top?.contains(panel));
 }
+
+/** Keep keyboard navigation inside the active modal; nested menus handle their own keys first. */
+export function trapModalTab(event: KeyboardEvent, panel: HTMLElement) {
+  if (event.key !== "Tab") return;
+  const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex]:not([tabindex="-1"])'))
+    .filter(node => !node.closest('[inert],[hidden]') && node.getAttribute("aria-hidden") !== "true" && node.tabIndex >= 0 && node.getClientRects().length > 0);
+  const first = controls[0], last = controls[controls.length - 1], active = document.activeElement;
+  if (!first) { event.preventDefault(); panel.focus(); return; }
+  if (event.shiftKey && (active === first || active === panel || !panel.contains(active))) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && (active === last || !panel.contains(active))) { event.preventDefault(); first.focus(); }
+}

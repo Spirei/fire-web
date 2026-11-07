@@ -1,4 +1,5 @@
 "use client";
+import { IconButton, Capsule } from "@/components/Capsule";
 
 import { holdingAccountMarket } from "@/lib/stockAccount";
 import StockConnectBadge from "@/components/StockConnectBadge";
@@ -1001,37 +1002,37 @@ export default function TradeOrdersPanel({
             <span />
             <span className="inline-flex items-center gap-1">
               {order.status === "pending" && !order.apiManaged && (
-                <button
+                <IconButton size="sm" framed
                   type="button"
                   onClick={() => void handleCancel(order)}
                   title="撤单"
-                  aria-label="撤单"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink dark:border-white/10 dark:hover:bg-white/10"
+                  label="撤单"
+                  className=""
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                     <path d="M4 8h16" /><path d="M6 8l1 12h10l1-12" /><path d="M9 8V6a2 2 0 0 1 4 0v2" />
                   </svg>
-                </button>
+                </IconButton>
               )}
-              <button
+              <IconButton size="sm" framed
                 type="button"
                 onClick={() => setDetailOrder(order)}
                 title="查看订单详情"
-                aria-label="查看订单详情"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink dark:border-white/10 dark:hover:bg-white/10"
+                label="查看订单详情"
+                className=""
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="h-3.5 w-3.5">
                   <path d="M9 5h11M9 10h11M9 15h11M9 20h11" /><path d="M4 5h1M4 10h1M4 15h1M4 20h1" />
                 </svg>
-              </button>
+              </IconButton>
             </span>
             <span className="flex min-w-0 items-center gap-1 overflow-hidden pl-1">
               {(order.apiManaged || order.historyLocked) && <span className="truncate text-[11px] text-muted" title={order.apiManaged ? "在 App 中管理此订单" : "此证券包含 App 成交回执，保留历史记录"}>{order.apiManaged ? "App 订单" : "只读"}</span>}
-              {onEdit && !order.apiManaged && !order.historyLocked && <button type="button" onClick={() => onEdit(order)} className="btn btn-ghost btn-sm">编辑</button>}
+              {onEdit && !order.apiManaged && !order.historyLocked && <Capsule variant="ghost" size="sm" type="button" onClick={() => onEdit(order)} className="">编辑</Capsule>}
               {onDelete && !order.apiManaged && !order.historyLocked && (
-                <button type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="btn btn-ghost btn-sm text-down disabled:opacity-50">
+                <Capsule variant="ghost" size="sm" type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="text-down disabled:opacity-50">
                   {deletingId === order.id ? "删除中…" : <DeleteIcon size={13} />}
-                </button>
+                </Capsule>
               )}
             </span>
           </div>
@@ -1089,14 +1090,14 @@ export default function TradeOrdersPanel({
                 className="h-8 w-[180px] rounded-[9px] border border-edge bg-white pl-8 pr-2.5 text-xs text-ink placeholder:text-faint transition-colors focus:border-edge-strong dark:border-white/10 dark:bg-[#1c222d] dark:text-white"
               />
               {searchInput && (
-                <button
+                <IconButton size="sm"
                   type="button"
                   onClick={() => { setSearchQuery(""); setSearchInput(""); setSearchOpen(false); }}
-                  aria-label="清除搜索"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-5 w-5 items-center justify-center rounded-full text-faint transition-colors hover:bg-bg-gray hover:text-ink"
+                  label="清除搜索"
+                  className="absolute right-1 top-1/2 -translate-y-1/2"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-3 w-3"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                </button>
+                </IconButton>
               )}
             </div>
             {searchOpen && inputKeyword && suggestions.length > 0 && (
@@ -1290,23 +1291,23 @@ export default function TradeOrdersPanel({
                 {timeFilter.mode === "custom" && (
                   <>
                     <div className="mb-3 flex items-center justify-between">
-                      <button
+                      <IconButton size="sm" framed
                         type="button"
                         onClick={() => setTimeMonth((value) => shiftMonth(value, -1))}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-edge text-muted hover:bg-bg-gray"
-                        aria-label="上个月"
+                        className=""
+                        label="上个月"
                       >
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m12 15-5-5 5-5" /></svg>
-                      </button>
+                      </IconButton>
                       <strong className="text-sm">选择委托时间区间</strong>
-                      <button
+                      <IconButton size="sm" framed
                         type="button"
                         onClick={() => setTimeMonth((value) => shiftMonth(value, 1))}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-edge text-muted hover:bg-bg-gray"
-                        aria-label="下个月"
+                        className=""
+                        label="下个月"
                       >
                         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m8 5 5 5-5 5" /></svg>
-                      </button>
+                      </IconButton>
                     </div>
                     <div className="grid gap-5 md:grid-cols-2">
                       {[timeMonth, shiftMonth(timeMonth, 1)].map((month) => {
@@ -1438,16 +1439,16 @@ export default function TradeOrdersPanel({
               第 {safePage + 1} / {totalPages} 页 · 共 {searchedOrders.length} 笔
             </span>
             <div className="flex items-center gap-1">
-              <button
+              <IconButton size="sm" framed
                 type="button"
                 disabled={safePage === 0}
                 onClick={() => setPageIndex(Math.max(0, safePage - 1))}
                 title="上一页"
-                aria-label="上一页"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/10 dark:hover:bg-white/10"
+                label="上一页"
+                className=""
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="m15 18-6-6 6-6" /></svg>
-              </button>
+              </IconButton>
               {Array.from({ length: Math.min(totalPages, 7) }, (_, index) => {
                 // 页码窗口：当前页居中，超出 7 页时取窗口
                 const start = Math.max(0, Math.min(safePage - 3, totalPages - 7));
@@ -1468,16 +1469,16 @@ export default function TradeOrdersPanel({
                   </button>
                 );
               })}
-              <button
+              <IconButton size="sm" framed
                 type="button"
                 disabled={safePage >= totalPages - 1}
                 onClick={() => setPageIndex(Math.min(totalPages - 1, safePage + 1))}
                 title="下一页"
-                aria-label="下一页"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-bg-gray hover:text-ink disabled:cursor-not-allowed disabled:opacity-35 dark:border-white/10 dark:hover:bg-white/10"
+                label="下一页"
+                className=""
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="m9 18 6-6-6-6" /></svg>
-              </button>
+              </IconButton>
             </div>
           </div>
         )}
@@ -1508,17 +1509,17 @@ export default function TradeOrdersPanel({
               {manageColumns.map((item, index) => (
                 <div key={item.key} onDragOver={(event) => event.preventDefault()} onDrop={() => dropColumn(index)} className="mx-2 flex items-center gap-1.5 rounded-[8px] px-2 py-1.5 transition-colors hover:bg-bg-gray">
                   <FlatCheckbox checked={item.visible} onChange={() => toggleColumn(index)} label={ORDER_COLUMNS.find((column) => column.key === item.key)?.label ?? item.key} dim={!item.visible} />
-                  <button
+                  <IconButton size="sm"
                     type="button"
                     draggable
                     onDragStart={(event) => { dragIndex.current = index; event.dataTransfer.effectAllowed = "move"; }}
                     onDragEnd={() => { dragIndex.current = null; }}
-                    className="drag-handle inline-flex h-6 w-6 cursor-grab items-center justify-center rounded-md text-muted transition-colors hover:bg-bg-gray hover:text-ink active:cursor-grabbing"
-                    aria-label={`拖动 ${ORDER_COLUMNS.find((column) => column.key === item.key)?.label ?? item.key} 排序`}
+                    className=""
+                    label={`拖动 ${ORDER_COLUMNS.find((column) => column.key === item.key)?.label ?? item.key} 排序`}
                     title="拖动排序"
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
-                  </button>
+                  </IconButton>
                 </div>
               ))}
             </div>
@@ -1616,8 +1617,8 @@ export default function TradeOrdersPanel({
               )}
             </div>
             <div className="flex justify-end gap-2.5 border-t border-edge px-5 py-3.5">
-              <button type="button" onClick={() => setExportOpen(false)} className="btn btn-ghost btn-sm">取消</button>
-              <button type="button" disabled={exporting} onClick={() => void downloadExport()} className="btn btn-line btn-sm disabled:opacity-60">{exporting ? "导出中…" : "导出"}</button>
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => setExportOpen(false)} className="">取消</Capsule>
+              <Capsule variant="secondary" size="sm" type="button" disabled={exporting} onClick={() => void downloadExport()} className="disabled:opacity-60">{exporting ? "导出中…" : "导出"}</Capsule>
             </div>
           </div>
         </div>
@@ -1722,26 +1723,26 @@ export default function TradeOrdersPanel({
               )}
             </div>
             <div className="flex justify-end gap-2.5 border-t border-edge px-5 py-3.5">
-              <button type="button" onClick={() => setImportOpen(false)} className="btn btn-ghost btn-sm">关闭</button>
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => setImportOpen(false)} className="">关闭</Capsule>
               {importPreview && importPreview.dryRun && (
-                <button
+                <Capsule variant="secondary" size="sm"
                   type="button"
                   disabled={importing || importPreview.imported === 0}
                   onClick={() => fileInputRef.current?.click()}
-                  className="btn btn-line btn-sm disabled:opacity-60"
+                  className="disabled:opacity-60"
                 >
                   选择其他文件
-                </button>
+                </Capsule>
               )}
               {importPreview && importPreview.dryRun && (
-                <button
+                <Capsule variant="secondary" size="sm"
                   type="button"
                   disabled={importing || importPreview.imported === 0}
                   onClick={() => confirmImport(previewFileRef.current!)}
-                  className="btn btn-line btn-sm disabled:opacity-60"
+                  className="disabled:opacity-60"
                 >
                   {importing ? "导入中…" : `确认导入 ${importPreview.imported} 笔`}
-                </button>
+                </Capsule>
               )}
             </div>
           </div>
@@ -1759,18 +1760,18 @@ export default function TradeOrdersPanel({
             <span key="b" className="inline-flex items-center gap-1.5">
               <span className="font-mono tabular-nums text-ink">{detail.orderNo || "—"}</span>
               {detail.orderNo && (
-                <button
+                <IconButton size="sm"
                   type="button"
                   onClick={() => void copyOrderNo(detail)}
                   title="复制订单号"
-                  aria-label="复制订单号"
-                  className="inline-flex h-5 w-5 items-center justify-center rounded-md text-faint transition-colors hover:bg-bg-gray hover:text-ink dark:hover:bg-white/10"
+                  label="复制订单号"
+                  className=""
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
                     <rect x="9" y="9" width="12" height="12" rx="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>
-                </button>
+                </IconButton>
               )}
             </span>
           )],

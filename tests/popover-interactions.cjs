@@ -8,6 +8,11 @@ vm.runInNewContext(compile('../lib/selectPopover.ts'), geometry);
 const place = geometry.exports.selectPopoverPlacement;
 const pureModules = {};
 for (const name of ['format','fundCurrencies']) { const mod = {exports:{}}; vm.runInNewContext(compile('../lib/'+name+'.ts'),mod); pureModules['@/lib/'+name]=mod.exports; }
+const controlsModule={exports:{}};
+vm.runInNewContext(compile('../components/Capsule.tsx'),{exports:controlsModule.exports,require});
+pureModules['@/components/Capsule']=controlsModule.exports;
+const pureControls=new Set(Object.values(controlsModule.exports));
+function expandControl(node){while(node&&pureControls.has(node.type))node=typeof node.type==='function'?node.type(node.props):node.type.render(node.props,node.props.ref);return node;}
 const viewport = { left: 0, top: 0, width: 390, height: 844 };
 let p = place({ left: 24, top: 100, bottom: 140, width: 220 }, { width: 220, height: 194 }, viewport);
 assert.equal(p.above, false); assert.equal(p.top, 146); assert.equal(p.width, 220);
@@ -52,11 +57,12 @@ function harness(file, props, shared) {
   hooks.useLayoutEffect = hooks.useEffect;
   const context = { exports: {}, window: win, document: doc, Node: Element, HTMLElement: Element,
     setTimeout(fn) { timers.set(++timerId, fn); return timerId; }, clearTimeout(id) { timers.delete(id); },
-    require: name => name === 'react' ? hooks : name === 'react-dom' ? { createPortal: children => children } : name === '@/lib/selectPopover' ? geometry.exports : name === '@/lib/overlayLifecycle' ? overlay : name === '@/components/CurrencySelect' ? { __esModule: true, default: () => null } : pureModules[name] ? pureModules[name] : name === '@tabler/icons-react' ? { IconCheck: () => null, IconChevronDown: () => null } : require(name)
+    require: name => name === 'react' ? hooks : name === 'react-dom' ? { createPortal: children => children } : name === '@/lib/selectPopover' ? geometry.exports : name === '@/lib/overlayLifecycle' ? overlay : name === '@/components/AppModal' ? {__esModule:true,default:()=>null,ModalActions:()=>null} : name === '@/components/CurrencySelect' ? { __esModule: true, default: () => null } : pureModules[name] ? pureModules[name] : name === '@tabler/icons-react' ? { IconCheck: () => null, IconChevronDown: () => null } : require(name)
   };
   vm.runInNewContext(compile(file), context);
-  function nodes(node = tree) { if (!node || typeof node !== 'object') return []; if (Array.isArray(node)) return node.flatMap(item => nodes(item)); return [node, ...React.Children.toArray(node.props?.children).flatMap(child => nodes(child))]; }
+  function nodes(node = tree) { node=expandControl(node); if (!node || typeof node !== 'object') return []; if (Array.isArray(node)) return node.flatMap(item => nodes(item)); return [node, ...React.Children.toArray(node.props?.children).flatMap(child => nodes(child))]; }
   function attach(node, parent = doc.body, path = 'root') {
+    node=expandControl(node);
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) { node.forEach((child, index) => attach(child, parent, `${path}.${index}`)); return; }
     let element = parent;
@@ -143,13 +149,14 @@ releaseA(); releaseA(); assert.equal(element.style.overflow, 'hidden', 'release 
 console.log('PASS stacked overlays: topmost Escape, busy guard, priority and scroll restoration in either close order');
 
 let fundCloses = 0;
-const fund = harness('../components/FundEntryDialog.tsx', { currency:'USD', amount:'12', direction:1, type:'deposit', occurredAt:'2026-10-14', note:'', currentBalance:100, saving:true, onClose:()=>fundCloses++, onSubmit() {}, setCurrency() {}, setDirection() {}, setType() {}, setAmount() {}, setOccurredAt() {}, setNote() {} });
+const fundContent = harness('../components/FundEntryDialog.tsx', { currency:'USD', amount:'12', direction:1, type:'deposit', occurredAt:'2026-10-14', note:'', currentBalance:100, saving:true, onClose:()=>fundCloses++, onSubmit() {}, setCurrency() {}, setDirection() {}, setType() {}, setAmount() {}, setOccurredAt() {}, setNote() {} });
+const fund = harness('../components/AppModal.tsx',{...fundContent.render().props});
 fund.render(); assert.equal(fund.find('aria-label','关闭').props.disabled,true);
 fund.dispatch('keydown', keyEvent('Escape')); assert.equal(fundCloses,0,'saving form cannot be dismissed with Escape');
-const backdrop = fund.find('role','presentation'); backdrop.props.onMouseDown({target:fund.doc.body,currentTarget:fund.doc.body}); assert.equal(fundCloses,0,'saving form cannot be dismissed by its backdrop');
-fund.props.saving = false; fund.render();
-assert.equal(fund.find('role','presentation').props.onKeyDown,undefined,'only one Escape listener owns the close action');
+const backdrop = fund.nodes().find(n=>n.props?.className?.includes('modal-scrim')); backdrop.props.onClick(); assert.equal(fundCloses,0,'saving form cannot be dismissed by its backdrop');
+fundContent.props.saving=false;Object.assign(fund.props,fundContent.render().props);fund.render();
+assert.equal(fund.find('role','dialog').props.onKeyDown,undefined,'only one Escape listener owns the close action');
 const confirm = harness('../components/AppModal.tsx', {title:'Confirm',priority:true,children:'body',onClose() {}},fund); confirm.render();
 fund.dispatch('keydown',keyEvent('Escape')); assert.equal(fundCloses,0,'system confirmation cannot close the form beneath it'); confirm.cleanup();
-fund.dispatch('keydown',keyEvent('Escape')); assert.equal(fundCloses,1); fund.cleanup(); assert.equal(fund.doc.body.style.overflow,'');
+fund.dispatch('keydown',keyEvent('Escape')); fund.flushTimers(); assert.equal(fundCloses,1); fund.cleanup(); assert.equal(fund.doc.body.style.overflow,'');
 console.log('PASS fund dialog: saving guard, one close handler and system-confirmation isolation');

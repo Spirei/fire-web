@@ -1,6 +1,6 @@
 "use client";
 
-import { lockScroll } from "@/lib/overlayLifecycle";
+import AppModal from "@/components/AppModal";
 
 import { useEffect, useState } from "react";
 import LoginForm from "@/components/LoginForm";
@@ -43,34 +43,12 @@ export default function LoginModal() {
       .catch(() => {});
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape" || e.defaultPrevented || e.repeat || document.querySelector("[data-priority-modal='true']")) return;
-      e.preventDefault();
-      setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    const unlockScroll = lockScroll();
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      unlockScroll();
-    };
-  }, [open]);
-
   if (!open) return null;
 
   const fontCls = logoFontClass(logoFont);
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/55 p-4">
-      <div className="fixed inset-0" onClick={() => setOpen(false)} aria-hidden />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="登录"
-        className="relative z-10 flex w-full max-w-[880px] sm:min-h-[680px] overflow-hidden rounded-[22px] border border-white/10 bg-white shadow-[0_24px_70px_rgba(0,0,0,.45)] dark:border-[#2a3140] dark:bg-[#12161f]"
-      >
+  return <AppModal title="登录" hideHeader size="xl" className="login-modal-panel" onClose={() => setOpen(false)}>
+    {(requestClose) => <div className="login-modal-layout">
         {/* 左侧品牌图（桌面上传图 / 兜底渐变） */}
         <aside className="relative hidden w-[52%] flex-col justify-between overflow-hidden bg-gradient-to-br from-[#0f2b26] via-[#113a33] to-[#0a1512] p-8 sm:flex">
           {sideImage ? (
@@ -95,9 +73,8 @@ export default function LoginModal() {
 
         {/* 右侧表单区 */}
         <div className="flex w-full flex-1 items-center sm:min-w-0">
-          <LoginForm onClose={() => setOpen(false)} />
+          <LoginForm onClose={requestClose} />
         </div>
-      </div>
-    </div>
-  );
+    </div>}
+  </AppModal>;
 }

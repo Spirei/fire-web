@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import echarts, { type EChartsInstance } from "@/lib/echarts";
@@ -396,9 +397,9 @@ export default function HoldingsPnlSankey({ profit, loss, profitTotal, lossTotal
           className="max-h-[58vh] w-full rounded-2xl border border-edge bg-white object-contain dark:bg-[#16181d]"
         />
         <div className="mt-5 flex justify-end gap-2.5">
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPreviewUrl(null)}>关闭</button>
-          <button type="button" className="btn btn-line btn-sm" onClick={() => void copyImage(previewUrl)}>复制图片</button>
-          <button type="button" className="btn btn-brand btn-sm text-ink" onClick={() => saveImage(previewUrl)}>保存图片</button>
+          <Capsule variant="ghost" size="sm" type="button" className="" onClick={() => setPreviewUrl(null)}>关闭</Capsule>
+          <Capsule variant="secondary" size="sm" type="button" className="" onClick={() => void copyImage(previewUrl)}>复制图片</Capsule>
+          <Capsule variant="primary" size="sm" type="button" className="text-ink" onClick={() => saveImage(previewUrl)}>保存图片</Capsule>
         </div>
       </AppModal>
     )}

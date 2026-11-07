@@ -30,13 +30,7 @@ body .alcor-feed .feed-post .feed-post-content h2{font-size:18px;line-height:26p
 .feed-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 32px 52px}
 .feed-header h1{min-width:0;overflow-wrap:anywhere;font-size:34px;font-weight:600;letter-spacing:normal;line-height:40px;margin:0}
 .feed-header-actions{display:flex;align-items:center;gap:8px;flex:none}
-.feed-icon-button,.feed-more{display:inline-flex;justify-content:center;align-items:center;border:0;background:transparent;color:inherit;flex:none;padding:0}
-.feed-icon-button{width:36px;height:36px;border-radius:50%;transition:background .2s}
-.feed-settings-button,.feed-icon-button:hover{background:var(--feed-fill)}
-.feed-icon-button:disabled{opacity:.45;cursor:default}
-.feed-refresh-button.is-working>svg{animation:feed-refresh-spin 1.15s linear infinite;transform-origin:center}
-@keyframes feed-refresh-spin{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.feed-refresh-button.is-working>svg{animation:none}}
+.feed-more{display:inline-flex;justify-content:center;align-items:center;border:0;background:transparent;color:inherit;flex:none;padding:0}
 .feed-mascot{position:relative;width:44px;height:44px;flex:none;border-radius:50%;border:1px solid var(--feed-divider);background:#fcfcfc;overflow:hidden;box-shadow:0 2px 8px #11111214,0 2px 16px #1111120a}
 .feed-mascot-poster{width:100%;height:100%;object-fit:cover}
 .feed-mascot-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease-out}
@@ -149,7 +143,7 @@ body .alcor-feed .feed-post .feed-post-content h2{font-size:18px;line-height:26p
 .feed-discussion-footnote{display:flex;gap:4px;align-items:center;justify-content:center;font-size:10px;color:var(--feed-tertiary);margin-top:10px}
 @media(max-width:1023px){.alcor-feed{max-width:800px;padding:8px 16px 56px}.feed-header{margin-bottom:30px}.feed-post{margin-bottom:32px}.feed-prompt-modal.app-modal-panel{max-width:min(512px,80vw)!important}.feed-discussion-modal.app-modal-panel{max-width:min(540px,76vw)!important}.feed-discussion-log{max-height:min(360px,38dvh)}}
 @media(max-width:639px){.alcor-feed{padding:4px 2px 32px}.feed-header{gap:12px;margin-bottom:26px}.feed-mascot{width:36px;height:36px}.feed-header h1{font-size:28px;line-height:34px}.feed-post{grid-template-columns:30px minmax(0,1fr);gap:12px;margin-bottom:30px}.feed-post-icon{width:30px;height:30px}.feed-post-heading{gap:4px 6px;flex-wrap:wrap}.feed-post-heading h2{flex-basis:calc(100% - 42px);order:0}.feed-more{order:1}.feed-post-heading time{font-size:11px;order:2;flex-basis:100%;line-height:14px}.feed-body{font-size:16px;line-height:22px;margin-top:6px}.feed-post-content{padding-top:0}.feed-post-actions{margin-top:8px;gap:6px}.feed-status,.feed-skeleton{margin-left:42px}.feed-prompt-modal.app-modal-panel{max-width:100%!important}.feed-instructions{min-height:min(210px,32dvh);max-height:38dvh;font-size:16px;line-height:22px;padding:12px}.feed-modal-actions{margin-top:18px}.feed-discussion-modal.app-modal-panel{max-width:100%!important}.feed-discussion-log{max-height:38dvh}.feed-message-user{margin-left:20px}.feed-composer textarea{font-size:16px}}
-@media(pointer:coarse){.feed-icon-button,.feed-more{width:40px;height:40px}.feed-more{margin-top:-6px}.feed-post-actions button{min-height:44px;min-width:44px}.feed-composer button{width:40px;height:40px}.feed-instructions,.feed-composer textarea,.feed-theme .feed-config-input{font-size:16px}.feed-inline-action{min-height:36px}}
+@media(pointer:coarse){.feed-more{width:40px;height:40px}.feed-more{margin-top:-6px}.feed-post-actions button{min-height:44px;min-width:44px}.feed-composer button{width:40px;height:40px}.feed-instructions,.feed-composer textarea,.feed-theme .feed-config-input{font-size:16px}.feed-inline-action{min-height:36px}}
 @media(max-height:600px){.feed-prompt-modal.app-modal-panel{padding:20px!important}.feed-instructions{min-height:100px;max-height:30dvh}.feed-discussion-log{min-height:80px;max-height:30dvh}.feed-discussion-modal>.mb-5{margin-bottom:12px}.feed-task-detail{padding:0 0 8px}.feed-task-detail img{width:48px;height:48px;margin-bottom:8px}}
 @media(prefers-reduced-motion:reduce){.feed-mascot-video{display:none}}
 @media(max-width:639px){.feed-header{margin-left:42px}.feed-mascot-top .feed-mascot{--feed-mascot-size:64px;width:64px;height:64px}.feed-mascot-top{margin-bottom:22px}.feed-icon-fallback{width:30px;height:30px}.feed-empty{margin:36px 0 0 42px}}

@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 
-import Link from "next/link";
+import { Capsule, CapsuleLink } from "@/components/Capsule";
 import PasswordStrength from "@/components/PasswordStrength";
 import { useMemo, useRef, useState } from "react";
 
@@ -45,7 +46,7 @@ export default function PasswordResetForm({ token, onBusy, onRestart }: { token:
     }
   }
 
-  if (done) return <div className="space-y-5 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-brand-light text-2xl text-brand-deep">✓</div><div><h1 className="text-2xl font-extrabold text-ink">密码已更新</h1><p className="mt-2 text-sm text-muted">所有旧登录会话已退出，请使用新密码重新登录。</p></div><Link href="/login" className="inline-flex h-11 items-center justify-center rounded-[10px] bg-[#0866ff] px-6 text-sm font-bold text-white hover:bg-[#075ce5]">返回登录</Link></div>;
+  if (done) return <div className="space-y-5 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-brand-light text-2xl text-brand-deep">✓</div><div><h1 className="text-2xl font-extrabold text-ink">密码已更新</h1><p className="mt-2 text-sm text-muted">所有旧登录会话已退出，请使用新密码重新登录。</p></div><CapsuleLink href="/login" size="lg">返回登录</CapsuleLink></div>;
 
   return <form onSubmit={submit} className="space-y-4">
     <div><h1 className="text-2xl font-extrabold text-ink">设置新密码</h1><p className="mt-1.5 text-sm text-muted">至少 8 位，并同时包含字母和数字。</p></div>
@@ -53,7 +54,7 @@ export default function PasswordResetForm({ token, onBusy, onRestart }: { token:
     <div><label className="block text-sm font-semibold text-ink-2">新密码<PasswordInput type="password" value={password} disabled={busy} maxLength={128} onChange={event => setPassword(event.target.value)} autoComplete="new-password" required className="field mt-1.5 w-full" /></label><PasswordStrength password={password} /></div>
     <label className="block text-sm font-semibold text-ink-2">确认新密码<PasswordInput type="password" value={confirm} disabled={busy} maxLength={128} onChange={event => setConfirm(event.target.value)} autoComplete="new-password" required className="field mt-1.5 w-full" /></label>
     {error && <p role="alert" className="rounded-[10px] bg-up-bg px-3.5 py-3 text-sm text-up">{error}</p>}
-    <button type="submit" disabled={busy || !valid} className="h-11 w-full rounded-[10px] bg-[#0866ff] text-sm font-bold text-white transition-colors hover:bg-[#075ce5] disabled:cursor-not-allowed disabled:bg-bg-gray disabled:text-faint">{busy ? "正在更新…" : "更新密码"}</button>
+    <Capsule type="submit" size="lg" busy={busy} disabled={!valid} className="w-full">{busy ? "正在更新…" : "更新密码"}</Capsule>
     <Link href="/login" className="block text-center text-sm font-semibold text-ink hover:underline">返回登录</Link>
     {onRestart && <button type="button" disabled={busy} onClick={onRestart} className="block w-full text-center text-sm text-muted">重新验证身份</button>}
   </form>;

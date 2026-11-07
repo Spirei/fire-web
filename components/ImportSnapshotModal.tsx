@@ -1,4 +1,5 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
 
 import { useRef, useState } from "react";
 import AppModal from "@/components/AppModal";
@@ -133,6 +134,7 @@ export default function ImportSnapshotModal({
       title={isWatchlist ? "截图导入自选股" : "截图导入持仓"}
       desc={phase === "preview" ? (isWatchlist ? "识别结果可编辑，确认后写入自选股" : "识别结果可编辑，确认后自动写入我的持仓") : (isWatchlist ? "上传行情列表截图，自动识别股票并同步到自选股" : "上传券商持仓或行情截图，自动识别股票并同步更新")}
       onClose={onClose}
+      closeDisabled={importing || phase === "working"}
       size="xl"
     >
       {phase === "upload" || phase === "working" ? (
@@ -162,7 +164,7 @@ export default function ImportSnapshotModal({
           />
           {error && <p className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{error}</p>}
           <div className="dialog-actions">
-            <button type="button" onClick={onClose} className="dialog-btn dialog-btn-ghost">取消</button>
+            <Capsule variant="secondary" type="button" onClick={onClose} className="">取消</Capsule>
           </div>
         </div>
       ) : (
@@ -231,8 +233,8 @@ export default function ImportSnapshotModal({
           )}
           {error && <p className="rounded-[10px] bg-up-bg px-3.5 py-2.5 text-[13px] text-up">{error}</p>}
           <div className="dialog-actions">
-            <button type="button" onClick={onClose} disabled={importing} className="dialog-btn dialog-btn-ghost">取消</button>
-            <button type="button" onClick={() => void apply()} disabled={importing} className="dialog-btn dialog-btn-neutral">{importing ? "导入中…" : `导入 ${rows.filter((r) => r.name.trim() || r.code.trim()).length} 条`}</button>
+            <Capsule variant="secondary" type="button" onClick={onClose} disabled={importing} className="">取消</Capsule>
+            <Capsule variant="primary" type="button" onClick={() => void apply()} disabled={importing} className="">{importing ? "导入中…" : `导入 ${rows.filter((r) => r.name.trim() || r.code.trim()).length} 条`}</Capsule>
           </div>
         </div>
       )}

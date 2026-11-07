@@ -1,4 +1,5 @@
 "use client";
+import { Capsule, IconButton } from "@/components/Capsule";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
@@ -191,7 +192,7 @@ function PillGroup({
       <span className="mr-0.5 text-[11px] font-semibold text-faint">{label}</span>
       <div data-glass-group className="flex min-w-0 max-w-full flex-wrap gap-2 rounded-xl border border-edge-strong bg-bg-gray/60 p-1 text-[11px] font-semibold">
         {options.map((o) => (
-          <button
+          <Capsule variant="secondary" selected={value === o.key}
             key={o.key}
             type="button"
             onClick={() => onChange(o.key)}
@@ -203,7 +204,7 @@ function PillGroup({
           >
             {o.dot && <span className={`h-1.5 w-1.5 flex-none rounded-full ${o.dot}`} />}
             {o.label}
-          </button>
+          </Capsule>
         ))}
       </div>
     </div>
@@ -457,7 +458,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   function marketPill(m: MarketKey) {
     const dragIndex = orderedMarkets.indexOf(m);
     return (
-      <button
+      <Capsule variant="secondary" selected={marketKey === m}
         key={m}
         type="button"
         draggable={canManage && !savingOrder}
@@ -483,7 +484,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
           <circle cx="9" cy="12" r="1.1" /><circle cx="15" cy="12" r="1.1" />
           <circle cx="9" cy="18" r="1.1" /><circle cx="15" cy="18" r="1.1" />
         </svg>}
-      </button>
+      </Capsule>
     );
   }
 
@@ -642,25 +643,25 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-1 rounded-full border border-edge-strong bg-bg-gray/60 p-1">
-                <button
+                <IconButton size="sm"
                   type="button"
                   onClick={() => moveMonth(-1)}
                   disabled={!canPrev}
-                  aria-label="上个月"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted transition-all duration-200 hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted"
+                  label="上个月"
+                  className=""
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m15 18-6-6 6-6" /></svg>
-                </button>
+                </IconButton>
                 <span className="min-w-[112px] text-center text-sm font-bold tabular-nums text-ink">{monthTitle}</span>
-                <button
+                <IconButton size="sm"
                   type="button"
                   onClick={() => moveMonth(1)}
                   disabled={!canNext}
-                  aria-label="下个月"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted transition-all duration-200 hover:bg-brand-hover hover:text-ink dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted"
+                  label="下个月"
+                  className=""
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m9 18 6-6-6-6" /></svg>
-                </button>
+                </IconButton>
               </div>
               <button
                 type="button"

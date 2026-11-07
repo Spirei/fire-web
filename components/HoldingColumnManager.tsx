@@ -1,4 +1,5 @@
 "use client";
+import { IconButton } from "@/components/Capsule";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
@@ -85,11 +86,11 @@ export function useHoldingColumns() {
 }
 
 export function HoldingColumnsButton({ onClick }: { onClick: () => void }) {
-  return <button type="button" onClick={onClick} title="显示与排序持仓列" aria-label="显示与排序持仓列" className="group inline-flex h-9 w-9 flex-none items-center justify-center rounded-[9px] border border-edge-strong bg-white text-muted shadow-sm transition-all duration-200 hover:-translate-y-px hover:bg-brand-hover hover:text-ink active:scale-[.97] dark:bg-[#1c222d]">
+  return <IconButton size="md" framed type="button" onClick={onClick} title="显示与排序持仓列" label="显示与排序持仓列" className="flex-none">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px] transition-transform duration-200 group-hover:scale-105">
       <path d="M4 5h16l-6.35 7.15v5.25l-3.3 1.65v-6.9L4 5Z" />
     </svg>
-  </button>;
+  </IconButton>;
 }
 
 /** 扁平复选框（参考图样式）：选中 = 白底黑勾，未选中 = 透明 + 浅边框 */
@@ -188,9 +189,9 @@ export function HoldingColumnManager({ columns, onSave, onClose }: { columns: Ho
           {rows.map((item, index) => (
             <div key={item.key} onDragOver={(event) => event.preventDefault()} onDrop={() => drop(index)} className="mx-2 flex items-center gap-1.5 rounded-[8px] px-2 py-1.5 transition-colors hover:bg-bg-gray">
               <FlatCheckbox checked={item.visible} onChange={() => toggle(index)} label={HOLDING_COLUMN_LABELS[item.key]} dim={!item.visible} />
-              <button type="button" draggable onDragStart={(event) => { dragIndex.current = index; event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { dragIndex.current = null; }} className="drag-handle inline-flex h-6 w-6 cursor-grab items-center justify-center rounded-md text-muted transition-colors hover:bg-bg-gray hover:text-ink active:cursor-grabbing" aria-label={`拖动 ${HOLDING_COLUMN_LABELS[item.key]} 排序`} title="拖动排序">
+              <IconButton size="sm" type="button" draggable onDragStart={(event) => { dragIndex.current = index; event.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { dragIndex.current = null; }} className="" label={`拖动 ${HOLDING_COLUMN_LABELS[item.key]} 排序`} title="拖动排序">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
-              </button>
+              </IconButton>
             </div>
           ))}
         </div>

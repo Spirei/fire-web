@@ -1,4 +1,5 @@
 "use client";
+import { Capsule, IconButton } from "@/components/Capsule";
 import MailTemplatesSettings from "@/components/MailTemplatesSettings";
 import { DiscordFields, FeishuFields, QqFields, TelegramFields, WebPushFields, WecomFields } from "@/components/NotifyChannelFields";
 
@@ -15,7 +16,7 @@ import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
 import PlatformBackups from "@/components/PlatformBackups";
-import { lockScroll } from "@/lib/overlayLifecycle";
+import { lockScroll, trapModalTab } from "@/lib/overlayLifecycle";
 import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
@@ -79,6 +80,7 @@ interface Props {
 }
 
 function SettingsDetailShell({ title, category, detailKey, showBack = false, closeDisabled = false, editable = false, editing = false, onBack, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; showBack?: boolean; closeDisabled?: boolean; editable?: boolean; editing?: boolean; onBack?: () => void; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
+  const detailPanelRef = useRef<HTMLElement | null>(null);
   const workspaceActive = useWorkspaceActive();
   const [mounted, setMounted] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -107,7 +109,9 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
     if (!mounted || !workspaceActive) return;
     const unlockScroll = lockScroll();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || event.repeat) return;
+      if (event.defaultPrevented) return;
+      if (event.key === "Tab" && detailPanelRef.current && !document.querySelector("[data-priority-modal='true']")) { trapModalTab(event, detailPanelRef.current); return; }
+      if (event.key !== "Escape" || event.repeat) return;
       // 详情上方还有确认、找回密码或版本弹窗时，只允许最上层弹窗处理 Esc。
       if (document.querySelector("[data-priority-modal='true']")) return;
       event.preventDefault();
@@ -124,7 +128,7 @@ function SettingsDetailShell({ title, category, detailKey, showBack = false, clo
   const content = (
     <div className={`sc-detail-layer fixed inset-0 z-[10900] flex items-center justify-center p-4 sm:p-8${closing ? " is-closing" : ""}`} style={{ display: workspaceActive ? undefined : "none" }} aria-hidden={!workspaceActive || undefined} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="关闭设置详情" className="sc-detail-scrim absolute inset-0" onClick={requestClose} disabled={closing || closeDisabled} />
-      <section className="sc-detail-dialog relative flex w-full max-w-[600px] flex-col overflow-hidden" data-detail={detailKey}>
+      <section ref={detailPanelRef} className="sc-detail-dialog relative flex w-full max-w-[600px] flex-col overflow-hidden" data-detail={detailKey}>
         <div className="sc-detail-theme-bridge sv-win-root sv-orca sv-center flex min-h-0 flex-1 flex-col">
         <header className="sc-detail-dialog-head flex-none">
           {showBack && <button type="button" className="sc-detail-back" aria-label="返回" onClick={onBack || requestClose} disabled={closing || closeDisabled}><span aria-hidden="true">‹</span></button>}
@@ -311,9 +315,9 @@ function CronRefreshButton() {
     }
   }
   return (
-    <button type="button" onClick={refreshRates} disabled={busy} className="btn btn-ghost btn-sm disabled:opacity-60">
+    <Capsule variant="ghost" size="sm" type="button" onClick={refreshRates} disabled={busy} className="disabled:opacity-60">
       {busy ? "刷新中…" : "立即刷新"}
-    </button>
+    </Capsule>
   );
 }
 
@@ -391,7 +395,7 @@ function BackupTaskCard() {
   const totalSize = backups.reduce((s, b) => s + b.size, 0);
   const fmtSize = (n: number) =>
     n >= 1073741824 ? `${(n / 1073741824).toFixed(1)} GB` : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${(n / 1024).toFixed(0)} KB` : `${n} B`;
-  if (!cfg) return <div className="settings-load-state" role="status">{loadError || "正在读取备份设置…"}{loadError && <button type="button" className="btn btn-line" onClick={() => void refresh()}>重试</button>}</div>;
+  if (!cfg) return <div className="settings-load-state" role="status">{loadError || "正在读取备份设置…"}{loadError && <Capsule variant="secondary" type="button" className="" onClick={() => void refresh()}>重试</Capsule>}</div>;
   return <div className="settings-backup-panel">
     <SettingsManagedGroup scope="backups" inline>
     <SettingsManagedPane name="plan" title="备份计划" summary={`${cfg.enabled ? "已开启" : "未开启"} · ${({1:"每小时",24:"每天",168:"每周",720:"每月"} as Record<number,string>)[cfg.intervalHours] || `每 ${cfg.intervalHours} 小时`} · 保留 ${cfg.keep} 份`}>
@@ -400,11 +404,11 @@ function BackupTaskCard() {
       <div className="sw-row"><div className="sw-row-label"><b>备份频率</b></div><AppSelect value={intervalHours} onChange={value => setIntervalHours(Number(value))} options={[{ value: "1", label: "每小时" }, { value: "24", label: "每天" }, { value: "168", label: "每周" }, { value: "720", label: "每月" }]} className="settings-clean-select" ariaLabel="备份频率" /></div>
       <div className="sw-row"><div className="sw-row-label"><b>保留份数</b><span>自动清理较早的备份</span></div><AppSelect value={keep} onChange={value => setKeep(Number(value))} options={[3, 7, 14, 30].map(value => ({ value:String(value), label:`${value} 份` }))} className="settings-clean-select" ariaLabel="备份保留份数" /></div>
     </fieldset>
-    <button type="button" className="btn settings-full-action" onClick={save} disabled={saving || busy || (cfg.enabled === enabled && cfg.intervalHours === intervalHours && cfg.keep === keep)}>{saving ? "保存中…" : "保存设置"}</button>
+    <Capsule variant="secondary" type="button" className="settings-full-action" onClick={save} disabled={saving || busy || (cfg.enabled === enabled && cfg.intervalHours === intervalHours && cfg.keep === keep)}>{saving ? "保存中…" : "保存设置"}</Capsule>
     </SettingsManagedPane>
     <SettingsManagedPane name="records" title="备份记录" summary={`${backups.length} 份 · ${fmtSize(totalSize)}`}>
     <div className="settings-clean-group">
-      <div className="sw-row"><div className="sw-row-label"><b>最近备份</b><span>{last}</span></div><button type="button" className="btn btn-line" onClick={backupNow} disabled={busy || saving}>{busy ? "备份中…" : "立即备份"}</button></div>
+      <div className="sw-row"><div className="sw-row-label"><b>最近备份</b><span>{last}</span></div><Capsule variant="secondary" type="button" className="" onClick={backupNow} disabled={busy || saving}>{busy ? "备份中…" : "立即备份"}</Capsule></div>
       <div className="sw-row"><div className="sw-row-label"><b>已保存</b><span>data/backups</span></div><span className="settings-detail-value">{backups.length} 份 · {fmtSize(totalSize)}</span></div>
     </div>
     </SettingsManagedPane>
@@ -1480,7 +1484,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     showToast("已取消未保存的修改");
   }
   const EDIT_CANCEL_BUTTON = (
-    <button type="button" onClick={cancelActiveEdit} className="btn btn-ghost btn-sm">取消</button>
+    <Capsule variant="ghost" size="sm" type="button" onClick={cancelActiveEdit} className="">取消</Capsule>
   );
 
   saveActiveEditRef.current = saveActiveEdit;
@@ -1935,10 +1939,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   return (
     <div className="settings-page flex h-full min-h-0 flex-1">
-      {showDeleteConfirm && createPortal(
-        <div data-priority-modal="true" className="fixed inset-0 z-[11000] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="确认注销账号" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); } }}>
-          <div className="sc-meta-dialog w-full max-w-[594px] rounded-2xl border border-edge bg-white p-6 shadow-pop dark:border-[#2a3140] dark:bg-[#1b2029]">
-            <h3 className="text-base font-bold text-ink">确认注销账号</h3>
+      {showDeleteConfirm && <AppModal title="确认注销账号" size="md" onClose={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); }}>
             <p className="mt-2 text-sm text-muted">此操作<strong className="text-up">不可恢复</strong>，将永久删除账号「{user.nickname || user.username}」及全部持仓、订单、分组、偏好等数据。</p>
             <label className="mt-4 block text-xs font-semibold text-muted">请输入登录名「<b className="text-ink">{user.username}</b>」以确认</label>
             <input
@@ -1973,13 +1974,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               </>
             )}
             <div className="mt-5 flex justify-end gap-2.5">
-              <button type="button" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); }} className="btn btn-ghost btn-sm">取消</button>
-              <button type="button" disabled={deleteConfirmText.trim() !== user.username || !deletePassword || (totpEnabled && !deleteTotpCode)} onClick={doDeleteAccount} className="btn btn-ghost btn-sm !text-up disabled:opacity-40">确认注销</button>
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); }} className="">取消</Capsule>
+              <Capsule variant="danger" size="sm" type="button" disabled={deleteConfirmText.trim() !== user.username || !deletePassword || (totpEnabled && !deleteTotpCode)} onClick={doDeleteAccount} className="!text-up disabled:opacity-40">确认注销</Capsule>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      </AppModal>}
       <aside className="sw-sidebar relative hidden w-[248px] flex-none flex-col border-r md:flex">
         <div className="sc-brand"><h1>账户设置</h1></div>
         <div className="sw-sidebar-nav">
@@ -2189,11 +2187,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       className="xl:col-span-2"
                       id="ticker"
                       titleAction={!editingTicker ? (
-                        <button type="button" onClick={() => setEditingTicker(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑首页指数" aria-label="编辑首页指数">
+                        <IconButton size="sm" type="button" onClick={() => setEditingTicker(true)} className="" title="编辑首页指数" label="编辑首页指数">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                        </button>
+                        </IconButton>
                       ) : undefined}
-                      action={editingTicker ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
+                      action={editingTicker ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<Capsule variant="secondary" size="sm" type="button" onClick={() => { void saveActiveEdit(); }} className="">保存</Capsule></div> : undefined}
                     >
                       <div className="settings-compact-list mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 rounded-[10px] bg-bg-gray/60 px-3 py-2.5 sm:flex sm:flex-wrap sm:gap-3">
                         <span className="text-[13px] font-semibold text-ink-2">轮换间隔</span>
@@ -2281,12 +2279,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <option key={m} value={m} />
                         ))}
                       </datalist>
-                      {editingTicker && <button type="button" onClick={addTickerItem} className="btn btn-line btn-sm mt-3">
+                      {editingTicker && <Capsule variant="secondary" size="sm" type="button" onClick={addTickerItem} className="mt-3">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
                           <path d="M12 5v14" /><path d="M5 12h14" />
                         </svg>
                         添加指数
-                      </button>}
+                      </Capsule>}
                     </SettingsSection>
 
                     <SettingsSection
@@ -2296,11 +2294,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       className="xl:col-span-2"
                       id="nav"
                       titleAction={!editingHomeNav ? (
-                        <button type="button" onClick={() => setEditingHomeNav(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑首页导航" aria-label="编辑首页导航">
+                        <IconButton size="sm" type="button" onClick={() => setEditingHomeNav(true)} className="" title="编辑首页导航" label="编辑首页导航">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                        </button>
+                        </IconButton>
                       ) : undefined}
-                      action={editingHomeNav ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
+                      action={editingHomeNav ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<Capsule variant="secondary" size="sm" type="button" onClick={() => { void saveActiveEdit(); }} className="">保存</Capsule></div> : undefined}
                     >
                       <div className="settings-compact-list settings-meta-list flex flex-col gap-2">
                         {(site.homeNav || []).map((item) => (
@@ -2348,22 +2346,22 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   title="应用导航菜单"
                   desc="默认页、入口名称、图标与顺序"
                   titleAction={!editingTabs ? (
-                    <button type="button" onClick={() => setEditingTabs(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑应用导航" aria-label="编辑应用导航">
+                    <IconButton size="sm" type="button" onClick={() => setEditingTabs(true)} className="" title="编辑应用导航" label="编辑应用导航">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                    </button>
+                    </IconButton>
                   ) : undefined}
                   action={
-                    editingTabs ? <button
+                    editingTabs ? <Capsule variant="secondary" size="sm"
                       type="button"
                       disabled={blockSaving.tabs}
                       onClick={async () => {
                         const saved = await saveBlock("tabs", { tabs }, "导航菜单已保存");
                         if (saved) setEditingTabs(false);
                       }}
-                      className="btn btn-line btn-sm disabled:opacity-60"
+                      className="disabled:opacity-60"
                     >
                       {blockSaving.tabs ? "保存中…" : "保存"}
-                    </button> : undefined
+                    </Capsule> : undefined
                   }
                 >
                   <div className="settings-compact-list settings-meta-list flex flex-col gap-2">
@@ -2401,12 +2399,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           )}
                         </button> : <span className="inline-flex h-5 w-5 flex-none items-center justify-center">{t.default && <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-ink"><path d="m4 10 3.5 3.5L16 5.5" /></svg>}</span>}
                         <div className={editingTabs ? "flex min-w-0 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}>
-                          <button
+                          <IconButton size="sm" framed
                             type="button"
                             disabled={t.key === "trading" || !editingTabs || !!blockSaving[`nav-icon:${t.key}`]}
                             onClick={() => navIconRefs.current[t.key]?.click()}
-                            className="group relative flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-[9px] border border-edge bg-white shadow-[0_1px_3px_rgba(10,14,25,.08)] disabled:cursor-default dark:bg-[#1c1c1e]"
-                            title={t.key === "trading" ? "动态使用专属报纸图标" : `上传/更换「${t.label}」导航图标`}
+                            className="group relative flex-none overflow-hidden"
+                            label={t.key === "trading" ? "动态使用专属报纸图标" : `上传/更换「${t.label}」导航图标`}
                           >
                             <SafeAssetImage
                               src={t.key === "trading" ? undefined : assetIcons[t.key.toUpperCase()]}
@@ -2426,7 +2424,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                 </svg>
                               )}
                             </span>}
-                          </button>
+                          </IconButton>
                           <input
                             ref={(el) => {
                               navIconRefs.current[t.key] = el;
@@ -2455,12 +2453,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             title="独立 URL，如 /holdings"
                             className="h-[34px] min-w-0 flex-1 rounded-[8px] border border-edge-strong bg-bg-gray/40 px-2.5 font-mono text-xs outline-none transition-shadow focus:bg-white focus:shadow-[0_0_0_3px_rgba(107,114,128,.14)]"
                           /> : <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-muted" title={t.url || `/${t.key}`}>{t.url || `/${t.key}`}</span>}
-                          {editingTabs && <button type="button" disabled={i === 0} onClick={() => moveTab(i, -1)} className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-35" title="上移">
+                          {editingTabs && <IconButton size="sm" framed type="button" disabled={i === 0} onClick={() => moveTab(i, -1)} className="flex-none" label="上移">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m18 15-6-6-6 6" /></svg>
-                          </button>}
-                          {editingTabs && <button type="button" disabled={i === tabs.length - 1} onClick={() => moveTab(i, 1)} className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-[8px] border border-edge text-muted transition-colors hover:bg-brand-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-35" title="下移">
+                          </IconButton>}
+                          {editingTabs && <IconButton size="sm" framed type="button" disabled={i === tabs.length - 1} onClick={() => moveTab(i, 1)} className="flex-none" label="下移">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="m6 9 6 6 6-6" /></svg>
-                          </button>}
+                          </IconButton>}
                         </div>
                       </div>
                     ))}
@@ -2479,8 +2477,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   title="原公开动态来源"
                   desc="保留原公开内容的缓存配置；新的个性化动态在页面右上角编辑指示。"
                   action={editingTradingSquare ? (
-                    <button type="button" disabled={blockSaving.tradingSquare} onClick={() => void saveTradingSquare()} className="btn btn-line btn-sm disabled:opacity-60">{blockSaving.tradingSquare ? "保存中…" : "保存"}</button>
-                  ) : <button type="button" onClick={() => setEditingTradingSquare(true)} className="btn btn-ghost btn-sm">编辑</button>}
+                    <Capsule variant="secondary" size="sm" type="button" disabled={blockSaving.tradingSquare} onClick={() => void saveTradingSquare()} className="disabled:opacity-60">{blockSaving.tradingSquare ? "保存中…" : "保存"}</Capsule>
+                  ) : <Capsule variant="ghost" size="sm" type="button" onClick={() => setEditingTradingSquare(true)} className="">编辑</Capsule>}
                 >
                   <div className="flex flex-col">
                     {([
@@ -2522,23 +2520,23 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   desc="管理持仓券商、别名与顺序。"
                   id="groups"
                   titleAction={!editingStockGroups ? (
-                    <button
+                    <IconButton size="sm"
                       type="button"
                       disabled={!groupsLoaded}
                       onClick={() => setEditingStockGroups(true)}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink disabled:opacity-40"
+                      className=""
                       title="编辑券商分组"
-                      aria-label="编辑券商分组"
+                      label="编辑券商分组"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                         <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
                       </svg>
-                    </button>
+                    </IconButton>
                   ) : undefined}
                   action={
                     editingStockGroups ? (
                       <div className="flex items-center gap-2">
-                        <button
+                        <Capsule variant="ghost" size="sm"
                           type="button"
                           disabled={groupSaving}
                           onClick={() => {
@@ -2546,19 +2544,19 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                             setEditingStockGroups(false);
                             setGroupMsg(null);
                           }}
-                          className="btn btn-ghost btn-sm disabled:opacity-60"
+                          className="disabled:opacity-60"
                         >
                           取消
-                        </button>
-                        <button
+                        </Capsule>
+                        <Capsule variant="secondary" size="sm"
                           type="button"
                           disabled={groupSaving || !groupsLoaded}
                           onClick={saveStockGroups}
-                          className="btn btn-line btn-sm disabled:opacity-60"
+                          className="disabled:opacity-60"
                           title={!groupsLoaded ? "券商列表加载中…" : undefined}
                         >
                           {groupSaving ? "保存中…" : !groupsLoaded ? "加载中…" : "保存"}
-                        </button>
+                        </Capsule>
                       </div>
                     ) : undefined
                   }
@@ -2636,10 +2634,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     )}
                   </div>
                   {editingStockGroups && (
-                    <button type="button" onClick={addGroup} className="btn btn-ghost btn-sm mt-4 self-start">
+                    <Capsule variant="ghost" size="sm" type="button" onClick={addGroup} className="mt-4 self-start">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
                       添加券商
-                    </button>
+                    </Capsule>
                   )}
                   {groupMsg && (
                     <p className={`rounded-[10px] px-3.5 py-2.5 text-[13px] ${groupMsg.type === "ok" ? "bg-brand-light text-brand-deep" : "bg-up-bg text-up"}`}>
@@ -2654,31 +2652,31 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   desc="统一全站市场徽标的颜色与文字。"
                   id="market-badges"
                   titleAction={!editingMarketBadges ? (
-                    <button
+                    <IconButton size="sm"
                       type="button"
                       onClick={() => setEditingMarketBadges(true)}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink"
+                      className=""
                       title="编辑市场色块"
-                      aria-label="编辑市场色块"
+                      label="编辑市场色块"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                         <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
                       </svg>
-                    </button>
+                    </IconButton>
                   ) : undefined}
                   action={
                     editingMarketBadges ? (
                       <div className="flex items-center gap-2">
-                        <button
+                        <Capsule variant="ghost" size="sm"
                           type="button"
                           onClick={() => {
                             setSite((s) => ({ ...s, marketBadges: { ...DEFAULT_MARKET_BADGES }, marketBadgesVisible: true }));
                           }}
-                          className="btn btn-ghost btn-sm"
+                          className=""
                         >
                           恢复默认
-                        </button>
-                        <button
+                        </Capsule>
+                        <Capsule variant="ghost" size="sm"
                           type="button"
                           onClick={() => {
                             fetch("/api/settings")
@@ -2693,13 +2691,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                               .catch(() => undefined);
                             setEditingMarketBadges(false);
                           }}
-                          className="btn btn-ghost btn-sm"
+                          className=""
                         >
                           取消
-                        </button>
-                        <button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">
+                        </Capsule>
+                        <Capsule variant="secondary" size="sm" type="button" onClick={() => { void saveActiveEdit(); }} className="">
                           保存
-                        </button>
+                        </Capsule>
                       </div>
                     ) : undefined
                   }
@@ -2788,13 +2786,13 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     })}
                   </div>
                   {editingMarketBadges && (
-                    <button
+                    <Capsule variant="ghost" size="sm"
                       type="button"
                       onClick={() => setSite((s) => ({ ...s, marketBadges: { ...DEFAULT_MARKET_BADGES }, marketBadgesVisible: true }))}
-                      className="btn btn-ghost btn-sm mt-3 self-start"
+                      className="mt-3 self-start"
                     >
                       恢复默认
-                    </button>
+                    </Capsule>
                   )}
                   {blockMsg.marketBadges && (
                     <p className={`mt-3 rounded-[10px] px-3.5 py-2.5 text-[13px] ${blockMsg.marketBadges.type === "ok" ? "bg-brand-light text-brand-deep" : "bg-up-bg text-up"}`}>
@@ -2852,7 +2850,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       title="模型服务"
                       desc="管理聊天与决策模型。聊天模型按顺序回退。"
                       className="settings-model-section"
-                      action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" disabled={!!site.modelServicesError || !!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">{uploadingModelIconId ? "图标保存中…" : "保存"}</button></div> : <button type="button" disabled={!!site.modelServicesError} onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="btn btn-ghost btn-sm">编辑</button>}
+                      action={editingModel ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<Capsule variant="secondary" size="sm" type="button" disabled={!!site.modelServicesError || !!uploadingModelIconId || !!blockSaving.model} onClick={() => { void saveActiveEdit(); }} className="">{uploadingModelIconId ? "图标保存中…" : "保存"}</Capsule></div> : <Capsule variant="ghost" size="sm" type="button" disabled={!!site.modelServicesError} onClick={() => { if (!site.modelServices.length) updateServices(services); setEditingModel(true); }} className="">编辑</Capsule>}
                     >
                       <div className="model-service-stack">
                         {site.modelServicesError && <p role="alert" className="text-sm text-red-500">{site.modelServicesError}</p>}
@@ -2989,11 +2987,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   desc="管理 OpenD 连接与行情来源。"
                   id="trade"
                   titleAction={!editingFutu ? (
-                    <button type="button" onClick={() => setEditingFutu(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑富途连接" aria-label="编辑富途连接">
+                    <IconButton size="sm" type="button" onClick={() => setEditingFutu(true)} className="" title="编辑富途连接" label="编辑富途连接">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                    </button>
+                    </IconButton>
                   ) : undefined}
-                  action={editingFutu ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
+                  action={editingFutu ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<Capsule variant="secondary" size="sm" type="button" onClick={() => { void saveActiveEdit(); }} className="">保存</Capsule></div> : undefined}
                 >
                   <SettingsManagedGroup scope="trade" inline editing={editingFutu}>
                     <SettingsManagedPane name="connection" title="OpenD 连接" summary={`${site.futuHost || "127.0.0.1"}:${site.futuPort || "11111"} · ${futuStatusLabel}`}>
@@ -3012,9 +3010,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           <i className={`h-1.5 w-1.5 rounded-full ${futuChecking ? "bg-[#d1d5db]" : futuOnline ? "bg-[#0fa07b]" : "bg-[#e5a13b]"}`} />
                           {futuStatusLabel}
                         </span>
-                        <button type="button" disabled={futuTest?.busy} onClick={testFutu} className="btn btn-line btn-sm disabled:opacity-60">
+                        <Capsule variant="secondary" size="sm" type="button" disabled={futuTest?.busy} onClick={testFutu} className="disabled:opacity-60">
                           {futuTest?.busy ? "测试中…" : "测试连接"}
-                        </button>
+                        </Capsule>
                         {futuTest?.msg && (
                           <span className={`text-[11px] ${futuTest.ok ? "text-[#0fa07b]" : "text-up"}`}>{futuTest.msg}</span>
                         )}
@@ -3039,9 +3037,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         ) : (
                           <span className="text-[11.5px] text-faint">{futuQuota.ok === false ? "查询失败，请重试" : "未查询"}</span>
                         )}
-                        <button type="button" disabled={futuQuota.loading} onClick={() => void loadFutuQuota()} className="btn btn-line btn-sm disabled:opacity-60">
+                        <Capsule variant="secondary" size="sm" type="button" disabled={futuQuota.loading} onClick={() => void loadFutuQuota()} className="disabled:opacity-60">
                           {futuQuota.loading ? "查询中…" : "查询额度"}
-                        </button>
+                        </Capsule>
                       </div>
                     </div>
                     </SettingsManagedPane>
@@ -3071,11 +3069,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   desc={SOURCE_SECTIONS.find((section) => section.id === activeAnchor)?.desc || "实时行情、搜索、分时走势与汇率换算"}
                   id={SOURCE_DETAIL_ANCHORS.has(activeAnchor) ? activeAnchor : "sources"}
                   titleAction={!editingSources ? (
-                    <button type="button" onClick={() => setEditingSources(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑股票来源接口" aria-label="编辑股票来源接口">
+                    <IconButton size="sm" type="button" onClick={() => setEditingSources(true)} className="" title="编辑股票来源接口" label="编辑股票来源接口">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                    </button>
+                    </IconButton>
                   ) : undefined}
-                  action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<button type="button" onClick={() => { void saveActiveEdit(); }} className="btn btn-line btn-sm">保存</button></div> : undefined}
+                  action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<Capsule variant="secondary" size="sm" type="button" onClick={() => { void saveActiveEdit(); }} className="">保存</Capsule></div> : undefined}
                 >
                   <div className="source-field-list flex flex-col">
                     {SOURCE_SECTIONS.filter((section) => section.id === activeAnchor).map(({ id, keys }) => {
@@ -3156,11 +3154,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   title="个人信息"
                   desc="头像、昵称与邮箱"
                   titleAction={!editingProfile ? (
-                    <button type="button" onClick={() => setEditingProfile(true)} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-brand-hover hover:text-ink" title="编辑个人信息" aria-label="编辑个人信息">
+                    <IconButton size="sm" type="button" onClick={() => setEditingProfile(true)} className="" title="编辑个人信息" label="编辑个人信息">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-                    </button>
+                    </IconButton>
                   ) : undefined}
-                  action={editingProfile ? <div className="flex items-center gap-2"><button type="button" onClick={() => { setNickname(me.nickname ?? ""); setEmail(me.email ?? ""); setProfilePassword(""); setProfileCode(""); setProfileFactorRequired(false); setEditingProfile(false); }} className="btn btn-ghost btn-sm">取消</button><button type="button" onClick={saveProfile} className="btn btn-line btn-sm">保存资料</button></div> : undefined}
+                  action={editingProfile ? <div className="flex items-center gap-2"><Capsule variant="ghost" size="sm" type="button" onClick={() => { setNickname(me.nickname ?? ""); setEmail(me.email ?? ""); setProfilePassword(""); setProfileCode(""); setProfileFactorRequired(false); setEditingProfile(false); }} className="">取消</Capsule><Capsule variant="secondary" size="sm" type="button" onClick={saveProfile} className="">保存资料</Capsule></div> : undefined}
                 >
                   <div className="settings-profile-grid">
                     <div className="settings-avatar-side">
@@ -3176,7 +3174,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <span>@{me.username}</span>
                         <em>{user.role === "admin" ? "管理员" : "成员"}</em>
                       </div>
-                      {editingProfile && <><button type="button" disabled={avatarUploading} onClick={() => avatarRef.current?.click()} className="btn btn-ghost btn-sm">上传头像</button><small>jpg / png / webp，≤ 5MB</small></>}
+                      {editingProfile && <><Capsule variant="ghost" size="sm" type="button" disabled={avatarUploading} onClick={() => avatarRef.current?.click()} className="">上传头像</Capsule><small>jpg / png / webp，≤ 5MB</small></>}
                       {avatarMsg && <p className={avatarMsg.type === "ok" ? "is-ok" : "is-error"}>{avatarMsg.text}</p>}
                     </div>
                     <div className="settings-profile-fields">
@@ -3204,7 +3202,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           )}
                         </div>
                       </div>
-                      {!editingProfile && me.email && !me.emailVerified && <div className="sw-row"><div className="sw-row-label"><b>验证邮箱</b><span>点击确认邮件中的链接</span></div><button type="button" disabled={emailVerifyBusy} onClick={()=>void sendEmailConfirmation()} className="btn btn-line btn-sm">{emailVerifyBusy?"发送中…":"发送确认邮件"}</button></div>}
+                      {!editingProfile && me.email && !me.emailVerified && <div className="sw-row"><div className="sw-row-label"><b>验证邮箱</b><span>点击确认邮件中的链接</span></div><Capsule variant="secondary" size="sm" type="button" disabled={emailVerifyBusy} onClick={()=>void sendEmailConfirmation()} className="">{emailVerifyBusy?"发送中…":"发送确认邮件"}</Capsule></div>}
                       {emailVerifyMessage && <p role={emailVerifyState === "error" ? "alert" : "status"} className={`settings-form-message is-${emailVerifyState}`}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/>{emailVerifyState === "error" ? <path d="M12 7v6m0 3h.01"/> : <path d="m8 12 3 3 5-6"/>}</svg><span>{emailVerifyMessage}</span></p>}
                       {editingProfile && email.trim().toLowerCase() !== (me.email ?? "").trim().toLowerCase() && (
                         <>
@@ -3245,7 +3243,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="sw-row">
                     <div className="sw-row-label"><b>网站数据</b><span>下载为 JSON 文件</span></div>
                     <div className="ctrl">
-                      <button type="button" disabled={backupBusy === "export"} onClick={exportSiteBackup} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "export" ? "导出中…" : "导出"}</button>
+                      <Capsule variant="ghost" size="sm" type="button" disabled={backupBusy === "export"} onClick={exportSiteBackup} className="disabled:opacity-60">{backupBusy === "export" ? "导出中…" : "导出"}</Capsule>
                     </div>
                   </div>
                   </SettingsManagedPane>
@@ -3255,7 +3253,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="sw-row">
                     <div className="sw-row-label"><b>备份文件</b><span>JSON 格式</span></div>
                     <div className="ctrl">
-                      <button type="button" disabled={backupBusy === "import"} onClick={() => importBackupRef.current?.click()} className="btn btn-ghost btn-sm disabled:opacity-60">{backupBusy === "import" ? "导入中…" : "导入"}</button>
+                      <Capsule variant="ghost" size="sm" type="button" disabled={backupBusy === "import"} onClick={() => importBackupRef.current?.click()} className="disabled:opacity-60">{backupBusy === "import" ? "导入中…" : "导入"}</Capsule>
                       <input ref={importBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importSiteBackup(f); }} />
                     </div>
                   </div>
@@ -3263,7 +3261,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <SettingsManagedPane name="holdings" title="持仓数据" summary={`导出持仓与自选记录 · ${recordsCount} 条`}>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount} 条</span></div>
-                    <button type="button" onClick={onExport} className="btn btn-ghost btn-sm">导出</button>
+                    <Capsule variant="ghost" size="sm" type="button" onClick={onExport} className="">导出</Capsule>
                   </div>
                   </SettingsManagedPane>
                   </SettingsManagedGroup>
@@ -3273,7 +3271,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="settings-danger-zone">
                   <div className="sw-row">
                     <div className="sw-row-label"><b>清空数据</b><span>不可恢复，请谨慎操作</span></div>
-                    <button type="button" onClick={clearAll} disabled={clearing || recordsCount === 0} className="btn btn-ghost btn-sm !text-up disabled:opacity-50">{clearing ? "清空中…" : "清空"}</button>
+                    <Capsule variant="danger" size="sm" type="button" onClick={clearAll} disabled={clearing || recordsCount === 0} className="!text-up disabled:opacity-50">{clearing ? "清空中…" : "清空"}</Capsule>
                   </div>
                   </div>
                 </SettingsSection>
@@ -3281,7 +3279,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="settings-danger-zone">
                     <div className="sw-row">
                       <div className="sw-row-label"><b>永久注销</b><span>账号删除后不可恢复，请先导出备份</span></div>
-                      <button type="button" onClick={() => setShowDeleteConfirm(true)} className="btn btn-ghost btn-sm !text-up">注销账号</button>
+                      <Capsule variant="danger" size="sm" type="button" onClick={() => setShowDeleteConfirm(true)} className="!text-up">注销账号</Capsule>
                     </div>
                   </div>
                 </SettingsSection>

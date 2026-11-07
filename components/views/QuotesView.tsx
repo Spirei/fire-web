@@ -1,4 +1,6 @@
 "use client";
+import { Capsule } from "@/components/Capsule";
+import Pagination from "@/components/Pagination";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
@@ -754,7 +756,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
             <i className={`h-1.5 w-1.5 rounded-full ${refreshing ? "animate-pulse bg-[#3297f6]" : quoteAt ? "bg-down" : "bg-faint"}`} />
             {refreshing ? "刷新中…" : quoteAt ? `更新于 ${quoteAt}` : lastRefreshAt ? `上次刷新 ${lastRefreshAt}` : "等待行情"}
           </span>
-          <RefreshButton onClick={() => scheduleRef.current?.manual()} title="立即刷新行情" className="h-8 w-8 rounded-[9px]" />
+          <RefreshButton busy={refreshing} onClick={() => scheduleRef.current?.manual()} title="立即刷新行情" className="h-8 w-8 rounded-[9px]" />
           <AppSelect value={intervalMs} onChange={(value) => setIntervalMs(Number(value))} options={INTERVALS.map((item) => ({ value: String(item.ms), label: `每 ${item.label}` }))} className="h-8 rounded-[9px] border border-edge bg-bg-gray px-2.5 text-[11px] font-semibold text-muted transition-colors hover:border-edge-strong" ariaLabel="刷新间隔" />
         </div>
       </div>
@@ -767,7 +769,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
           const g = watchGroups.find((x) => x.id === chip.id);
           const customIcon = g && g.kind === "custom" ? g.icon || brokerIcons[g.name] || groupStockIcon[g.id] : undefined;
           return (
-            <button aria-pressed={selected}
+            <Capsule variant="secondary" aria-pressed={selected}
               key={chip.id}
               ref={(node) => { groupChipRefs.current[chip.id || "__all"] = node; }}
               type="button"
@@ -797,7 +799,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
               )}
               {chip.label}
               <span className={`text-[11px] tabular-nums ${selected ? "opacity-80" : "text-faint"}`}>{chip.count}</span>
-            </button>
+            </Capsule>
           );
         })}
         </div>
@@ -911,14 +913,11 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
         )}
         {/* 分页：每页 6 条 */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-edge bg-bg-gray/50 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-edge px-4 py-3">
             <span className="text-xs tabular-nums text-muted">
               {groupChips.all.find((c) => c.id === filterId)?.label ?? "全部"} · {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} / {filtered.length}
             </span>
-            <div className="flex gap-2">
-              <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="inline-flex h-[38px] items-center justify-center gap-1.5 rounded-full border border-edge-strong bg-white px-5 text-sm font-semibold text-brand-deep whitespace-nowrap transition-all duration-200 hover:bg-brand-hover hover:text-ink active:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-40">上一页</button>
-              <button type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="inline-flex h-[38px] items-center justify-center gap-1.5 rounded-full border border-edge-strong bg-white px-5 text-sm font-semibold text-brand-deep whitespace-nowrap transition-all duration-200 hover:bg-brand-hover hover:text-ink active:bg-bg-gray disabled:cursor-not-allowed disabled:opacity-40">下一页</button>
-            </div>
+            <Pagination page={safePage} total={totalPages} onChange={setPage}/>
           </div>
         )}
       </div>
