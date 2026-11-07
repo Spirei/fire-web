@@ -1,5 +1,5 @@
-name: Build and publish Fire image
-run-name: "${{ (github.event_name == 'push' || github.event_name == 'pull_request' || inputs.verify_only) && 'Fire 检查' || 'Fire 构建发布' }} · ${{ inputs.request_id || github.sha }}"
+name: Fire 检查与镜像发布
+run-name: "${{ github.event_name == 'push' && github.event.head_commit.message || github.event_name == 'pull_request' && github.event.pull_request.title || inputs.verify_only && 'Fire 手动检查：验证当前版本' || github.event_name == 'schedule' && 'Fire 定时发布：检查并构建最新变更' || 'Fire 手动发布：检查并构建当前版本' }}"
 
 on:
   push:
