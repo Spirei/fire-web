@@ -113,10 +113,7 @@ def mount_legacy_deployment(app, settings, db):
                         "conclusion": run["conclusion"],
                         "event": run["event"],
                         "workflowPath": run["workflow_path"],
-                        "publication": ("pending" if run["status"] != "completed" else "unknown")
-                        if run["workflow_path"] == ".github/workflows/docker-publish.yml"
-                        and run["event"] in {"schedule", "workflow_dispatch"}
-                        else None,
+                        "publication": run["publication"],
                         "startedAt": run["started_at"],
                         "updatedAt": run["updated_at"],
                         "url": run["url"],

@@ -29,6 +29,39 @@ STAGE_ORDER = {
 }
 
 
+async def publication_results(settings, runs):
+    """Historical job observations only; never a deployable-release proof."""
+    gate = asyncio.Semaphore(5)
+
+    async def outcome(run):
+        if run["workflow_path"] != ".github/workflows/docker-publish.yml" or run["event"] not in {
+            "schedule", "workflow_dispatch"
+        }:
+            return None
+        if run["status"] != "completed":
+            return "pending"
+        if run["conclusion"] != "success":
+            return "failed"
+        try:
+            async with gate:
+                raw = await asyncio.to_thread(
+                    github_json, settings, f"/actions/runs/{run['id']}/jobs?per_page=100"
+                )
+            jobs = raw.get("jobs")
+            if not isinstance(jobs, list) or raw.get("total_count", len(jobs)) > len(jobs):
+                return "unknown"
+            publish = [j for j in jobs if j.get("name") == "Publish linux/amd64 image"]
+            if len(publish) == 1 and publish[0].get("status") == "completed":
+                return {"success": "published", "skipped": "reused"}.get(
+                    publish[0].get("conclusion"), "unknown"
+                )
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            pass
+        return "unknown"
+
+    return dict(zip((r["id"] for r in runs), await asyncio.gather(*(outcome(r) for r in runs))))
+
+
 def run_view(settings, raw):
     ident = raw.get("id")
     if not isinstance(ident, int) or ident < 1:
@@ -184,6 +217,9 @@ async def history_page(request, who, *, page=1, per_page=5):
             github_json, settings, f"/actions/runs?branch=main&per_page={per_page}&page={page}"
         )
         items = [run_view(settings, r) for r in raw["workflow_runs"]]
+        outcomes = await publication_results(settings, items)
+        for item in items:
+            item["publication"] = outcomes[item["id"]]
         return {
             "items": items,
             "total": raw.get("total_count"),

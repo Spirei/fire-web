@@ -407,7 +407,7 @@ async def test_configured_status_maps_source_jobs_and_bounded_history_without_fa
                 "jobs": [
                     {
                         "id": 9,
-                        "name": "publish",
+                        "name": "Publish linux/amd64 image",
                         "status": "completed",
                         "conclusion": "success",
                         "started_at": when,
@@ -441,7 +441,7 @@ async def test_configured_status_maps_source_jobs_and_bounded_history_without_fa
     assert result.status_code == 200, result.text
     value = result.json()
     assert value["source"]["sha"] == release.revision and value["image"]["matchesMain"] is True
-    assert value["runs"][0]["workflowPath"] == run["path"] and value["runs"][0]["publication"] == "unknown"
+    assert value["runs"][0]["workflowPath"] == run["path"] and value["runs"][0]["publication"] == "published"
     assert value["runtime"]["matchesImage"] is None and value["runtime"]["sha"] == "unknown"
     assert value["imageProgress"]["jobs"][0]["steps"][0]["startedAt"] == when
     assert value["heatmap"] == {"2026-01-03": 1} and value["heatmapComplete"] is True
