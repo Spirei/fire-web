@@ -16,6 +16,7 @@ vm.runInNewContext(
   mod,
 );
 const { buildStages, buildStatusLabel, workflowLabel } = mod.exports;
+assert.equal(workflowLabel("Build request receipt · 550e8400-e29b-41d4-a716-446655440000"), "登记发布请求");
 const job = (id, name, status = "in_progress", conclusion = null) => ({
   id,
   name,

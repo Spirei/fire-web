@@ -234,3 +234,25 @@ async def test_failed_original_github_run_recovers_without_dispatch(client, admi
     result = await client.get(P + "/builds/" + str(request_id))
     assert result.json()["status"] == "failed" and "未成功" in result.json()["message"]
     assert not calls
+
+
+async def test_failed_clean_title_run_recovers_by_internal_receipt_without_redispatch(client, admin, app, monkeypatch):
+    from alcor_api.deployment_build_receipts import GATE_JOB, RECEIPT_STEP
+
+    configure(app, monkeypatch)
+    identifier = uuid4()
+    async with app.state.db.connection() as conn:
+        await conn.execute("INSERT INTO deployment_builds(owner_id,request_id,status,repository) VALUES(%s,%s,'unknown',%s)",
+                           (admin, identifier, app.state.settings.deployment_repository))
+    def github(_settings, path, body=None):
+        assert body is None and not path.endswith("/dispatches")
+        if "/jobs?" in path:
+            return {"jobs": [{"name": GATE_JOB, "steps": [{"name": RECEIPT_STEP + str(identifier),
+                    "status": "completed", "conclusion": "success"}]}]}
+        return {"workflow_runs": [{"id": 42, "event": "workflow_dispatch", "path": ".github/workflows/docker-publish.yml",
+                "head_branch": "main", "display_title": "Build and publish Alcor image",
+                "status": "completed", "conclusion": "failure"}]}
+    monkeypatch.setattr(deployments, "github_json", github)
+    result = await client.get(P + "/builds/" + str(identifier))
+    assert result.status_code == 200 and result.json()["status"] == "failed"
+    assert "未成功" in result.json()["message"]

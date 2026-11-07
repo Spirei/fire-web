@@ -135,6 +135,7 @@ export function buildStatusLabel(status: string, conclusion: string | null) {
   return "失败";
 }
 export function workflowLabel(label: string): string {
+  if (label.startsWith("Build request receipt · ")) return "登记发布请求";
   if (/^Post Run astral-sh\/setup-uv@/.test(label)) return "收尾：Python 环境";
   if (/^Run astral-sh\/setup-uv@/.test(label)) return "准备 Python 环境";
   const shard = label.match(CHECK);

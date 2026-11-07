@@ -8140,9 +8140,9 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ...V0_1_76_ENTRY,
   version: "v0.1.77",
   date: "2026-11-08",
-  summary: "修复 Linux 容器启动失败",
+  summary: "修复容器启动及发布标题显示",
   software: V0_1_76_ENTRY.software.map(item => ({ ...item, version: "v0.1.77" })),
-  changes: [{ kind: "fix", title: "修复容器启动入口", desc: "Python 启动脚本更名，避免遮蔽标准库 platform 导致 Linux 的 uuid 导入失败；配置检查、内置后端和 Worker 使用同一新入口。" }],
+  changes: [{ kind: "fix", title: "发布标题不再显示内部编号", desc: "GitHub 发布列表保留 Build and publish Alcor image 原名称，不再拼接请求 UUID；回执编号移到构建内部步骤，保留旧标题回执兼容和响应丢失后的只读查询，不猜测关联或自动重发。站内构建进度将此步骤显示为登记发布请求。" }, { kind: "fix", title: "修复容器启动入口", desc: "Python 启动脚本更名，避免遮蔽标准库 platform 导致 Linux 的 uuid 导入失败；配置检查、内置后端和 Worker 使用同一新入口。" }],
 };
 
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;

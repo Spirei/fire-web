@@ -1,6 +1,56 @@
 from uuid import uuid4
+from datetime import datetime, timezone
+
+import pytest
 
 from alcor_api.deployment_build_receipts import find_run
+
+
+@pytest.mark.parametrize("title", ["Build and publish Alcor image", "Check Alcor image"])
+def test_clean_title_recovers_original_receipt_from_internal_step(title):
+    from alcor_api.deployment_build_receipts import lookup_run, GATE_JOB, RECEIPT_STEP
+
+    identifier = uuid4()
+    run = {"id": 42, "event": "workflow_dispatch", "path": ".github/workflows/docker-publish.yml",
+           "head_branch": "main", "display_title": title}
+    step = {"name": RECEIPT_STEP + str(identifier), "status": "completed", "conclusion": "success"}
+    calls = []
+    def github(_settings, path):
+        calls.append(path)
+        assert "/dispatches" not in path
+        return {"jobs": [{"name": GATE_JOB, "steps": [step]}]} if "/jobs?" in path else {"workflow_runs": [run]}
+
+    assert lookup_run(None, github, identifier, created_at=datetime(2026, 11, 8, tzinfo=timezone.utc)) == run
+    assert "created=2026-11-07T23%3A58%3A00%2B00%3A00..2026-11-08T00%3A05%3A00%2B00%3A00" in calls[0]
+    assert calls[1] == "/actions/runs/42/jobs?per_page=100"
+    assert lookup_run(None, github, uuid4()) is None
+    step["conclusion"] = "skipped"
+    assert lookup_run(None, github, identifier) is None
+    step["conclusion"] = "success"
+    run["head_branch"] = "other"
+    assert lookup_run(None, github, identifier) is None
+    run["head_branch"] = "main"
+    run["path"] = ".github/workflows/other.yml"
+    assert lookup_run(None, github, identifier) is None
+
+
+def test_clean_title_never_guesses_receipt_from_sha_or_incomplete_jobs():
+    from alcor_api.deployment_build_receipts import lookup_run
+
+    run = {"id": 42, "event": "workflow_dispatch", "path": ".github/workflows/docker-publish.yml",
+           "head_branch": "main", "display_title": "Build and publish Alcor image", "head_sha": "a" * 40}
+    def github(_settings, path):
+        return {"jobs": [], "total_count": 1} if "/jobs?" in path else {"workflow_runs": [run]}
+    with pytest.raises(ValueError, match="truncated"):
+        lookup_run(None, github, uuid4())
+
+    calls = []
+    def bounded(_settings, path):
+        calls.append(path)
+        return {"jobs": []} if "/jobs?" in path else {"workflow_runs": [{**run, "id": i} for i in range(1, 7)]}
+    with pytest.raises(ValueError, match="truncated"):
+        lookup_run(None, bounded, uuid4())
+    assert sum("/jobs?" in path for path in calls) == 5
 
 
 def test_receipt_matches_only_original_workflow_uuid():
@@ -37,11 +87,13 @@ def test_release_workflow_indexes_request_and_checks_confirmed_commit_before_bui
     title = workflow["run-name"]
     assert "Build and publish Alcor image" in title
     assert "Fire 手动发布" not in title and "Fire 定时发布" not in title
-    assert "inputs.request_id" in title
+    assert "inputs.request_id" not in title
     assert "github.event.head_commit.message" in title
     assert "github.event.pull_request.title" in title
-    assert "github.event_name == 'workflow_dispatch' && inputs.request_id" in title
-    assert "format(' · {0}', inputs.request_id)" in title
+    receipt = workflow["jobs"]["scheduled-change-gate"]["steps"][0]
+    assert receipt["name"] == "Build request receipt · ${{ inputs.request_id }}"
+    assert "workflow_dispatch" in receipt["if"] and "inputs.request_id != ''" in receipt["if"]
+    assert "inputs.request_id" not in receipt["run"]  # No input interpolation into shell code.
     assert "github.sha" not in title
     jobs = workflow["jobs"]
     inputs = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]

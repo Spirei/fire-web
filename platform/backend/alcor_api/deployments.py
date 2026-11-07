@@ -434,7 +434,7 @@ async def build_receipt(request_id: UUID, request: Request, who: Admin):
 
         settings = await effective(request)
         try:
-            matched = await asyncio.to_thread(lookup_run, settings, github_json, request_id)
+            matched = await asyncio.to_thread(lookup_run, settings, github_json, request_id, created_at=row["created_at"])
         except (OSError, ValueError, KeyError, TypeError):
             matched = False
         if matched:
