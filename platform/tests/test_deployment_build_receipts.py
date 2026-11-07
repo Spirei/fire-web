@@ -18,6 +18,8 @@ def test_receipt_matches_only_original_workflow_uuid():
         return {"workflow_runs": [run]}
 
     assert find_run(None, github, ident)
+    run["display_title"] = f"Build and publish Alcor image · {ident}"
+    assert find_run(None, github, ident)
     assert not find_run(None, github, uuid4())
     run["path"] = ".github/workflows/ci.yml"
     assert not find_run(None, github, ident)
@@ -31,7 +33,10 @@ def test_release_workflow_indexes_request_and_checks_confirmed_commit_before_bui
 
     root = Path(__file__).parents[2]
     workflow = yaml.safe_load((root / ".github/workflows/docker-publish.yml").read_text())
+    assert workflow["name"] == "Build and publish Alcor image"
     title = workflow["run-name"]
+    assert "Build and publish Alcor image" in title
+    assert "Fire 手动发布" not in title and "Fire 定时发布" not in title
     assert "inputs.request_id" in title
     assert "github.event.head_commit.message" in title
     assert "github.event.pull_request.title" in title
