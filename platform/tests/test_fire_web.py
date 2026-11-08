@@ -78,6 +78,26 @@ async def test_fire_progress_uses_method_catalog_and_real_routes(client, admin):
     assert (await client.get("/api/fire/connections/postgresql")).json()["state"] == "unconfigured"
 
 
+async def test_fire_catalogue_conditional_reads_still_require_current_admin(client, admin, settings):
+    await fire_login(client)
+    first = await client.get('/api/fire/system/api-migration')
+    assert first.status_code == 200
+    etag = first.headers['etag']
+    assert etag == first.json()['etag']
+    for value in (etag, etag.removeprefix('W/'), '"unrelated", ' + etag):
+        again = await client.get('/api/fire/system/api-migration', headers={'if-none-match':value})
+        assert again.status_code == 304 and not again.content
+        assert again.headers['etag'] == etag
+        assert 'no-store' in again.headers['cache-control']
+    changed = await client.get('/api/fire/system/api-migration', headers={'if-none-match':'"old-contract"'})
+    assert changed.status_code == 200 and changed.content == first.content
+    await create_user(settings, 'CatalogueMember', 'Synthetic9Pass', role='user')
+    await fire_login(client, 'CatalogueMember')
+    assert (await client.get('/api/fire/system/api-migration', headers={'if-none-match':etag})).status_code == 403
+    client.cookies.clear()
+    assert (await client.get('/api/fire/system/api-migration', headers={'if-none-match':etag})).status_code == 401
+
+
 def test_fire_has_no_sqlite_runtime_driver():
     import ast
     from pathlib import Path

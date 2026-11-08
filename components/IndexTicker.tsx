@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { startVisiblePolling } from "@/lib/visiblePolling";
 import MarketIcon from "@/components/MarketIcon";
 import { marketMeta } from "@/lib/types";
 
@@ -140,7 +141,7 @@ export default function IndexTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
   const [intervalSec, setIntervalSec] = useState(5);
   // 轮询间隔由服务端按「是否有市场在交易」给出：开市 60 秒，全部收市 5 分钟兜底
-  const [pollSec, setPollSec] = useState(60);
+  const pollSec = useRef(60);
   const [idx, setIdx] = useState(0);
 
   useLayoutEffect(() => {
@@ -148,49 +149,40 @@ export default function IndexTicker() {
     if (!cached) return;
     setItems(cached.items);
     if (typeof cached.interval === "number" && cached.interval >= 3) setIntervalSec(cached.interval);
-    if (typeof cached.pollSec === "number" && cached.pollSec >= 30) setPollSec(cached.pollSec);
+    if (typeof cached.pollSec === "number" && cached.pollSec >= 30) pollSec.current = cached.pollSec;
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
+    async function load(signal: AbortSignal) {
       try {
-        const res = await fetch("/api/ticker", { cache: "no-store" });
+        const res = await fetch("/api/ticker", { cache: "no-store", signal });
         if (!res.ok) return;
         const data = await res.json().catch(() => null);
-        if (!cancelled && Array.isArray(data?.items) && data.items.length > 0) {
+        if (!signal.aborted && Array.isArray(data?.items) && data.items.length > 0) {
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);
-          if (typeof data.pollSec === "number" && data.pollSec >= 30) setPollSec(data.pollSec);
+          if (typeof data.pollSec === "number" && data.pollSec >= 30) pollSec.current = data.pollSec;
           try { sessionStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ items: data.items, interval: data.interval, pollSec: data.pollSec })); } catch { /* quota */ }
         }
       } catch {
         /* 静默失败，下轮重试 */
       }
     }
-    load();
-    const timer = window.setInterval(() => {
-      // 页面不可见（切后台 / 睡眠）时暂停轮询，避免多标签页堆积请求拖慢服务
-      if (!document.hidden) load();
-    }, pollSec * 1000);
-    const onVis = () => {
-      if (!document.hidden) load();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    const onSettings = () => load();
+    const polling = startVisiblePolling({ read: load, interval: () => pollSec.current * 1000 });
+    const onSettings = () => { void polling.refresh(); };
     window.addEventListener("fire:settings-updated", onSettings);
     return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVis);
+      polling.stop();
       window.removeEventListener("fire:settings-updated", onSettings);
     };
-  }, [pollSec]);
+  }, []);
 
   // 按设置的时间轮换一个指数
   useEffect(() => {
     if (items.length <= 1) return;
-    const timer = window.setInterval(() => setIdx((i) => (i + 1) % items.length), intervalSec * 1000);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setIdx((i) => (i + 1) % items.length);
+    }, intervalSec * 1000);
     return () => window.clearInterval(timer);
   }, [items.length, intervalSec]);
 

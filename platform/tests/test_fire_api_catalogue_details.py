@@ -36,3 +36,16 @@ def test_catalogue_groups_native_authorities_instead_of_catch_all_bucket():
         app.add_api_route(path, read, methods=['GET'])
     result = catalogue(app, document={'revision':'synthetic', 'operations':[]})
     assert {item['category'] for item in result['items']} == {'卡面与卡包', '资金与现金', '交易费用', '账号与安全'}
+
+
+def test_catalogue_fingerprint_changes_with_real_router_contract():
+    app = FastAPI()
+    def read():
+        return {}
+    app.add_api_route('/api/example', read, methods=['GET'])
+    first = catalogue(app)
+    assert catalogue(app) is first
+    app.add_api_route('/api/example', read, methods=['POST'])
+    changed = catalogue(app)
+    assert changed['etag'] != first['etag']
+    assert catalogue(app) is changed

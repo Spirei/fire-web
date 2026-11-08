@@ -44,6 +44,7 @@ type Operation = {
 };
 type Overview = { services: Service[]; task_counts: Record<string, number> };
 type Migration = {
+  etag?: string;
   items: (Operation & ApiOperation)[];
   schemas?: Record<string, unknown>;
   summary: Record<string, number>;
@@ -137,6 +138,7 @@ export default function SystemView({
     return () => { actionScope.current++; };
   }, [active, mode, ownerId, filter]);
   const firstSeed = useRef(!!seed);
+  const directorySnapshot = useRef<Migration | undefined>(seed?.directory);
   const csrf = useRef(seed?.identity.csrf ?? ""),
     generation = useRef(0),
     instance = useRef(seed?.identity.instance_id ?? "");
@@ -150,6 +152,7 @@ export default function SystemView({
     setOverviewStale(false);
     setTasks([]);
     setMigration(null);
+    directorySnapshot.current = undefined;
     setSelected(null);
     setReceipt(null);
     setConnection(null);
@@ -210,7 +213,7 @@ export default function SystemView({
           ? json<Migration>("/api/fire/system/api-migration", {
               signal,
               headers: { "x-csrf-token": identity.csrf },
-            })
+            }, 30000, directorySnapshot.current?.etag ? { etag: directorySnapshot.current.etag, value: directorySnapshot.current } : undefined)
           : Promise.all([
               json<Overview>("/api/fire/system/overview", {
                 signal,
@@ -221,7 +224,10 @@ export default function SystemView({
         if (signal?.aborted || ticket !== generation.current) return;
         if (csrf.current && csrf.current !== identity.csrf) clear();
         csrf.current = identity.csrf;
-        if (mode === "migration") setMigration(data as Migration);
+        if (mode === "migration") {
+          directorySnapshot.current = data as Migration;
+          setMigration(data as Migration);
+        }
         else {
           const [view, list] = data as [
             Overview,

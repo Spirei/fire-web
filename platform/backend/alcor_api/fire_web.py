@@ -10,6 +10,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import JSONResponse, Response
 from pydantic import Field
 
 from . import tasks
@@ -180,7 +181,12 @@ async def api_migration(request: Request, who: Admin):
     from .fire_api_surface import catalogue
 
     try:
-        return catalogue(request.app)
+        result = catalogue(request.app)
+        etag = result["etag"]
+        candidates = request.headers.get("if-none-match", "").split(",")
+        if any(value.strip().removeprefix("W/") == etag.removeprefix("W/") or value.strip() == "*" for value in candidates):
+            return Response(status_code=304, headers={"etag": etag, "cache-control": "private, no-store"})
+        return JSONResponse(result, headers={"etag": etag, "cache-control": "private, no-store"})
     except (OSError, ValueError):
         raise HTTPException(503, "Fire API 清单尚未生成") from None
 

@@ -47,7 +47,7 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "",
   }
 
   useEffect(() => {
-    let lastCheck = 0;
+    let lastCheck = initialUser ? Date.now() : 0;
     let pending = false;
     const controller = new AbortController();
     function loadUser(force = false) {
@@ -78,7 +78,7 @@ export default function UserMenu({ goTo, initialUser = null, initialAvatar = "",
     }
     const checkVisible = () => loadUser();
     const reloadUser = () => loadUser(true);
-    loadUser(true);
+    loadUser();
     const timer = window.setInterval(checkVisible, 15 * 60 * 1000);
     window.addEventListener("fire:user-updated", reloadUser);
     window.addEventListener("focus", checkVisible);

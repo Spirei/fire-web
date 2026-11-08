@@ -1,5 +1,6 @@
 """Read-only route evidence for Fire's concrete API catalogue, including hidden callbacks."""
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -158,6 +159,7 @@ def catalogue(app, *, document=None):
         },
     }
 
+    result["etag"] = 'W/"' + hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest() + '"'
     if cacheable:
         app.state.fire_api_catalogue = (signature, result)
     return result

@@ -13,13 +13,16 @@ function message(value: unknown): string {
   return "请求失败";
 }
 
-export async function platformRequest<T>(path: string, init: RequestInit = {}, timeoutMs = 30000): Promise<T> {
+export async function platformRequest<T>(path: string, init: RequestInit = {}, timeoutMs = 30000, conditional?: { etag: string; value: T }): Promise<T> {
+  const reading = !init.method || ["GET", "HEAD"].includes(init.method.toUpperCase());
+  if (conditional && !reading) throw new Error("条件读取不适用于写入请求");
   const controller = new AbortController();
   const parent = init.signal;
   const cancel = () => controller.abort(parent?.reason);
   if (parent?.aborted) cancel();
   else parent?.addEventListener("abort", cancel, { once: true });
-  const reading = !init.method || ["GET", "HEAD"].includes(init.method.toUpperCase());
+  const headers = new Headers(init.headers);
+  if (conditional) headers.set("if-none-match", conditional.etag);
   const timer = setTimeout(() => controller.abort(new Error(reading ? "读取超时，请重试" : "请求超时，请核对结果后再操作")), timeoutMs);
   let stop: (() => void) | undefined;
   const aborted = new Promise<never>((_, reject) => {
@@ -32,13 +35,14 @@ export async function platformRequest<T>(path: string, init: RequestInit = {}, t
     return await Promise.race([aborted, (async () => {
       let response: Response;
       try {
-        response = await fetch(path, { cache: "no-store", ...init, signal: controller.signal });
+        response = await fetch(path, { cache: "no-store", ...init, headers, signal: controller.signal });
       } catch (error) {
         if (controller.signal.aborted) throw controller.signal.reason;
         if (error instanceof TypeError) throw new Error(reading ? "网络连接中断，请重试" : "网络连接中断，请核对结果后再操作");
         throw error;
       }
       if (response.status === 204) return undefined as T;
+      if (response.status === 304 && conditional) return conditional.value;
       let data: unknown;
       try { data = await response.json(); }
       catch {
