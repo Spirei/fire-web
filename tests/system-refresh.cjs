@@ -106,6 +106,9 @@ function harness(active = true, seeded = false) {
   assert.equal(h.closed, 2, "hidden page retires sensitive dialogs");
   h.context.document.hidden = false;
   h.context.pauseRefresh.current = true;
+  const closedBeforeResume = h.closed;
+  h.events.get("visibilitychange")();
+  assert.equal(h.closed,closedBeforeResume,"visible page with an open dialog pauses refresh without dismissing it");
   await h.tick();
   assert.equal(
     h.calls,
@@ -205,3 +208,17 @@ assert.equal(observed({requestId:'one',receipt:{status:'failed'}}), 'down');
 assert.equal(observed({requestId:'one',receipt:{status:'passed'}}), 'up');
 assert.equal(observed({error:'read failed'}), 'stale');
 console.log('PASS connection header: checking, unknown, failure and stale observations cannot masquerade as success');
+
+let connectionAction;
+(function find(node){if(ts.isArrowFunction(node)&&node.modifiers?.some(m=>m.kind===ts.SyntaxKind.AsyncKeyword)&&node.parameters[0]?.name.getText(source)==='signal'&&node.getText(source).includes('if (needsRecovery)'))connectionAction=node;ts.forEachChild(node,find);})(source);
+assert(connectionAction);
+const actionCode=ts.transpileModule('exports.run='+connectionAction.getText(source),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+(async()=>{
+ const calls=[];let storedId='existing',reply={status:'passed',message:'连接成功'};
+ const c={exports:{},needsRecovery:true,requestId:'existing',kind:'postgresql',csrf:'synthetic',settings:{revision:'one'},config:{host:'synthetic'},clientRequestId:()=> 'new-request',setRequestId:id=>storedId=id,setReceipt(){},showToast(){},json:async(url,options)=>{calls.push({url,options});if(reply instanceof Error)throw reply;return reply;}};
+ vm.runInNewContext(actionCode,c);const signal=new AbortController().signal;
+ await c.exports.run(signal);assert(calls[0].url.endsWith('/receipts/existing'));assert.equal(calls[0].options.method,undefined);
+ c.needsRecovery=false;reply=Error('response lost');await assert.rejects(c.exports.run(signal));assert.equal(storedId,'new-request','unknown result keeps the original request identity');
+ reply=Object.assign(Error('verification required'),{status:403});await assert.rejects(c.exports.run(signal));assert.equal(storedId,'','explicit pre-execution rejection remains retryable after verification');
+ console.log('PASS connection action: unresolved outcome queries its receipt, transport loss retains identity, and definite rejection allows verification');
+})().catch(error=>{console.error(error);process.exitCode=1;});

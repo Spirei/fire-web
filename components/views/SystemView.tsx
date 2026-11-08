@@ -268,11 +268,10 @@ export default function SystemView({
     if (firstSeed.current && (mode !== "tasks" || seed?.filter === filter)) firstSeed.current = false;
     else void load(controller.signal);
     const resume = () => {
-      if (!document.hidden && !pauseRefresh.current) void load(controller.signal, true);
-      else {
+      if (document.hidden) {
         setConnection(null);
         setSelected(null);
-      }
+      } else if (!pauseRefresh.current) void load(controller.signal, true);
     };
     document.addEventListener("visibilitychange", resume);
     let timer: ReturnType<typeof setTimeout>;
@@ -518,10 +517,7 @@ export default function SystemView({
                       {service.id === "worker" ? "Worker" : service.label}
                     </h3>
                     <p className="system-state">
-                      <i className={!overviewStale && service.state === "up" ? "is-up" : ""} />
-                      {overviewStale ? "待复查" : service.id === "worker" && service.state === "up"
-                        ? "运行中"
-                        : status(service.state)}
+                      <StatusIndicator state={overviewStale ? "stale" : service.state} label={service.id === "worker" && !overviewStale ? service.state === "up" ? "运行中" : service.state === "down" ? "未连接" : undefined : undefined} observedAt={service.observed_at} size="md"/>
                     </p>
                     <p className="text-sm text-muted">{overviewStale ? `上次结果：${service.detail}` : service.detail}</p>
                     <Capsule variant="primary"
@@ -719,11 +715,12 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError, observation }
       <dt>{label}</dt><dd>{value === undefined || value === null || value === "" ? "—" : String(value)}</dd>
     </div>
   );
+  const needsRecovery = Boolean(requestId && (!receipt || !["passed","failed"].includes(receipt.status)));
   const connectionState = busy && requestId ? "checking" : requestId
     ? receipt?.status === "passed" ? "up" : receipt?.status === "failed" ? "down" : "unknown"
     : error ? "stale" : observation?.state || "unknown";
   return (
-    <SystemDialog label={kind === "postgresql" ? "PostgreSQL 连接" : "Redis 连接"} titleAddon={<StatusIndicator state={connectionState} observedAt={requestId ? undefined : observation?.observed_at}/>} onClose={onClose} busy={busy}>
+    <SystemDialog label={kind === "postgresql" ? "PostgreSQL 连接" : "Redis 连接"} titleAddon={<StatusIndicator state={connectionState} label={needsRecovery && !busy ? "待核对" : undefined} observedAt={requestId ? undefined : observation?.observed_at}/>} onClose={onClose} busy={busy}>
       <p className="text-sm text-muted">连接由服务器环境配置管理，更改后重启生效。</p>
       <dl className="system-connection-summary" aria-busy={busy && !settings}>
         {field("地址", config?.host, true)}
@@ -735,15 +732,6 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError, observation }
       </dl>
       {error && <p role="alert" className="system-error">{error}</p>}
       {receipt?.status === "failed" && !error && <OperationStatus state="error">{receipt.message}</OperationStatus>}
-      {requestId && (!receipt || !["passed","failed"].includes(receipt.status)) && !busy && (
-        <div className="system-result-recovery">
-          <span>检测结果待核对</span>
-          <Capsule size="sm" variant="secondary" onClick={() => void run(async signal => {
-            const value = await json<Receipt>("/api/fire/connections/" + kind + "/receipts/" + requestId, { headers: { "x-csrf-token": csrf }, signal });
-            if (!signal.aborted) { setReceipt(value); showToast(value.message, value.status === "passed" ? "ok" : "err"); }
-          })}>核对结果</Capsule>
-        </div>
-      )}
       {verify && (
         <div className="system-reauth">
           <label>身份验证<VerificationField value={verifyPassword} onChange={e => setVerifyPassword(e.target.value)} autoComplete="current-password" /></label>
@@ -759,17 +747,25 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError, observation }
           if (!signal.aborted) setSettings(value);
         })}>重新读取</Capsule>
         <Capsule variant="secondary" className="" disabled={busy || !config} onClick={() => void run(async signal => {
+          if (needsRecovery) {
+            const value = await json<Receipt>("/api/fire/connections/" + kind + "/receipts/" + requestId, { headers: { "x-csrf-token": csrf }, signal });
+            if (!signal.aborted) { setReceipt(value); showToast(value.message, value.status === "passed" ? "ok" : "err"); }
+            return;
+          }
           const id = clientRequestId();
           setRequestId(id); setReceipt(null);
-          const value = await json<Receipt>("/api/fire/connections/" + kind + "/test", {
-            method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, signal,
-            body: JSON.stringify({ request_id: id, revision: settings?.revision ?? null, config, password_mode: "keep", reuse_current_password: true }),
-          });
-          if (!signal.aborted) {
-            setReceipt(value);
-            showToast(value.message, value.status === "passed" ? "ok" : "err");
+          try {
+            const value = await json<Receipt>("/api/fire/connections/" + kind + "/test", {
+              method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, signal,
+              body: JSON.stringify({ request_id: id, revision: settings?.revision ?? null, config, password_mode: "keep", reuse_current_password: true }),
+            });
+            if (!signal.aborted) { setReceipt(value); showToast(value.message, value.status === "passed" ? "ok" : "err"); }
+          } catch (error) {
+            // An explicit rejection happened before execution; unknown outcomes retain their ID.
+            if (!signal.aborted && [400,401,403,409,422,429].includes((error as {status?:number}).status || 0)) setRequestId("");
+            throw error;
           }
-        })}>{busy ? "处理中…" : "测试连接"}</Capsule>
+        })}>{busy ? "处理中…" : needsRecovery ? "核对结果" : "测试连接"}</Capsule>
       </div>
     </SystemDialog>
   );

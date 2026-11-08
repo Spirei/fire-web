@@ -54,3 +54,18 @@ assert(html(StatusIndicator,{state:'unknown'}).includes('未检测'));
 assert(html(StatusIndicator,{state:'up'}).includes('已连接'));
 assert(html(StatusIndicator,{state:'down'}).includes('连接失败'));
 console.log('PASS service identity colors stay independent of truthful connection state');
+
+// Read the real state text colors against every supported palette.
+const palettes=require('../lib/palettes.ts').SITE_PALETTES;
+const rgb=hex=>hex.replace('#','').match(/../g).map(v=>parseInt(v,16));
+const luminance=rgb=>rgb.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+const contrast=(a,b)=>{const x=luminance(a),y=luminance(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+for(const mode of ['light','dark'])for(const palette of palettes){
+ const bg=rgb(palette[mode][0]);
+ for(const state of ['up','down','warning']){
+  const selector=(mode==='dark'?'.dark ':'')+`.interface-check-card[data-state=${state}] .interface-check-samples strong{color:`;
+  const at=css.indexOf(selector);assert(at>=0,selector);const color=rgb(css.slice(at+selector.length).match(/^#[\da-f]{6}/)[0]);
+  assert(contrast(color,bg)>=4.5,`${palette.id} ${mode} ${state} text contrast`);
+ }
+}
+console.log('PASS detector state text remains readable in every light and dark palette');
