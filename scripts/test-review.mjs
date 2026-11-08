@@ -1,5 +1,5 @@
 import {spawnSync} from 'node:child_process';
-const files = ['platform-startup','deploy-run-title','deploy-progress','shared-controls','search-history','platform-gateway','platform-navigation','system-refresh','platform-request','system-actions','workspace-motion','popover-interactions','records-refresh','auth-client','cash-balance-client','feed-agent-client','feed-agent-playback','feed-client','feed-style','futu-connection-client','liquid-glass','quote-pool-client','simple-ledger-security','site-palettes','stock-chart-controls','workspace-background'];
+const files = ['first-run-setup','platform-startup','deploy-run-title','deploy-progress','shared-controls','search-history','platform-gateway','platform-navigation','system-refresh','platform-request','system-actions','workspace-motion','popover-interactions','records-refresh','auth-client','cash-balance-client','feed-agent-client','feed-agent-playback','feed-client','feed-style','futu-connection-client','liquid-glass','quote-pool-client','simple-ledger-security','site-palettes','stock-chart-controls','workspace-background'];
 for (const name of files) {
  console.log('\nTEST '+name);
  const result=spawnSync(process.execPath,['tests/'+name+'.cjs'],{stdio:'inherit'});

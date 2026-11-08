@@ -50,6 +50,27 @@ def test_uuid_required_zero_rejected_and_secret_values_hidden(fire_env, monkeypa
     assert "SyntheticDbSecret9" not in str(error.value)
 
 
+def test_production_setup_token_uses_fire_env_and_never_independent_api(fire_env, monkeypatch):
+    monkeypatch.setenv("ALCOR_REGISTRATION_SETUP_TOKEN", "IndependentApiOnlySecret")
+    assert load_fire_settings().registration_setup_token is None
+    monkeypatch.setenv("FIRE_SETUP_TOKEN", "")
+    assert load_fire_settings().registration_setup_token is None
+    monkeypatch.setenv("FIRE_ENVIRONMENT", "production")
+    monkeypatch.setenv("FIRE_SETUP_TOKEN", "SyntheticProductionInstallSecret123")
+    settings = load_fire_settings()
+    assert settings.environment == "production"
+    assert settings.registration_setup_token.get_secret_value() == "SyntheticProductionInstallSecret123"
+    monkeypatch.setenv("FIRE_REGISTRATION_SETUP_TOKEN", "")
+    assert load_fire_settings().registration_setup_token.get_secret_value() == "SyntheticProductionInstallSecret123"
+    monkeypatch.setenv("FIRE_REGISTRATION_SETUP_TOKEN", "SyntheticProductionInstallSecret123")
+    assert load_fire_settings().registration_setup_token.get_secret_value() == "SyntheticProductionInstallSecret123"
+    monkeypatch.setenv("FIRE_REGISTRATION_SETUP_TOKEN", "ConflictingInstallSecret123")
+    with pytest.raises(ValueError, match="配置重复") as error:
+        load_fire_settings()
+    assert "SyntheticProductionInstallSecret123" not in str(error.value)
+    assert "ConflictingInstallSecret123" not in str(error.value)
+
+
 def test_compose_updater_and_image_use_fire_configuration(fire_env, monkeypatch):
     monkeypatch.setenv("GHCR_IMAGE", "ghcr.io/example/fire-web")
     monkeypatch.setenv("FIRE_DEPLOYMENT_UPDATER_URL", "http://fire-updater:8080/v1/update")
@@ -86,7 +107,7 @@ def test_template_keys_are_supported_and_instance_identity_is_explicit():
         for line in (root / ".env.example").read_text().splitlines()
         if line and not line.startswith("#")
     }
-    runtime = {"FIRE_PYTHON", "FIRE_WORKER", "FIRE_NETWORK", "FIRE_PRIVATE_DIR"}
+    runtime = {"FIRE_PYTHON", "FIRE_WORKER", "FIRE_NETWORK", "FIRE_PRIVATE_DIR", "FIRE_SETUP_TOKEN"}
     assert {key for key in env if key.startswith("FIRE_")} <= runtime | {
         "FIRE_" + key.upper() for key in Settings.model_fields
     }

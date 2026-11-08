@@ -1,3 +1,5 @@
+@import "../styles/first-run.css";
+
 /* 卡面库新品标签：不依赖卡面底色，保持紧凑、清晰的银白铭牌质感。 */
 .card-library-new-badge {
   position: absolute;

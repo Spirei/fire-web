@@ -34,6 +34,12 @@ def load_fire_settings():
         value = os.environ.get("FIRE_" + name.upper())
         if value == "" and field.default is None:
             overrides[name] = None
+    setup_token = os.environ.get("FIRE_SETUP_TOKEN", "")
+    previous_token = os.environ.get("FIRE_REGISTRATION_SETUP_TOKEN", "")
+    if setup_token:
+        if previous_token and setup_token != previous_token:
+            raise ValueError("安装令牌配置重复，请统一使用 FIRE_SETUP_TOKEN")
+        overrides["registration_setup_token"] = setup_token
     image = os.environ.get("GHCR_IMAGE", "")
     if (
         image
