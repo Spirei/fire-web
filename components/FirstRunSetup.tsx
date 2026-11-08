@@ -24,6 +24,10 @@ export default function FirstRunSetup({ requireSetupToken = false, initialBrand 
   const [failedImages, setFailedImages] = useState<string[]>([]);
   const brandImage = [brand.logo, brand.favicon, "/site-icon.svg"].find(src => src && !failedImages.includes(src));
 
+  function failBrandImage(src: string) {
+    setFailedImages(current => current.includes(src) ? current : [...current, src]);
+  }
+
   useEffect(() => {
     fetch("/api/settings/public")
       .then((res) => (res.ok ? res.json() : null))
@@ -97,7 +101,9 @@ export default function FirstRunSetup({ requireSetupToken = false, initialBrand 
       <div className="fr-page">
         <header className="fr-top">
           <div className="fr-brand">
-            {brandImage ? <img key={brandImage} src={brandImage} alt="" onError={() => setFailedImages(current => [...current, brandImage])} /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            {brandImage ? <img key={brandImage} src={brandImage} alt="" ref={image => {
+              if (image?.complete && image.naturalWidth === 0) failBrandImage(brandImage);
+            }} onError={() => failBrandImage(brandImage)} /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
               <path d="M3 17l5-6 4 3 6-8" />
               <path d="M15 6h3v3" />
             </svg>}
