@@ -17,10 +17,10 @@ from .system_asset_api import content
 
 
 def mount_asset_catalog(app, settings, db):
-    from .legacy_asset_directory import LegacyAssetDirectory
+    from .legacy_asset_directory import LegacyAssetDirectory, public_upload_root
     from .legacy_card_directory import LegacyCardDirectory
-    app.state.legacy_asset_directory = LegacyAssetDirectory(settings.file_root)
-    app.state.legacy_card_directory = LegacyCardDirectory(settings.file_root)
+    app.state.legacy_asset_directory = LegacyAssetDirectory(public_upload_root(settings))
+    app.state.legacy_card_directory = LegacyCardDirectory(public_upload_root(settings))
     app.state.legacy_card_directory.asset_directory = app.state.legacy_asset_directory
     from .asset_library_access import mount_material_access, assert_material_read
     mount_material_access(app, db)

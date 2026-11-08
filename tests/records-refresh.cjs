@@ -10,7 +10,7 @@ function harness(){let time=0;const requests=[],applied=[],ownerChanges=[];
 let count=0;async function test(name,fn){await fn();count++;console.log('PASS '+name);}
 (async()=>{
  await test('entry and repeated focus/pageshow events coalesce, including slow reads',async()=>{
-  assert.deepEqual([...RECORDS_WORKSPACES],['holdings','watchlist','assets','pnl','fire','earnings']);
+  assert.deepEqual([...RECORDS_WORKSPACES],['holdings','watchlist','assets','pnl','fire','earnings','global']);
   const h=harness();h.sync.setActive(true);h.sync.resume();await tick();assert.equal(h.requests.length,1);
   h.advance(2000);h.sync.resume();h.sync.refresh();await tick();assert.equal(h.requests.length,1);
   h.requests[0].resolve({ownerId:'owner',records:['first']});await tick();assert.deepEqual(h.applied,[['first']]);
@@ -31,6 +31,10 @@ let count=0;async function test(name,fn){await fn();count++;console.log('PASS '+
  await test('owner mismatch or disposal never applies another account or late results',async()=>{
   const h=harness();h.sync.setActive(true);await tick();h.requests[0].resolve({ownerId:'other',records:['private']});await tick();assert.deepEqual(h.applied,[]);assert.equal(h.ownerChanges.length,1,'reload SSR identity to remount the correct account');
   h.sync.refresh();await tick();h.sync.dispose();assert(h.requests[1].signal.aborted);h.requests[1].resolve({ownerId:'other',records:['late']});await tick();assert.deepEqual(h.applied,[]);assert.equal(h.ownerChanges.length,1);
+ });
+ await test('a fresh server snapshot skips the duplicate first read but later entry and writes revalidate',async()=>{
+  let at=10,reads=0;const sync=createRecordsRefresh('owner',async()=>{reads++;return{ownerId:'owner',records:[]}},()=>{},()=>at,()=>{},()=>{},10);
+  sync.setActive(true);await tick();assert.equal(reads,0);sync.changed();await tick();assert.equal(reads,1);sync.setActive(false);at+=2000;sync.setActive(true);await tick();assert.equal(reads,2);sync.dispose();
  });
  await test('failed background reads retain confirmed data with no retry loop',async()=>{
   const h=harness();h.sync.setActive(true);await tick();h.requests[0].reject(Error('offline'));await tick();assert.equal(h.requests.length,1);assert.deepEqual(h.applied,[]);

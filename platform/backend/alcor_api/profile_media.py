@@ -55,20 +55,21 @@ class ProfileMedia:
     def root(self, create=False):
         if self.settings.file_root is None:
             raise HTTPException(503, "私有文件存储尚未配置")
-        parent = private_dir(self.settings.file_root) if create else self.settings.file_root
-        if not create:
-            if parent.is_symlink():
-                raise HTTPException(404, "图片不存在")
-            parent_info = parent.stat()
-            if (
-                not stat.S_ISDIR(parent_info.st_mode)
-                or parent_info.st_uid != os.getuid()
-                or parent_info.st_mode & 0o077
-            ):
-                raise HTTPException(404, "图片不存在")
+        parent = self.settings.file_root
+        # A NAS mount can be shared. Only this application's owner-only media
+        # child contains originals; do not chmod or take ownership of the mount.
+        if parent.is_symlink():
+            raise HTTPException(503 if create else 404, "图片目录不可用")
+        if create:
+            parent.mkdir(parents=True, exist_ok=True)
+        if not stat.S_ISDIR(parent.stat().st_mode):
+            raise HTTPException(503 if create else 404, "图片目录不可用")
         root = parent / "profile-media"
         if create:
-            return private_dir(root)
+            try:
+                return private_dir(root)
+            except (OSError, BackupFailure):
+                raise HTTPException(503, "图片目录不可写或权限不正确") from None
         if root.is_symlink():
             raise HTTPException(404, "图片不存在")
         info = root.stat()

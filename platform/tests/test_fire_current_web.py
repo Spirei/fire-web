@@ -45,6 +45,31 @@ async def test_personal_profile_atomic_cas_owner_background(client, admin, app, 
     assert (await client.get('/api/auth/personal-home')).json()['profile']['revision']==0
 
 
+async def test_avatar_and_large_background_work_on_shared_nas_mount(client, admin, settings, tmp_path):
+    import os
+    await fire_login(client)
+    settings.file_root = tmp_path / "shared-mount"
+    settings.file_root.mkdir(mode=0o777)
+    settings.file_root.chmod(0o777)
+    image = Image.new("RGB", (4000, 3000), "blue")
+    data = io.BytesIO(); image.save(data, "JPEG")
+    response = await client.post('/api/upload', data={'kind':'avatar', 'requestId':str(uuid4())}, files={'file':('avatar.jpg',data.getvalue(),'image/jpeg')})
+    assert response.status_code == 200, response.text
+    assert (await client.get(response.json()['url'])).status_code == 200
+    assert settings.file_root.stat().st_mode & 0o777 == 0o777
+    child = settings.file_root / 'profile-media'
+    assert child.stat().st_mode & 0o777 == 0o700
+    assert child.stat().st_uid == os.getuid()
+    profile = (await client.get('/api/auth/personal-home')).json()['profile']
+    result = await client.post('/api/auth/personal-home', data={'requestId':str(uuid4()),'revision':str(profile['revision'])}, files={'file':('background.jpg',data.getvalue(),'image/jpeg')})
+    assert result.status_code == 200, result.text
+    background = await client.get('/api/auth/personal-home?kind=background&v='+result.json()['profile']['background']['sha256'])
+    assert background.status_code == 200
+    with Image.open(io.BytesIO(background.content)) as reduced:
+        assert max(reduced.size) <= 2048
+    assert all(path.stat().st_mode & 0o777 == 0o600 for path in child.iterdir())
+
+
 async def test_search_history_cas_limit_dedup_owner_and_clear(client, admin, settings, app):
     await fire_login(client)
     url='/api/auth/search-history'

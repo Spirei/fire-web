@@ -138,8 +138,9 @@ export async function platformRequest(
 export async function platformJson<T>(
   path: string,
   headers?: HeadersInit,
+  options: { signal?: AbortSignal } = {},
 ): Promise<T> {
-  const response = await platformRequest(path, { headers, internal: true });
+  const response = await platformRequest(path, { headers, internal: true, signal: options.signal });
   if (!response.ok) throw new PlatformError(response.status);
   return (await response.json()) as T;
 }

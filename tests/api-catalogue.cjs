@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm');
+const source=fs.readFileSync('components/ApiCatalogue.tsx','utf8'),ast=ts.createSourceFile('ApiCatalogue.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const fn=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='expandSchema');assert(fn);
+const context={exports:{}};vm.runInNewContext(ts.transpileModule(fn.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,context);
+const ref=name=>({'$ref':'#/components/schemas/'+name});
+const schemas={List:{type:'object',properties:{items:{type:'array',items:ref('Task')}}},Task:{type:'object',properties:{id:{type:'string'},parent:ref('Task')}}};
+const result=context.exports.expandSchema({'200':{content:{'application/json':{schema:ref('List')}}}},schemas);
+const task=result['200'].content['application/json'].schema.properties.items.items;
+assert.equal(task.properties.id.type,'string','Nested response items expose their actual fields');
+assert.equal(task.properties.parent.$ref,'#/components/schemas/Task','Recursive types remain bounded references');
+assert(!schemas.List.properties.items.items.properties,'Document expansion never mutates the shared schema source');
+console.log('PASS API response details expand nested models without cycles or changing their source');

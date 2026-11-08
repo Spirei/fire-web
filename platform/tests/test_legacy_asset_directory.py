@@ -85,6 +85,21 @@ async def test_empty_and_unconfigured_directories_are_empty(tmp_path):
     assert await LegacyAssetDirectory(tmp_path).inventory() == []
 
 
+async def test_fire_reads_existing_uploads_without_scanning_private_files(tmp_path):
+    from alcor_api.config import Settings
+    from alcor_api.legacy_asset_directory import public_upload_root
+
+    uploads, private = tmp_path / "uploads", tmp_path / "private"
+    original = write(uploads, "asset/market/US.svg")
+    write(private, "asset/market/HK.svg")
+    settings = Settings(connections_from_environment=True, public_upload_root=uploads, file_root=private)
+    rows = await LegacyAssetDirectory(public_upload_root(settings)).inventory()
+    assert [(row["type"], row["code"]) for row in rows] == [("market", "US")]
+    assert original.read_bytes() == SVG
+    settings.public_upload_root = None
+    assert public_upload_root(settings) is None
+
+
 def test_safe_embedded_raster_svg_is_rendered_without_rewriting_original(tmp_path):
     import base64
     import io

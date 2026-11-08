@@ -1,3 +1,5 @@
+import { cache } from "react";
+import type { WebSession } from "./workspaceInitial";
 import { headers } from "next/headers";
 import {
   platformJson,
@@ -7,18 +9,17 @@ import {
 import type { User } from "./types";
 export const SESSION_COOKIE = "fire_session";
 export const LEGACY_SESSION_COOKIE = "sto" + "cklog_session";
-export async function getAuthUser(request: Request): Promise<User | null> {
+export const getWebSession = cache(async (cookie: string): Promise<WebSession | null> => {
   try {
-    return (
-      await platformJson<{ user: User }>("/api/fire/session", {
-        cookie: request.headers.get("cookie") || "",
-      })
-    ).user;
+    return await platformJson<WebSession>("/api/fire/session", { cookie });
   } catch (error) {
     if (error instanceof PlatformError && [401, 403].includes(error.status))
       return null;
     throw error;
   }
+});
+export async function getAuthUser(request: Request): Promise<User | null> {
+  return (await getWebSession(request.headers.get("cookie") || ""))?.user ?? null;
 }
 export async function getUserByToken(
   token: string | null,

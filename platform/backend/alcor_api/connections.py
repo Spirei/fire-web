@@ -664,8 +664,13 @@ class Connections:
         return result, revision
 
     def request_fingerprint(self, data, operation):
+        self.environment_operation(data, operation)
         payload = data.model_dump(mode="json", exclude={"password"})
         payload["password"] = data.password.get_secret_value() if data.password else None
+        if self.base.connections_from_environment:
+            # Environment tests accept no submitted secret and never save one.
+            # Their public command identity does not need a credential vault.
+            return hashlib.sha256(canonical(payload | {"operation": operation, "instance": str(self.base.instance_id)}).encode()).hexdigest()
         return hmac.new(
             self.vault.key(), canonical(payload | {"operation": operation}).encode(), hashlib.sha256
         ).hexdigest()
@@ -886,13 +891,7 @@ class Connections:
             ).fetchone()
             row = await self.row(conn, kind)
             # Replays bind the original input, including keep/clear mode, without depending on a later revision.
-            request_payload = data.model_dump(mode="json", exclude={"password"})
-            request_payload["password"] = data.password.get_secret_value() if data.password else None
-            fingerprint = hmac.new(
-                self.vault.key(),
-                canonical(request_payload | {"operation": operation}).encode(),
-                hashlib.sha256,
-            ).hexdigest()
+            fingerprint = self.request_fingerprint(data, operation)
             if previous:
                 if previous["fingerprint"] != fingerprint or previous["kind"] != kind:
                     raise HTTPException(409, "请求编号已用于其他配置")

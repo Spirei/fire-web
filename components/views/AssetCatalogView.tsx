@@ -76,8 +76,10 @@ type Listing = {
 };
 export default function AssetCatalogView({
   ownerId = "",
+  initial,
 }: {
   ownerId?: string;
+  initial?: import("@/lib/workspaceInitial").WorkspaceInitial["material"];
 }) {
   const params = useWorkspaceSearchParams(),
     guard = useWorkspaceLocationGuard(),
@@ -88,12 +90,12 @@ export default function AssetCatalogView({
       ? params.get("tab")!
       : "market",
     market = params.get("market") || "ALL",
-    query = params.get("q") || "",
+    query = (params.get("q") || "").slice(0, 200),
     page = Math.max(1, Number(params.get("page")) || 1),
     grid = params.get("view") === "grid",
     removed = type !== "group" && params.get("removed") === "1";
-  const [listing, setListing] = useState<Listing | null>(null),
-    [loading, setLoading] = useState(true),
+  const [listing, setListing] = useState<Listing | null>(initial?.data ?? null),
+    [loading, setLoading] = useState(!initial),
     [error, setError] = useState(""),
     [tick, setTick] = useState(0),
     [selecting, setSelecting] = useState(false),
@@ -111,7 +113,7 @@ export default function AssetCatalogView({
       | null
     >(null);
   const marketCountCache = useRef(new Map<string, Record<string, number>>());
-  const pageCache = useRef(new Map<string, { data: Listing; at: number }>());
+  const pageCache = useRef(new Map<string, { data: Listing; at: number }>(initial ? [[initial.key, {data:initial.data,at:Date.now()}]] : []));
   const seenTick = useRef(0);
   const directoryFile = useRef<HTMLInputElement>(null);
   const editorFile = useRef<HTMLInputElement>(null);
@@ -125,7 +127,7 @@ export default function AssetCatalogView({
   const bar = useRef<HTMLElement>(null),
     drag = useRef<string | null>(null),
     readKey = `${ownerId}|${type}|${market}|${query}|${page}|${removed}`,
-    [loadedKey, setLoadedKey] = useState("");
+    [loadedKey, setLoadedKey] = useState(initial?.key ?? "");
   const current = useRef(readKey);
   current.current = readKey;
   const displayed =

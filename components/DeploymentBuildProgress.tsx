@@ -141,8 +141,8 @@ export default function DeploymentBuildProgress({
         </a>
       </div>
       {stages.length ? (
-        <div className="flex flex-col items-stretch gap-2 p-4 lg:flex-row lg:items-start lg:gap-3 lg:p-5">
-          {stages.map((stage, index) => {
+        <div className="deployment-build-stages">
+          {stages.map((stage) => {
             const current = stage.jobs
               .flatMap((job) => job.steps)
               .find((step) => step.status === "in_progress");
@@ -265,14 +265,6 @@ export default function DeploymentBuildProgress({
                     )
                   )}
                 </details>
-                {index < stages.length - 1 && (
-                  <IconChevronRight
-                    aria-hidden="true"
-                    className="mx-auto shrink-0 rotate-90 self-center text-slate-300 lg:mx-0 lg:mt-6 lg:self-start lg:rotate-0 dark:text-slate-700"
-                    size={18}
-                    stroke={1.8}
-                  />
-                )}
               </div>
             );
           })}

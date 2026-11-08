@@ -182,6 +182,7 @@ def mount_legacy_deployment(app, settings, db):
             "heatmapComplete": heatmap["complete"] if heatmap else False,
             "heatmapError": heatmap_error,
             "imageProgress": progress,
+            "release": release.model_dump() if release else None,
             "source": {**source, "shortSha": source_sha[:7]} if source else None,
             "image": {
                 "latestSuccessfulSha": release_sha,

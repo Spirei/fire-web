@@ -1,0 +1,26 @@
+import type { User } from "./types";
+import type { CardLibraryPayload } from "./cardLibrary";
+import type { FeedPayload } from "./feedTypes";
+import type { CelebsResult } from "./celebsData";
+import type { PoolBootstrap } from "./quotePoolView";
+import type { ApiOperation } from "@/components/ApiCatalogue";
+export type MaterialListing = {marketCounts:Record<string,number>;removedCount?:number;assets:{id:string;type:string;market:string;code:string;name:string;url:string;urlDark?:string;imageUrl?:string;brokerMarkets:string[]}[];total:number;page:number;revision:string};
+export type PersonalProfile = {revision:number;bio:string;gender:string;background:{sha256:string}|null};
+export type PersonalActivity = {total:number;activeDays:number;longest:number;current:number;since:number;today:string;days:Record<string,number>};
+export type ApiDirectory = {items:ApiOperation[];schemas?:Record<string,unknown>;summary:Record<string,number>;retirements?:{method:string;path:string;reason:string;replacement:string}[]};
+export type SystemService = {id:string;label:string;state:string;detail:string;observed_at:string|null};
+export type SystemOverview = {services:SystemService[];task_counts:Record<string,number>};
+export type SystemTask = {id:string;request_id:string;kind:string;status:string;created_at:string;attempts:number;result:unknown;error_code:string|null};
+export type WebSession = {user:User;csrf:string;instance_id:string};
+export type WorkspaceInitial = {
+ logs?:{userLogs:import("./types").SystemLog[];systemLogs:import("./types").SystemLog[]};
+ watchGroups?:import("./watchGroupsStore").WatchGroupDto[];
+ material?:{key:string;data:MaterialListing};
+ cards?:CardLibraryPayload;
+ feed?:FeedPayload;
+ celebs?:CelebsResult;
+ quotePool?:PoolBootstrap;
+ personal?:{user:User;profile:PersonalProfile;activity:PersonalActivity};
+ users?:{users:(User&{createdAt:string;recordsCount:number;online:boolean;totpEnabled?:boolean})[];me:string};
+ system?:{mode:'overview'|'tasks'|'migration';filter:string;identity:WebSession;overview?:SystemOverview;tasks?:{items:SystemTask[];next_cursor:string|null};directory?:ApiDirectory};
+};

@@ -27,14 +27,14 @@ let usersCache: { at: number; users: AdminUser[]; me: string } | null = null;
 const USERS_CACHE_TTL = 5000;
 const USERS_SESSION_KEY = "fire:users-cache-v1";
 
-function readUsersSession(): { users: AdminUser[]; me: string; fresh: boolean } | null {
-  if (usersCache && Date.now() - usersCache.at < USERS_CACHE_TTL) {
+function readUsersSession(ownerId: string): { users: AdminUser[]; me: string; fresh: boolean } | null {
+  if (usersCache && usersCache.me === ownerId && Date.now() - usersCache.at < USERS_CACHE_TTL) {
     return { users: usersCache.users, me: usersCache.me, fresh: true };
   }
   if (typeof window === "undefined") return null;
   try {
-    const parsed = JSON.parse(sessionStorage.getItem(USERS_SESSION_KEY) || "null") as { users?: AdminUser[]; me?: string } | null;
-    if (parsed && Array.isArray(parsed.users) && parsed.users.length > 0) {
+    const parsed = JSON.parse(sessionStorage.getItem(USERS_SESSION_KEY + ":" + ownerId) || "null") as { users?: AdminUser[]; me?: string } | null;
+    if (parsed && Array.isArray(parsed.users) && parsed.users.length > 0 && parsed.me === ownerId) {
       return { users: parsed.users, me: parsed.me || "", fresh: false };
     }
   } catch {
@@ -46,7 +46,7 @@ function readUsersSession(): { users: AdminUser[]; me: string; fresh: boolean } 
 function writeUsersSession(users: AdminUser[], me: string) {
   usersCache = { at: Date.now(), users, me };
   try {
-    sessionStorage.setItem(USERS_SESSION_KEY, JSON.stringify({ users, me }));
+    sessionStorage.setItem(USERS_SESSION_KEY + ":" + me, JSON.stringify({ users, me }));
   } catch {
     /* 忽略存储异常 */
   }
@@ -73,14 +73,15 @@ function UserAvatar({ user, size = "md" }: { user: Pick<User, "username" | "avat
   );
 }
 
-export default function UsersView() {
+export default function UsersView({ownerId = "", initial}:{ownerId?:string;initial?:import("@/lib/workspaceInitial").WorkspaceInitial["users"]}) {
   const active = useWorkspaceActive();
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [me, setMe] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<AdminUser[]>(initial?.users ?? []);
+  const [me, setMe] = useState(initial?.me ?? "");
+  const [loading, setLoading] = useState(!initial);
 
   useLayoutEffect(() => {
-    const cached = readUsersSession();
+    if (initial) { writeUsersSession(initial.users, initial.me); return; }
+    const cached = readUsersSession(ownerId);
     if (!cached) return;
     setUsers(cached.users);
     setMe(cached.me);
@@ -98,7 +99,7 @@ export default function UsersView() {
   const adminCount = users.filter((u) => u.role === "admin").length;
 
   async function load(opts?: { force?: boolean }) {
-    const cached = readUsersSession();
+    const cached = readUsersSession(ownerId);
     if (cached) {
       setUsers(cached.users);
       setMe(cached.me);
@@ -111,6 +112,7 @@ export default function UsersView() {
       const res = await fetch("/api/users");
       if (!res.ok) throw new Error(res.status === 401 ? "登录已失效，请重新登录" : "用户列表加载失败");
       const data = await res.json();
+      if (data.me !== ownerId) throw new Error("登录身份已变化，请刷新页面");
       writeUsersSession(data.users, data.me);
       setUsers(data.users);
       setMe(data.me);
@@ -130,7 +132,7 @@ export default function UsersView() {
   }, [active]);
 
   async function requestAdminStepUp(): Promise<{ currentPassword: string; code: string } | null> {
-    const currentPassword = await appPrompt("请输入你的管理员密码以继续", { title: "安全验证", placeholder: "当前密码" });
+    const currentPassword = await appPrompt("请输入你的管理员密码以继续", { title: "安全验证", inputType: "password" });
     if (!currentPassword) return null;
     const currentAdmin = users.find((item) => item.id === me);
     const code = currentAdmin?.totpEnabled

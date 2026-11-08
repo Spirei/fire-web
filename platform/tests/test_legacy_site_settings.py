@@ -13,6 +13,53 @@ from psycopg.types.json import Jsonb
 P = "/api/settings"
 
 
+async def test_first_run_registration_then_site_save_uses_current_revision_and_admin_proof(client):
+    password = "Synthetic9Pass"
+    created = await client.post("/api/auth/register", json={"username": "SetupOwner", "password": password})
+    assert created.status_code == 201, created.text
+    assert created.json()["user"]["role"] == "admin"
+    initial = (await client.get(P)).json()
+    patch = {"title": "Alcor", "allowRegister": False}
+    assert (await client.put(P, json=patch)).status_code == 422
+    payload = {**patch, "requestId": str(uuid4()), "revision": initial["revision"], "currentPassword": password}
+    saved = await client.put(P, json=payload)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["settings"]["title"] == "Alcor"
+    assert saved.json()["settings"]["allowRegister"] is False
+    receipt = await client.get(P + "/operations/" + payload["requestId"])
+    assert receipt.json() == saved.json()["operation"]
+    assert receipt.json()["state"] == "completed"
+    assert (await client.put(P, json=payload)).json()["operation"] == receipt.json()
+
+
+async def test_opend_settings_install_own_fixed_source_without_manual_env(legacy, app, monkeypatch):
+    from alcor_api.market_transport import Transport
+    calls = []
+    async def diagnostic(self, policy, action):
+        calls.append((policy,action))
+        return {'responded':True,'qotLogined':True}
+    monkeypatch.setattr(Transport, 'diagnostic', diagnostic)
+    current = (await legacy.get(P)).json()
+    fields = {'futuHost':'192.0.2.41','futuPort':'11111','quoteSource':'auto','futuApproved':True}
+    def command(state, **extra):
+        return {**fields,'requestId':str(uuid4()),'revision':state['revision'],'privateRevision':state['privateRevision'],'currentPassword':'Synthetic9Pass',**extra}
+    refused = await legacy.put(P,json=command(current,currentPassword='incorrect'))
+    assert refused.status_code == 403, refused.text
+    assert not calls
+    saved = await legacy.put(P,json=command(current))
+    assert saved.status_code == 200, saved.text
+    read = (await legacy.get(P)).json()
+    assert read['settings']['futuHost'] == fields['futuHost']
+    assert read['settings']['futuPort'] == '11111'
+    assert (await legacy.put(P,json=command(read))).status_code == 200
+    tested = await legacy.post('/api/futu/test',json={'host':fields['futuHost'],'port':'11111','requestId':str(uuid4())})
+    assert tested.status_code == 200, tested.text
+    assert tested.json()['ok'] is True
+    assert len(calls) == 1 and calls[0][1] == 'futu.test'
+    denied = await legacy.post('/api/futu/test',json={'host':'192.0.2.42','port':'11111'})
+    assert denied.status_code == 403 and len(calls) == 1
+
+
 @pytest_asyncio.fixture
 async def legacy(app, admin):
     async with httpx.AsyncClient(

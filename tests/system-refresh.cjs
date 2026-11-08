@@ -38,7 +38,7 @@ const compile = (node) =>
       module: ts.ModuleKind.CommonJS,
     },
   }).outputText;
-function harness(active = true) {
+function harness(active = true, seeded = false) {
   const timers = new Map(),
     events = new Map(),
     signals = [];
@@ -48,6 +48,9 @@ function harness(active = true) {
   const context = {
     exports: {},
     active,
+    firstSeed: { current: seeded },
+    seed: undefined,
+    filter: "",
     mode: "overview",
     AbortController,
     generation: { current: 0 },
@@ -116,6 +119,11 @@ function harness(active = true) {
   assert.equal(h.timers.size, 0);
   assert.equal(h.events.size, 0);
   assert(h.signals.every((signal) => signal.aborted));
+  const seeded = harness(true, true);
+  assert.equal(seeded.calls, 0, "server bootstrap removes the duplicate mount read");
+  await seeded.tick();
+  assert.equal(seeded.calls, 1, "live polling still revalidates the server snapshot");
+  seeded.cleanup();
   const inactive = harness(false);
   assert.equal(inactive.calls, 0);
   assert.equal(inactive.timers.size, 0);

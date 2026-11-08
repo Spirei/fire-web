@@ -5,13 +5,13 @@ from psycopg.types.json import Jsonb
 from .card_catalog import can_publish_cards
 from .card_catalog_contract import public_metadata
 from .legacy_card_directory import LegacyCardDirectory
-from .legacy_asset_directory import LegacyAssetDirectory
+from .legacy_asset_directory import LegacyAssetDirectory, public_upload_root
 
 
 class CardPublicAssets:
     def __init__(self, db, directory=None):
         self.db = db
-        self.directory = directory or LegacyCardDirectory(db.settings.file_root)
+        self.directory = directory or LegacyCardDirectory(public_upload_root(db.settings))
 
     async def source(self, aid):
         source = await self.directory.find(aid)

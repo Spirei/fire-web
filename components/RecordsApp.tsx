@@ -105,7 +105,7 @@ const DEFAULT_TABS: TabConfig[] = [
 ];
 
 // 保证 FIRE 页签始终存在且固定在「资产分析」下方（即使数据库里的导航菜单未包含它）。
-const SYSTEM_TABS:TabConfig[]=[{key:'system-overview',label:'系统总览',url:'/system-overview'},{key:'background-tasks',label:'后台任务',url:'/background-tasks'},{key:'api-migration',label:'接口迁移',url:'/api-migration'}];
+const SYSTEM_TABS:TabConfig[]=[{key:'system-overview',label:'系统总览',url:'/system-overview'},{key:'background-tasks',label:'后台任务',url:'/background-tasks'},{key:'api-migration',label:'API 接口',url:'/api-migration'}];
 function withFireTab(tabs: TabConfig[]): TabConfig[] {
   tabs=[...tabs.filter(tab=>!SYSTEM_TABS.some(item=>item.key===tab.key)),...SYSTEM_TABS];
   if (tabs.some((t) => t.key === "fire")) return tabs;
@@ -124,6 +124,8 @@ export default function RecordsApp({
   initialCelebs,
   initialUser,
   initialRecords,
+  initialRecordsReady = true,
+  initialSettingsVersion,
   initialWatchGroups = [],
   initialUserLogs,
   initialPasskeys = null,
@@ -136,9 +138,11 @@ export default function RecordsApp({
   initialAssetLibrary = null,
   initialCardLibrary = null,
   initialFeed = null,
-  initialQuotePool = null
+  initialQuotePool = null,
+  initialWorkspace = {},
 }: {
   initialTab: string;
+  initialWorkspace?: import("@/lib/workspaceInitial").WorkspaceInitial;
   initialNow: number;
   initialVersion: string;
   initialSymbol?: string;
@@ -146,10 +150,12 @@ export default function RecordsApp({
   initialCelebs?: import("@/lib/celebsData").CelebsResult | null;
   initialUser: User;
   initialRecords: StockRecord[];
+  initialRecordsReady?: boolean;
   initialWatchGroups?: WatchGroup[];
   initialUserLogs: SystemLog[];
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   initialFundBalances: Record<string, number|null>;
+  initialSettingsVersion?: import("@/lib/siteSettingsCommand").SettingsVersion;
   initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
@@ -166,6 +172,8 @@ export default function RecordsApp({
   const tabletDevice = useTabletDevice();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
+  const [recordsReady, setRecordsReady] = useState(initialRecordsReady);
+  const [recordsError, setRecordsError] = useState("");
   const recordsRef = useRef(records);
   const recordsSyncRef = useRef<ReturnType<typeof createRecordsRefresh> | null>(null);
   recordsRef.current = records;
@@ -190,7 +198,7 @@ export default function RecordsApp({
   const [tabletSidebarSide, setTabletSidebarSide] = usePersistedState<"left" | "right">("fire:tablet-sidebar-side", "left");
   const platformSidebarCollapsed = tabletDevice ? tabletSidebarCollapsed : sidebarCollapsed;
   const [userLogs, setUserLogs] = useState<SystemLog[]>(initialUserLogs);
-  const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
+  const [systemLogs, setSystemLogs] = useState<SystemLog[]>(initialWorkspace.logs?.systemLogs ?? []);
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab as TabKey);
   const [panelDirection, setPanelDirection] = useState("none");
   const navigationTab = activeTab === "quote-pool" ? "global" : activeTab;
@@ -689,6 +697,7 @@ export default function RecordsApp({
 
   useEffect(() => {
     const sync = createRecordsRefresh(user.id, async signal => {
+      setRecordsError("");
       const res = await fetch("/api/records", { signal, cache: "no-store" });
       if (!res.ok) throw new Error("记录读取失败");
       const records: unknown = await res.json();
@@ -701,10 +710,11 @@ export default function RecordsApp({
       quotesRef.current = retained;
       recordsRef.current = next;
       setRecords(next);
+      setRecordsReady(true);
       setValuationReady(next.filter(record => Number(record.qty) > 0 && record.code.trim()).every(record => Number.isFinite(Number(retained[record.id]?.price))));
-    }, Date.now, () => router.refresh());
+    }, Date.now, () => router.refresh(), () => setRecordsError("投资记录读取失败"), initialRecordsReady ? initialNow : -Infinity);
     recordsSyncRef.current = sync;
-    const activate = () => sync.setActive(!document.hidden && RECORDS_WORKSPACES.has(activeTabRef.current));
+    const activate = () => sync.setActive(!document.hidden && (RECORDS_WORKSPACES.has(activeTabRef.current) || activeTabRef.current === "settings" && new URLSearchParams(window.location.search).get("sub") === "profile" && ["data", "danger"].includes(new URLSearchParams(window.location.search).get("anchor") || "")));
     const resume = () => { activate(); sync.resume(); };
     const changed = () => sync.changed();
     activate();
@@ -723,8 +733,8 @@ export default function RecordsApp({
   }, [user.id, router]);
 
   useEffect(() => {
-    recordsSyncRef.current?.setActive(!document.hidden && RECORDS_WORKSPACES.has(activeTab));
-  }, [activeTab]);
+    recordsSyncRef.current?.setActive(!document.hidden && (RECORDS_WORKSPACES.has(activeTab) || activeTab === "settings" && settingsSub === "profile" && ["data", "danger"].includes(searchParams.get("anchor") || "")));
+  }, [activeTab, settingsSub, searchParams]);
 
   useEffect(() => {
     window.addEventListener("fire:settings-updated", reloadSettings);
@@ -962,7 +972,8 @@ export default function RecordsApp({
   useEffect(() => {
     // Warm only the two likely next destinations. Other views load on hover,
     // focus or press; importing every page at once competes with button input.
-    const keys = [...mobilePrimaryOrder, "holdings", "watchlist", "assets"]
+    const neighbors = ["library", "cards"].includes(activeTab) ? ["library", "cards"] : ["system-overview", "background-tasks", "api-migration"].includes(activeTab) ? ["settings"] : [];
+    const keys = [...neighbors, ...mobilePrimaryOrder, "holdings", "watchlist", "assets"]
       .filter((key, index, all) => key !== activeTab && all.indexOf(key) === index && sidebarTabs.some(tab => tab.key === key))
       .slice(0, 2);
     let index = 0;
@@ -1014,20 +1025,20 @@ export default function RecordsApp({
 
   // 行情、持仓等没变时戳保持不变。换页就能沿用上次的节点，不再把整页重算一遍。
   const financialPanelDataStamp = useMemo(() => ({}), [
-    records, quotes, quoteAt, refreshing, livePrice, valuationReady,
+    records, recordsReady, recordsError, quotes, quoteAt, refreshing, livePrice, valuationReady,
     groups, markets, marketLabels, marketOptions, userLogs, systemLogs, user,
     navTabs, mobileNavigationOrder, settingsSub, settingsSubReady,
     initialNow, initialVersion, initialSymbol, initialCelebAvatars, initialCelebs, initialUser,
     initialWatchGroups, initialPasskeys, initialFundBalances,
-    initialSettings, initialAssetLibrary, initialCardLibrary, initialFeed
+    initialSettings, initialAssetLibrary, initialCardLibrary, initialFeed, initialWorkspace
   ]);
   // A quote refresh must not rebuild settings, calendars or other non-price views.
   // Keep records in the settings stamp because its export action captures them.
-  const settingsPanelDataStamp = useMemo(() => ({}), [records, user, settingsSub, settingsSubReady, initialSettings, initialPasskeys, initialVersion]);
-  const globalPanelDataStamp = useMemo(() => ({}), [initialNow]);
+  const settingsPanelDataStamp = useMemo(() => ({}), [records, recordsReady, user, settingsSub, settingsSubReady, initialSettings, initialPasskeys, initialVersion]);
+  const globalPanelDataStamp = useMemo(() => ({}), [initialNow, records, recordsReady, recordsError, quotes, valuationReady]);
   const feedPanelDataStamp = useMemo(() => ({}), [initialNow, initialFeed]);
   const celebsPanelDataStamp = useMemo(() => ({}), [user, initialCelebAvatars, initialCelebs]);
-  const earningsPanelDataStamp = useMemo(() => ({}), [records, initialNow, initialUser]);
+  const earningsPanelDataStamp = useMemo(() => ({}), [records, recordsReady, recordsError, initialNow, initialUser]);
   const managementPanelDataStamp = useMemo(() => ({}), [user, initialSettings, initialAssetLibrary, initialCardLibrary]);
   const independentPanelStamps: Partial<Record<TabKey, object>> = {
     settings: settingsPanelDataStamp, global: globalPanelDataStamp, "quote-pool": globalPanelDataStamp,
@@ -1045,7 +1056,7 @@ export default function RecordsApp({
         </div>
       )}
       <div className={settingsSubReady ? "h-full" : "hidden h-full"} aria-hidden={!settingsSubReady}>
-        {settingsSub === "palette" ? <PlatformAppearance /> : settingsSub === "profile-home" ? <PersonalHome user={user} onEdit={() => navigateTo("settings", "profile")} /> : <SettingsView
+        {settingsSub === "palette" ? <PlatformAppearance /> : settingsSub === "profile-home" ? <PersonalHome user={user} initial={initialWorkspace.personal} onEdit={() => navigateTo("settings", "profile")} /> : <SettingsView
           user={{
             id: user.id,
             username: user?.username ?? "",
@@ -1055,13 +1066,14 @@ export default function RecordsApp({
             avatar: user?.avatar ?? "",
             role: user?.role ?? "user"
           }}
-          recordsCount={records.length}
+          recordsCount={recordsReady ? records.length : null}
           onExport={exportJson}
           onClearAll={clearAllRecords}
           onTabsChange={setNavTabs}
           initialSub={settingsSub ?? undefined}
           initialPasskeys={initialPasskeys}
           initialSettings={initialSettings}
+          initialSettingsVersion={initialTab === "settings" ? initialSettingsVersion : undefined}
         />}
       </div>
     </div>
@@ -1119,7 +1131,7 @@ export default function RecordsApp({
           // 隐藏页、以及数据未变的当前页，都沿用上次节点。换页只改隐藏，避免整页重算造成顿挫。
           let node = panels.current.get(tab) ?? null;
           if (active && (node == null || panelBuiltStamp.current.get(tab) !== panelDataStamp)) {
-            node = (
+            node = RECORDS_WORKSPACES.has(activeTab) && !recordsReady ? (recordsError ? <div className="workspace-load-error" role="alert"><p>{recordsError}</p><button type="button" onClick={() => recordsSyncRef.current?.changed()}>重试</button></div> : <WorkspaceLoading />) : (
             <>
           {activeTab === "watchlist" && (
             <WatchlistView
@@ -1189,7 +1201,7 @@ export default function RecordsApp({
               initialQuotes={quotes}
             /></MobileBackGesture>
           )}
-          {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" ? initialNow : 0} />}
+          {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" && initialWorkspace.logs ? initialNow : 0} />}
           {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} ledger={
             <HoldingsView
               records={records}
@@ -1216,9 +1228,9 @@ export default function RecordsApp({
           {activeTab === "trading" && <FeedView initial={initialFeed} initialNow={initialNow} />}
           {activeTab === "earnings" && <EarningsCalendarView records={records} canManage={initialUser.role === "admin"} initialNow={initialNow} />}
           {activeTab === "celebs" && <CelebsView isAdmin={user?.role === "admin"} initialAvatars={initialCelebAvatars} initialData={initialCelebs} />}
-          {activeTab === "users" && (user?.role === "admin" ? <UsersView /> : <NoPermission />)}
-          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView ownerId={user.id} initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
-          {(['system-overview','background-tasks','api-migration'] as string[]).includes(activeTab) && (user?.role==='admin'?<SystemView ownerId={initialUser.id} mode={activeTab==='system-overview'?'overview':activeTab==='background-tasks'?'tasks':'migration'} onNavigate={navigateWorkspace}/>:<NoPermission/>)}
+          {activeTab === "users" && (user?.role === "admin" ? <UsersView ownerId={user.id} initial={initialWorkspace.users} /> : <NoPermission />)}
+          {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialListing={initialWorkspace.material} ownerId={user.id} initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
+          {(['system-overview','background-tasks','api-migration'] as string[]).includes(activeTab) && (user?.role==='admin'?<SystemView initial={initialWorkspace.system} ownerId={initialUser.id} mode={activeTab==='system-overview'?'overview':activeTab==='background-tasks'?'tasks':'migration'} onNavigate={navigateWorkspace}/>:<NoPermission/>)}
           {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
             settingsSub === "palette" || settingsSub === "profile-home" ? settingsPanel : <SettingsWindow version={initialVersion}>{settingsPanel}</SettingsWindow>

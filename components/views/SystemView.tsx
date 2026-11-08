@@ -1,4 +1,5 @@
 "use client";
+import { clientRequestId } from "@/lib/randomId";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   IconDatabase,
@@ -14,6 +15,7 @@ import AppModal from "@/components/AppModal";
 import { Capsule, IconButton } from "@/components/Capsule";
 import AppSelect from "@/components/AppSelect";
 import { platformRequest as json } from "@/lib/platformRequest";
+import ApiCatalogue, { type ApiOperation } from "@/components/ApiCatalogue";
 import PasswordInput from "@/components/PasswordInput";
 import { ServiceIllustration } from "@/components/ServiceIllustration";
 
@@ -39,11 +41,11 @@ type Operation = {
   method: string;
   path: string;
   status: "connected" | "pending" | "presentation";
-  client_acceptance: string;
 };
 type Overview = { services: Service[]; task_counts: Record<string, number> };
 type Migration = {
-  items: Operation[];
+  items: (Operation & ApiOperation)[];
+  schemas?: Record<string, unknown>;
   summary: Record<string, number>;
   retirements?: {
     method: string;
@@ -84,21 +86,24 @@ export default function SystemView({
   mode,
   onNavigate,
   ownerId,
+  initial,
 }: {
   mode: Mode;
   ownerId: string;
+  initial?: import("@/lib/workspaceInitial").WorkspaceInitial["system"];
   onNavigate: (path: string) => void;
 }) {
   const active = useWorkspaceActive();
-  const [overview, setOverview] = useState<Overview | null>(null),
-    [tasks, setTasks] = useState<Task[]>([]),
-    [migration, setMigration] = useState<Migration | null>(null);
+  const seed = initial?.mode === mode && initial.identity.user.id === ownerId ? initial : undefined;
+  const [overview, setOverview] = useState<Overview | null>(seed?.overview ?? null),
+    [tasks, setTasks] = useState<Task[]>(seed?.tasks?.items ?? []),
+    [migration, setMigration] = useState<Migration | null>(seed?.directory ?? null);
   const [overviewStale, setOverviewStale] = useState(false);
   const [error, setError] = useState(""),
     [loading, setLoading] = useState(false),
     [connection, setConnection] = useState<"postgresql" | "redis" | null>(null);
   const [visibleLimit, setVisibleLimit] = useState(100);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<string | null>(seed?.tasks?.next_cursor ?? null);
   const params = useWorkspaceSearchParams();
   const canUseLocation = useWorkspaceLocationGuard();
   const taskStatuses = ["queued", "running", "succeeded", "failed", "cancelled", "cancel_requested"];
@@ -131,9 +136,10 @@ export default function SystemView({
     setBusy(false);
     return () => { actionScope.current++; };
   }, [active, mode, ownerId, filter]);
-  const csrf = useRef(""),
+  const firstSeed = useRef(!!seed);
+  const csrf = useRef(seed?.identity.csrf ?? ""),
     generation = useRef(0),
-    instance = useRef("");
+    instance = useRef(seed?.identity.instance_id ?? "");
   const clear = useCallback(() => {
     csrf.current = "";
     setCursor(null);
@@ -244,7 +250,8 @@ export default function SystemView({
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController();
-    void load(controller.signal);
+    if (firstSeed.current && (mode !== "tasks" || seed?.filter === filter)) firstSeed.current = false;
+    else void load(controller.signal);
     const resume = () => {
       if (!document.hidden) void load(controller.signal);
       else {
@@ -279,7 +286,7 @@ export default function SystemView({
     setBusy(true);
     setError("");
     const ticket = actionScope.current;
-    const pending = { request_id: crypto.randomUUID() };
+    const pending = { request_id: clientRequestId() };
     setReceipt(pending);
     try {
       const task = await json<Task>("/api/fire/tasks", {
@@ -375,7 +382,7 @@ export default function SystemView({
       (item) =>
         (!filter || item.status === filter) &&
         (!query ||
-          `${item.method} ${item.path}`
+          `${item.method} ${item.path} ${item.summary || ""} ${item.description || ""} ${item.category || ""}`
             .toLowerCase()
             .includes(query.toLowerCase())),
     ) || [];
@@ -445,7 +452,7 @@ export default function SystemView({
             ? "系统总览"
             : mode === "tasks"
               ? "后台任务"
-              : "接口迁移"}
+              : "API 接口"}
         </h1>
         <div className="flex gap-3">
           <IconButton label="刷新" busy={loading} framed onClick={() => void load()}><IconRefresh /></IconButton>
@@ -466,7 +473,7 @@ export default function SystemView({
           {error}
         </p>
       )}
-      {loading && !overview && !migration && <p role="status">加载中…</p>}
+      {!error && !overview && !migration && !tasks.length && <div className="system-initial-skeleton" role="status" aria-label="正在读取系统数据"><span /><span /><span /></div>}
       {receipt && (
         <div className="system-receipt" role="status">
           {receipt.task
@@ -547,7 +554,7 @@ export default function SystemView({
           <div className="system-section-heading">
             <h2>
               <IconApi size={20} />
-              接口迁移
+              API 接口
             </h2>
             <button onClick={() => onNavigate("/api-migration")}>
               查看清单
@@ -619,63 +626,20 @@ export default function SystemView({
           <div className="system-filters">
             <input
               aria-label="搜索接口"
-              placeholder="搜索路径或方法"
+              placeholder="搜索名称、路径或方法"
               maxLength={200}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             <AppSelect
-              ariaLabel="接入状态"
+              ariaLabel="接口状态"
               value={filter}
               onChange={setFilter}
               className="system-filter-select"
               options={[{ value: "", label: "全部接口" }, { value: "connected", label: "后端已登记" }, { value: "pending", label: "待接入" }, ...(migration.summary.presentation ? [{ value: "presentation", label: "网页接口" }] : [])]}
             />
           </div>
-          <div className="system-table-wrap">
-            <table className="system-table">
-              <thead>
-                <tr>
-                  <th>方法</th>
-                  <th>接口路径</th>
-                  <th>接入状态</th>
-                  <th>页面验收</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.slice(0, visibleLimit).map((item) => (
-                  <tr key={item.method + item.path}>
-                    <td>
-                      <code>{item.method}</code>
-                    </td>
-                    <td>
-                      <code>{item.path}</code>
-                    </td>
-                    <td>
-                      {item.status === "connected"
-                        ? "后端已登记"
-                        : item.status === "pending"
-                          ? "待接入"
-                          : "Fire 展示接口"}
-                    </td>
-                    <td>
-                      {item.client_acceptance === "verified"
-                        ? "已验收"
-                        : "待验收"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {visible.length > visibleLimit && (
-              <Capsule variant="secondary"
-                className=""
-                onClick={() => setVisibleLimit((value) => value + 100)}
-              >
-                加载更多
-              </Capsule>
-            )}
-          </div>
+          <ApiCatalogue schemas={migration.schemas} items={visible} category={params.get("category") || ""} onCategory={value => updateQuery("category", value)} />
         </>
       )}
       {active && selected && (
@@ -835,7 +799,7 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
           if (!signal.aborted) setSettings(value);
         })}>重新读取</Capsule>
         <Capsule variant="secondary" className="" disabled={busy || !config} onClick={() => void run(async signal => {
-          const id = crypto.randomUUID();
+          const id = clientRequestId();
           setRequestId(id); setReceipt(null);
           const value = await json<Receipt>("/api/fire/connections/" + kind + "/test", {
             method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, signal,

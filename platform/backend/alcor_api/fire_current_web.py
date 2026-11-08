@@ -95,8 +95,10 @@ def normalize_web_background(raw):
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(io.BytesIO(raw)) as original:
-                if original.format not in {"JPEG", "PNG", "WEBP"} or original.width * original.height > 4_000_000:
+                if original.format not in {"JPEG", "PNG", "WEBP"} or original.width * original.height > 40_000_000:
                     raise ValueError()
+                if original.format == "JPEG":
+                    original.draft("RGB", (2048, 2048))
                 original.load()
                 image = ImageOps.exif_transpose(original).convert("RGB")
                 image.thumbnail((2048, 2048))
@@ -104,7 +106,7 @@ def normalize_web_background(raw):
                 image.save(output, "JPEG", quality=88)
                 return output.getvalue()
     except (ValueError, OSError, UnidentifiedImageError, Image.DecompressionBombError, Image.DecompressionBombWarning):
-        raise HTTPException(400, "请选择不超过400万像素的 JPEG、PNG 或 WebP 图片") from None
+        raise HTTPException(400, "图片无法读取，请选择 JPEG、PNG 或 WebP 图片") from None
 
 
 @router.post("/api/auth/personal-home")

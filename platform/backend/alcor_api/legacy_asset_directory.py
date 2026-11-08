@@ -47,6 +47,13 @@ MARKET_NAMES = {
 MARKET_ALIASES = {label + key: key for key, label in MARKET_NAMES.items()} | {"美国US": "US"}
 
 
+def public_upload_root(settings):
+    # Fire keeps public uploads separate from private originals and backups.
+    if settings.connections_from_environment:
+        return settings.public_upload_root
+    return settings.public_upload_root or settings.file_root
+
+
 def market_key(stem):
     raw = stem.upper()
     if raw in MARKET_NAMES:

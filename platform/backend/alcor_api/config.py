@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     backup_dir: Path | None = None
     backup_secret_dir: Path | None = None
     file_root: Path | None = None
+    public_upload_root: Path | None = None
     asset_root: Path | None = None
     pg_tools_dir: Path | None = None
     backup_max_bytes: int = Field(default=64 * 1024 * 1024, ge=1024 * 1024, le=512 * 1024 * 1024)

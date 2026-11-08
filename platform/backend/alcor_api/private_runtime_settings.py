@@ -477,10 +477,25 @@ class PrivateRuntimeSettings:
                 groups['models']['activeModelServiceId']=selected['id']
                 unhandled=[key for key in unhandled if key not in alias_keys and key!='llmProvider']
             futu_keys=set(raw)&{'futuHost','futuPort'}
+            opend_policy = None
+            approved_opend = raw.get('futuApproved') is True
+            if 'futuApproved' in raw:
+                if not approved_opend or futu_keys != {'futuHost','futuPort'}:
+                    raise HTTPException(422,'请明确确认本次 OpenD 地址及用途')
+                unhandled=[key for key in unhandled if key!='futuApproved']
             if futu_keys:
                 from .dividend_sources import Target
                 targets=copy.deepcopy(private.get('dividend_source_targets',[]));policies=copy.deepcopy(private.get('market_data_policies',[]))
-                available=[target for target in targets if target.get('source')=='futu']
+                if approved_opend:
+                    if not password or verifier is None:
+                        raise HTTPException(403,'保存 OpenD 连接需要管理员验证')
+                    checked=await verifier.step_up(conn,who,password,code)
+                    verified_factor=(conn,who.id,who.token_hash,checked)
+                    from .opend_settings import configured_opend
+                    selected,opend_policy=configured_opend(who,raw['futuHost'],raw['futuPort'])
+                    targets=[target for target in targets if target.get('id')!=selected['id']]+[selected]
+                    policies=[policy for policy in policies if policy.get('id')!=opend_policy['id']]+[opend_policy]
+                available=[target for target in targets if target.get('source')=='futu' and (not approved_opend or target['id']==opend_policy['target_id'])]
                 if len(available)!=1:raise HTTPException(409,'旧富途字段须对应唯一已安装富途目标')
                 selected=available[0]
                 if 'futuHost' in raw:selected['host']=raw['futuHost']
@@ -520,6 +535,18 @@ class PrivateRuntimeSettings:
                 child=str(uuid5(UUID(str(request_id)),'private-runtime:'+group))
                 result=await service.save(who,{'requestId':child,'expectedRevision':expected,'group':group,'patch':groups.get(group,{}),'secretActions':secrets.get(group,{})},connection=conn,verified_factor=verified_factor)
                 expected=result['revision'];outputs.append(result)
+            if opend_policy:
+                from .market_authority import Authority, Policy
+                policy = Policy(**opend_policy)
+                current = await (await conn.execute("""SELECT c.revision FROM market_source_configs c JOIN users u ON u.id=c.owner_id
+                    WHERE c.owner_id=%s AND c.policy_id=%s AND c.policy_fingerprint=%s
+                    AND c.origin_instance=%s AND c.session_version=u.session_version
+                    AND c.native_grant_id IS NULL AND NOT EXISTS
+                    (SELECT 1 FROM market_source_revocations r WHERE r.owner_id=c.owner_id AND r.revision=c.revision)
+                    ORDER BY c.created_at DESC LIMIT 1""", (who.id,policy.id,policy.fingerprint,self.db.settings.instance_id))).fetchone()
+                if not current:
+                    configured = await Authority(Bound(conn,self.db.settings), (policy,)).configure(who,uuid5(UUID(str(request_id)),'opend-source'),policy.id)
+                    outputs.append({'authority':'opend-source',**configured})
             enrollment=[]
             if interval_changes:
                 from .feed_refresh_policy import enroll_changed

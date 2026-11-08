@@ -602,6 +602,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
   };
 
   useEffect(() => {
+    if (initial) return;
     let cancelled = false;
     fetch("/api/cards")
       .then((res) => (res.ok ? res.json() : null))

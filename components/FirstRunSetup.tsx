@@ -3,6 +3,7 @@
 import PasswordInput from "@/components/PasswordInput";
 import PasswordStrength from "@/components/PasswordStrength";
 import ThemeToggle from "@/components/ThemeToggle";
+import { SiteSettingsCommand } from "@/lib/siteSettingsCommand";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -11,6 +12,7 @@ type Step = 1 | 2 | 3;
 
 export default function FirstRunSetup({ requireSetupToken = false, initialBrand = { logo: "", favicon: "" } }: { requireSetupToken?: boolean; initialBrand?: { logo: string; favicon: string } }) {
   const router = useRouter();
+  const siteSave = useMemo(() => new SiteSettingsCommand(), []);
   const [step, setStep] = useState<Step>(1);
   const [setupToken, setSetupToken] = useState("");
   const [username, setUsername] = useState("");
@@ -77,13 +79,9 @@ export default function FirstRunSetup({ requireSetupToken = false, initialBrand 
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim() || "Alcor", allowRegister })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "保存站点信息失败");
+      await siteSave.save({ title: title.trim() || "Alcor", allowRegister }, password);
+      setPassword("");
+      setConfirm("");
       setStep(3);
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存站点信息失败");
@@ -165,7 +163,7 @@ export default function FirstRunSetup({ requireSetupToken = false, initialBrand 
                 <div className="fr-fields single">
                   <label htmlFor="fr-title">
                     网站标题
-                    <input id="fr-title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+                    <input id="fr-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={loading || siteSave.pending} autoFocus />
                   </label>
                 </div>
                 <div className="fr-toggle">
@@ -176,6 +174,7 @@ export default function FirstRunSetup({ requireSetupToken = false, initialBrand 
                     type="button"
                     role="switch"
                     aria-labelledby="fr-register-label"
+                    disabled={loading || siteSave.pending}
                     aria-checked={allowRegister}
                     className={`fr-switch${allowRegister ? " on" : ""}`}
                     onClick={() => setAllowRegister((v) => !v)}
@@ -187,7 +186,7 @@ export default function FirstRunSetup({ requireSetupToken = false, initialBrand 
                 <div className="fr-actions">
                   <button className="fr-secondary" type="button" onClick={() => setStep(3)}>跳过</button>
                   <button className="fr-primary" type="submit" disabled={loading}>
-                    {loading ? "正在保存…" : "保存并继续"}
+                    {loading ? "正在保存…" : siteSave.pending ? "核对保存结果" : "保存并继续"}
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
                   </button>
                 </div>

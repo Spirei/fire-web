@@ -6,9 +6,12 @@ import { DiscordFields, FeishuFields, QqFields, TelegramFields, WebPushFields, W
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard, useWorkspaceActive } from "@/lib/workspacePanel";
 
 import PasswordInput from "@/components/PasswordInput";
+import { SiteSettingsCommand } from "@/lib/siteSettingsCommand";
+import { platformRequest } from "@/lib/platformRequest";
+import { useImageCrop } from "@/components/ImageCropDialog";
 import XueqiuCookieInput from "@/components/XueqiuCookieInput";
 import { xueqiuCookiePatch, type XueqiuCookieDraft } from "@/lib/xueqiuCookieClient";
-import { clientRandomId } from "@/lib/randomId";
+import { clientRandomId, clientRequestId } from "@/lib/randomId";
 import ModelTestButton from "@/components/ModelTestButton";
 import PasskeySettings from "@/components/PasskeySettings";
 import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
@@ -69,11 +72,12 @@ const DEFAULT_TICKER: TickerConfig = {
 
 interface Props {
   user: { id: string; username: string; nickname?: string; uid?: string; email?: string; emailVerified?: boolean; avatar?: string; role?: string };
-  recordsCount: number;
+  recordsCount: number | null;
   onExport: () => void;
   onClearAll: (password: string) => Promise<boolean>;
   onTabsChange: (tabs: TabConfig[]) => void;
   initialSub?: string;
+  initialSettingsVersion?: import("@/lib/siteSettingsCommand").SettingsVersion;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
   initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
@@ -165,7 +169,7 @@ const SETTINGS_CATEGORIES = [
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
 const SOURCE_DETAIL_ANCHORS = new Set(["sources", "source-reports", "source-icons", "source-content"]);
-const EDITABLE_DETAIL_ANCHORS = new Set(["appearance", "ticker", "nav", "app-nav", "groups", "market-badges", ...SOURCE_DETAIL_ANCHORS, "translation", "trade", "profile", "trading-square"]);
+const EDITABLE_DETAIL_ANCHORS = new Set(["info","appearance", "ticker", "nav", "app-nav", "groups", "market-badges", ...SOURCE_DETAIL_ANCHORS, "translation", "trade", "profile", "trading-square"]);
 
 function persistSettingsAnchor(sub: SubKey, anchor: string): boolean {
   const anchors = SETTINGS_SEARCH_INDEX.filter((item) => item.sub === sub);
@@ -265,11 +269,12 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   }
 ];
 
-function SettingsSwitch({ checked, onChange, label = "切换设置" }: { checked: boolean; onChange: () => void; label?: string }) {
+function SettingsSwitch({ checked, onChange, label = "切换设置", disabled = false }: { checked: boolean; onChange: () => void; label?: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
+      disabled={disabled}
       aria-checked={checked}
       aria-label={label}
       onClick={onChange}
@@ -679,7 +684,10 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 // 连续点击则目标不断前移，弹簧持续追赶，产生连续顺滑的转动。
 // 临界阻尼（无过冲、无回弹）+ 弹簧自身正是“起步缓、中间快、收尾柔”的缘故，
 // 比直接给速度/摩擦更流畅，不会有速度突跳或生硬停下的卡顿感。
-export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings, initialPasskeys }: Props) {
+export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings, initialPasskeys, initialSettingsVersion }: Props) {
+  const avatarCrop = useImageCrop();
+  const futuSave = useMemo(() => new SiteSettingsCommand(), []);
+  const settingCommands = useRef(new Map<string, SiteSettingsCommand>());
   const passkeyData = useMemo(() => createPasskeySettingsData(initialPasskeys), [user.username, user.uid, initialPasskeys]);
   useEffect(() => () => passkeyData.invalidate(), [passkeyData]);
   const isAdminUser = user?.role === "admin";
@@ -760,6 +768,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     marketBadgesVisible: initialSettings.marketBadgesVisible !== false
   } : DEFAULT_SETTINGS);
   const settingsSaveGeneration = useRef(0);
+  const settingsVersion = useRef<import("@/lib/siteSettingsCommand").SettingsVersion | null>(initialSettingsVersion ?? null);
+  function captureSettingsVersion(data: { revision?: number; privateRevision?: number }) {
+    settingsVersion.current = Number.isSafeInteger(data.revision) && Number(data.revision) >= 0 ? { revision: data.revision!, ...(Number.isSafeInteger(data.privateRevision) ? {privateRevision:data.privateRevision} : {}) } : null;
+  }
   const [tabs, setTabs] = useState<TabConfig[]>(initialSettings?.tabs ?? DEFAULT_TABS);
   const [stockGroups, setStockGroups] = useState<GroupConfig[]>(initialSettings?.groups ?? []);
   const [blockSaving, setBlockSaving] = useState<Record<string, boolean>>({});
@@ -827,12 +839,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [initialSub, isAdminUser, searchParams]);
 
   useEffect(() => {
+    if (initialSettingsVersion) { captureSaved(site); return; }
     const generation = settingsSaveGeneration.current;
     fetch("/api/settings")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (generation !== settingsSaveGeneration.current) return;
         if (data?.settings) {
+          captureSettingsVersion(data);
           setSite({ ...DEFAULT_SETTINGS, ...data.settings, marketBadges: normalizeMarketBadges(data.settings.marketBadges), marketBadgesVisible: data.settings.marketBadgesVisible !== false });
           captureSaved(data.settings);
           setTabs(data.settings.tabs ?? DEFAULT_TABS);
@@ -941,19 +955,47 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setBlockSaving((b) => ({ ...b, [key]: true }));
     setBlockMsg((m) => ({ ...m, [key]: undefined }));
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        credentials: "same-origin",
-        redirect: "error",
-        signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...fields, ...(fields.modelServices ? { modelServicesRevision: site.modelServicesRevision } : {}) })
-      });
-      const data = await readLimitedResponseJson<any>(res, 1024 * 1024);
+      if (key === "futu") {
+        let password = "", code = "";
+        if (!futuSave.pending) {
+          const approved = await appConfirm("允许此 OpenD 连接用于行情读取、连接检测和额度查询？", { title: "保存 OpenD 连接" });
+          if (!approved) return false;
+          const proof = await appPrompt("请输入管理员密码", { title: "安全验证", inputType: "password" });
+          if (!proof) return false;
+          password = proof;
+          if (totpEnabled) {
+            const factor = await appPrompt("请输入验证码", { title: "安全验证" });
+            if (!factor) return false;
+            code = factor;
+          }
+        }
+        if (!futuSave.pending && !settingsVersion.current) throw new Error("配置尚未读完，请稍后保存");
+        await futuSave.save({ ...fields, futuApproved: true }, password, code, settingsVersion.current ?? undefined);
+        const current = await platformRequest<{ settings: SiteSettings; revision:number; privateRevision?:number }>("/api/settings");
+        captureSettingsVersion(current);
+        setSite(s => ({ ...s, ...current.settings })); captureSaved(current.settings);
+        showToast(hint); window.dispatchEvent(new Event("fire:settings-updated"));
+        return true;
+      }
+      let command = settingCommands.current.get(key);
+      if (!command) { command = new SiteSettingsCommand(); settingCommands.current.set(key, command); }
+      let password = "", code = "";
+      if (!command.pending) {
+        const proof = await appPrompt("请输入管理员密码", { title: "安全验证", inputType: "password" });
+        if (!proof) return false;
+        password = proof;
+        if (totpEnabled) {
+          const factor = await appPrompt("请输入验证码", { title: "安全验证" });
+          if (!factor) return false;
+          code = factor;
+        }
+      }
+      if (!command.pending && !settingsVersion.current) throw new Error("配置尚未读完，请稍后保存");
+      await command.save({ ...fields, ...(fields.modelServices && Number.isInteger(site.modelServicesRevision) ? { modelServicesRevision: site.modelServicesRevision } : {}) }, password, code, settingsVersion.current ?? undefined);
+      const data = await platformRequest<{settings: SiteSettings; revision:number; privateRevision?:number}>("/api/settings", {signal});
       if (signal?.aborted) throw new DOMException("请求已取消", "AbortError");
-      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error.slice(0, 200) : "保存失败");
-      if (!data?.settings || typeof data.settings !== "object" || Array.isArray(data.settings) || typeof data.settings.domain !== "string" || !Array.isArray(data.settings.tabs)) throw new Error("保存结果无效，请刷新核对后重试");
       settingsSaveGeneration.current += 1;
+      captureSettingsVersion(data);
       setSite((s) => ({ ...s, ...data.settings, ...(fields.modelServices === undefined ? { modelServices: s.modelServices, modelServicesRevision: s.modelServicesRevision, modelServicesInitialized: s.modelServicesInitialized } : {}), llmApiKey: s.llmApiKey }));
       captureSaved(data.settings);
       if (data.settings?.marketBadges || typeof data.settings?.marketBadgesVisible === "boolean") {
@@ -965,7 +1007,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       window.dispatchEvent(new Event("fire:records-updated"));
       return true;
     } catch (err) {
-      setBlockMsg((m) => ({ ...m, [key]: { type: "err", text: err instanceof Error ? err.message : "保存失败" } }));
+      const message = err instanceof Error ? err.message : "保存失败";
+      setBlockMsg((m) => ({ ...m, [key]: { type: "err", text: message } }));
+      if (!["mobile-nav", "tradingSquare", "marketBadges", "wechat", "telegram", "feishu", "qq", "discord", "webpush"].includes(key)) showToast(message, "err");
       return false;
     } finally {
       setBlockSaving((b) => ({ ...b, [key]: false }));
@@ -976,7 +1020,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setSite((s) => ({ ...s, [key]: value }));
   }
 
-  /* Site information and the standalone visibility switch auto-save; editors require Save. */
+  /* Only the standalone visibility switch auto-saves; administrator edits use Save. */
   const savedRef = useRef<Record<string, unknown> | null>(null);
   // 上次保存成功的完整设置（取消用）；tabsRef 同步 tabs，避免闭包拿到旧值
   const lastSavedRef = useRef<{ site: SiteSettings; tabs: TabConfig[] } | null>(null);
@@ -1012,29 +1056,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     const cur = autoSaveSnapshot(site) as unknown as Record<string, unknown>;
     const patch: Record<string, unknown> = {};
     Object.keys(cur).forEach((key) => {
-      if (key === "marketBadgesVisible" && editingMarketBadges) return;
+      if (key !== "marketBadgesVisible" || editingMarketBadges) return;
       if (cur[key] !== saved[key]) patch[key] = cur[key];
     });
     if (Object.keys(patch).length === 0) return;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch("/api/settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch)
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || "保存失败");
-        captureSaved(data.settings);
-        window.dispatchEvent(new Event("fire:settings-updated"));
-        const keys = Object.keys(patch);
-        const savedMessage =
-          keys.length === 1 && keys[0] === "marketBadgesVisible"
-            ? patch.marketBadgesVisible ? "市场色块已显示" : "市场色块已隐藏"
-            : keys.length === 1 && keys[0] === "allowRegister"
-              ? patch.allowRegister ? "已允许新用户注册" : "已关闭新用户注册"
-              : "设置已自动保存";
-        showToast(savedMessage);
+        const ok = await saveBlock("siteInfo", patch, "设置已保存");
+        if (!ok) return;
+
       } catch (err) {
         showToast(err instanceof Error ? err.message : "保存失败，请稍后重试", "err");
       }
@@ -1115,12 +1145,15 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   async function uploadAvatar(file: File) {
+    const cropped = await avatarCrop.crop(file, "avatar");
+    if (!cropped) return;
     setAvatarUploading(true);
     setAvatarMsg(null);
     try {
       const fd = new FormData();
       fd.append("kind", "avatar");
-      fd.append("file", file);
+      fd.append("file", cropped);
+      fd.append("requestId", clientRequestId());
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "上传失败");
@@ -1356,8 +1389,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     } finally { clearTimeout(timeout); tradingSquareSaveRef.current = false; }
   }
   const [editingProfile, setEditingProfile] = useState(false);
-  // 站点信息：不再有「编辑 / 保存」两步 —— 字段常驻可编辑，改动由全局自动保存（700ms 防抖 + 胶囊提示）落库
-  const [editingSiteInfo] = useState(true);
+  const [editingSiteInfo, setEditingSiteInfo] = useState(false);
   const [editingFutu, setEditingFutu] = useState(false);
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
@@ -1377,8 +1409,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const activePageMeta = SETTINGS_SEARCH_INDEX.find((item) => item.sub === sub && item.anchor === activeAnchor);
 
   function beginActiveEdit() {
+    if (!groupsLoaded) return;
     if (activeAnchor === "trading-square") setEditingTradingSquare(true);
-    // info 分区常驻可编辑（自动保存），无需进入编辑态
+    else if (activeAnchor === "info") setEditingSiteInfo(true);
     else if (activeAnchor === "appearance") setEditingAppearance(true);
     else if (activeAnchor === "ticker") setEditingTicker(true);
     else if (activeAnchor === "nav") setEditingHomeNav(true);
@@ -1397,7 +1430,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }, [activeAnchor]);
   // 把「当前分区是否在编辑」广播给标题栏（铅笔 ↔ 完成图标切换）
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: ["info", "palette", "passkeys"].includes(activeAnchor) } }));
+    window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: ["palette", "passkeys"].includes(activeAnchor) } }));
   }, [activeEditState, activeAnchor]);
   const saveActiveEditRef = useRef<() => Promise<void>>(async () => {});
   const savingEditRef = useRef(false);
@@ -1414,7 +1447,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         await saveTradingSquare();
       } else if (activeAnchor === "info") {
         const ok = await saveBlock("siteInfo", { title: site.title, domain: site.domain, allowRegister: site.allowRegister, footerDesc: site.footerDesc }, "站点信息已保存");
-        // 站点信息是常驻可编辑 + 自动保存，不再有「保存后转只读」这一步
+        if (ok) setEditingSiteInfo(false);
       } else if (activeAnchor === "appearance") {
         const ok = await saveBlock("brand", { ico: site.ico, pwaIcon: site.pwaIcon, siteLogo: site.siteLogo, logoText: site.logoText, logoFont: site.logoFont, homepageBg: site.homepageBg, loginSideImage: site.loginSideImage }, "网站形象已保存");
         if (ok) setEditingAppearance(false);
@@ -1459,6 +1492,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   /** 取消：回滚到上次保存成功的完整状态并退出编辑（主流做法里「取消 + 保存」成对出现） */
   function exitActiveEdit() {
     if (activeAnchor === "trading-square") setEditingTradingSquare(false);
+    else if (activeAnchor === "info") setEditingSiteInfo(false);
     else if (activeAnchor === "appearance") setEditingAppearance(false);
     else if (activeAnchor === "ticker") setEditingTicker(false);
     else if (activeAnchor === "nav") setEditingHomeNav(false);
@@ -1502,7 +1536,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteTotpCode, setDeleteTotpCode] = useState("");
   const [groupSaving, setGroupSaving] = useState(false);
-  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [groupsLoaded, setGroupsLoaded] = useState(!!initialSettingsVersion);
   const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [srcSaving, setSrcSaving] = useState(false);
   const { label: futuStatusLabel, online: futuOnline, checking: futuChecking, skipped: futuSkipped, result: futuTest, test: testFutu } = useFutuConnectionStatus(site.futuHost, site.futuPort);
@@ -1867,7 +1901,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   const [clearing, setClearing] = useState(false);
   async function clearAll() {
-    if (!await appConfirm(`将清空全部 ${recordsCount} 条记录，此操作无法恢复。`, { title: "清空全部记录", danger: true })) return;
+    if (!await appConfirm(`将清空全部 ${recordsCount ?? "—"} 条记录，此操作无法恢复。`, { title: "清空全部记录", danger: true })) return;
     const password = await appPrompt("请输入当前密码以继续", { title: "安全验证", placeholder: "当前密码" });
     if (!password) return;
     setClearing(true);
@@ -1939,6 +1973,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   return (
     <div className="settings-page flex h-full min-h-0 flex-1">
+      {avatarCrop.dialog}
       {showDeleteConfirm && <AppModal title="确认注销账号" size="md" onClose={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); }}>
             <p className="mt-2 text-sm text-muted">此操作<strong className="text-up">不可恢复</strong>，将永久删除账号「{user.nickname || user.username}」及全部持仓、订单、分组、偏好等数据。</p>
             <label className="mt-4 block text-xs font-semibold text-muted">请输入登录名「<b className="text-ink">{user.username}</b>」以确认</label>
@@ -2011,7 +2046,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             category={currentCategory?.label || "账户设置"}
             detailKey={activeAnchor}
             showBack={activeAnchor === "totp" && (totpEnabled || !!totpSetup || totpLandingStage === "method")}
-            closeDisabled={(activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "trading-square" && !!blockSaving.tradingSquare) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}
+            closeDisabled={Object.values(blockSaving).some(Boolean) || (activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "trading-square" && !!blockSaving.tradingSquare) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}
             onBack={activeAnchor === "totp" ? () => {
               if (totpBusy) return;
               if (totpSetup && totpSetupStage === "verify") { setTotpSetupStage("name"); setTotpSetupCode(""); setTotpMsg(null); return; }
@@ -2020,7 +2055,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               if (!totpEnabled && totpLandingStage === "method") { setTotpLandingStage("intro"); return; }
               openCategory(detailOrigin || currentCategory?.key || "home");
             } : undefined}
-            editable={EDITABLE_DETAIL_ANCHORS.has(activeAnchor)}
+            editable={groupsLoaded && EDITABLE_DETAIL_ANCHORS.has(activeAnchor)}
             editing={activeEditState}
             onEdit={beginActiveEdit}
             onSave={() => { void saveActiveEdit(); }}
@@ -2059,6 +2094,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                         <div className="sw-row-label"><b>允许新用户注册</b><span>关闭后仅管理员可创建账号</span></div>
                         <SettingsSwitch
                           checked={site.allowRegister}
+                          disabled={!editingSiteInfo}
                           onChange={() => setSite((s) => ({ ...s, allowRegister: !s.allowRegister }))}
                         />
                       </div>
@@ -3258,10 +3294,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     </div>
                   </div>
                   </SettingsManagedPane>
-                  <SettingsManagedPane name="holdings" title="持仓数据" summary={`导出持仓与自选记录 · ${recordsCount} 条`}>
+                  <SettingsManagedPane name="holdings" title="持仓数据" summary={`导出持仓与自选记录 · ${recordsCount ?? "—"} 条`}>
                   <div className="sw-row">
-                    <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount} 条</span></div>
-                    <Capsule variant="ghost" size="sm" type="button" onClick={onExport} className="">导出</Capsule>
+                    <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount ?? "—"} 条</span></div>
+                    <Capsule variant="ghost" size="sm" type="button" disabled={recordsCount === null} onClick={onExport} className="">导出</Capsule>
                   </div>
                   </SettingsManagedPane>
                   </SettingsManagedGroup>
@@ -3271,7 +3307,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   <div className="settings-danger-zone">
                   <div className="sw-row">
                     <div className="sw-row-label"><b>清空数据</b><span>不可恢复，请谨慎操作</span></div>
-                    <Capsule variant="danger" size="sm" type="button" onClick={clearAll} disabled={clearing || recordsCount === 0} className="!text-up disabled:opacity-50">{clearing ? "清空中…" : "清空"}</Capsule>
+                    <Capsule variant="danger" size="sm" type="button" onClick={clearAll} disabled={clearing || recordsCount === null || recordsCount === 0} className="!text-up disabled:opacity-50">{clearing ? "清空中…" : "清空"}</Capsule>
                   </div>
                   </div>
                 </SettingsSection>

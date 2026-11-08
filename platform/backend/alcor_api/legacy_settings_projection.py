@@ -18,6 +18,9 @@ def project(groups):
         for key in ('smtpPassword','xueqiuCookie'):
             if states.get(key)=='configured':result[key+'Configured']=True
         if name=='sources':
+            futu=[target for target in values.get('dividend_source_targets',[]) if target.get('source')=='futu']
+            if len(futu)==1:
+                result.update(futuHost=futu[0]['host'],futuPort=str(futu[0]['port']))
             for person,field in (('trump','tradingSquareTrumpRefreshMinutes'),('duan','tradingSquareDuanRefreshMinutes')):
                 declared=values.get('peopleRefreshIntervals',{}).get(person)
                 if declared is not None:result[field]=declared

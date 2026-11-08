@@ -16,7 +16,8 @@ from test_fire_web import fire_login
 
 async def test_environment_is_authority_for_api_worker_bootstrap_and_test_receipts(settings):
     settings.connections_from_environment = True
-    settings.connection_secret_dir.mkdir(mode=0o700)
+    settings.connection_secret_dir.mkdir(mode=0o777)
+    settings.connection_secret_dir.chmod(0o777)
     stale = settings.connection_secret_dir / ("bootstrap-" + str(settings.instance_id) + ".enc")
     stale.write_text("Synthetic stale encrypted configuration must never be read")
     stale.chmod(0o600)

@@ -33,6 +33,8 @@ def test_current_fire_configuration_does_not_inherit_independent_api(fire_env, m
     monkeypatch.setenv("FIRE_MAIL_PASSWORD", "")
     settings = load_fire_settings()
     assert settings.connections_from_environment is True
+    from alcor_api.config import ROOT
+    assert settings.public_upload_root == ROOT.parent / "public" / "uploads"
     assert settings.deployment_checks_workflow == "docker-publish.yml"
     assert settings.pool_size == 7 and settings.lease_seconds == 45
     assert settings.pg_tools_dir == tmp_path

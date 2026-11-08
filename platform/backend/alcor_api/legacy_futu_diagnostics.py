@@ -115,7 +115,7 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                 continue
             choices.append((row["revision"], policy))
         if not choices:
-            raise HTTPException(503, "尚无本人已配置且明确许可该检查用途的固定来源")
+            raise HTTPException(503, "请先保存 OpenD 连接设置")
         if len(choices) != 1:
             raise HTTPException(409, "存在多个许可来源，请明确选择来源版本")
         revision, policy = choices[0]

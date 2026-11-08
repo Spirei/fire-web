@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm');
+const context={exports:{},URLSearchParams};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/workspaceBootstrap.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,context);
+const bootstrap=context.exports.workspaceBootstrap;
+const identity={user:{id:'owner-one',role:'admin'},csrf:'synthetic',instance_id:'synthetic'};
+(async()=>{
+ const calls=[],read=async path=>{calls.push(path);return {assets:[],total:0,page:1,revision:'1',marketCounts:{}};};
+ const materials=await bootstrap('library',new URLSearchParams('tab=stock&market=HK&q=a%26b&page=2'),identity,read);
+ assert.equal(materials.material.key,'owner-one|stock|HK|a&b|2|false');
+ assert.equal(calls.length,1);const query=new URLSearchParams(calls[0].split('?')[1]);assert.equal(query.get('q'),'a&b');assert.equal(query.get('page'),'2');
+ calls.length=0;await bootstrap('library',new URLSearchParams(),{...identity,user:{id:'reader',role:'user'}},read);assert.equal(calls.length,0,'Non-admin never gets material administration bootstrap');
+ calls.length=0;await bootstrap('settings',new URLSearchParams('sub=palette'),identity,read);assert.equal(calls.length,0,'Appearance must not wait for records, funds or unrelated pages');
+ const pending=[],gate=path=>new Promise(resolve=>pending.push({path,resolve}));
+ const system=bootstrap('system-overview',new URLSearchParams(),identity,gate);
+ assert.equal(pending.length,2,'Overview and tasks start in parallel');assert(!pending.some(p=>p.path.includes('session')),'Already-authenticated server session is reused within this request');
+ pending.forEach(p=>p.resolve(p.path.includes('tasks')?{items:[],next_cursor:null}:{services:[],task_counts:{}}));
+ const result=await system;assert.equal(result.system.identity.user.id,'owner-one');assert.equal(result.system.tasks.items.length,0);
+ calls.length=0;await bootstrap('cards',new URLSearchParams(),identity,read);assert.deepEqual(calls,['/api/cards']);
+ console.log('PASS refresh bootstrap reads only the current page, preserves URL filters and ownership, and avoids a second client session waterfall');
+})().catch(error=>{console.error(error);process.exitCode=1;});

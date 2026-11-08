@@ -1,12 +1,14 @@
 "use client";
 import { Capsule } from "@/components/Capsule";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconPencil, IconPhotoPlus, IconRefresh } from "@tabler/icons-react";
 import { clientRequestId } from "@/lib/randomId";
 import type { User } from "@/lib/types";
 import AppSelect from "@/components/AppSelect";
 import { showToast } from "@/lib/toast";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
+import { useImageCrop } from "@/components/ImageCropDialog";
 type Profile = {
   revision: number;
   bio: string;
@@ -26,26 +28,44 @@ type Activity = {
 };
 export default function PersonalHome({
   user: initialUser,
+  initial,
 }: {
   user: User;
+  initial?: import("@/lib/workspaceInitial").WorkspaceInitial["personal"];
   onEdit?: () => void;
 }) {
+  const imageCrop = useImageCrop();
+  const cover = useRef<HTMLElement>(null);
+  const tipId = useId();
+  const [tip, setTip] = useState<{ day: string; count: number; known: boolean; left: number; top: number; below: boolean } | null>(null);
+  function showDay(element: HTMLElement, cell: { day: string; count: number; known: boolean }) {
+    const rect = element.getBoundingClientRect();
+    setTip({ ...cell, left: Math.max(112, Math.min(window.innerWidth - 112, rect.left + rect.width / 2)), top: rect.top >= 88 ? rect.top - 12 : rect.bottom + 12, below: rect.top < 88 });
+  }
+  useEffect(() => {
+    if (!tip) return;
+    const close = () => setTip(null);
+    window.addEventListener("scroll", close, true); window.addEventListener("resize", close);
+    return () => { window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
+  }, [tip]);
   const [user, setUser] = useState(initialUser),
-    [profile, setProfile] = useState<Profile | null>(null),
-    [activity, setActivity] = useState<Activity | null>(null),
+    [profile, setProfile] = useState<Profile | null>(initial?.profile ?? null),
+    [activity, setActivity] = useState<Activity | null>(initial?.activity ?? null),
     [error, setError] = useState(""),
     [activityError, setActivityError] = useState(""),
     [editing, setEditing] = useState(false),
     [nickname, setNickname] = useState(initialUser.nickname || ""),
-    [bio, setBio] = useState(""),
-    [gender, setGender] = useState("unspecified"),
+    [bio, setBio] = useState(initial?.profile.bio ?? ""),
+    [gender, setGender] = useState(initial?.profile.gender ?? "unspecified"),
     [busy, setBusy] = useState(false),
     [tick, setTick] = useState(0);
   const avatar = useRef<HTMLInputElement>(null),
     background = useRef<HTMLInputElement>(null),
     foreground = useWorkspaceForeground();
+  const profileSeed = useRef(!!initial), activitySeed = useRef(!!initial);
   useEffect(() => {
     if (!foreground) return;
+    if (profileSeed.current && tick === 0) { profileSeed.current = false; return; }
     const c = new AbortController();
     setError("");
     fetch("/api/auth/personal-home", { signal: c.signal, cache: "no-store" })
@@ -72,6 +92,7 @@ export default function PersonalHome({
   }, [foreground, tick]);
   useEffect(() => {
     if (!foreground) return;
+    if (activitySeed.current && tick === 0) { activitySeed.current = false; return; }
     const c = new AbortController();
     setActivityError("");
     fetch("/api/auth/personal-activity", {
@@ -122,10 +143,14 @@ export default function PersonalHome({
   }
   async function upload(file: File, kind: "avatar" | "background") {
     if (busy || !profile) return;
+    const rect = cover.current?.getBoundingClientRect();
+    const cropped = await imageCrop.crop(file, kind, rect && rect.height > 0 ? rect.width / rect.height : 2);
+    if (!cropped) return;
     setBusy(true);
     try {
       const form = new FormData();
-      form.set("file", file);
+      form.set("file", cropped);
+      form.set("requestId", clientRequestId());
       if (kind === "avatar") form.set("kind", "avatar");
       else {
         form.set("requestId", clientRequestId());
@@ -197,7 +222,10 @@ export default function PersonalHome({
   }, [activity]);
   return (
     <section className="personal-home" aria-label="个人主页">
+      {imageCrop.dialog}
+      {tip && createPortal(<div id={tipId} role="tooltip" className="personal-day-tooltip" style={{ left: tip.left, top: tip.top, transform: `translate(-50%, ${tip.below ? "0" : "-100%"})` }}><span>{Number(tip.day.slice(5, 7))}月{Number(tip.day.slice(8))}日</span><strong>{tip.known ? `${tip.count.toLocaleString()} 次 API 请求` : "未采集"}</strong></div>, document.body)}
       <header
+        ref={cover}
         className="personal-cover"
         style={
           profile?.background
@@ -394,7 +422,11 @@ export default function PersonalHome({
         {activityError ? (
           <p role="alert">{activityError}</p>
         ) : !calendar ? (
-          <p role="status">正在读取本人请求统计</p>
+          <div className="personal-heatmap personal-heatmap-placeholder" aria-busy="true" aria-label="API 请求统计">
+            <div className="personal-heatmap-months" aria-hidden="true">{Array.from({length:12},(_,n)=><span key={n}>—</span>)}</div>
+            <div className="personal-heatmap-cells" style={{gridTemplateColumns:"repeat(53,minmax(9px,1fr))"}} aria-hidden="true">{Array.from({length:371},(_,n)=><i key={n}/>)}</div>
+            <footer aria-hidden="true"><span>—</span><span>少 <i data-level="0"/><i data-level="1"/><i data-level="2"/><i data-level="3"/><i data-level="4"/> 多</span></footer>
+          </div>
         ) : (
           <div className="personal-heatmap">
             <div className="personal-heatmap-scroll">
@@ -436,7 +468,12 @@ export default function PersonalHome({
                                   : "4"
                       }
                       aria-label={`${cell.day} · ${cell.known ? `${cell.count} 次 API 请求` : "未采集"}`}
-                      title={`${cell.day} · ${cell.known ? `${cell.count} 次 API 请求` : "未采集"}`}
+                      aria-describedby={tip?.day === cell.day ? tipId : undefined}
+                      onPointerEnter={e => showDay(e.currentTarget, cell)}
+                      onPointerLeave={() => setTip(null)}
+                      onFocus={e => showDay(e.currentTarget, cell)}
+                      onBlur={() => setTip(null)}
+                      onClick={e => showDay(e.currentTarget, cell)}
                     />
                   ) : (
                     <i key={index} />
@@ -454,15 +491,6 @@ export default function PersonalHome({
                 <i data-level="4" /> 多
               </span>
             </footer>
-            <p className="personal-observation-note">
-              本人请求自{" "}
-              {activity
-                ? new Date(activity.since).toLocaleDateString("zh-CN", {
-                    timeZone: "Asia/Shanghai",
-                  })
-                : "—"}{" "}
-              起采集；此前日期未采集。
-            </p>
           </div>
         )}
       </section>
