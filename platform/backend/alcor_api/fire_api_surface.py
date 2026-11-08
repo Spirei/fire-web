@@ -34,6 +34,17 @@ def catalogue(app, *, document=None):
         if not path or not path.startswith("/api/") or path == "/api/{path:path}":
             continue
         routes.append((path, compile_path(path)[0], set(route.methods or [])))
+    contract_root = Path(__file__).resolve().parents[2] / "contracts"
+    groups = json.loads((contract_root / "api-catalogue-groups.json").read_text())
+    legacy_register = json.loads((contract_root / "migration-register.json").read_text())
+    original_ids = {row['id'] for row in legacy_register['domains']}
+    original_bindings = {}
+    for operation in legacy_register['operations']:
+        key = operation['method'], normalized_path(operation['path'])
+        original_bindings.setdefault(key, set()).update(operation['feature_ids'])
+    if any(not set(group['featureIds']) <= original_ids for group in groups):
+        raise ValueError("API catalogue group has an unknown original feature ID")
+    group_by_category = {name: (index, group) for index, group in enumerate(groups) for name in group['categories']}
     items, known = [], set()
     for item in document["operations"]:
         if "[[..." in item["path"]:
@@ -140,7 +151,14 @@ def catalogue(app, *, document=None):
             'fire-settings':'设置','settings':'设置','system':'系统管理','health':'系统管理','tasks':'后台任务',
             'deployment':'发布管理','deploy-status':'发布管理','backups':'备份与恢复','backup':'备份与恢复',
         }
-        item['category'] = domains.get(first, '其他接口')
+        item['featureIds'] = sorted(original_bindings.get((item['method'], normalized_path(item.get('upstream', item['path']))), set()))
+        item['subcategory'] = domains.get(first, '其他接口')
+        order, group = group_by_category[item['subcategory']]
+        item['category'] = group['name']
+        item['categoryOrder'] = order
+        item['categoryNumber'] = order + 1
+        item['subcategoryOrder'] = group['categories'].index(item['subcategory'])
+        item['categoryFeatureIds'] = group['featureIds']
         item['parameters'] = operation.get('parameters',[])
         item['requestBody'] = operation.get('requestBody')
         item['responses'] = operation.get('responses',{})

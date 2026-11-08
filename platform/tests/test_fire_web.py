@@ -152,3 +152,16 @@ async def test_fire_bootstrap_credentials_are_explicit_bound_and_never_returned(
     assert response.json()["effective"] is not None
     overview = (await client.get("/api/fire/system/overview")).json()
     assert next(item for item in overview["services"] if item["id"] == "postgresql")["state"] == "up"
+
+async def test_interface_checks_are_owner_scoped_and_never_trigger_collection(client, admin, db):
+    await fire_login(client)
+    first = await client.get('/api/fire/system/interface-checks')
+    assert first.status_code == 200, first.text
+    data = first.json()
+    assert data['collectionOnRead'] is False
+    assert {'broker','quotes','fx','earnings'} <= {row['kind'] for row in data['items']}
+    assert all(not row['points'] for row in data['items'])
+    async with db.connection() as conn:
+        assert (await (await conn.execute('SELECT count(*) n FROM market_data_operations')).fetchone())['n'] == 0
+        assert (await (await conn.execute('SELECT count(*) n FROM market_diagnostic_admissions')).fetchone())['n'] == 0
+    assert (await client.get('/api/fire/system/interface-checks',headers={'authorization':'Bearer synthetic-invalid'})).status_code == 403

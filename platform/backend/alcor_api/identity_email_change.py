@@ -107,11 +107,14 @@ class IdentityEmailChange:
             await self.direct_locked(conn, who, user, email, password, code, request_id)
 
     async def direct_locked(self, conn, who, user, email, password, code, request_id):
-        if not password or not await asyncio.to_thread(verify_password, password, user["password_hash"]):
-            raise HTTPException(403, "修改邮箱需要验证当前密码")
-        factor = await self.factors.factor(conn, who.id)
-        if factor and factor["totp_enabled"] and not await self.factors.consume(conn, who.id, code):
-            raise HTTPException(403, "二次验证失败")
+        from .session_verification import SESSION_PROOF, verified
+        strong = password == SESSION_PROOF and await verified(conn, who)
+        if not strong:
+            if not password or not await asyncio.to_thread(verify_password, password, user["password_hash"]):
+                raise HTTPException(403, "修改邮箱需要验证当前密码")
+            factor = await self.factors.factor(conn, who.id)
+            if factor and factor["totp_enabled"] and not await self.factors.consume(conn, who.id, code):
+                raise HTTPException(403, "二次验证失败")
         await self.apply(conn, who, user, email, request_id, revoke=False)
 
     async def request(self, who, request_id):

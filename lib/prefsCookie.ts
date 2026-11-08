@@ -28,12 +28,21 @@ function byteLength(value: string): number {
   return encodeURIComponent(value).length;
 }
 
-/** 序列化偏好表，并保证结果一定塞得进一条 cookie：超了就按「从小到大」保留，丢掉太长的几条 */
+// These small layout preferences must survive a full preference cookie. Otherwise
+// the server draws closed navigation and hydration restores the local open state.
+const FIRST_FRAME_KEYS = new Set([
+  "fire:platform-navigation-expanded", "fire:platform-sidebar-collapsed",
+  "fire:tablet-sidebar-collapsed", "fire:site-palette", "fire:theme-mode", "fire:appearance-accent"
+]);
+
+/** Keep first-frame layout before optional preferences while respecting the cookie limit. */
 export function serializePrefs(map: PrefMap): string {
   const entries = Object.entries(map).filter(([key, value]) => Boolean(key) && value !== undefined);
   const full = JSON.stringify(Object.fromEntries(entries));
   if (byteLength(full) <= MAX_BYTES) return full;
-  const sorted = [...entries].sort((a, b) => JSON.stringify(a[1]).length - JSON.stringify(b[1]).length);
+  const sorted = [...entries].sort((a, b) =>
+    Number(FIRST_FRAME_KEYS.has(b[0])) - Number(FIRST_FRAME_KEYS.has(a[0]))
+    || JSON.stringify(a[1]).length - JSON.stringify(b[1]).length);
   const kept: PrefMap = Object.create(null);
   for (const [key, value] of sorted) {
     if (byteLength(JSON.stringify({ ...kept, [key]: value })) > MAX_BYTES) continue;

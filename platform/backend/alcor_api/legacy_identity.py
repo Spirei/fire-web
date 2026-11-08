@@ -27,7 +27,7 @@ LEGACY_WEB_PATHS = {
     "/api/auth/password-reset/confirm",
     '/api/auth/login', '/api/auth/login/totp', '/api/auth/logout',
     '/api/auth/me', '/api/auth/register', '/api/auth/setup-status', '/api/auth/totp',
-    '/api/auth/passkeys', '/api/auth/passkeys/config',
+    '/api/auth/passkeys', '/api/auth/passkeys/config', '/api/auth/passkeys/verification',
     '/api/auth/password',
     '/api/auth/register/email/request', '/api/auth/register/email/confirm',
     '/api/auth/email-verification/request', '/api/auth/email-verification/confirm',
@@ -92,10 +92,10 @@ async def legacy_session(conn,token,*,native_v1=False,platform=False):
     if not token or len(token)>128:raise LegacyError(401,40101,'请先登录')
     clients=['legacy-web','legacy-v1'] if native_v1 else (['new-web'] if platform else ['legacy-web'])
     row=await (await conn.execute('''SELECT u.*,s.expires_at,s.auth_method,s.passkey_id,s.created_at AS authenticated_at FROM sessions s JOIN users u ON u.id=s.user_id
-        WHERE s.token_hash=%s AND s.client_id=ANY(%s) AND s.expires_at>clock_timestamp() AND s.session_version=u.session_version AND u.active''',(digest(token),clients))).fetchone()
+        WHERE s.token_hash=%s AND s.client_id=ANY(%s) AND s.expires_at>clock_timestamp() AND s.session_version=u.session_version AND u.active
+        AND (COALESCE(s.passkey_id,'')='' OR EXISTS
+            (SELECT 1 FROM identity_passkeys p WHERE p.id=s.passkey_id AND p.user_id=u.id))''',(digest(token),clients))).fetchone()
     if not row:raise LegacyError(401,40102,'登录已失效，请重新登录')
-    if row['passkey_id'] and not await (await conn.execute('SELECT 1 FROM identity_passkeys WHERE id=%s AND user_id=%s',(row['passkey_id'],row['id']))).fetchone():
-        raise LegacyError(401,40102,'登录已失效，请重新登录')
     from .request_activity import bind_account
     bind_account(row['id'])
     return row

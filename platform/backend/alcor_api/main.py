@@ -120,6 +120,11 @@ def create_app(settings: Settings | None = None):
         await db.open()
         watcher = None
         try:
+            from .private_paths import prepare_existing
+            app.state.private_directory_status = prepare_existing(settings)
+            for kind, state in app.state.private_directory_status.items():
+                if state != 'ready':
+                    log.warning('private_directory_unavailable kind=%s', kind)
             await connections.verify_bootstrap(bootstrap_revision)
             watcher = asyncio.create_task(connections.watch())
             observer = asyncio.create_task(observations.loop())

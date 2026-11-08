@@ -99,6 +99,28 @@ async def connection(kind: Kind, request: Request, who: Admin):
     return result
 
 
+@router.get('/system/interface-checks')
+async def interface_checks(request: Request, who: Admin):
+    from .interface_checks import snapshot
+    from .security import digest
+    if not await request.app.state.rate_limit(request.app.state.db, digest('interface-checks:' + who.id), 30, window_seconds=60):
+        raise HTTPException(429, '检测记录读取过于频繁')
+    return await snapshot(request.app, who)
+
+
+@router.get('/system/interface-checks/receipts/{identifier}')
+async def interface_check_receipt(identifier: UUID, request: Request, who: Admin):
+    authority = request.app.state.market_authority
+    async with authority.db.connection() as conn, conn.transaction():
+        from .security import lock_mutation_identity
+        await lock_mutation_identity(conn, who, require_admin=True)
+        result = await authority.receipt(conn, who.id, identifier)
+        if result.get('kind') != 'futu.test':
+            raise HTTPException(404, '检测回执不存在')
+        await authority.config(conn, who.id, UUID(result['sourceRevision']))
+        return result
+
+
 @router.post("/connections/reauthenticate", status_code=204)
 async def verify_connection(data: VerificationInput, request: Request, who: Admin):
     return await verify_admin_access(data, request, who, "connection")

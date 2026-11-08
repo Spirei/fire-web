@@ -24,6 +24,9 @@ def purpose(scope: Scope):
 
 
 async def require_admin_verification(conn, who, scope: Scope):
+    from .session_verification import verified
+    if await verified(conn, who):
+        return
     name = purpose(scope)
     row = await (
         await conn.execute(

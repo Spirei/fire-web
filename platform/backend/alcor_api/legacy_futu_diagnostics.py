@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -210,10 +211,12 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                     "INSERT INTO market_diagnostic_admissions(owner_id,request_id,source_revision,action,fingerprint,result) VALUES(%s,%s,%s,%s,%s,%s)",
                     (who.id, identifier, revision, action, operation_digest(operation), Jsonb(admitted)),
                 )
+            started = time.perf_counter()
             try:
                 observed = await transport.diagnostic(policy, action)
             except Exception:  # noqa: BLE001 -- Optional SDK failures contain no safe client-visible details.
                 observed = {}
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
             async with db.connection() as conn, conn.transaction():
                 await authority.owner_lock(conn, who)
                 await lock_mutation_identity(conn, who, require_admin=True)
@@ -231,6 +234,7 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                     "sourceRevision": str(revision),
                     "licenseRevision": policy.license_revision,
                     "observedAt": datetime.now(UTC).isoformat(),
+                    "elapsedMs": elapsed_ms,
                 }
                 if action == "futu.test":
                     logged = observed.get("qotLogined")

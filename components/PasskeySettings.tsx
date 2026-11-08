@@ -1,7 +1,8 @@
 "use client";
 import { Capsule } from "@/components/Capsule";
 
-import PasswordInput from "@/components/PasswordInput";
+import VerificationField from "@/components/VerificationField";
+import { SESSION_PROOF } from "@/lib/adminProof";
 import PasskeyIllustration from "@/components/PasskeyIllustration";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import AppModal from "@/components/AppModal";
@@ -100,7 +101,7 @@ export default function PasskeySettings({ admin, onClose, mode = "keys", dataSou
   }
   async function confirmAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!pending || lock.current || !password || (totp && !code.trim())) return;
+    if (!pending || lock.current || !password || (totp && password !== SESSION_PROOF && !code.trim())) return;
     const action = pending;
     source.invalidate();
     const controller = new AbortController(); activeRequest.current = controller;
@@ -206,10 +207,10 @@ export default function PasskeySettings({ admin, onClose, mode = "keys", dataSou
     <form onSubmit={confirmAction} className="pk-verify-form">
         <div className="pk-account-row"><span className="pk-account-mark"><SubNavIcon name="account" /></span><span><b>Alcor 账号</b><small>安全验证</small></span></div>
         {pending.kind === "add" && <label className="pk-field"><span>通行密钥名称（选填）</span><input value={name} maxLength={64} onChange={e => setName(e.target.value)} placeholder="例如：iCloud 或 Bitwarden" disabled={busy} /></label>}
-        <label className="pk-field"><span>当前密码</span><PasswordInput type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} placeholder="输入当前密码" disabled={busy} /></label>
-        {totp && <label className="pk-field"><span>二次验证码或备用码</span><input required autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} placeholder="6 位验证码或备用码" disabled={busy} /></label>}
+        <label className="pk-field"><span>身份验证</span><VerificationField type="password" required autoComplete="current-password" data-autofocus autoFocus value={password} onChange={e => setPassword(e.target.value)} placeholder="输入当前密码" disabled={busy} /></label>
+        {totp && password !== SESSION_PROOF && <label className="pk-field"><span>二次验证码或备用码</span><input required autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} placeholder="6 位验证码或备用码" disabled={busy} /></label>}
         {verificationError && <p role="alert" className="text-sm text-up">{verificationError}</p>}
-        <div className="dialog-actions"><Capsule variant="secondary" type="button" className="" disabled={busy} onClick={closeVerification}>取消</Capsule><Capsule type="submit" variant={pending.kind === "delete" ? "danger" : "primary"} disabled={busy || !password || (totp && !code.trim())}>{busy ? "处理中…" : actionLabel}</Capsule></div>
+        <div className="dialog-actions"><Capsule variant="secondary" type="button" className="" disabled={busy} onClick={closeVerification}>取消</Capsule><Capsule type="submit" variant={pending.kind === "delete" ? "danger" : "primary"} disabled={busy || !password || (totp && password !== SESSION_PROOF && !code.trim())}>{busy ? "处理中…" : actionLabel}</Capsule></div>
     </form>
   </div>;
   if (!onClose) return <>{content}{pending && <AppModal className="pk-reference-modal pk-verify-modal" size="lg" title={actionLabel} desc={pending.kind === "delete" ? `删除「${pending.key.name}」后，相关设备需要重新登录。` : domainChanged ? "更换域名后需重新添加通行密钥。请验证当前账号。" : "为了保护账号安全，请先验证当前账号。"} onClose={closeVerification} closeDisabled={busy}>{verificationContent}</AppModal>}</>;

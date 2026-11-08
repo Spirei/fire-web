@@ -21,7 +21,6 @@ node scripts/rename-assets.mjs --apply
 
 - `node tests/asset-migration.mjs`：dry-run 不写入、备份、重复执行、碰撞保护、缺失文件、同图共享、自定义图标及中文股票保留。
 - `npm run test:review`：SSR/API 同图返回同一 URL，默认素材不会覆盖迁移后的地址，同 inode 替换不会误删图片。
-- 浏览器检查手机、平板横竖屏、短桌面不挂载四色门；正常桌面保留。视口模拟不等于实体设备测试。
 - 网络面板的 memory/disk cache 行不等于重复下载；验收看实际 URL 和传输字节，不能只数条目。
 
 线上素材迁移与新版代码部署是两件事：迁移即时更新数据，隐藏组件与客户端缓存修复在部署新版镜像后生效。

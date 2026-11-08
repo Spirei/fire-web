@@ -1,5 +1,6 @@
 """One read-only, owner-scoped projection of card metadata, preferences and balances."""
 
+import asyncio
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
@@ -45,21 +46,47 @@ def mount_card_library(app, db):
                 details = await CardWallet(bound).details(conn, who.id)
                 source = catalog['source']
                 manifest = source['manifest'] if source else {'regions': [], 'typeOrder': []}
+                runtime = None
+                directory = getattr(app.state, 'legacy_card_directory', None)
+                if source is None and directory is not None:
+                    runtime = await asyncio.to_thread(directory.manifest)
+                    if runtime is not None:
+                        manifest = runtime
                 published = await (await conn.execute(
-                    'SELECT p.image_path,v.public_path,v.served_sha256 FROM card_catalog_public_index p '
+                    'SELECT p.image_path,p.metadata,p.deleted_at,v.public_path,v.served_sha256 FROM card_catalog_public_index p '
                     'LEFT JOIN system_asset_versions v ON v.id=p.image_version '
-                    'WHERE p.deleted_at IS NULL ORDER BY p.image_path LIMIT 10001',
+                    'ORDER BY p.image_path LIMIT 10001',
                 )).fetchall()
                 if len(published) > 10000:
                     raise HTTPException(409, '卡面覆盖表超出完整读取预算')
                 covers = {row['image_path']: row['public_path'] + '?sha256=' + row['served_sha256']
-                          for row in published if row['public_path'] and row['served_sha256']}
+                          for row in published if not row['deleted_at'] and row['public_path'] and row['served_sha256']}
+                if runtime is not None:
+                    from urllib.parse import quote
+                    overrides = {row['image_path']: row for row in published}
+                    removed = {row['asset_id'] for row in await (await conn.execute(
+                        'SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL'
+                    )).fetchall()}
+                    for region in manifest['regions']:
+                        for bank in region.get('banks', []):
+                            visible = []
+                            for card in bank.get('cards', []):
+                                path = '/uploads/cards/' + quote(card['file'], safe='/%')
+                                override = overrides.get(path)
+                                if 'card:' + card['file'] in removed or override and override['deleted_at']:
+                                    continue
+                                if override and override['metadata'].get('name'):
+                                    card['name'] = override['metadata']['name']
+                                if path in covers:
+                                    covers[card['file']] = covers[path]
+                                visible.append(card)
+                            bank['cards'] = visible
                 value = {
                     **manifest, 'updatedAt': source['importedAt'] if source else None,
-                    'source': 'registered_card_manifest' if source else '',
+                    'source': 'registered_card_manifest' if source else 'runtime_public_card_manifest' if runtime is not None else '',
                     'sourceRevision': catalog['sourceRevision'],
-                    'sourceState': 'available' if source else 'unavailable',
-                    **({'error': '尚未登记本人可读取的卡面来源，请先核对并导入原始清单'} if not manifest.get('regions') else {}),
+                    'sourceState': 'available' if source or runtime is not None else 'unavailable',
+                    **({'error': '卡面清单暂时无法读取，请检查原有卡面目录挂载'} if source is None and runtime is None else {}),
                     'preferenceRevision': preferences['revision'],
                     'amounts': [{'cardKey': row['card_key'], 'amount': row['amount'],
                                  'currency': row['currency'], 'note': row['note'],

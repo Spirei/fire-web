@@ -25,7 +25,6 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
   const destination = authorizationLogin || returnTo === "/app/devices" ? returnTo : "/global";
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
-  const [loginType, setLoginType] = useState<"username" | "email">("username");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -205,25 +204,6 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
         {!authorizationLogin && <CloseButton onClick={() => (onClose ? onClose() : router.push("/"))} />}
       </div>}
 
-      {/* 登录方式：用户名 / 邮箱 */}
-      {mode === "login" && !totpTicket && !recovering && (
-        <div className="mt-6 grid grid-cols-2 gap-1 rounded-full bg-bg-gray p-1">
-          {([["username", "用户名登录"], ["email", "邮箱登录"]] as const).map(([key, label]) => (
-            <Capsule variant="secondary" selected={loginType === key} aria-pressed={loginType === key}
-              key={key}
-              type="button"
-              onClick={() => { setLoginType(key); setError(""); }}
-              className={`rounded-full px-3 py-2 text-[13px] font-semibold transition-colors ${
-                loginType === key ? "bg-white text-ink shadow-sm dark:bg-[#1c2330]" : "text-muted hover:text-ink"
-              }`}
-            >
-              {label}
-            </Capsule>
-          ))}
-        </div>
-      )}
-
-      {mode === "login" && !totpTicket && !recovering && <PasskeyLoginButton disabled={loading} onBusy={setLoading} onError={setError} onSuccess={() => { onClose?.(); router.push(destination); router.refresh(); }} />}
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
         {totpTicket ? (
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
@@ -245,9 +225,9 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
         {!totpTicket && !recovering && (
         <>
         <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink-2">
-          {mode === "login" ? (loginType === "email" ? "邮箱" : "用户名") : emailRegistrationSupported ? "用户名或邮箱" : "用户名"}
+          {mode === "login" || emailRegistrationSupported ? "用户名或邮箱" : "用户名"}
           <input
-            type={mode === "login" && loginType === "email" ? "email" : "text"}
+            type="text"
             maxLength={mode === "register" && !emailRegistrationSupported ? 20 : 254}
             value={username}
             disabled={loading}
@@ -255,9 +235,7 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
             placeholder={
               mode === "register"
                 ? emailRegistrationSupported ? "请输入用户名或邮箱" : "3-20 位字母、数字、下划线或中文"
-                : loginType === "email"
-                  ? "请输入邮箱"
-                  : "请输入用户名"
+                : "请输入用户名或邮箱"
             }
             required
             className={inputCls}
@@ -341,6 +319,8 @@ export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?
           {retrySeconds > 0 ? (retrySeconds >= 3600 ? `${Math.ceil(retrySeconds / 3600)} 小时后重试` : retrySeconds >= 60 ? `${Math.ceil(retrySeconds / 60)} 分钟后重试` : `${retrySeconds} 秒后重试`) : loading ? "请稍候…" : totpTicket ? "验证并登录" : mode === "login" ? "登录" : emailRegistration ? registrationEmail ? "验证并注册" : "获取验证码" : "注册并登录"}
         </Capsule>
 
+
+        {mode === "login" && !totpTicket && !recovering && <PasskeyLoginButton disabled={loading} onBusy={setLoading} onError={setError} onSuccess={() => { onClose?.(); router.push(destination); router.refresh(); }} />}
 
         {totpTicket && (
           <p className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[13px] text-muted">

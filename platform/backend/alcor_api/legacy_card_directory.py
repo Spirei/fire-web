@@ -15,21 +15,27 @@ def card_id(path):
 
 
 class LegacyCardDirectory(LegacyAssetDirectory):
-    def load(self):
-        if self.cached is not None and time.monotonic() < self.until:
-            return self.cached
+    def manifest(self):
+        """The existing explicit public manifest; never scan unrelated folders or seed PG."""
         try:
             raw = self.read_parts(['cards', 'manifest.json'], 2 * 1024 * 1024)
         except HTTPException as exc:
             if exc.status_code == 404:
-                self.cached = []
-                self.until = time.monotonic() + 5
-                return []
+                return None
             raise
         try:
-            manifest = public_manifest(manifest_value(raw.decode('utf-8-sig'), '运行目录原始卡面清单')['manifest'])
+            return public_manifest(manifest_value(raw.decode('utf-8-sig'), '运行目录原始卡面清单')['manifest'])
         except (UnicodeError, ValueError):
             raise HTTPException(503, '原始卡面清单无法读取') from None
+
+    def load(self):
+        if self.cached is not None and time.monotonic() < self.until:
+            return self.cached
+        manifest = self.manifest()
+        if manifest is None:
+            self.cached = []
+            self.until = time.monotonic() + 5
+            return []
         rows = []; seen = set()
         for region in manifest['regions']:
             for bank in region.get('banks', []):

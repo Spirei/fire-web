@@ -254,7 +254,9 @@ def mount_legacy_record_writes(app,settings,db):
                             raise HTTPException(409,'全量清除须明确当前记录集合版本')
                         from .passwords import verify_password
                         user=await(await conn.execute('SELECT password_hash FROM users WHERE id=%s FOR SHARE',(who.id,))).fetchone()
-                        if not isinstance(raw.get('password'),str) or not await asyncio.to_thread(verify_password,raw['password'],user['password_hash']):
+                        from .session_verification import SESSION_PROOF, verified
+                        strong = raw.get('password') == SESSION_PROOF and await verified(conn, who)
+                        if not strong and (not isinstance(raw.get('password'),str) or not await asyncio.to_thread(verify_password,raw['password'],user['password_hash'])):
                             raise HTTPException(403,'当前密码错误')
                         rows=await(await conn.execute('SELECT id,revision FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 201',(who.id,))).fetchall()
                         if len(rows)>200:

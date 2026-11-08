@@ -1,4 +1,5 @@
 "use client";
+import { requestAdminProof } from "@/lib/adminProof";
 
 import { IconPencil, IconKey, IconShieldLock, IconFingerprint } from "@tabler/icons-react";
 import { CapsuleBadge, IconButton, Capsule } from "@/components/Capsule";
@@ -132,14 +133,8 @@ export default function UsersView({ownerId = "", initial}:{ownerId?:string;initi
   }, [active]);
 
   async function requestAdminStepUp(): Promise<{ currentPassword: string; code: string } | null> {
-    const currentPassword = await appPrompt("请输入你的管理员密码以继续", { title: "安全验证", inputType: "password" });
-    if (!currentPassword) return null;
-    const currentAdmin = users.find((item) => item.id === me);
-    const code = currentAdmin?.totpEnabled
-      ? await appPrompt("请输入管理员二次验证码或备用码", { title: "二次验证", placeholder: "6 位数字或备用码" })
-      : "";
-    if (currentAdmin?.totpEnabled && !code) return null;
-    return { currentPassword, code: code || "" };
+    const proof = await requestAdminProof();
+    return proof ? {currentPassword:proof.password,code:proof.code} : null;
   }
 
   async function saveEdit(e: React.FormEvent) {

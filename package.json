@@ -3,9 +3,9 @@
   "version": "0.1.77",
   "private": true,
   "scripts": {
-    "predev": "node scripts/generate-api-request-routes.mjs",
+    "predev": "node scripts/prepare-system-media.mjs && node scripts/generate-api-request-routes.mjs",
     "dev": "node scripts/fire.mjs dev",
-    "prebuild": "node scripts/generate-api-request-routes.mjs && node scripts/generate-platform-releases.cjs",
+    "prebuild": "node scripts/prepare-system-media.mjs && node scripts/generate-api-request-routes.mjs && node scripts/generate-platform-releases.cjs",
     "build": "next build",
     "start": "node scripts/fire.mjs start",
     "audit:public": "node scripts/audit-public-repo.mjs",

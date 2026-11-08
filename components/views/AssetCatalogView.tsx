@@ -8,7 +8,7 @@ import {
   IconUpload,
   IconRestore,
   IconCheck,
-  IconDots,
+  IconDotsVertical,
 } from "@tabler/icons-react";
 import {
   useWorkspaceSearchParams,
@@ -588,7 +588,7 @@ export default function AssetCatalogView({
                 <AppSelect
                   value={market}
                   ariaLabel="更多市场"
-                  triggerContent={<IconDots size={21} />}
+                  triggerContent={<IconDotsVertical size={20} />}
                   className="material-market-more"
                   options={marketSlots.more.map((m) => ({
                     value: m,
@@ -769,7 +769,7 @@ export default function AssetCatalogView({
                           className="material-stock-badge"
                         />
                       )}
-                      {item.code}
+                      <span className="material-code" title={item.code}>{item.code}</span>
                     </small>
                   </span>
                 </Identity>

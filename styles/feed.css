@@ -260,13 +260,7 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
 .feed-mascot-top{flex-direction:column;align-items:center;gap:0}
 .feed-mascot-name{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:36px;margin-top:-2px;padding:5px 18px;border:1px solid var(--feed-divider);border-radius:999px;background:var(--feed-panel);color:var(--feed-ink);font-size:16px;line-height:24px;box-shadow:0 3px 12px var(--feed-fill)}
 [role="dialog"]:has(>.feed-agent-modal){padding:88px 32px 24px}
-.feed-agent-modal.app-modal-panel{max-width:540px!important;height:min(760px,calc(100dvh - 112px));padding:24px!important;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
-.feed-agent-modal>.mb-5{position:sticky;top:0;z-index:3;height:46px;align-items:center;margin-bottom:-46px}
-.feed-agent-modal>.mb-5>div:first-child{display:none}
-.feed-agent-modal>.mb-5>div.ml-auto{order:2;flex:none;margin-left:auto;max-width:none}
-.feed-agent-round,html:root body:has([data-capsule-scope="non-home"]) .feed-agent-modal.app-modal-panel>.mb-5>button[aria-label="关闭"]{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border:1px solid var(--feed-divider)!important;border-radius:50%;background:var(--feed-panel)!important;color:var(--feed-ink)!important;box-shadow:0 3px 14px var(--feed-fill)!important;padding:0}
-.feed-agent-modal>.mb-5>button[aria-label="关闭"]{order:0}
-.feed-agent-modal>.mb-5>button[aria-label="关闭"] svg{width:23px;height:23px;stroke-width:1.7}
+.feed-agent-modal.app-modal-panel{max-width:540px!important;height:auto;max-height:min(680px,calc(100dvh - 112px));padding:24px!important;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .feed-agent-hero{display:flex;flex-direction:column;align-items:center;padding:8px 52px 25px;text-align:center}
 .feed-agent-portrait{position:relative;display:grid;place-items:center;width:116px;height:116px;flex:none;border:1px solid var(--feed-divider);border-radius:50%;background:var(--feed-field)}
 .feed-agent-portrait-crop{position:relative;display:grid;place-items:center;width:100%;height:100%;overflow:hidden;border-radius:50%}
@@ -278,11 +272,7 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
 .feed-agent-connected{display:flex;align-items:center;gap:7px;font-size:16px;line-height:24px;color:var(--feed-ink)}
 .feed-agent-connected>span{display:grid;place-items:center;width:16px;height:16px;flex:none;border-radius:50%;background:var(--feed-agent-connected,#23b457);color:var(--feed-agent-bolt,#fff)}
 .feed-agent-connected .feed-agent-bolt{display:block;width:9px;height:13px;flex:none}
-.feed-agent-edit-menu{position:absolute;z-index:5;top:calc(100% + 6px);left:50%;transform:translateX(-50%);width:290px;max-width:calc(100vw - 64px);padding:12px;border:1px solid var(--feed-divider);border-radius:28px;background:var(--feed-agent-menu,#fffffff0);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 12px 40px var(--feed-overlay)}
-.feed-agent-edit-menu button{display:flex;align-items:center;gap:18px;width:100%;padding:15px 16px;border:0;border-radius:18px;background:transparent;font-size:19px;line-height:28px;color:var(--feed-ink);text-align:left}
-.feed-agent-edit-menu button:hover,.feed-agent-edit-menu button:focus-visible{background:var(--feed-fill)}
-.feed-agent-round:hover:not(:disabled){background:var(--feed-field)!important}
-.feed-agent-round:focus-visible,.feed-agent-edit-menu button:focus-visible,.feed-agent-tabs button:focus-visible,.feed-agent-avatar-options button:focus-visible,.feed-agent-older:focus-visible{outline:2px solid var(--feed-secondary);outline-offset:3px}
+.feed-agent-tabs button:focus-visible,.feed-agent-avatar-options button:focus-visible,.feed-agent-older:focus-visible{outline:2px solid var(--feed-secondary);outline-offset:3px}
 .feed-agent-tabs{display:flex;align-items:center;gap:4px;padding:5px;border:1px solid var(--feed-divider);border-radius:999px;margin:0 0 28px;background:var(--feed-panel)}
 .feed-agent-tabs button{display:grid;place-items:center;flex:1;min-width:0;height:44px;border:0;border-radius:999px;background:transparent;color:var(--feed-secondary)}
 .feed-agent-tabs button[aria-pressed="true"]{background:var(--feed-fill);color:var(--feed-ink)}
@@ -318,7 +308,7 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
 .feed-agent-avatar-options img{width:64px;height:64px;object-fit:cover;border-radius:50%}
 @media(max-width:639px){
   [role="dialog"]:has(>.feed-agent-modal){padding:72px 12px 12px}
-  .feed-agent-modal.app-modal-panel{padding:20px!important;height:calc(100dvh - 84px);max-height:calc(100dvh - 84px);border-radius:28px!important}
+  .feed-agent-modal.app-modal-panel{padding:20px!important;height:auto;max-height:calc(100dvh - 84px);border-radius:28px!important}
   .feed-agent-hero{padding:14px 44px 25px}
   .feed-agent-portrait{width:112px;height:112px}
   .feed-agent-tabs{margin-bottom:26px}
@@ -326,13 +316,8 @@ html:root body:has([data-capsule-scope="non-home"]) .feed-themed-modal.app-modal
   .feed-agent-event{gap:14px;grid-template-columns:44px minmax(0,1fr)}
   .feed-agent-event-icon{width:44px;height:44px}
   .feed-agent-event h4{font-size:17px;line-height:24px}
-  .feed-agent-edit-menu{width:276px}
 }
 @media(prefers-reduced-motion:reduce){.feed-agent-modal{scroll-behavior:auto}.feed-agent-face-video{display:none}}
-/* AppModal places header actions on a second row on phones; this profile keeps its two round controls together. */
-.feed-agent-modal.app-modal-panel>.mb-5{display:flex!important;align-items:center!important}
-.feed-agent-modal.app-modal-panel>.mb-5>div.ml-auto{width:46px!important;flex:0 0 auto!important;grid-area:auto!important}
-.feed-agent-modal.app-modal-panel>.mb-5>button[aria-label="关闭"]{grid-area:auto!important}
 
 .feed-mascot-placeholder{width:72px;height:108px;position:relative}
 .feed-mascot-placeholder::before{content:"";display:block;width:72px;height:72px;border-radius:50%;background:var(--feed-fill)}

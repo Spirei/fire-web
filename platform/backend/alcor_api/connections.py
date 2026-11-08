@@ -52,7 +52,11 @@ class Vault:
             raise HTTPException(503, "凭据存储尚未配置")
         directory = Path(self.directory)
         if not self.read_only:
-            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            from .private_paths import owned_directory
+            try:
+                owned_directory(directory)
+            except OSError:
+                raise HTTPException(503, "凭据目录不可写或属主不正确") from None
         if directory.is_symlink() or directory.stat().st_mode & 0o077:
             raise HTTPException(503, "凭据目录权限不正确")
         if self.read_only:
@@ -60,11 +64,15 @@ class Vault:
         flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
         fd = os.open(directory / (self.namespace + ".lock"), flags, 0o600)
         try:
+            if os.fstat(fd).st_uid != os.getuid():
+                raise PermissionError('Credential lock owner mismatch')
+            os.fchmod(fd, 0o600)
             fcntl.flock(fd, fcntl.LOCK_EX)
             path = directory / (self.namespace + ".key")
             if not path.exists():
                 keyfd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(keyfd, "wb") as file:
+                    os.fchmod(file.fileno(), 0o600)
                     file.write(Fernet.generate_key())
                     file.flush()
                     os.fsync(file.fileno())
@@ -78,6 +86,9 @@ class Vault:
         keyfd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(keyfd, "rb") as file:
             info = os.fstat(file.fileno())
+            if not self.read_only and stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_mode & 0o077:
+                os.fchmod(file.fileno(), 0o600)
+                info = os.fstat(file.fileno())
             if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.getuid():
                 raise HTTPException(503, "凭据文件权限不正确")
             key = file.read(128)

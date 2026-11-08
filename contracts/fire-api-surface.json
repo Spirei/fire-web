@@ -2385,6 +2385,21 @@
       "method": "POST",
       "path": "/api/v2/watch-groups/reorder",
       "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fire/system/interface-checks",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fire/system/interface-checks/receipts/[identifier]",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/passkeys/verification",
+      "owner": "platform"
     }
   ],
   "retirements": [

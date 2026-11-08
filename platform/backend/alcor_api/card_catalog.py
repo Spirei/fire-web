@@ -1,6 +1,7 @@
 """Explicit public card metadata snapshots and owner-isolated custom card associations."""
 
 import hashlib
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from datetime import UTC
@@ -111,9 +112,14 @@ class CardCatalog:
                 return previous
             source = await self.source(conn)
             if source['id'] is None:
-                raise HTTPException(409, '卡面来源尚未核对，请先导入清单')
-            source_value = restore_json(source['manifest'])
-            index = manifest_value(canonical(source_value), source['source_label'])['nameKeys']
+                from .legacy_card_directory import LegacyCardDirectory
+                from .legacy_asset_directory import public_upload_root
+                source_value = await asyncio.to_thread(LegacyCardDirectory(public_upload_root(self.db.settings)).manifest)
+                if source_value is None:
+                    raise HTTPException(409, '卡面来源尚未核对，请先导入清单')
+            else:
+                source_value = restore_json(source['manifest'])
+            index = manifest_value(canonical(source_value), source['source_label'] or '运行目录原始卡面清单')['nameKeys']
             existing = await (await conn.execute('SELECT metadata FROM card_custom_records WHERE owner_id=%s AND deleted_at IS NULL', (who.id,))).fetchall()
             if key_of(value) in index or any(key_of(restore_json(row['metadata'])) == key_of(value) for row in existing):
                 raise HTTPException(409, '卡面库里已经有这张卡了（同名 + 同银行）')

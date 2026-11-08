@@ -4,13 +4,25 @@ from uuid import uuid4
 
 import httpx
 import pytest_asyncio
-from alcor_api.backups import tables_and_hashes
+from alcor_api.backups import tables_and_hashes as full_tables_and_hashes
 from alcor_api.cli import create_user
 from alcor_api.connection_models import PostgresConfig
 from alcor_api.connections import Vault
 from psycopg.types.json import Jsonb
 
 P = "/api/settings"
+
+
+async def tables_and_hashes(conn):
+    # Request counters are deliberately written by the asynchronous observer.
+    # Keep the backup's complete fingerprint unchanged; this read-only assertion
+    # covers every configuration/business table, excluding only that telemetry.
+    snapshot = await full_tables_and_hashes(conn)
+    telemetry = {
+        'request_observations', 'request_rollup_state', 'request_observation_producers',
+        'account_request_activity', 'account_request_activity_batches', 'account_request_activity_state',
+    }
+    return {name:value for name,value in snapshot.items() if name not in telemetry}
 
 
 async def test_first_run_registration_then_site_save_uses_current_revision_and_admin_proof(client):

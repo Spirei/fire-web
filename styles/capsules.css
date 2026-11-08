@@ -146,9 +146,8 @@ html:root[data-palette] body:has([data-capsule-scope="non-home"]) :is(.pg-btn,.f
 
 html:root[data-palette] body .capsule-control[data-capsule-variant="secondary"][data-selected="true"] { background:var(--capsule-fill)!important; color:var(--capsule-ink)!important; border-color:var(--capsule-fill)!important; }
 /* Compact icon actions share size, selection, hover and progress semantics. */
-html:root[data-palette] body .capsule-icon-control { display:inline-flex; flex:none; align-items:center; justify-content:center; width:36px; height:36px; padding:0; border:1px solid transparent; border-radius:11px; background:transparent; color:rgb(var(--site-muted)); cursor:pointer; }
+html:root[data-palette] body .capsule-icon-control { display:inline-flex; flex:none; align-items:center; justify-content:center; box-sizing:border-box; width:36px; min-width:36px; max-width:36px; height:36px; min-height:36px; max-height:36px; padding:0; line-height:1; border:1px solid transparent; border-radius:11px; background:transparent; color:rgb(var(--site-muted)); cursor:pointer; }
 html:root[data-palette] body .capsule-icon-control:hover:not(:disabled) { background:rgb(var(--site-ink) / .07); color:rgb(var(--site-ink)); }
-html:root[data-palette] body .capsule-icon-control[aria-pressed="true"] { background:rgb(var(--site-ink) / .08); color:var(--capsule-fill); }
 html:root[data-palette] body .capsule-icon-control:disabled { opacity:.4; cursor:not-allowed; }
 @media(prefers-reduced-motion:no-preference) { .capsule-icon-control[data-busy="true"] > svg { animation:collection-spin 1s linear infinite; } }
 @keyframes collection-spin { to { transform:rotate(360deg); } }
@@ -157,8 +156,12 @@ html:root[data-palette] body .capsule-icon-control:disabled { opacity:.4; cursor
 html:root[data-palette] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active,.sw-nav-item.is-active,.platform-appearance.is-active) { background:var(--capsule-fill)!important; color:var(--capsule-ink)!important; border-color:transparent!important; }
 @media(hover:hover) { html:root[data-palette] body:has([data-capsule-scope="non-home"]) :is(.fire-sidebar-item-active,.sc-nav-link.is-active,.sw-nav-item.is-active,.platform-appearance.is-active):hover { background:var(--capsule-hover)!important; color:var(--capsule-ink)!important; } }
 
-html:root[data-palette] body .capsule-icon-control[data-size="sm"] { width:32px; height:32px; border-radius:9px; }
+html:root[data-palette] body .capsule-icon-control[data-size="sm"] { width:32px; min-width:32px; max-width:32px; height:32px; min-height:32px; max-height:32px; border-radius:9px; }
 html:root[data-palette] body .capsule-icon-control[data-framed="true"] { border-color:rgb(var(--site-edge)); background:rgb(var(--site-surface)); }
+
+html:root[data-palette] body .capsule-icon-control:is([aria-pressed="true"],[aria-selected="true"],[aria-current="page"]) { background:var(--capsule-fill); border-color:var(--capsule-fill); color:var(--capsule-ink); }
+html:root[data-palette] body .capsule-icon-control:is([aria-pressed="true"],[aria-selected="true"],[aria-current="page"]):hover:not(:disabled) { background:var(--capsule-hover); border-color:var(--capsule-hover); color:var(--capsule-ink); }
+html:root[data-palette] body .capsule-icon-control > svg { display:block; color:inherit; }
 
 /* All control variants share sizing, foreground inheritance, keyboard hover and busy states. */
 html:root[data-palette] body .capsule-control[data-size="sm"] { min-height:30px; min-width:30px; padding:5px 10px; font-size:12px; }
@@ -184,3 +187,19 @@ html:root[data-palette] body :is(.capsule-control,.capsule-icon-control):active:
 html:root[data-palette] body .capsule-control[data-capsule-variant="danger"]:is(:hover,:focus-visible):not(:disabled) { background:var(--capsule-danger-hover)!important; }
 /* Filled pagination keeps a distinct current page as well as its accessible state. */
 html:root[data-palette] body .capsule-control[data-capsule-variant="primary"]:is([data-selected="true"],[aria-current="page"]) { background:var(--capsule-hover)!important; border-color:var(--capsule-hover)!important; }
+
+/* Summary cards filter their collection without duplicating a status selector. */
+html:root[data-palette] body .capsule-control.metric-control { display:block; position:relative; min-width:0; width:100%; min-height:92px; padding:15px 18px; border:0!important; border-radius:12px; text-align:left; background:transparent!important; color:rgb(var(--site-ink))!important; }
+html:root[data-palette] body .capsule-control.metric-control>span { display:flex; align-items:center; gap:7px; color:rgb(var(--site-muted))!important; font-size:12px; font-weight:400; }
+html:root[data-palette] body .capsule-control.metric-control>span>svg { width:16px; height:16px; flex:none; }
+html:root[data-palette] body .capsule-control.metric-control>strong { display:block; margin-top:12px; color:inherit!important; font-size:27px; font-weight:550; line-height:1.2; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+html:root[data-palette] body .capsule-control.metric-control:is(:hover,:focus-visible):not(:disabled) { background:rgb(var(--site-ink) / .04)!important; }
+html:root[data-palette] body .capsule-control.metric-control[aria-pressed="true"] { background:color-mix(in srgb,var(--capsule-fill) 7%,rgb(var(--site-surface)))!important; }
+html:root[data-palette] body .capsule-control.metric-control[aria-pressed="true"]::after { content:""; position:absolute; bottom:7px; left:18px; right:auto; width:clamp(42px,28%,64px); height:3px; border-radius:3px; background:var(--capsule-fill); }
+@media(max-width:600px) { html:root[data-palette] body .capsule-control.metric-control { padding:13px 12px; min-height:88px; } html:root[data-palette] body .capsule-control.metric-control>strong { font-size:23px; } html:root[data-palette] body .capsule-control.metric-control[aria-pressed="true"]::after { left:12px; right:auto; } }
+
+/* Selected hover keeps numeric content readable rather than inheriting filled-pill ink. */
+html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="true"],[data-selected="true"],:hover,:focus-visible):not(:disabled) { color:rgb(var(--site-ink))!important; }
+html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="true"],[data-selected="true"]):is(:hover,:focus-visible):not(:disabled) { background:color-mix(in srgb,var(--capsule-fill) 10%,rgb(var(--site-surface)))!important; }
+html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="true"],[data-selected="true"],:hover,:focus-visible)>strong { color:rgb(var(--site-ink))!important; }
+html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="true"],[data-selected="true"],:hover,:focus-visible)>span { color:rgb(var(--site-muted))!important; }

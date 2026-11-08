@@ -30,3 +30,27 @@ for(const f of ['VersionModal','LoginModal','FundEntryDialog','CelebsManageModal
 const capsuleCss=fs.readFileSync(path.join(root,'styles/capsules.css'),'utf8');assert(capsuleCss.includes('.capsule-control[data-capsule-variant="primary"]:is([data-selected="true"],[aria-current="page"]) { background:var(--capsule-hover)'),'current filled page must remain visually distinct');
 const css=fs.readFileSync(path.join(root,'app/globals.css'),'utf8');assert(css.includes('.app-modal-body')&&css.includes('100dvh - 2 * var(--modal-gutter)'));
 console.log('PASS all '+roots.length+' workspace views reach shared controls; migrated dialogs share the bounded modal frame');
+const DeleteIcon=require('../components/DeleteIcon.tsx').default;
+const trash=html(DeleteIcon,{size:16});
+assert(trash.includes('<svg')&&!trash.includes('<img')&&!trash.includes('/icons/'),'deletion never depends on mounted files');
+
+const Avatar=require('../components/Avatar.tsx').default;
+const avatar=html(Avatar,{name:'Synthetic',size:24});assert(avatar.includes('flex:0 0 24px')&&avatar.includes('max-width:24px')&&avatar.includes('aspect-ratio:1'),'placeholder and image avatars retain square dimensions');
+
+const AppSelect=require('../components/AppSelect.tsx').default;
+const selectProps={value:5,options:[{value:'5',label:'五秒',swatch:'#123456'}],onChange(){},ariaLabel:'刷新间隔',className:'original-trigger',menuClassName:'original-menu'};
+const selectHtml=html(AppSelect,selectProps);
+assert(selectHtml.includes('五秒')&&selectHtml.includes('original-trigger')&&selectHtml.includes('app-select-swatch')&&selectHtml.includes('aria-expanded="false"'));
+assert(!selectHtml.includes('role="listbox"'),'server render contains no hidden menu tree');
+assert(html(AppSelect,{...selectProps,disabled:true}).includes('disabled=""'));
+assert(html(AppSelect,{...selectProps,triggerContent:React.createElement('span',null,'自定义')}).includes('自定义'));
+assert(html(AppSelect,{...selectProps,value:'unlisted'}).includes('unlisted'));
+console.log('PASS select SSR preserves numeric values, labels, swatches, custom content, missing-value fallback and caller classes with the shared trigger');
+
+const ServiceIcon=require('../components/ServiceIcon.tsx').default;
+for(const kind of ['postgresql','redis','worker','broker','quotes','fx','earnings']) assert(html(ServiceIcon,{kind}).includes('data-kind="'+kind+'"'));
+const StatusIndicator=require('../components/StatusIndicator.tsx').default;
+assert(html(StatusIndicator,{state:'unknown'}).includes('未检测'));
+assert(html(StatusIndicator,{state:'up'}).includes('已连接'));
+assert(html(StatusIndicator,{state:'down'}).includes('连接失败'));
+console.log('PASS service identity colors stay independent of truthful connection state');

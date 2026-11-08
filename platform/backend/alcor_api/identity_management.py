@@ -45,6 +45,9 @@ class IdentityManagement:
         if stage_only:
             return user
         if recent_allowed:
+            from .session_verification import verified
+            if await verified(conn, who):
+                return user
             recent = await (
                 await conn.execute(
                     "SELECT 1 FROM sessions WHERE token_hash=%s AND user_id=%s AND created_at>clock_timestamp()-interval '15 minutes' AND created_at<=clock_timestamp()",

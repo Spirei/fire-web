@@ -67,7 +67,8 @@ class ProfileMedia:
         root = parent / "profile-media"
         if create:
             try:
-                return private_dir(root)
+                from .private_paths import owned_directory
+                return owned_directory(root)
             except (OSError, BackupFailure):
                 raise HTTPException(503, "图片目录不可写或权限不正确") from None
         if root.is_symlink():
@@ -86,6 +87,7 @@ class ProfileMedia:
         target = root / str(identifier)
         fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "wb") as stream:
+            os.fchmod(stream.fileno(), 0o600)
             stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())

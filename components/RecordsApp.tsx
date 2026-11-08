@@ -1,8 +1,9 @@
 "use client";
+import { requestAdminProof } from "@/lib/adminProof";
 
 import { useSearchParams } from "next/navigation";
 
-import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import preloadedWorkspace from "@/components/PreloadedWorkspaceView";
 import WorkspacePanel, { WorkspaceBoundary, WorkspaceLoading } from "@/components/WorkspacePanel";
@@ -26,6 +27,8 @@ import {
   type User
 } from "@/lib/types";
 import { showToast } from "@/lib/toast";
+import { SiteSettingsCommand } from "@/lib/siteSettingsCommand";
+import { platformRequest } from "@/lib/platformRequest";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import { applyQuoteBatches, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot } from "@/lib/quoteBatches";
@@ -43,7 +46,7 @@ import PlatformAppearance from "@/components/PlatformAppearance";
 import PersonalHome from "@/components/PersonalHome";
 import UserMenu from "@/components/UserMenu";
 import type { WatchGroup } from "@/lib/watchGroups";
-import { useDesktopViewport, useFourDoorViewport, useTabletDevice } from "@/lib/useDesktopViewport";
+import { useDesktopViewport, useTabletDevice } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
 import { workspaceForPath, workspaceDestination, type WorkspaceVisit } from "@/lib/workspaceRouting";
@@ -70,9 +73,6 @@ const CardLibraryView = preloadedWorkspace("cards", dynamic(() => import("@/comp
 const QuotePoolView = preloadedWorkspace("quote-pool", dynamic(() => import("@/components/views/QuotePoolView"), { loading: WorkspaceLoading }));
 const GlobalPreviewView = preloadedWorkspace("global", dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading }));
 const AssetPnlAnalysisView = preloadedWorkspace("pnl", dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading }));
-const FourDoorNavigator = lazy(() => import("@/components/FourDoorNavigator"));
-// 预览也按需下载：关闭时不把插图代码打入主页面；开启时与交互代码并行加载。
-const FourDoorLoading = lazy(() => import("@/components/FourDoorLoading"));
 
 import SystemView from '@/components/views/SystemView';
 
@@ -168,7 +168,6 @@ export default function RecordsApp({
 }) {
   const router = useRouter();
   const desktopViewport = useDesktopViewport();
-  const fourDoorViewport = useFourDoorViewport();
   const tabletDevice = useTabletDevice();
   const [user] = useState<User>(initialUser);
   const [records, setRecords] = useState<StockRecord[]>(initialRecords);
@@ -191,8 +190,6 @@ export default function RecordsApp({
   const contentRef = useRef<HTMLDivElement>(null);
   const assetReturnRef = useRef<{ url: string; top: number; innerTop: number } | null>(null);
   const restoreAssetScrollRef = useRef(false);
-  const [fourDoorEnabled] = usePersistedState("fire:four-door-enabled", false);
-  const [fourDoorPinned, setFourDoorPinned] = usePersistedState("fire:four-door-pinned", false);
   const [tabletSidebarCollapsed, setTabletSidebarCollapsed] = usePersistedState("fire:tablet-sidebar-collapsed", false);
   const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState("fire:platform-sidebar-collapsed", false);
   const [tabletSidebarSide, setTabletSidebarSide] = usePersistedState<"left" | "right">("fire:tablet-sidebar-side", "left");
@@ -419,7 +416,7 @@ export default function RecordsApp({
         if (generation !== settingsReloadGeneration.current) return;
         const s = st?.settings;
         if (!s) return;
-        if (s.tabs) {
+        if (Array.isArray(s.tabs) && s.tabs.length) {
           setNavTabs(
             withFireTab(
               s.tabs.some((t: TabConfig) => t.key === "settings")
@@ -616,6 +613,8 @@ export default function RecordsApp({
 
   /* ---------- 导航页签可拖动排序 + 自动保存 ---------- */
   const tabDragKeyRef = useRef<TabKey | null>(null);
+  const tabOrderCommand = useRef(new SiteSettingsCommand());
+  const tabOrderBusy = useRef(false);
 
   async function persistTabOrder(nextSidebar: { key: TabKey }[]) {
     const byKey = new Map(navTabs.map((t) => [t.key, t]));
@@ -624,17 +623,25 @@ export default function RecordsApp({
       .filter((t): t is TabConfig => Boolean(t));
     const hidden = navTabs.filter((t) => !ordered.some((o) => o.key === t.key));
     const nextTabs = withFireTab([...ordered, ...hidden]);
-    setNavTabs(nextTabs);
+    if (tabOrderBusy.current) return;
+    tabOrderBusy.current = true;
+    const previous = navTabs;
     try {
-      await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tabs: nextTabs })
-      });
+      let password = "", code = "";
+      if (!tabOrderCommand.current.pending) {
+        const proof = await requestAdminProof();
+        if (!proof) return;
+        ({password,code} = proof);
+      }
+      // Keep the full current menu while persistence is pending; no partial/empty overwrite.
+      await tabOrderCommand.current.save({tabs:nextTabs}, password, code);
+      setNavTabs(nextTabs);
+      showToast("导航顺序已保存");
       window.dispatchEvent(new Event("fire:settings-updated"));
-    } catch {
-      /* 自动保存失败时保留本地顺序 */
-    }
+    } catch (error) {
+      setNavTabs(previous);
+      showToast(error instanceof Error ? error.message : "顺序保存失败", "err");
+    } finally { tabOrderBusy.current = false; }
   }
 
   function onTabDrop(targetKey: TabKey) {
@@ -965,10 +972,6 @@ export default function RecordsApp({
         }),
     [navTabs, user, assetIcons, initialNavIcons, navIconsHydrated]
   );
-  const randomWorkspaceKeys = useMemo(
-    () => sidebarTabs.filter((tab) => !["users", "library", "cards", "activities", "settings"].includes(tab.key)).map((tab) => tab.key),
-    [sidebarTabs]
-  );
   useEffect(() => {
     // Warm only the two likely next destinations. Other views load on hover,
     // focus or press; importing every page at once competes with button input.
@@ -1089,14 +1092,6 @@ export default function RecordsApp({
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:flex ${activeTab === "settings" ? "is-settings" : ""}`}>
         <PlatformSidebarHeader collapsed={platformSidebarCollapsed} onToggle={() => tabletDevice ? setTabletSidebarCollapsed(value => !value) : setSidebarCollapsed(value => !value)} items={sidebarTabs} onSelect={key => selectTab(key as TabKey)} admin={user?.role === "admin"} ownerId={user?.id || "guest"} onSettings={(sub, anchor) => anchor ? activateWorkspace("settings", "link", `/settings?${new URLSearchParams({ sub, anchor })}`) : navigateTo("settings", sub)} title={initialSettings.logoText || "Alcor"} />
         <nav id="fire-desktop-nav" ref={desktopNavRef} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
-          {fourDoorEnabled === true && fourDoorViewport && (
-            <div className={`four-door-anchor ${fourDoorPinned ? "is-pinned" : ""}`}>
-              {/* 预览自身也可能等待下载；失败只收起装饰，不影响侧栏入口。 */}
-              <WorkspaceBoundary fallback={<></>}><Suspense fallback={null}>
-                <WorkspaceBoundary fallback={<FourDoorLoading activeKey={activeTab} />}><Suspense fallback={<FourDoorLoading activeKey={activeTab} />}><FourDoorNavigator activeKey={activeTab} randomKeys={randomWorkspaceKeys} onSelect={(key) => selectTab(key as TabKey)} pinned={fourDoorPinned} onTogglePinned={() => setFourDoorPinned(value => !value)} /></Suspense></WorkspaceBoundary>
-              </Suspense></WorkspaceBoundary>
-            </div>
-          )}
           <PlatformNavigation items={sidebarTabs} activeKey={navigationTab} onSelect={key => selectTab(key as TabKey)} onSettings={sub => navigateTo("settings", sub)} onDrop={key => onTabDrop(key as TabKey)} onDragStart={key => { tabDragKeyRef.current = key as TabKey; }} onDragEnd={() => { tabDragKeyRef.current = null; }} />
         </nav>
         <div className="fire-sidebar-footer">

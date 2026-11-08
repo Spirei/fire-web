@@ -97,7 +97,7 @@ function harness(active = true, seeded = false) {
 (async () => {
   const h = harness();
   assert.equal(h.calls, 1);
-  assert.equal(await h.tick(), 5000);
+  assert.equal(await h.tick(), 15000);
   assert.equal(h.calls, 2);
   h.context.document.hidden = true;
   await h.tick();
@@ -164,12 +164,12 @@ function harness(active = true, seeded = false) {
       (row) => row.options.headers["x-csrf-token"] === "synthetic",
     ),
   );
-  const stale = [], observations = [];
+  const stale = [], observations = [], loading = [];
   let unavailable = true;
   const probe = {
     exports: {}, document: { hidden: false }, generation: { current: 0 },
     csrf: { current: "" }, instance: { current: "" }, ownerId: "owner", mode: "overview", filter: "",
-    visibleTaskCount: { current: 25 }, clear(){}, fail(){}, setLoading(){}, setError(){},
+    visibleTaskCount: { current: 25 }, clear(){}, fail(){}, setLoading(value){loading.push(value);}, setError(){},
     setMigration(){}, setTasks(){}, setCursor(){}, setReceipt(){},
     setOverview: value => observations.push(value), setOverviewStale: value => stale.push(value),
     json: async url => {
@@ -182,6 +182,7 @@ function harness(active = true, seeded = false) {
   vm.runInNewContext(compile(load), probe);
   await probe.exports.run(); assert.equal(stale.at(-1), true); assert.equal(observations.length, 0, "failed probe retains last observation rather than inventing a new one");
   unavailable = false; await probe.exports.run(); assert.equal(stale.at(-1), false); assert.equal(observations.length, 1);
+  loading.length=0; await probe.exports.run(undefined,true); assert.equal(loading.length,0,"background reads never toggle foreground loading or collapse empty states");
   console.log(
     "PASS system refresh: visible-only polling, dialog/mutation pause, cleanup and retained task pagination",
   );
@@ -189,3 +190,18 @@ function harness(active = true, seeded = false) {
   console.error(error);
   process.exitCode = 1;
 });
+
+// Exercise the actual header expression so an unresolved test cannot reuse old green status.
+let connectionState;
+(function find(node){if(ts.isVariableDeclaration(node)&&node.name.getText(source)==='connectionState')connectionState=node.initializer;ts.forEachChild(node,find);})(source);
+assert(connectionState);
+const stateCode=ts.transpileModule('exports.state='+connectionState.getText(source),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+function observed(values){const c={exports:{},busy:false,requestId:'',receipt:null,error:'',observation:{state:'up'},...values};vm.runInNewContext(stateCode,c);return c.exports.state;}
+assert.equal(observed({}), 'up');
+assert.equal(observed({observation:undefined}), 'unknown');
+assert.equal(observed({requestId:'one'}), 'unknown');
+assert.equal(observed({requestId:'one',busy:true}), 'checking');
+assert.equal(observed({requestId:'one',receipt:{status:'failed'}}), 'down');
+assert.equal(observed({requestId:'one',receipt:{status:'passed'}}), 'up');
+assert.equal(observed({error:'read failed'}), 'stale');
+console.log('PASS connection header: checking, unknown, failure and stale observations cannot masquerade as success');

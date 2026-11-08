@@ -10,3 +10,10 @@ assert.equal(task.properties.id.type,'string','Nested response items expose thei
 assert.equal(task.properties.parent.$ref,'#/components/schemas/Task','Recursive types remain bounded references');
 assert(!schemas.List.properties.items.items.properties,'Document expansion never mutates the shared schema source');
 console.log('PASS API response details expand nested models without cycles or changing their source');
+const retiredSource=fs.readFileSync('components/ApiRetirements.tsx','utf8'),retiredAst=ts.createSourceFile('ApiRetirements.tsx',retiredSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const groupFn=retiredAst.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='groupRetirements');
+const retiredContext={exports:{}};vm.runInNewContext(ts.transpileModule(groupFn.getText(retiredAst),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,retiredContext);
+const retired=[{method:'GET',path:'/old/export',reason:'统一备份',replacement:'/api/fire/backups'},{method:'POST',path:'/old/export',reason:'统一备份',replacement:'/api/fire/backups'},{method:'DELETE',path:'/old/unused',reason:'已移除',replacement:'无'}],original=JSON.stringify(retired);
+const grouped=retiredContext.exports.groupRetirements(retired);
+assert.equal(grouped.length,2);assert.equal(grouped.reduce((n,g)=>n+g.count,0),retired.length);assert.equal(grouped[0].paths.length,1);assert.equal(grouped[0].paths[0].methods.join(','),'GET,POST');assert.equal(JSON.stringify(retired),original);
+console.log('PASS retirement groups retain every original method, path, reason and replacement without mutating evidence');

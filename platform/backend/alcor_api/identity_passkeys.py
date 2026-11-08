@@ -58,12 +58,51 @@ class Passkeys:
     async def step_up(self, conn, who, password, code):
         await lock_mutation_identity(conn, who, require_admin=False)
         user = await (await conn.execute('SELECT * FROM users WHERE id=%s FOR UPDATE', (who.id,))).fetchone()
+        from .session_verification import SESSION_PROOF, verified
+        if password == SESSION_PROOF:
+            if user and await verified(conn, who):
+                return user
+            raise HTTPException(403, '验证已失效，请重新使用通行密钥验证')
         if not user or not await asyncio.to_thread(verify_password, password, user['password_hash']):
             raise HTTPException(403, '当前密码不正确')
         factor = await self.factors.factor(conn, who.id)
         if factor and factor['totp_enabled'] and not await self.factors.consume(conn, who.id, code):
             raise HTTPException(403, '二次验证码或备用码不正确')
         return user
+
+    async def verify_options(self, request, response, who):
+        async with self.db.connection() as conn, conn.transaction():
+            c = await self.config(conn, request)
+            await self.serialize(conn, who)
+            await lock_mutation_identity(conn, who, require_admin=False)
+            keys = await (await conn.execute('SELECT id FROM identity_passkeys WHERE user_id=%s AND rp_id=%s ORDER BY id LIMIT 21', (who.id,c['rp_id']))).fetchall()
+            if not keys or len(keys)>20:raise HTTPException(409, '当前账号没有可用的通行密钥')
+            options = generate_authentication_options(rp_id=c['rp_id'], allow_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(k['id'])) for k in keys], user_verification=UserVerificationRequirement.REQUIRED)
+            value=json.loads(options_to_json(options))
+            request_id=await self.issue(conn,c,'verify',{'challenge':value['challenge']},response,who)
+            return {'options':value,'requestId':request_id}
+
+    async def verify_session(self, data, request, response, who):
+        failure=None
+        async with self.db.connection() as conn, conn.transaction():
+            try:
+                c=await self.config(conn,request)
+                await self.serialize(conn,who)
+                await lock_mutation_identity(conn,who,require_admin=False)
+                pending=await self.take(conn,c,'verify',data.requestId,request,who)
+                async with conn.transaction():
+                    credential=data.response;top_level(credential)
+                    key=await(await conn.execute('SELECT * FROM identity_passkeys WHERE id=%s AND user_id=%s AND rp_id=%s FOR UPDATE',(credential.get('id',''),who.id,c['rp_id']))).fetchone()
+                    if not key or credential.get('response',{}).get('userHandle') not in (None,'',key['user_handle']):raise HTTPException(403,'通行密钥验证失败')
+                    result=verify_authentication_response(credential=credential,expected_challenge=base64url_to_bytes(pending['challenge']),expected_rp_id=c['rp_id'],expected_origin=c['origin'],credential_public_key=key['public_key'],credential_current_sign_count=key['counter'],require_user_verification=True)
+                    await conn.execute('UPDATE identity_passkeys SET counter=%s,last_used_at=clock_timestamp(),backed_up=%s WHERE id=%s',(result.new_sign_count,result.credential_backed_up,key['id']))
+                    await conn.execute("UPDATE sessions SET auth_method='passkey',passkey_id=%s WHERE token_hash=%s AND user_id=%s",(key['id'],who.token_hash,who.id))
+                    await conn.execute("INSERT INTO audit_events(actor_id,action) VALUES(%s,'identity.session.verified')",(who.id,))
+            except HTTPException as exc:failure=exc
+            except Exception:failure=HTTPException(403,'通行密钥验证失败，请重新尝试')
+        if failure:raise failure
+        response.delete_cookie(self.cookie_name,path=self.cookie_path)
+        return {'ok':True}
 
     def purpose(self, purpose):
         return 'passkey-' + self.client_id + '-' + purpose

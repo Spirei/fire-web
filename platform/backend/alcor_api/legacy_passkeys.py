@@ -13,7 +13,7 @@ from .security import digest, trusted_origin
 PATH = "/api/auth/passkeys"
 CHALLENGE_COOKIE = "fire_passkey_challenge"
 CLIENT_COOKIE = "fire_passkey_client"
-ACTIONS = {"login-options", "login-verify", "register-options", "register-verify"}
+ACTIONS = {"login-options", "login-verify", "register-options", "register-verify", "verify-options", "verify-session"}
 
 
 def text(data, key, *, default="", maximum=128, minimum=0, trim=False, label=False):
@@ -139,6 +139,18 @@ def mount_legacy_passkeys(
     async def list_keys(request: Request):
         return await management.list(await member(request))
 
+    @app.get(PATH + '/verification', tags=['legacy-web-identity'])
+    async def verification(request: Request):
+        from .session_verification import verified
+        who = await member(request)
+        async with db.connection() as conn, conn.transaction():
+            from .security import lock_mutation_identity
+            await lock_mutation_identity(conn, who, require_admin=False)
+            strong = await verified(conn, who)
+            key = await (await conn.execute('SELECT 1 FROM identity_passkeys k JOIN identity_passkey_config c ON c.singleton WHERE k.user_id=%s AND c.enabled AND k.rp_id=c.rp_id AND c.origin=%s LIMIT 1', (who.id, settings.public_origin))).fetchone()
+            factor = await factors.factor(conn, who.id)
+            return {'verified': strong, 'passkeyAvailable': bool(key), 'totpEnabled': bool(factor and factor['totp_enabled'])}
+
     @app.post(PATH, tags=["legacy-web-identity"])
     async def action(request: Request, response: Response):
         trusted_origin(request)
@@ -166,6 +178,10 @@ def mount_legacy_passkeys(
                 return {"ok": True}
             if data.action == "register-options":
                 return await passkeys.register_options(data, request, response, who)
+            if data.action == 'verify-options':
+                return await passkeys.verify_options(request, response, who)
+            if data.action == 'verify-session':
+                return await passkeys.verify_session(data, request, response, who)
             return await passkeys.register_verify(data, request, who)
         except HTTPException as exc:
             if exc.status_code in {403, 409}:

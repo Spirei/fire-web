@@ -49,8 +49,6 @@ const deploymentFiles = new Set([
   ".env.example",
 ]);
 
-// 四色门侧栏运行必需的 4 个素材：体积极小、缺任意一个侧栏入口会先闪再消失，
-// 已获准随公开仓库分发（其余 public/uploads、二进制素材仍然禁止入库）。
 const publicMediaAllowlist = new Set([
   // Existing public Alcor backend product artwork, used by the unified Fire passkey route.
   "platform/backend/alcor_api/data/public_site_passkey.png",
@@ -70,14 +68,13 @@ const publicMediaAllowlist = new Set([
 
   // FIRE 页面运行必需的小丑鱼图；独立随镜像发布，不放行其他部署素材。
   "public/fire-assets/clownfish-family.png",
+  // Service identity assets reused from the original Alcor interface.
+  "public/fire-assets/brands/postgresql.svg",
+  "public/fire-assets/brands/redis.png",
   // 配色设置入口的内置矢量图标，属于产品源码，不是用户上传或部署私有素材。
   "public/icons/palette.svg",
   // 用户授权随源码发布的内置安全检查插图；不放行其他部署素材。
   "public/icons/security-check.svg",
-  "public/uploads/feature/four-door/window.png",
-  "public/uploads/feature/four-door/dial.png",
-  "public/uploads/feature/four-door/pointer.png",
-  "public/uploads/feature/four-door/cursor-hand.png",
   // 通行密钥引导的内置插图，已获准随公开仓库分发。
   "public/uploads/feature/passkey/passkey.png",
   // 用户为动态页提供并授权的默认图标及小人。

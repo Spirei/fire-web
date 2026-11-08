@@ -54,10 +54,12 @@ async def change_own_password(
     if error := password_error(new_password):
         raise HTTPException(422, error)
     async with db.connection() as conn:
+        from .session_verification import SESSION_PROOF, verified
+        strong = current_password == SESSION_PROOF and await verified(conn, who)
         original = await (
             await conn.execute("SELECT password_hash FROM users WHERE id=%s", (who.id,))
         ).fetchone()
-    if not original or not await asyncio.to_thread(
+    if not original or not strong and not await asyncio.to_thread(
         verify_password, current_password, original["password_hash"]
     ):
         raise HTTPException(422, "当前密码不正确")
@@ -74,9 +76,11 @@ async def change_own_password(
         ).fetchone()
         if current["password_hash"] != original["password_hash"]:
             raise HTTPException(409, "账号已更新，请重新核对")
+        if strong and not await verified(conn, who):
+            raise HTTPException(403, "身份验证已失效")
         service = IdentityService(db.settings, db)
         factor = await service.factor(conn, who.id)
-        if factor and factor["totp_enabled"] and not await service.consume(conn, who.id, code):
+        if not strong and factor and factor["totp_enabled"] and not await service.consume(conn, who.id, code):
             raise HTTPException(403, "二次验证失败")
         await apply_password_locked(
             conn, who, hashed, request_id, keep_current=keep_current, keep_all_sessions=keep_all_sessions

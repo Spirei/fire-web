@@ -176,9 +176,10 @@ class FeedService:
              (who.id,group_id,group['mode'],include_hidden,group['mode'],group['people'],author,author,cursor_time,cursor_time,cursor_id,limit+1))).fetchall()
             selected=rows[:limit];last=selected[-1] if selected else None
             next_cursor=base64.urlsafe_b64encode(json.dumps([stamp(last['sort_at']),last['id']],separators=(',',':')).encode()).decode().rstrip('=') if len(rows)>limit and last else None
-            return {'agent':await profile_on_connection(conn,who.id),'posts':[post_dto(row) for row in selected],'nextCursor':next_cursor,
+            agent=await profile_on_connection(conn,who.id)
+            return {'agent':agent,'posts':[post_dto(row) for row in selected],'nextCursor':next_cursor,
                     'preferences':await preferences_on_connection(conn,who.id,group_id),'group':group,'groups':await groups_on_connection(conn,who.id),'job':None,
-                    'capabilities':{'generate':False,'search':'news-rss','avatar':{'image':'stored_profile_only','video':None}},
+                    'capabilities':{'generate':False,'search':'news-rss','avatar':{'image':agent['image'] or '/uploads/feature/feed/alcor.png','video':None if agent['image'] else '/uploads/feature/feed/alcor-idle.mp4'}},
                     'sourceState':'stored_observations_only','collectionOnRead':False}
 
     async def receipt(self,who,request_id):

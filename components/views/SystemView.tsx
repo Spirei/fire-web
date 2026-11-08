@@ -2,20 +2,25 @@
 import { clientRequestId } from "@/lib/randomId";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  IconDatabase,
-  IconBolt,
-  IconPackages,
   IconRefresh,
   IconActivity,
-  IconClipboardList,
   IconApi,
+  IconSearch, IconCircleCheck, IconClock, IconArchive,
 } from "@tabler/icons-react";
 import { useWorkspaceActive, useWorkspaceLocationGuard, useWorkspaceSearchParams } from "@/lib/workspacePanel";
 import AppModal from "@/components/AppModal";
 import { Capsule, IconButton } from "@/components/Capsule";
 import AppSelect from "@/components/AppSelect";
 import { platformRequest as json } from "@/lib/platformRequest";
-import ApiCatalogue, { type ApiOperation } from "@/components/ApiCatalogue";
+import InterfaceChecks from "@/components/InterfaceChecks";
+import OperationStatus from "@/components/OperationStatus";
+import ServiceIcon from "@/components/ServiceIcon";
+import StatusIndicator from "@/components/StatusIndicator";
+import MetricButton from "@/components/MetricButton";
+import ApiRetirements from "@/components/ApiRetirements";
+import { showToast } from "@/lib/toast";
+import ApiCatalogue, { apiDisplayNumber, apiStatusLabel, type ApiOperation } from "@/components/ApiCatalogue";
+import VerificationField from "@/components/VerificationField";
 import PasswordInput from "@/components/PasswordInput";
 import { ServiceIllustration } from "@/components/ServiceIllustration";
 
@@ -73,14 +78,16 @@ function SystemDialog({
   label,
   onClose,
   busy = false,
+  titleAddon,
   children,
 }: {
   label: string;
   onClose: () => void;
   busy?: boolean;
+  titleAddon?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  return <AppModal title={label} onClose={onClose} closeDisabled={busy} size="lg">{children}</AppModal>;
+  return <AppModal title={label} titleAddon={titleAddon} onClose={onClose} closeDisabled={busy} size="lg">{children}</AppModal>;
 }
 
 export default function SystemView({
@@ -100,6 +107,8 @@ export default function SystemView({
     [tasks, setTasks] = useState<Task[]>(seed?.tasks?.items ?? []),
     [migration, setMigration] = useState<Migration | null>(seed?.directory ?? null);
   const [overviewStale, setOverviewStale] = useState(false);
+  const [showRetired,setShowRetired] = useState(false);
+  useEffect(()=>setShowRetired(false),[active,mode,ownerId]);
   const [error, setError] = useState(""),
     [loading, setLoading] = useState(false),
     [connection, setConnection] = useState<"postgresql" | "redis" | null>(null);
@@ -165,10 +174,10 @@ export default function SystemView({
     [clear],
   );
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal, silent = false) => {
       if (document.hidden) return;
       const ticket = ++generation.current;
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError("");
       try {
         const identity = await json<{
@@ -248,7 +257,7 @@ export default function SystemView({
       } catch (e) {
         if (!signal?.aborted && ticket === generation.current) { setOverviewStale(true); fail(e); }
       } finally {
-        if (ticket === generation.current) setLoading(false);
+        if (!silent && ticket === generation.current) setLoading(false);
       }
     },
     [mode, filter, fail, clear, ownerId],
@@ -259,7 +268,7 @@ export default function SystemView({
     if (firstSeed.current && (mode !== "tasks" || seed?.filter === filter)) firstSeed.current = false;
     else void load(controller.signal);
     const resume = () => {
-      if (!document.hidden) void load(controller.signal);
+      if (!document.hidden && !pauseRefresh.current) void load(controller.signal, true);
       else {
         setConnection(null);
         setSelected(null);
@@ -271,11 +280,11 @@ export default function SystemView({
     const poll = async () => {
       if (disposed) return;
       if (!document.hidden && !pauseRefresh.current)
-        await load(controller.signal);
+        await load(controller.signal, true);
       if (!disposed)
-        timer = setTimeout(poll, mode === "migration" ? 15000 : 5000);
+        timer = setTimeout(poll, mode === "tasks" ? 5000 : 15000);
     };
-    timer = setTimeout(poll, mode === "migration" ? 15000 : 5000);
+    timer = setTimeout(poll, mode === "tasks" ? 5000 : 15000);
     return () => {
       disposed = true;
       clearTimeout(timer);
@@ -388,7 +397,7 @@ export default function SystemView({
       (item) =>
         (!filter || item.status === filter) &&
         (!query ||
-          `${item.method} ${item.path} ${item.summary || ""} ${item.description || ""} ${item.category || ""}`
+          `${item.method} ${item.path} ${item.summary || ""} ${item.description || ""} ${item.category || ""} ${item.subcategory || ""} ${apiDisplayNumber(item.categoryNumber)}`
             .toLowerCase()
             .includes(query.toLowerCase())),
     ) || [];
@@ -438,7 +447,7 @@ export default function SystemView({
           ))}
         </tbody>
       </table>
-      {!tasks.length && !loading && <p className="system-empty">暂无任务</p>}
+      {!tasks.length && (!loading || overview) && <p className="system-empty">暂无任务</p>}
       {mode === "tasks" && cursor && (
         <Capsule variant="secondary"
           className=""
@@ -493,21 +502,11 @@ export default function SystemView({
       )}
       {mode === "overview" && overview && (
         <>
-          <div className="system-segment">
-            <Capsule variant="secondary" aria-current="page">运行总览</Capsule>
-            <Capsule variant="secondary" onClick={() => onNavigate("/background-tasks")}>后台任务</Capsule>
-          </div>
           <div className="system-section-heading">
             <h2>连接状态</h2>
           </div>
           <div className="system-services">
             {overview.services.map((service) => {
-              const Icon =
-                service.id === "postgresql"
-                  ? IconDatabase
-                  : service.id === "redis"
-                    ? IconBolt
-                    : IconPackages;
               return (
                 <article key={service.id} className="system-service">
                   <div className={`system-service-art is-${service.id}`}>
@@ -515,7 +514,7 @@ export default function SystemView({
                   </div>
                   <div className="system-service-body">
                     <h3>
-                      <Icon size={24} stroke={1.6} aria-hidden="true" />
+                      <ServiceIcon kind={service.id} />
                       {service.id === "worker" ? "Worker" : service.label}
                     </h3>
                     <p className="system-state">
@@ -543,7 +542,6 @@ export default function SystemView({
           <div className="system-section-heading">
             <div>
               <h2>
-                <IconClipboardList size={20} />
                 最近任务
               </h2>
               <p className="text-sm text-muted">
@@ -557,15 +555,8 @@ export default function SystemView({
             </button>
           </div>
           {taskTable}
-          <div className="system-section-heading">
-            <h2>
-              <IconApi size={20} />
-              API 接口
-            </h2>
-            <button onClick={() => onNavigate("/api-migration")}>
-              查看清单
-            </button>
-          </div>
+          <InterfaceChecks active={active && !connection && !selected} ownerId={ownerId} onSettings={kind=>onNavigate(`/settings?sub=stocks&anchor=${kind === "broker" ? "trade" : kind === "earnings" ? "source-reports" : "sources"}&from=investment`)}/>
+
         </>
       )}
       {mode === "tasks" && (
@@ -584,68 +575,27 @@ export default function SystemView({
       )}
       {mode === "migration" && migration && (
         <>
-          <div className="system-api-counts">
-            <span>
-              接口操作<strong>{migration.summary.total}</strong>
-            </span>
-            <span>
-              后端已登记<strong>{migration.summary.connected}</strong>
-            </span>
-            <span>
-              待接入<strong>{migration.summary.pending}</strong>
-            </span>
-            <span>
-              已清理<strong>{migration.summary.retired || 0}</strong>
-            </span>
+          <div className="system-api-counts" title="接口清单按请求方法和路径匹配，不代表实际调用成功">
+            {([
+              ["接口操作", migration.summary.total, IconApi, ""],
+              [apiStatusLabel("connected"), migration.summary.connected, IconCircleCheck, "connected"],
+              [apiStatusLabel("pending"), migration.summary.pending, IconClock, "pending"],
+              ["已清理", migration.summary.retired || 0, IconArchive, "retired"],
+            ] as const).map(([label, count, Icon, value]) => <MetricButton key={label} label={label} value={count} icon={<Icon size={16} stroke={1.6} aria-hidden="true"/>} selected={value === "retired" ? undefined : filter === value} aria-haspopup={value === "retired" ? "dialog" : undefined} onClick={()=>value === "retired" ? setShowRetired(true) : setFilter(value)} />)}
+            {!!migration.summary.presentation&&<MetricButton label={apiStatusLabel("presentation")} value={migration.summary.presentation} icon={<IconApi size={16}/>} selected={filter === "presentation"} onClick={()=>setFilter("presentation")}/>}
           </div>
-          {!!migration.retirements?.length && (
-            <details className="system-connection-receipt">
-              <summary>已清理 {migration.retirements.length} 个旧入口</summary>
-              <div className="system-table-wrap">
-                <table className="system-table">
-                  <thead>
-                    <tr>
-                      <th>旧入口</th>
-                      <th>处理结果</th>
-                      <th>替代能力</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {migration.retirements.map((item) => (
-                      <tr key={item.method + item.path}>
-                        <td>
-                          <code>
-                            {item.method} {item.path}
-                          </code>
-                        </td>
-                        <td>{item.reason}</td>
-                        <td>
-                          <code>{item.replacement}</code>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          )}
-          <div className="system-filters">
-            <input
+          <ApiCatalogue schemas={migration.schemas} items={visible} category={params.get("category") || ""} onCategory={value => updateQuery("category", value)} filters={<>
+            <label className="api-search"><IconSearch size={18} stroke={1.6} aria-hidden="true"/><input
               aria-label="搜索接口"
-              placeholder="搜索名称、路径或方法"
+              placeholder="搜索接口、路径或编号"
               maxLength={200}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-            />
-            <AppSelect
-              ariaLabel="接口状态"
-              value={filter}
-              onChange={setFilter}
-              className="system-filter-select"
-              options={[{ value: "", label: "全部接口" }, { value: "connected", label: "后端已登记" }, { value: "pending", label: "待接入" }, ...(migration.summary.presentation ? [{ value: "presentation", label: "网页接口" }] : [])]}
-            />
-          </div>
-          <ApiCatalogue schemas={migration.schemas} items={visible} category={params.get("category") || ""} onCategory={value => updateQuery("category", value)} />
+            /></label>
+          </>} />
+          {active&&showRetired&&<AppModal title={`已清理的旧入口 · ${migration.retirements?.length || 0}`} size="lg" onClose={()=>setShowRetired(false)}>
+              <ApiRetirements items={migration.retirements || []}/>
+          </AppModal>}
         </>
       )}
       {active && selected && (
@@ -672,6 +622,7 @@ export default function SystemView({
         <ConnectionManager
           key={connection}
           kind={connection}
+          observation={overviewStale ? undefined : overview?.services.find(service=>service.id === connection)}
           csrf={csrf.current}
           onClose={() => setConnection(null)}
           onIdentityError={clear}
@@ -703,8 +654,9 @@ type Receipt = {
   message: string;
   revision?: string;
 };
-function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
+function ConnectionManager({ kind, csrf, onClose, onIdentityError, observation }: {
   kind: "postgresql" | "redis";
+  observation?: Service;
   csrf: string;
   onClose: () => void;
   onIdentityError: () => void;
@@ -722,6 +674,7 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
   const reject = useCallback((e: unknown) => {
     const value = e as { status?: number; reauthentication?: boolean };
     setError(e instanceof Error ? e.message : "请求失败");
+    showToast(e instanceof Error ? e.message : "请求失败", "err");
     if (value.status === 403 && value.reauthentication) setVerify(true);
     else if (value.status === 401 || value.status === 403) onIdentityError();
   }, [onIdentityError]);
@@ -766,8 +719,11 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
       <dt>{label}</dt><dd>{value === undefined || value === null || value === "" ? "—" : String(value)}</dd>
     </div>
   );
+  const connectionState = busy && requestId ? "checking" : requestId
+    ? receipt?.status === "passed" ? "up" : receipt?.status === "failed" ? "down" : "unknown"
+    : error ? "stale" : observation?.state || "unknown";
   return (
-    <SystemDialog label={kind === "postgresql" ? "PostgreSQL 连接" : "Redis 连接"} onClose={onClose} busy={busy}>
+    <SystemDialog label={kind === "postgresql" ? "PostgreSQL 连接" : "Redis 连接"} titleAddon={<StatusIndicator state={connectionState} observedAt={requestId ? undefined : observation?.observed_at}/>} onClose={onClose} busy={busy}>
       <p className="text-sm text-muted">连接由服务器环境配置管理，更改后重启生效。</p>
       <dl className="system-connection-summary" aria-busy={busy && !settings}>
         {field("地址", config?.host, true)}
@@ -778,21 +734,19 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
         {field("连接加密", encryption, true)}
       </dl>
       {error && <p role="alert" className="system-error">{error}</p>}
-      {receipt && <p role="status">{receipt.message}</p>}
-      {requestId && (
-        <details className="system-connection-receipt">
-          <summary>操作回执</summary>
-          <div className="system-receipt"><code>{requestId}</code>
-            <button disabled={busy} onClick={() => void run(async signal => {
-              const value = await json<Receipt>("/api/fire/connections/" + kind + "/receipts/" + requestId, { headers: { "x-csrf-token": csrf }, signal });
-              if (!signal.aborted) setReceipt(value);
-            })}>查询回执</button>
-          </div>
-        </details>
+      {receipt?.status === "failed" && !error && <OperationStatus state="error">{receipt.message}</OperationStatus>}
+      {requestId && (!receipt || !["passed","failed"].includes(receipt.status)) && !busy && (
+        <div className="system-result-recovery">
+          <span>检测结果待核对</span>
+          <Capsule size="sm" variant="secondary" onClick={() => void run(async signal => {
+            const value = await json<Receipt>("/api/fire/connections/" + kind + "/receipts/" + requestId, { headers: { "x-csrf-token": csrf }, signal });
+            if (!signal.aborted) { setReceipt(value); showToast(value.message, value.status === "passed" ? "ok" : "err"); }
+          })}>核对结果</Capsule>
+        </div>
       )}
       {verify && (
         <div className="system-reauth">
-          <label>确认管理员密码<PasswordInput value={verifyPassword} onChange={e => setVerifyPassword(e.target.value)} autoComplete="current-password" /></label>
+          <label>身份验证<VerificationField value={verifyPassword} onChange={e => setVerifyPassword(e.target.value)} autoComplete="current-password" /></label>
           <Capsule variant="secondary" className="" disabled={busy || !verifyPassword} onClick={() => void run(async signal => {
             await json<void>("/api/fire/connections/reauthenticate", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify({ password: verifyPassword }), signal });
             if (!signal.aborted) { setVerify(false); setVerifyPassword(""); }
@@ -811,7 +765,10 @@ function ConnectionManager({ kind, csrf, onClose, onIdentityError }: {
             method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, signal,
             body: JSON.stringify({ request_id: id, revision: settings?.revision ?? null, config, password_mode: "keep", reuse_current_password: true }),
           });
-          if (!signal.aborted) setReceipt(value);
+          if (!signal.aborted) {
+            setReceipt(value);
+            showToast(value.message, value.status === "passed" ? "ok" : "err");
+          }
         })}>{busy ? "处理中…" : "测试连接"}</Capsule>
       </div>
     </SystemDialog>

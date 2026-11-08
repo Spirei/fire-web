@@ -21,6 +21,7 @@ export default function AppModal({
   onClose,
   children,
   headerActions,
+  titleAddon,
   size = "sm",
   className = "",
   draggable = false,
@@ -34,6 +35,7 @@ export default function AppModal({
   onClose: () => void;
   children: React.ReactNode | ((requestClose: () => void) => React.ReactNode);
   headerActions?: React.ReactNode;
+  titleAddon?: React.ReactNode;
   size?: ModalSize;
   className?: string;
   draggable?: boolean;
@@ -146,7 +148,7 @@ export default function AppModal({
       >
         {!hideHeader && <div className={`app-modal-header ${draggable ? "cursor-move touch-none select-none" : ""}`} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={stopDrag} onPointerCancel={stopDrag}>
           <div className="min-w-0">
-            {title && <h3 className="text-[17px] font-semibold leading-snug text-ink">{title}</h3>}
+            {title && <h3 className={`text-[17px] font-semibold leading-snug text-ink ${titleAddon ? "flex flex-wrap items-center gap-3" : ""}`}>{title}{titleAddon}</h3>}
             {desc && <p className="mt-1 text-[13px] text-muted">{desc}</p>}
           </div>
           {headerActions && <div className="ml-auto min-w-0 flex-1 sm:max-w-[240px]">{headerActions}</div>}

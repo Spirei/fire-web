@@ -12,7 +12,7 @@ async function requestJSON(url: string, method: string, body?: unknown, signal?:
   if (signal?.aborted) controller.abort();
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-  const verification = method === "POST" && !!body && typeof body === "object" && ["register-verify", "login-verify"].includes(String((body as { action?: unknown }).action));
+  const verification = method === "POST" && !!body && typeof body === "object" && ["register-verify", "login-verify", "verify-session"].includes(String((body as { action?: unknown }).action));
   const mutation = ["PUT", "PATCH", "DELETE"].includes(method) || verification;
   try {
     const response = await fetch(url, { method, signal: controller.signal, credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), cache: "no-store" });

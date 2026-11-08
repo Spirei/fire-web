@@ -4,6 +4,7 @@ const source=fs.readFileSync(path.join(__dirname,'../components/LoginForm.tsx'),
 const functions=[];
 (function visit(node){if(ts.isFunctionDeclaration(node)&&['submit','completeTotp','pause','retryDelay'].includes(node.name?.text))functions.push(node.getText(tree));ts.forEachChild(node,visit);})(tree);
 assert.equal(functions.length,4);
+assert(source.includes("<PasskeyLoginButton"), "combined identifier login must retain the passkey action");
 function fixture(mode='register',shared=new Map()){
  let calls=0,pushes=0;const context={Date,Error,Number,Math,Response,JSON,mode,step:mode,retryDeadlines:shared,submitting:{current:false},totpSubmitting:{current:false},loading:false,
   emailRegistration:false,emailRegistrationSupported:false,registrationEmail:null,registrationCode:'',setRegistrationEmail(v){context.registrationEmail=v;},setRegistrationCode(v){context.registrationCode=v;},username:'client_user',password:'Client-password-123',confirm:'Client-password-123',totpTicket:'',totpCode:'',totpAutoTried:{current:''},useBackupCode:false,

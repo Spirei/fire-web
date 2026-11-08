@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+const systemMedia = JSON.parse(readFileSync(new URL("./contracts/system-media.json", import.meta.url), "utf8"));
 /** @type {import('next').NextConfig} */
 
 // 局域网开发来源：本机默认放行；额外地址用 DEV_ORIGINS 环境变量配置（逗号分隔，
@@ -34,6 +36,7 @@ const nextConfig = {
   allowedDevOrigins,
   async rewrites() {
     return { beforeFiles: [
+      ...systemMedia.map(name => ({source:"/uploads/feature/"+name,destination:"/fire-assets/system/"+name})),
       // 系统安全插图优先由代码提供，不受宿主机 icons 挂载覆盖。
       { source: "/icons/security-check.svg", destination: "/api/system-assets/security-check" },
       { source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" },

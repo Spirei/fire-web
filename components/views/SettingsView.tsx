@@ -1,10 +1,13 @@
 "use client";
+import Avatar from "@/components/Avatar";
+import { SESSION_PROOF, requestAdminProof } from "@/lib/adminProof";
 import { Capsule, IconButton } from "@/components/Capsule";
 import MailTemplatesSettings from "@/components/MailTemplatesSettings";
 import { DiscordFields, FeishuFields, QqFields, TelegramFields, WebPushFields, WecomFields } from "@/components/NotifyChannelFields";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard, useWorkspaceActive } from "@/lib/workspacePanel";
 
+import VerificationField from "@/components/VerificationField";
 import PasswordInput from "@/components/PasswordInput";
 import { SiteSettingsCommand } from "@/lib/siteSettingsCommand";
 import { platformRequest } from "@/lib/platformRequest";
@@ -36,7 +39,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { GroupConfig, ModelServiceConfig, SiteSettings, TabConfig, TickerConfig } from "@/lib/types";
 import { showToast } from "@/lib/toast";
-import { appConfirm, appPrompt } from "@/lib/appDialog";
+import { appConfirm } from "@/lib/appDialog";
 import AppSelect from "@/components/AppSelect";
 import { copyText } from "@/lib/clipboard";
 import PaletteSettings from "@/components/PaletteSettings";
@@ -960,14 +963,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         if (!futuSave.pending) {
           const approved = await appConfirm("允许此 OpenD 连接用于行情读取、连接检测和额度查询？", { title: "保存 OpenD 连接" });
           if (!approved) return false;
-          const proof = await appPrompt("请输入管理员密码", { title: "安全验证", inputType: "password" });
+          const proof = await requestAdminProof();
           if (!proof) return false;
-          password = proof;
-          if (totpEnabled) {
-            const factor = await appPrompt("请输入验证码", { title: "安全验证" });
-            if (!factor) return false;
-            code = factor;
-          }
+          ({password,code} = proof);
         }
         if (!futuSave.pending && !settingsVersion.current) throw new Error("配置尚未读完，请稍后保存");
         await futuSave.save({ ...fields, futuApproved: true }, password, code, settingsVersion.current ?? undefined);
@@ -981,14 +979,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       if (!command) { command = new SiteSettingsCommand(); settingCommands.current.set(key, command); }
       let password = "", code = "";
       if (!command.pending) {
-        const proof = await appPrompt("请输入管理员密码", { title: "安全验证", inputType: "password" });
+        const proof = await requestAdminProof();
         if (!proof) return false;
-        password = proof;
-        if (totpEnabled) {
-          const factor = await appPrompt("请输入验证码", { title: "安全验证" });
-          if (!factor) return false;
-          code = factor;
-        }
+        ({password,code} = proof);
       }
       if (!command.pending && !settingsVersion.current) throw new Error("配置尚未读完，请稍后保存");
       await command.save({ ...fields, ...(fields.modelServices && Number.isInteger(site.modelServicesRevision) ? { modelServicesRevision: site.modelServicesRevision } : {}) }, password, code, settingsVersion.current ?? undefined);
@@ -1776,7 +1769,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setTotpMsg(null);
     setTotpBusy(true);
     try {
-      const password = totpReauthNeeded ? await appPrompt("登录已过较久，请重新验证身份", { title: "安全验证", placeholder: "当前密码" }) : "";
+      const proof = totpReauthNeeded ? await requestAdminProof() : null;
+      const password = proof?.password || "";
       if (totpReauthNeeded && !password) return;
       const res = await fetch("/api/auth/totp", {
         method: "PUT",
@@ -1902,8 +1896,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [clearing, setClearing] = useState(false);
   async function clearAll() {
     if (!await appConfirm(`将清空全部 ${recordsCount ?? "—"} 条记录，此操作无法恢复。`, { title: "清空全部记录", danger: true })) return;
-    const password = await appPrompt("请输入当前密码以继续", { title: "安全验证", placeholder: "当前密码" });
-    if (!password) return;
+    const proof = await requestAdminProof();
+    if (!proof) return;
+    const password = proof.password;
     setClearing(true);
     await onClearAll(password);
     setClearing(false);
@@ -1961,7 +1956,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
 
   const homeLanding = <div className="sc-landing sc-home-landing">
     <button type="button" className="sc-account-card" onClick={() => jumpTo({ sub: "profile", anchor: "profile", label: "个人信息" })}>
-      {me.avatar ? <img src={me.avatar} alt=""/> : <span className="sc-avatar-placeholder">{(me.nickname || me.username).slice(0, 1)}</span>}
+      <Avatar src={me.avatar} name={me.nickname || me.username} size={24}/>
       <span><strong>{me.email || me.nickname || me.username}</strong></span><span className="sc-chevron" aria-hidden="true">›</span>
     </button>
     <SecurityCheck onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
@@ -1985,17 +1980,17 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
               placeholder={`请输入 ${user.username}`}
               className="sc-meta-field mt-1.5 w-full border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
             />
-            <label className="mt-3 block text-xs font-semibold text-muted">当前密码</label>
-            <PasswordInput
+            <label className="mt-3 block text-xs font-semibold text-muted">身份验证</label>
+            <VerificationField
               type="password"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && deleteConfirmText.trim() === user.username && deletePassword && (!totpEnabled || deleteTotpCode)) doDeleteAccount(); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && deleteConfirmText.trim() === user.username && deletePassword && (!totpEnabled || deletePassword === SESSION_PROOF || deleteTotpCode)) doDeleteAccount(); }}
               autoComplete="current-password"
               placeholder="请输入当前密码"
               className="sc-meta-field mt-1.5 w-full border border-edge-strong bg-white px-3 text-sm text-ink outline-none placeholder:opacity-40 focus:border-edge-strong dark:bg-[#151a26] dark:border-[#2a3140]"
             />
-            {totpEnabled && (
+            {totpEnabled && deletePassword !== SESSION_PROOF && (
               <>
                 <label className="mt-3 block text-xs font-semibold text-muted">二次验证码或备用码</label>
                 <input
@@ -2010,7 +2005,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             )}
             <div className="mt-5 flex justify-end gap-2.5">
               <Capsule variant="ghost" size="sm" type="button" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeletePassword(""); setDeleteTotpCode(""); }} className="">取消</Capsule>
-              <Capsule variant="danger" size="sm" type="button" disabled={deleteConfirmText.trim() !== user.username || !deletePassword || (totpEnabled && !deleteTotpCode)} onClick={doDeleteAccount} className="!text-up disabled:opacity-40">确认注销</Capsule>
+              <Capsule variant="danger" size="sm" type="button" disabled={deleteConfirmText.trim() !== user.username || !deletePassword || (totpEnabled && deletePassword !== SESSION_PROOF && !deleteTotpCode)} onClick={doDeleteAccount} className="!text-up disabled:opacity-40">确认注销</Capsule>
             </div>
       </AppModal>}
       <aside className="sw-sidebar relative hidden w-[248px] flex-none flex-col border-r md:flex">
@@ -3243,10 +3238,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       {editingProfile && email.trim().toLowerCase() !== (me.email ?? "").trim().toLowerCase() && (
                         <>
                           <div className="sw-row">
-                            <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要当前密码</span></div>
-                            <div className="ctrl" style={{ flex: 1 }}><PasswordInput type="password" disabled={profileSaving} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
+                            <div className="sw-row-label"><b>安全验证</b><span>修改登录邮箱需要验证身份</span></div>
+                            <div className="ctrl" style={{ flex: 1 }}><VerificationField type="password" disabled={profileSaving} value={profilePassword} onChange={(e) => setProfilePassword(e.target.value)} autoComplete="current-password" placeholder="当前密码" className="sw-row-input" /></div>
                           </div>
-                          {(totpEnabled || profileFactorRequired) && <div className="sw-row">
+                          {profilePassword !== SESSION_PROOF && (totpEnabled || profileFactorRequired) && <div className="sw-row">
                             <div className="sw-row-label"><b>二次验证码</b><span>验证器验证码或备用码</span></div>
                             <div className="ctrl" style={{ flex: 1 }}><input disabled={profileSaving} autoComplete="one-time-code" spellCheck={false} maxLength={64} value={profileCode} onChange={(e) => setProfileCode(e.target.value)} placeholder="验证器 6 位数字或备用码" className="sw-row-input" /></div>
                           </div>}
@@ -3259,10 +3254,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 <SettingsSection id="password" icon="password" title="更改密码">
                   <form onSubmit={changePassword} className="settings-password-grid settings-password-meta">
                     <div className="settings-account-identity"><span className="settings-account-avatar">{me.avatar ? <img src={me.avatar} alt="" /> : (me.nickname || me.username).slice(0, 1)}</span><span><b>{me.nickname || me.username}</b><small>{me.email || `@${me.username}`}</small></span><span aria-hidden="true">›</span></div>
-                    <label><span>当前密码</span><PasswordInput type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required autoFocus data-autofocus autoComplete="current-password" placeholder="当前密码" /></label>
+                    <label><span>身份验证</span><VerificationField type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required autoFocus data-autofocus autoComplete="current-password" placeholder="当前密码" /></label>
                     <div><label><span>新密码</span><PasswordInput type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="新密码" /></label><PasswordStrength password={newPassword} userInputs={[me.username, me.nickname, me.email ?? ""]} /></div>
                     <label><span>确认新密码</span><PasswordInput type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required maxLength={128} autoComplete="new-password" placeholder="再次输入新密码" /></label>
-                    {totpEnabled && (
+                    {totpEnabled && oldPassword !== SESSION_PROOF && (
                       <label><span>二次验证码</span><input autoComplete="one-time-code" spellCheck={false} value={totpPasswordCode} onChange={(e) => setTotpPasswordCode(e.target.value)} required placeholder="验证器 6 位数字或备用码" /></label>
                     )}
                     <button type="button" className="settings-password-forgot" onClick={openPasswordRecovery}>忘记密码了？</button>
@@ -3397,8 +3392,8 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       <div className="totp-meta-methods"><div className="totp-meta-method is-selected"><span className="totp-meta-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2M19 19h1v1h-1z"/></svg></span><span className="totp-meta-method-copy"><b>{totpDeviceName || "身份验证应用"}</b><small>已开启，可使用验证码或备用码登录。</small></span><span className="totp-meta-status">已开启</span></div></div>
                       <h3>关闭双重验证</h3>
                       <form onSubmit={disableTotp} className="totp-meta-disable">
-                        <label><span>当前密码</span><PasswordInput type="password" autoComplete="current-password" value={totpDisablePassword} onChange={(e) => setTotpDisablePassword(e.target.value)} required /></label>
-                        <label><span>验证码或备用码</span><input autoComplete="one-time-code" value={totpDisableCode} onChange={(e) => setTotpDisableCode(e.target.value)} required /></label>
+                        <label><span>身份验证</span><VerificationField type="password" autoComplete="current-password" value={totpDisablePassword} onChange={(e) => setTotpDisablePassword(e.target.value)} required /></label>
+                        {totpDisablePassword !== SESSION_PROOF && <label><span>验证码或备用码</span><input autoComplete="one-time-code" value={totpDisableCode} onChange={(e) => setTotpDisableCode(e.target.value)} required /></label>}
                         <button type="submit" disabled={totpBusy}>{totpBusy ? "提交中…" : "关闭双重验证"}</button>
                       </form>
                     </div>
@@ -3605,7 +3600,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </button>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>前端技术栈</b><span>交互与响应式界面</span></div>
-                    <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · WebGL 原图动效 · KTX2/UASTC 纹理压缩 · zxcvbn-ts（本地密码强度）</span>
+                    <span className="settings-detail-value">Next.js 15 · React 19 · TypeScript · Tailwind CSS · Base UI（选择器按需加载）· WebGL 原图动效 · KTX2/UASTC 纹理压缩 · zxcvbn-ts（本地密码强度）</span>
                   </div>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>数据与服务</b><span>统一后端与 PostgreSQL 业务存储</span></div>

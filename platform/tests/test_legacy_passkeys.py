@@ -503,3 +503,48 @@ async def test_registry_tracks_all_six_legacy_methods_and_four_post_actions_with
         assert action["new_web_path"] == ("/api/session/passkeys" if action["action"].startswith("login-") else "/api/account/passkeys")
     assert report["summary"]["local_verified_operations"] == sum(op["status"] == "local_verified" for op in report["operations"])
     assert report["capability_plan"]["summary"]["client_integrations_accepted"] == 0
+
+async def test_strong_session_reuse_and_bound_passkey_reverification(db, settings, app):
+    from alcor_api.session_verification import SESSION_PROOF
+    _, private = await prepare(db, settings, factor=False)
+    async with browser(app) as client:
+        await login(client, private)
+        token = client.cookies['fire_session']
+        state = await client.get(P+'/verification')
+        assert state.status_code == 200, state.text
+        assert state.json()['verified'] is True
+        # Reusing a real strong session does not require password or TOTP again.
+        result = await client.post(P,json={'action':'register-options','password':SESSION_PROOF})
+        assert result.status_code == 200, result.text
+        async with db.connection() as conn, conn.transaction():
+            await conn.execute("UPDATE sessions SET auth_method='password',passkey_id=NULL WHERE token_hash=%s",(digest(token),))
+        assert (await client.get(P+'/verification')).json()['verified'] is False
+        assert (await client.post(P,json={'action':'register-options','password':SESSION_PROOF})).status_code == 400
+        issued = await client.post(P,json={'action':'verify-options'})
+        assert issued.status_code == 200, issued.text
+        issued = issued.json()
+        data = {'action':'verify-session','requestId':issued['requestId'],'response':assertion(issued['options'],private,counter=9)}
+        result = await client.post(P,json=data)
+        assert result.status_code == 200, result.text
+        assert client.cookies['fire_session'] == token, 'reverification must not rotate the active session'
+        assert (await client.get(P+'/verification')).json()['verified'] is True
+        assert (await client.post(P,json=data)).status_code == 400, 'a used WebAuthn assertion cannot be replayed'
+        async with db.connection() as conn, conn.transaction():
+            await conn.execute('DELETE FROM identity_passkeys WHERE id=%s',(KEY_ID,))
+        assert (await client.get(P+'/verification')).status_code == 401
+
+async def test_old_passkey_session_confirms_totp_without_repeating_password(db, settings, app):
+    _, private = await prepare(db, settings, factor=False)
+    async with browser(app) as client:
+        await login(client, private)
+        token = client.cookies['fire_session']
+        async with db.connection() as conn, conn.transaction():
+            await conn.execute("UPDATE sessions SET created_at=clock_timestamp()-interval '20 minutes' WHERE token_hash=%s", (digest(token),))
+        setup = await client.post('/api/auth/totp')
+        assert setup.status_code == 200, setup.text
+        confirmed = await client.put('/api/auth/totp', json={
+            'code': totp_code(setup.json()['secret'], int(time.time())), 'name': 'Synthetic verifier',
+        })
+        assert confirmed.status_code == 200, confirmed.text
+        assert len(confirmed.json()['backupCodes']) == 8
+        assert (await client.get('/api/auth/totp')).json()['enabled'] is True

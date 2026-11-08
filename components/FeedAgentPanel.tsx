@@ -4,6 +4,8 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { IconCheck, IconClock, IconDeviceDesktop, IconFingerprint, IconList, IconPencil, IconShieldCheck, IconUpload, IconUserCircle } from "@tabler/icons-react";
 import { copyText } from "@/lib/clipboard";
 import AppModal from "./AppModal";
+import AppActionMenu from "./AppActionMenu";
+import { IconButton } from "./Capsule";
 import SafeAssetImage from "./SafeAssetImage";
 import FeedAgentPortrait from "./FeedAgentPortrait";
 import { feedRequest, FeedRequestError, feedJobRunning } from "@/lib/feedClient";
@@ -26,7 +28,7 @@ export default function FeedAgentPanel({data,tab,onTabChange,onClose,onProfileCh
   const [busy,setBusy]=useState(false),[error,setError]=useState(""),[needsRead,setNeedsRead]=useState(false),[copied,setCopied]=useState(false);
   const [avatarDraft,setAvatarDraft]=useState<AvatarDraft>({kind:"current"});
   const [history,setHistory]=useState<FeedJobPage|null>(null),[historyLoading,setHistoryLoading]=useState(false),[historyError,setHistoryError]=useState(""),[historyRead,setHistoryRead]=useState(0);
-  const live=useRef(true),lock=useRef(false),menuRef=useRef<HTMLDivElement>(null),pencilRef=useRef<HTMLButtonElement>(null),fileRef=useRef<HTMLInputElement>(null),historyController=useRef<AbortController|null>(null),historyEpoch=useRef(0),historyGroup=useRef(data.group?.id||"default"),previousEditing=useRef(editing),previewRef=useRef<string|null>(null);
+  const live=useRef(true),lock=useRef(false),pencilRef=useRef<HTMLButtonElement>(null),fileRef=useRef<HTMLInputElement>(null),historyController=useRef<AbortController|null>(null),historyEpoch=useRef(0),historyGroup=useRef(data.group?.id||"default"),previousEditing=useRef(editing),previewRef=useRef<string|null>(null);
   const group=data.group?.id||"default";
   const avatarPreview=avatarDraft.kind==="upload"?avatarDraft.url:null;
   previewRef.current=avatarPreview;
@@ -38,14 +40,6 @@ export default function FeedAgentPanel({data,tab,onTabChange,onClose,onProfileCh
     const escape=(event:KeyboardEvent)=>{if(event.key==="Escape"){event.preventDefault();event.stopImmediatePropagation();if(!busy)cancelEdit();}};
     document.addEventListener("keydown",escape,true);return()=>document.removeEventListener("keydown",escape,true);
   },[editing,busy,needsRead,menu]);
-  useEffect(()=>{
-    if(!menu)return;
-    const outside=(event:PointerEvent)=>{if(!menuRef.current?.contains(event.target as Node)&&!pencilRef.current?.contains(event.target as Node))setMenu(false);};
-    const escape=(event:KeyboardEvent)=>{if(event.key==="Escape"){event.stopImmediatePropagation();setMenu(false);pencilRef.current?.focus();}};
-    document.addEventListener("pointerdown",outside);document.addEventListener("keydown",escape,true);
-    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    return()=>{document.removeEventListener("pointerdown",outside);document.removeEventListener("keydown",escape,true);};
-  },[menu]);
   useEffect(()=>{setCopied(false);},[tab,group]);
   useEffect(()=>{if(!editing)setName(profile.name);},[profile.name,editing]);
   useEffect(()=>{
@@ -99,14 +93,17 @@ export default function FeedAgentPanel({data,tab,onTabChange,onClose,onProfileCh
   const portraitImage=editing==="avatar"?(avatarDraft.kind==="default"?DEFAULT_IMAGE:avatarPreview||profile.image||DEFAULT_IMAGE):profile.image||DEFAULT_IMAGE;
   const avatarChanged=avatarDraft.kind==="upload"&&avatarDraft.ready||avatarDraft.kind==="default"&&!!profile.image;
   const sourceErrors=data.peopleSources?.filter(source=>source.error)||[];
-  return <AppModal title={`${profile.name} 的动态`} size="md" className="feed-theme feed-themed-modal feed-agent-modal" onClose={onClose} closeDisabled={busy} headerActions={<button type="button" className="feed-agent-round" disabled={busy} aria-label={copied?"链接已复制":"复制动态链接"} onClick={()=>void share()}>{copied?<IconCheck size={24}/>:<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m-4 4 4-4 4 4M8 11H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2"/></svg>}</button>}>
+  return <AppModal title={`${profile.name} 的动态`} size="md" className="feed-theme feed-themed-modal feed-agent-modal" onClose={onClose} closeDisabled={busy} headerActions={<IconButton size="sm" framed disabled={busy} label={copied?"链接已复制":"复制动态链接"} onClick={()=>void share()}>{copied?<IconCheck size={24}/>:<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m-4 4 4-4 4 4M8 11H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2"/></svg>}</IconButton>}>
     <div className="feed-agent-hero">
       <div className="feed-agent-portrait">
         <div className={`feed-agent-portrait-crop${portraitImage===DEFAULT_IMAGE?" is-default":""}`}>
           {editing==="avatar"&&avatarDraft.kind==="upload"?(avatarDraft.failed?<IconUserCircle size={88} stroke={1}/>:<img key={avatarDraft.url} src={avatarDraft.url} alt={`${profile.name} 的形象预览`} onLoad={()=>setAvatarDraft(current=>current.kind==="upload"&&current.url===avatarDraft.url?{...current,ready:true}:current)} onError={()=>{if(previewRef.current!==avatarDraft.url)return;setAvatarDraft(current=>current.kind==="upload"&&current.url===avatarDraft.url?{...current,ready:false,failed:true}:current);setError("图片无法读取，请重新选择");}}/>):<FeedAgentPortrait image={portraitImage} video={portraitImage===DEFAULT_IMAGE?data.capabilities.avatar.video:null} name={profile.name}/>}
         </div>
-        <button ref={pencilRef} type="button" className="feed-agent-round feed-agent-pencil" aria-label="编辑小人" aria-haspopup="menu" aria-expanded={menu} aria-controls="feed-agent-edit-menu" disabled={busy} onClick={()=>setMenu(v=>!v)}><IconPencil size={23} stroke={1.7}/></button>
-        {menu&&<div id="feed-agent-edit-menu" ref={menuRef} role="menu" className="feed-agent-edit-menu" aria-label="编辑小人选项" onKeyDown={event=>{if(!["ArrowDown","ArrowUp","Home","End"].includes(event.key))return;event.preventDefault();const buttons=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button")),index=buttons.indexOf(document.activeElement as HTMLButtonElement);buttons[event.key==="Home"?0:event.key==="End"?buttons.length-1:(index+(event.key==="ArrowDown"?1:-1)+buttons.length)%buttons.length]?.focus();}}><button type="button" role="menuitem" onClick={()=>edit("avatar")}><IconUserCircle size={27} stroke={1.7}/>更换虚拟形象</button><button type="button" role="menuitem" onClick={()=>edit("name")}><IconPencil size={27} stroke={1.7}/>编辑名称</button></div>}
+        <IconButton ref={pencilRef} size="sm" framed className="feed-agent-pencil" label="编辑小人" aria-haspopup="menu" aria-expanded={menu} aria-controls="feed-agent-edit-menu" disabled={busy} onClick={()=>setMenu(v=>!v)}><IconPencil size={23} stroke={1.7}/></IconButton>
+        {menu&&<AppActionMenu id="feed-agent-edit-menu" label="编辑小人选项" anchor={pencilRef} onClose={()=>setMenu(false)} items={[
+          {label:"更换虚拟形象",icon:<IconUserCircle size={18} stroke={1.7}/>,onClick:()=>edit("avatar")},
+          {label:"编辑名称",icon:<IconPencil size={18} stroke={1.7}/>,onClick:()=>edit("name")},
+        ]}/>}
       </div>
       <h2>{profile.name}</h2><div className="feed-agent-connected"><span aria-hidden="true"><svg className="feed-agent-bolt" width="9" height="13" viewBox="0 0 12 20" fill="currentColor" focusable="false"><path d="M7.6 1.5 2.3 10.6H5.9L4.6 18.5 9.7 8.1H6.3Z"/></svg></span>已连接</div>
     </div>

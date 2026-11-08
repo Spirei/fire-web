@@ -93,3 +93,20 @@ async def test_original_asset_card_photo_can_be_replaced_and_restored_without_du
     assert result.json()['originalSha256'] == hashlib.sha256(SVG).hexdigest()
     assert (settings.file_root/'asset/card/Manual.svg').read_bytes() == SVG
     assert (await listing(client))['total'] == 2
+
+async def test_card_library_reads_existing_manifest_without_import_or_account_writes(client, admin, db):
+    response = await client.get('/api/cards')
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data['sourceState'] == 'available' and data['source'] == 'runtime_public_card_manifest'
+    assert data['regions'][0]['banks'][0]['cards'][0]['file'] == FILE
+    assert data['holdings'] == [] and data['amounts'] == []
+    async with db.connection() as conn:
+        for table in ['card_catalog_sources','card_preference_collections','card_wallet_accounts','card_custom_records']:
+            assert (await (await conn.execute('SELECT count(*) n FROM '+table)).fetchone())['n'] == 0
+
+async def test_card_library_applies_removed_and_replaced_public_cards(client, admin):
+    uploaded = await replacement(client)
+    assert uploaded.status_code == 200, uploaded.text
+    data = (await client.get('/api/cards')).json()
+    assert data['covers'][FILE].startswith('/uploads/')
