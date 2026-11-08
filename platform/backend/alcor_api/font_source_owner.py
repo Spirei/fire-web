@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row
 
 from .source_snapshot import PgSnapshot, SourceMismatch, schema_digest
@@ -44,11 +45,11 @@ async def verify_owner(definition, owner):
                 or dataset != definition.expected_dataset_identity
             ):
                 raise SourceMismatch("font_source_database_identity_unknown_or_changed")
-            schema = await PgSnapshot().schema(conn, check=lambda: definition.require_access(owner))
+            schema = await PgSnapshot().schema(conn, check=lambda: definition.require_access(owner),schema_name=definition.schema_name)
             if schema_digest(schema) != definition.expected_schema_hash:
                 raise SourceMismatch("source_schema_changed")
             if owner is not None:
-                found = await (await query("SELECT id FROM users WHERE id=%s LIMIT 2", (owner,))).fetchall()
+                found = await (await query(sql.SQL("SELECT id FROM {} WHERE id=%s LIMIT 2").format(sql.Identifier(definition.schema_name,'users')), (owner,))).fetchall()
                 if len(found) != 1:
                     raise SourceMismatch("font_source_owner_not_verified")
             definition.require_access(owner)

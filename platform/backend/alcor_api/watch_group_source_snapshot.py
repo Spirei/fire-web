@@ -24,8 +24,8 @@ MAX_FIELD=65536
 MAX_ROWS=50000
 
 
-async def pg_schema(conn):
-    rows=await (await conn.execute("SELECT table_name,column_name,data_type,udt_name,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name=ANY(%s) ORDER BY table_name,ordinal_position",(list(TABLES),))).fetchall()
+async def pg_schema(conn,*,schema_name='public'):
+    rows=await (await conn.execute("SELECT table_name,column_name,data_type,udt_name,is_nullable FROM information_schema.columns WHERE table_schema=%s AND table_name=ANY(%s) ORDER BY table_name,ordinal_position",(schema_name,list(TABLES)))).fetchall()
     return {table:[{'name':r['column_name'],'type':r['data_type'],'nativeType':r['udt_name'],'nullable':r['is_nullable']=='YES'} for r in rows if r['table_name']==table and (table=='watch_groups' or r['column_name'] in TABLES[table])] for table in TABLES}
 
 
@@ -53,9 +53,9 @@ async def capture(definition,registration,owner,*,after_table=None):
                 identity=await (await conn.execute("SELECT current_database() database,current_user role,current_setting('data_directory') directory,current_setting('transaction_read_only') ro,current_setting('transaction_isolation') isolation,current_setting('server_encoding') encoding,pg_current_snapshot()::text snapshot,(SELECT oid::text FROM pg_database WHERE datname=current_database()) database_oid,system_identifier::text FROM pg_control_system()")).fetchone()
                 dataset={'kind':'postgres','systemIdentifier':identity['system_identifier'],'databaseOid':identity['database_oid']}
                 if identity['database']!=definition.expected_database or identity['role']!=definition.expected_role or Path(identity['directory']).resolve()!=definition.expected_data_directory.resolve() or identity['ro']!='on' or identity['isolation']!='repeatable read' or identity['encoding']!='UTF8' or dataset!=definition.expected_dataset_identity:raise SourceMismatch('source_persistent_identity_not_verified')
-                if schema_digest(await PgSnapshot().schema(conn))!=definition.expected_schema_hash:raise SourceMismatch('source_identity_schema_changed')
-                if len(await (await conn.execute('SELECT id FROM users WHERE id=%s LIMIT 2',(owner,))).fetchall())!=1:raise SourceMismatch('source_owner_not_verified')
-                schema=await pg_schema(conn);validate_schema(schema,registration)
+                if schema_digest(await PgSnapshot().schema(conn,schema_name=definition.schema_name))!=definition.expected_schema_hash:raise SourceMismatch('source_identity_schema_changed')
+                if len(await (await conn.execute(sql.SQL('SELECT id FROM {} WHERE id=%s LIMIT 2').format(sql.Identifier(definition.schema_name,'users')),(owner,))).fetchall())!=1:raise SourceMismatch('source_owner_not_verified')
+                schema=await pg_schema(conn,schema_name=definition.schema_name);validate_schema(schema,registration)
                 for table,columns in TABLES.items():
                     require_source_access(definition,owner)
                     expressions=[]
@@ -63,7 +63,7 @@ async def capture(definition,registration,owner,*,after_table=None):
                         expressions.append(sql.SQL('CASE WHEN octet_length({}::text)>{} THEN NULL ELSE {}::text END AS {}').format(sql.Identifier(column),sql.Literal(MAX_FIELD),sql.Identifier(column),sql.Identifier('v'+str(index))))
                         expressions.append(sql.SQL('octet_length({}::text)>{} AS {}').format(sql.Identifier(column),sql.Literal(MAX_FIELD),sql.Identifier('large'+str(index))))
                     ordering=sql.SQL('watch_group_id,watch_group_sort,updated_at DESC,id::text COLLATE "C"') if table=='records' else sql.SQL('id::text COLLATE "C"')
-                    query=sql.SQL('SELECT {} FROM {} WHERE user_id=%s ORDER BY {}').format(sql.SQL(',').join(expressions),sql.Identifier(table),ordering)
+                    query=sql.SQL('SELECT {} FROM {} WHERE user_id=%s ORDER BY {}').format(sql.SQL(',').join(expressions),sql.Identifier(definition.schema_name,table),ordering)
                     async with conn.cursor(name='watch_source_'+table) as cursor:
                         cursor.itersize=4;await cursor.execute(query,(owner,))
                         async for row in cursor:

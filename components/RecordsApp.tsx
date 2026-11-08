@@ -70,13 +70,14 @@ const SettingsView = preloadedWorkspace("settings", dynamic(() => import("@/comp
 const UsersView = preloadedWorkspace("users", dynamic(() => import("@/components/views/UsersView"), { loading: WorkspaceLoading }));
 const AssetLibraryView = preloadedWorkspace("library", dynamic(() => import("@/components/views/AssetLibraryView"), { loading: WorkspaceLoading }));
 const CardLibraryView = preloadedWorkspace("cards", dynamic(() => import("@/components/views/CardLibraryView"), { loading: WorkspaceLoading }));
+const BackupRecoveryView = preloadedWorkspace("backup-recovery", dynamic(() => import("@/components/views/BackupRecoveryView"), { loading: WorkspaceLoading }));
 const QuotePoolView = preloadedWorkspace("quote-pool", dynamic(() => import("@/components/views/QuotePoolView"), { loading: WorkspaceLoading }));
 const GlobalPreviewView = preloadedWorkspace("global", dynamic(() => import("@/components/views/GlobalPreviewView"), { loading: WorkspaceLoading }));
 const AssetPnlAnalysisView = preloadedWorkspace("pnl", dynamic(() => import("@/components/AssetPnlAnalysis"), { loading: WorkspaceLoading }));
 
 import SystemView from '@/components/views/SystemView';
 
-type TabKey = "system-overview" | "background-tasks" | "api-migration" | "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "library" | "cards" | "settings" | "pnl";
+type TabKey = "system-overview" | "background-tasks" | "backup-recovery" | "api-migration" | "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -105,7 +106,7 @@ const DEFAULT_TABS: TabConfig[] = [
 ];
 
 // 保证 FIRE 页签始终存在且固定在「资产分析」下方（即使数据库里的导航菜单未包含它）。
-const SYSTEM_TABS:TabConfig[]=[{key:'system-overview',label:'系统总览',url:'/system-overview'},{key:'background-tasks',label:'后台任务',url:'/background-tasks'},{key:'api-migration',label:'API 接口',url:'/api-migration'}];
+const SYSTEM_TABS:TabConfig[]=[{key:'system-overview',label:'系统总览',url:'/system-overview'},{key:'background-tasks',label:'后台任务',url:'/background-tasks'},{key:'backup-recovery',label:'备份与恢复',url:'/backup-recovery'},{key:'api-migration',label:'API 接口',url:'/api-migration'}];
 function withFireTab(tabs: TabConfig[]): TabConfig[] {
   tabs=[...tabs.filter(tab=>!SYSTEM_TABS.some(item=>item.key===tab.key)),...SYSTEM_TABS];
   if (tabs.some((t) => t.key === "fire")) return tabs;
@@ -975,7 +976,7 @@ export default function RecordsApp({
   useEffect(() => {
     // Warm only the two likely next destinations. Other views load on hover,
     // focus or press; importing every page at once competes with button input.
-    const neighbors = ["library", "cards"].includes(activeTab) ? ["library", "cards"] : ["system-overview", "background-tasks", "api-migration"].includes(activeTab) ? ["settings"] : [];
+    const neighbors = ["library", "cards"].includes(activeTab) ? ["library", "cards"] : ["system-overview", "background-tasks", "backup-recovery", "api-migration"].includes(activeTab) ? ["settings"] : [];
     const keys = [...neighbors, ...mobilePrimaryOrder, "holdings", "watchlist", "assets"]
       .filter((key, index, all) => key !== activeTab && all.indexOf(key) === index && sidebarTabs.some(tab => tab.key === key))
       .slice(0, 2);
@@ -1226,6 +1227,7 @@ export default function RecordsApp({
           {activeTab === "users" && (user?.role === "admin" ? <UsersView ownerId={user.id} initial={initialWorkspace.users} /> : <NoPermission />)}
           {activeTab === "library" && (user?.role === "admin" ? <AssetLibraryView initialListing={initialWorkspace.material} ownerId={user.id} initialCdnEnabled={initialSettings.stockIconCdn} initialAssets={initialAssetLibrary?.assets} initialTotal={initialAssetLibrary?.total} /> : <NoPermission />)}
           {(['system-overview','background-tasks','api-migration'] as string[]).includes(activeTab) && (user?.role==='admin'?<SystemView initial={initialWorkspace.system} ownerId={initialUser.id} mode={activeTab==='system-overview'?'overview':activeTab==='background-tasks'?'tasks':'migration'} onNavigate={navigateWorkspace}/>:<NoPermission/>)}
+          {activeTab==='backup-recovery' && (user?.role==='admin'?<BackupRecoveryView initial={initialWorkspace.backupRecovery} ownerId={initialUser.id} initialNow={initialNow}/>:<NoPermission/>)}
           {activeTab === "cards" && <CardLibraryView initial={initialCardLibrary} />}
           {activeTab === "settings" && (
             settingsSub === "palette" || settingsSub === "profile-home" ? settingsPanel : <SettingsWindow version={initialVersion}>{settingsPanel}</SettingsWindow>

@@ -40,6 +40,37 @@ async def test_pg_identity_schema_owner_mismatch_cannot_export(old_pg):
     with pytest.raises(SourceMismatch):await PgSnapshot().export(old_pg,'different-owner')
 
 
+@pytest.mark.asyncio
+async def test_registered_schema_qualifies_owner_rows_and_order_links(old_pg,pg):
+    from psycopg.rows import dict_row
+    async with await psycopg.AsyncConnection.connect(pg.get_uri(database=old_pg.expected_database),autocommit=True,row_factory=dict_row) as conn:
+        await conn.execute('CREATE SCHEMA ledger')
+        await conn.execute(sql.SQL('GRANT USAGE ON SCHEMA ledger TO {}').format(sql.Identifier(old_pg.expected_role)))
+        tables=await(await conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'")).fetchall()
+        for table in tables:
+            await conn.execute(sql.SQL('ALTER TABLE {} SET SCHEMA ledger').format(sql.Identifier('public',table['tablename'])))
+        # Same-named public data must never enter an explicitly ledger-bound export.
+        await conn.execute('CREATE TABLE public.users(id text)')
+        await conn.execute("INSERT INTO public.users VALUES ('wrong-public-owner')")
+        await conn.execute(sql.SQL('GRANT SELECT ON public.users TO {}').format(sql.Identifier(old_pg.expected_role)))
+        schema=await PgSnapshot().schema(conn,schema_name='ledger')
+    registered=replace(old_pg,schema_name='ledger',expected_schema_hash=schema_digest(schema))
+    captured=await PgSnapshot().export(registered,OWNER)
+    assert captured['source']['schema']=='ledger'
+    assert captured['source']['ownerVerified']
+    assert captured['tables']['trade_orders']['rows']
+    assert captured['tables']['trade_fee_details']['rows']
+    assert not Mapping(captured).build()['manifest']['normalizationBlockers']
+    assert b'wrong-public-owner' not in canonical(captured)
+    with pytest.raises(SourceMismatch):await PgSnapshot().export(old_pg,OWNER)
+
+
+@pytest.mark.parametrize('name',['public; DROP TABLE users','pg_catalog','information_schema','', 'a.b','x'*64])
+def test_source_schema_rejects_system_or_executable_names(name):
+    with pytest.raises(ValueError):
+        SourceDefinition('example','source','postgres',(OWNER,),None,'0'*64,'unused',schema_name=name)
+
+
 
 
 @pytest.mark.asyncio

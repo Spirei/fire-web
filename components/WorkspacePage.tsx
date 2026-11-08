@@ -30,7 +30,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const settings=settingsSnapshot.settings;
   if(!identity)redirect(await needsSetup()?'/setup':'/login');
   const user=identity.user;
-  const system={'system-overview':'系统总览','background-tasks':'后台任务','api-migration':'API 接口'};
+  const system={'system-overview':'系统总览','background-tasks':'后台任务','backup-recovery':'备份与恢复','api-migration':'API 接口'};
   const systemKey=path.slice(1) as keyof typeof system;
   const specialTab=system[systemKey]?{key:systemKey}:path==='/quote-pool'?{key:'quote-pool'}:path==='/asset-pnl-analysis'?{key:'pnl'}:null;
   if(system[systemKey]&&!isAdmin(user))notFound();

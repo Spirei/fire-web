@@ -22,7 +22,11 @@ RUN case "$PG_MAJOR" in 16|17|18) ;; *) exit 1 ;; esac \
     && curl --fail --silent --show-error --proto '=https' --tlsv1.2 https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/keyrings/postgresql.asc \
     && gpg --show-keys --with-colons /usr/share/keyrings/postgresql.asc | grep -q '^fpr:::::::::B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8:' \
     && echo 'deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update && apt-get install -y --no-install-recommends "postgresql-client-$PG_MAJOR" \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-common \
+    && sed -i 's/^[#[:space:]]*create_main_cluster[[:space:]]*=.*/create_main_cluster = false/' /etc/postgresql-common/createcluster.conf \
+    && grep -q '^create_main_cluster = false$' /etc/postgresql-common/createcluster.conf \
+    && apt-get install -y --no-install-recommends "postgresql-client-$PG_MAJOR" "postgresql-$PG_MAJOR" \
+    && test ! -d "/var/lib/postgresql/$PG_MAJOR/main" \
     && apt-get purge -y --auto-remove curl gnupg && rm -rf /var/lib/apt/lists/*
 ENV FIRE_PG_TOOLS_DIR=/usr/lib/postgresql/${PG_MAJOR}/bin
 COPY --from=web /usr/local/bin/node /usr/local/bin/node

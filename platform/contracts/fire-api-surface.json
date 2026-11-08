@@ -2400,6 +2400,96 @@
       "method": "GET",
       "path": "/api/auth/passkeys/verification",
       "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/database-migration/connections",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/database-migration/source",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/database-migration/source/operations/[request_id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/database-migration/source/test",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/database-migration/target/test",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/database-migration/preparations",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fire/database-migration/connections",
+      "owner": "platform"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/fire/database-migration/source",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fire/database-migration/source/operations/[request_id]",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fire/database-migration/source/test",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fire/database-migration/target/test",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fire/database-migration/preparations",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/database-migration/preparations",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
+      "path": "/api/fire/database-migration/preparations",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/database-migration/source/operations/[request_id]/cancel",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/database-migration/preparations/cancel",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fire/database-migration/source/operations/[request_id]/cancel",
+      "owner": "platform"
+    },
+    {
+      "method": "POST",
+      "path": "/api/fire/database-migration/preparations/cancel",
+      "owner": "platform"
     }
   ],
   "retirements": [

@@ -2,7 +2,15 @@ import type { WorkspaceInitial, WebSession, MaterialListing } from './workspaceI
 /** Request-local reads only. No cross-account cache and no speculative financial requests. */
 export async function workspaceBootstrap(tab:string,query:URLSearchParams,identity:WebSession,read:<T>(path:string)=>Promise<T>):Promise<WorkspaceInitial>{
  const initial:WorkspaceInitial={};
- if(tab==='library'&&identity.user.role==='admin'){
+ if(tab==='backup-recovery'&&identity.user.role==='admin'){
+  const [connections,backups,preparations]=await Promise.all([read<NonNullable<WorkspaceInitial['backupRecovery']>['connections']>('/api/fire/database-migration/connections'),read<NonNullable<WorkspaceInitial['backupRecovery']>['backups']>('/api/fire/backups'),read<{items:import('./databaseMigration').MigrationPreparationTask[]}>('/api/fire/database-migration/preparations')]);
+  const requested=query.get('migrationRequest')||'';
+  let preparation=requested?preparations.items.find(item=>item.request_id===requested):preparations.items[0];
+  if(requested&&!preparation&&/^[a-f0-9-]{36}$/i.test(requested)){
+   try{const receipt=await read<import('./databaseMigration').MigrationPreparationTask>('/api/fire/tasks/receipts/'+requested);if(receipt.kind==='database.migration.prepare')preparation=receipt;}catch{}
+  }
+  initial.backupRecovery={identity,connections,backups,preparations:preparations.items,preparation};
+ }else if(tab==='library'&&identity.user.role==='admin'){
   const type=['market','stock','crypto','metal','flag','broker','group','card','icon'].includes(query.get('tab')||'')?query.get('tab')!:'market';
   const market=query.get('market')||'ALL',q=(query.get('q')||'').slice(0,200),page=Math.max(1,Number(query.get('page'))||1),removed=type!=='group'&&query.get('removed')==='1';
   let data:MaterialListing;

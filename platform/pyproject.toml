@@ -1,6 +1,6 @@
 [project]
 name = "fire-platform"
-version = "0.1.77"
+version = "0.1.78"
 description = "Fire internal backend and durable workers"
 requires-python = ">=3.12,<3.13"
 dependencies = [

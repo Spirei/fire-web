@@ -713,6 +713,8 @@ def create_app(settings: Settings | None = None):
     app.include_router(backup_router)
     from .backup_schedule_api import mount_backup_schedule
     mount_backup_schedule(app,db)
+    from .database_migration_api import mount_database_migration
+    mount_database_migration(app,db)
     from .account_admin import router as account_router
     app.include_router(account_router)
 

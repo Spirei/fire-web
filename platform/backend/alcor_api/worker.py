@@ -36,7 +36,7 @@ async def claim(db: Database, worker_id):
             await conn.execute(
                 """
             WITH candidate AS (
-                SELECT id FROM tasks WHERE kind IN ('system.diagnostics','backup.create','backup.verify','backup.restore','backup.retention','dividends.source.import','dividends.entitlements.review','feed.source_test','feed.refresh','feed.discussion','celeb.sec_collect','asset.source','agent.runtime') AND attempts<3
+                SELECT id FROM tasks WHERE kind IN ('system.diagnostics','backup.create','backup.verify','backup.restore','backup.retention','database.migration.prepare','dividends.source.import','dividends.entitlements.review','feed.source_test','feed.refresh','feed.discussion','celeb.sec_collect','asset.source','agent.runtime') AND attempts<3
                   AND (status='queued' OR (status='running' AND lease_until<clock_timestamp()))
                 ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1
             ) UPDATE tasks t SET status='running',attempts=attempts+1,lease_version=lease_version+1,
@@ -207,6 +207,12 @@ async def run(settings=None, stop=None):
                     try:
                         if task['kind']=='system.diagnostics':
                             await diagnose(db, cache, task)
+                        elif task['kind']=='database.migration.prepare':
+                            from .database_migration_jobs import execute as prepare_migration
+                            from .backups import BackupFailure
+                            try:await prepare_migration(db,task)
+                            except BackupFailure as exc:
+                                await finish(db,task,{'phase':'failed','business_written':False,'cutover_ready':False,'message':str(exc)},error_code='database_migration_preparation_failed')
                         elif task['kind'].startswith('dividends.'):
                             from .dividend_chain_tasks import execute as execute_dividend_task
                             await execute_dividend_task(db,task)
@@ -228,7 +234,10 @@ async def run(settings=None, stop=None):
                             except BackupFailure as exc:
                                 await finish(db,task,{'scope':'backup','message':str(exc)},error_code='backup_failed')
                     except Exception:
-                        if task['kind']=='backup.retention':
+                        if task['kind']=='database.migration.prepare':
+                            await finish(db,task,{'phase':'unknown','business_written':False,'cutover_ready':False,'message':'迁移准备中断，请核对原任务与保留的归档'},error_code='database_migration_preparation_unknown')
+                            log.warning('database_migration_preparation_unknown')
+                        elif task['kind']=='backup.retention':
                             await finish(db,task,{'state':'unknown','willRetryAutomatically':False},error_code='backup_retention_unknown')
                             log.warning('backup_retention_unknown')
                         elif task['kind'].startswith('backup.'):

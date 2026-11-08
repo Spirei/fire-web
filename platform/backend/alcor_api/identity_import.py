@@ -28,6 +28,8 @@ class SnapshotUser(InputModel):
     uid: str = Field(default='',max_length=128)
     avatar: str = Field(default='',max_length=65500)
     avatar_data: str | None = Field(default=None,max_length=65500)
+    avatar_original_base64: str | None = Field(default=None,max_length=6990508)
+    avatar_original_type: str | None = Field(default=None,pattern=r'^image/(jpeg|png|gif|webp)$')
     is_test: bool = False
     totp_enabled: bool = False
     totp_secret: SecretStr = SecretStr('')
@@ -43,6 +45,8 @@ class SnapshotUser(InputModel):
             raise ValueError('Source timestamp requires a timezone')
         if self.totp_enabled and not self.totp_secret.get_secret_value():
             raise ValueError('Enabled factor must retain its source secret')
+        if (self.avatar_original_base64 is None)!=(self.avatar_original_type is None) or self.avatar_data and self.avatar_original_base64 is not None:
+            raise ValueError('Source avatar representation is ambiguous or incomplete')
         if any(not re.fullmatch(r'(?:v2:)?[a-f0-9]{64}',v) for v in self.totp_backup_codes):
             raise ValueError('Unsupported backup code hash')
         return self
@@ -155,10 +159,18 @@ async def import_trial_snapshot(db, raw: dict, *, source_key: bytes | None, expe
         if any(code.startswith('v2:') for code in u.totp_backup_codes) and not source_key:
             raise ValueError('Source data key is required for existing backup codes')
         from .profiles import normalize_avatar
+        original=None
         image=u.avatar_data or (u.avatar if u.avatar.startswith('data:') else None)
-        if u.avatar and not image:raise ValueError('Source avatar bytes are required; do not discard the original image')
+        if u.avatar_original_base64 is not None:
+            from .profile_media import validate_legacy_avatar
+            if image or db.settings.file_root is None:raise ValueError('Source original avatar requires unambiguous private media storage')
+            try:raw_avatar=base64.b64decode(u.avatar_original_base64,validate=True)
+            except ValueError:raise ValueError('Invalid source avatar bytes') from None
+            extension={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'}[u.avatar_original_type]
+            original=validate_legacy_avatar(raw_avatar,extension)
+        if u.avatar and not image and original is None:raise ValueError('Source avatar bytes are required; do not discard the original image')
         avatar=normalize_avatar(image) if image else None
-        prepared.append((u,secret,avatar))
+        prepared.append((u,secret,avatar,original))
     keys=[]
     for key in snapshot.passkeys:
         if key.user_id not in user_ids or key.rp_id!=snapshot.passkey_config.rp_id:
@@ -193,9 +205,13 @@ async def import_trial_snapshot(db, raw: dict, *, source_key: bytes | None, expe
         # A trial never merges or overwrites existing identities.
         if await (await conn.execute('SELECT 1 FROM users LIMIT 1')).fetchone():
             raise ValueError('Trial identity import requires an empty user set')
-        for u,secret,avatar in prepared:
+        for u,secret,avatar,original in prepared:
             await conn.execute('INSERT INTO users(id,username,email,password_hash,role,active,created_at,is_test) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)',(u.id,u.username,u.email,u.password_hash.get_secret_value(),u.role,u.active,u.created_at,u.is_test))
             await conn.execute('INSERT INTO user_profiles(user_id,display_name,avatar,revision) VALUES(%s,%s,%s,%s)',(u.id,u.nickname,avatar,uuid4()))
+            if original is not None:
+                from .profile_media import ProfileMedia
+                object_id,_=await ProfileMedia(db.settings).stage(conn,u.id,*original)
+                await conn.execute('UPDATE user_profiles SET avatar_object_id=%s WHERE user_id=%s',(object_id,u.id))
             await conn.execute('INSERT INTO identity_source_profiles(user_id,metadata) VALUES(%s,%s)',(u.id,Jsonb({'uid':u.uid,'nickname':u.nickname,'avatar':u.avatar,'is_test':u.is_test,'history_started_at':datetime.now(timezone.utc).isoformat()})))
             source_stamp=hashlib.sha256(f'{u.password_hash.get_secret_value()}:{int(u.totp_enabled)}:{u.totp_secret.get_secret_value()}'.encode()).hexdigest()
             await conn.execute('''INSERT INTO identity_security(user_id,totp_enabled,totp_secret_ciphertext,totp_last_step,backup_codes,backup_key_ciphertext,device_name,source_stamp,email_verified)

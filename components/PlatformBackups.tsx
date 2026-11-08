@@ -36,7 +36,7 @@ const states: Record<string, string> = {
   cancelled: "已取消",
   cancel_requested: "取消中",
 };
-export default function PlatformBackups({ ownerId }: { ownerId: string }) {
+export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }: { ownerId: string; buttonOnly?: boolean; onClose?: () => void }) {
   const active = useWorkspaceActive(),
     canUseLocation = useWorkspaceLocationGuard();
   const [open, setOpen] = useState(false),
@@ -253,14 +253,15 @@ export default function PlatformBackups({ ownerId }: { ownerId: string }) {
     generation.current++;
     reset();
     setOpen(false);
+    onClose?.();
   }
   return (
     <>
-      <div className="sw-row">
-        <div className="sw-row-label">
+      <div className={buttonOnly ? undefined : "sw-row"}>
+        {!buttonOnly && <div className="sw-row-label">
           <b>联合备份</b>
           <span>完整 PG、登记原件与加密密钥 · 独立 Worker</span>
-        </div>
+        </div>}
         <Capsule variant="ghost" size="sm"
           type="button"
           className=""

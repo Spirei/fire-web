@@ -73,12 +73,17 @@ check "Retired attachments page" 404 "$(code -b "$JAR_ACCOUNT" "$BASE/attachment
 DEPLOY_STATUS_EXPECT=404
 if [ "$ACCOUNT_ROLE" = admin ]; then DEPLOY_STATUS_EXPECT=200; fi
 check "部署状态页按账号权限访问" "$DEPLOY_STATUS_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/deploy-status")"
+check "备份与恢复页按账号权限访问" "$DEPLOY_STATUS_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/backup-recovery")"
 
 check "股票池页面登录读取" 200 "$(code -b "$JAR_ACCOUNT" "$BASE/quote-pool")"
 check "本人股票池登录读取" 200 "$(code -b "$JAR_ACCOUNT" "$BASE/api/quote-pool?scope=mine")"
 SHARED_POOL_EXPECT=403
 if [ "$ACCOUNT_ROLE" = admin ]; then SHARED_POOL_EXPECT=200; fi
 check "共享股票池按账号权限访问" "$SHARED_POOL_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/api/quote-pool?scope=shared")"
+check "迁移连接未登录拒绝" 401 "$(code "$BASE/api/fire/database-migration/connections")"
+MIGRATION_EXPECT=403
+if [ "$ACCOUNT_ROLE" = admin ]; then MIGRATION_EXPECT=200; fi
+check "迁移连接按账号权限读取" "$MIGRATION_EXPECT" "$(code -b "$JAR_ACCOUNT" "$BASE/api/fire/database-migration/connections")"
 
 for REMOVED in /assistant /api/assistant /api/assistant/action /api/assistant/attachments /api/assistant/history /api/assistant/models /api/assistant/preferences /api/assistant/spaces /api/assistant/usage /api/asset-allocation /api/asset-allocation/assign /api/v1/asset-allocation /api/v2/asset-allocation /api/v1/asset-allocation/assign /api/v2/asset-allocation/assign; do
   check "已移除 ${REMOVED}" 404 "$(code -b "$JAR_ACCOUNT" "$BASE$REMOVED")"

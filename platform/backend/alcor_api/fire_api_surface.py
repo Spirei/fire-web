@@ -149,7 +149,7 @@ def catalogue(app, *, document=None):
             'app-packages':'应用与连接','app-state':'应用与连接','connections':'应用与连接',
             'clipboard':'剪贴板','request-logs':'请求日志','api-docs':'接口文档',
             'fire-settings':'设置','settings':'设置','system':'系统管理','health':'系统管理','tasks':'后台任务',
-            'deployment':'发布管理','deploy-status':'发布管理','backups':'备份与恢复','backup':'备份与恢复',
+            'deployment':'发布管理','deploy-status':'发布管理','backups':'备份与恢复','backup':'备份与恢复','database-migration':'备份与恢复',
         }
         item['featureIds'] = sorted(original_bindings.get((item['method'], normalized_path(item.get('upstream', item['path']))), set()))
         item['subcategory'] = domains.get(first, '其他接口')

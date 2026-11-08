@@ -4,7 +4,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/workspaceBootstrap.ts
 const bootstrap=context.exports.workspaceBootstrap;
 const identity={user:{id:'owner-one',role:'admin'},csrf:'synthetic',instance_id:'synthetic'};
 (async()=>{
- const calls=[],read=async path=>{calls.push(path);return {assets:[],total:0,page:1,revision:'1',marketCounts:{}};};
+ const calls=[],read=async path=>{calls.push(path);return {assets:[],items:[],total:0,page:1,revision:'1',marketCounts:{}};};
  const materials=await bootstrap('library',new URLSearchParams('tab=stock&market=HK&q=a%26b&page=2'),identity,read);
  assert.equal(materials.material.key,'owner-one|stock|HK|a&b|2|false');
  assert.equal(calls.length,1);const query=new URLSearchParams(calls[0].split('?')[1]);assert.equal(query.get('q'),'a&b');assert.equal(query.get('page'),'2');
@@ -16,5 +16,7 @@ const identity={user:{id:'owner-one',role:'admin'},csrf:'synthetic',instance_id:
  pending.forEach(p=>p.resolve(p.path.includes('tasks')?{items:[],next_cursor:null}:{services:[],task_counts:{}}));
  const result=await system;assert.equal(result.system.identity.user.id,'owner-one');assert.equal(result.system.tasks.items.length,0);
  calls.length=0;await bootstrap('cards',new URLSearchParams(),identity,read);assert.deepEqual(calls,['/api/cards']);
+ calls.length=0;const backup=await bootstrap('backup-recovery',new URLSearchParams('tab=migration'),identity,read);assert.equal(backup.backupRecovery.identity.user.id,'owner-one');assert.deepEqual(calls,['/api/fire/database-migration/connections','/api/fire/backups','/api/fire/database-migration/preparations']);
+ calls.length=0;await bootstrap('backup-recovery',new URLSearchParams(),{...identity,user:{id:'reader',role:'user'}},read);assert.equal(calls.length,0,'Migration configuration is never bootstrapped for ordinary members');
  console.log('PASS refresh bootstrap reads only the current page, preserves URL filters and ownership, and avoids a second client session waterfall');
 })().catch(error=>{console.error(error);process.exitCode=1;});

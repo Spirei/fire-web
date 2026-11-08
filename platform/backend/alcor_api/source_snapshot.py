@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import json
+import re
 import struct
 from dataclasses import dataclass,field
 from pathlib import Path
@@ -66,10 +67,13 @@ class SourceDefinition:
     migration_window: object | None = field(default=None, repr=False, compare=False)
     window_registry_path: Path | None = field(default=None, repr=False, compare=False)
     window_platform_instance: object | None = field(default=None, repr=False, compare=False)
+    schema_name: str = 'public'
 
     def __post_init__(self):
         if self.kind != "postgres":
             raise ValueError("source_backend_not_supported")
+        if not isinstance(self.schema_name,str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,62}',self.schema_name) or self.schema_name.startswith('pg_') or self.schema_name=='information_schema':
+            raise ValueError('source_schema_invalid')
 
     def require_access(self, owner=None):
         from .source_window import require_source_access
@@ -83,7 +87,9 @@ class SourceDefinition:
 
     def public_binding(self):
         # A source locator/password/path must never enter the manifest or audit log.
-        return {'alias':self.alias,'instance':self.instance,'kind':self.kind,'timezone':self.timezone,'schemaHash':self.expected_schema_hash}
+        result={'alias':self.alias,'instance':self.instance,'kind':self.kind,'timezone':self.timezone,'schemaHash':self.expected_schema_hash}
+        if self.schema_name!='public':result['schema']=self.schema_name
+        return result
 
 
 class SourceMismatch(ValueError):pass
@@ -116,7 +122,7 @@ def schema_digest(schema):return sha(canonical(schema))
 
 
 class PgSnapshot:
-    async def schema(self, conn, check=None):
+    async def schema(self, conn, check=None, *, schema_name='public'):
         async def execute(*args, **kwargs):
             if check:
                 check()
@@ -124,7 +130,7 @@ class PgSnapshot:
 
         rows = await (
             await execute(
-                "SELECT table_name,column_name,data_type,udt_name,numeric_precision,numeric_scale,character_maximum_length,is_nullable FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position"
+                "SELECT table_name,column_name,data_type,udt_name,numeric_precision,numeric_scale,character_maximum_length,is_nullable FROM information_schema.columns WHERE table_schema=%s ORDER BY table_name,ordinal_position",(schema_name,)
             )
         ).fetchall()
         schema={name:[] for name in TABLES}
@@ -133,7 +139,7 @@ class PgSnapshot:
             elif row['table_name']=='users' and row['column_name']=='id':schema['__owner_identity']=[{'name':'id','type':row['data_type'],'nativeType':row['udt_name'],'precision':row['numeric_precision'],'scale':row['numeric_scale'],'length':row['character_maximum_length'],'nullable':row['is_nullable']=='YES'}]
         candidates = await (
             await execute(
-                "SELECT c.relname name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relname IN ('trade_orders_new','fund_transactions_new') ORDER BY c.relname"
+                "SELECT c.relname name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relkind IN ('r','p') AND c.relname IN ('trade_orders_new','fund_transactions_new') ORDER BY c.relname",(schema_name,)
             )
         ).fetchall()
         schema['__migration_candidates']=[row['name'] for row in candidates]
@@ -146,9 +152,9 @@ class PgSnapshot:
                         """SELECT c.relname table_name,a.attname name,pg_catalog.format_type(a.atttypid,a.atttypmod) type
                     FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
                     LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
-                    WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relname=ANY(%s)
+                    WHERE n.nspname=%s AND c.relkind IN ('r','p') AND c.relname=ANY(%s)
                     ORDER BY c.relname,a.attnum""",
-                        (list(FAMILY_TABLES),),
+                        (schema_name,list(FAMILY_TABLES)),
                     )
                 ).fetchall()
             catalog={}
@@ -160,7 +166,7 @@ class PgSnapshot:
             schema['__financial_families']=structure_evidence({},method='postgres_catalog_permission_unavailable',known=False)
         try:
             async with conn.transaction():
-                security=await(await execute("SELECT c.relname name,c.relrowsecurity enabled FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY(%s)",(['account_financing_policy','account_financing_requests'],))).fetchall()
+                security=await(await execute("SELECT c.relname name,c.relrowsecurity enabled FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relname=ANY(%s)",(schema_name,['account_financing_policy','account_financing_requests']))).fetchall()
             schema['__financing_row_security']={'known':True,'tables':{row['name']:row['enabled'] for row in security}}
         except psycopg.errors.InsufficientPrivilege:
             schema['__financing_row_security']={'known':False,'tables':{}}
@@ -200,10 +206,10 @@ class PgSnapshot:
                     pass
                 dataset_verified=bool(dataset and definition.expected_dataset_identity==dataset)
                 if dataset and definition.expected_dataset_identity and not dataset_verified:raise SourceMismatch('source_persistent_dataset_identity_mismatch')
-                schema = await self.schema(conn, check=lambda: definition.require_access(owner))
+                schema = await self.schema(conn, check=lambda: definition.require_access(owner),schema_name=definition.schema_name)
                 if schema_digest(schema)!=definition.expected_schema_hash:raise SourceMismatch('source_schema_changed')
                 owners = (
-                    await (await execute("SELECT id FROM users WHERE id=%s LIMIT 2", (owner,))).fetchall()
+                    await (await execute(sql.SQL("SELECT id FROM {} WHERE id=%s LIMIT 2").format(sql.Identifier(definition.schema_name,'users')), (owner,))).fetchall()
                     if schema.get("__owner_identity")
                     else []
                 )
@@ -224,8 +230,8 @@ class PgSnapshot:
                         if col['type'] in ('real','double precision'):
                             function='float4send' if col['type']=='real' else 'float8send'
                             expressions.append(sql.SQL("encode({}({}),'hex') AS {}").format(sql.Identifier(function),column,sql.Identifier('b'+str(index))))
-                    owned=sql.SQL('r.user_id=%s') if scope=='user_id' else sql.SQL('EXISTS(SELECT 1 FROM trade_orders o WHERE o.id=r.order_id AND o.user_id=%s)')
-                    query=sql.SQL('SELECT {} FROM {} r WHERE {} LIMIT 100001').format(sql.SQL(',').join(expressions),sql.Identifier(name),owned)
+                    owned=sql.SQL('r.user_id=%s') if scope=='user_id' else sql.SQL('EXISTS(SELECT 1 FROM {} o WHERE o.id=r.order_id AND o.user_id=%s)').format(sql.Identifier(definition.schema_name,'trade_orders'))
+                    query=sql.SQL('SELECT {} FROM {} r WHERE {} LIMIT 100001').format(sql.SQL(',').join(expressions),sql.Identifier(definition.schema_name,name),owned)
                     exported=[]
                     async with conn.cursor(name="alcor_source_" + uuid4().hex) as cursor:
                         cursor.itersize=4

@@ -49,3 +49,35 @@ async def test_trial_import_rejects_missing_keys_wrong_target_and_ambiguous_user
         with pytest.raises(ValueError):await import_trial_snapshot(db,changed,source_key=key,expected_database=target)
     async with db.connection() as conn:
         assert (await (await conn.execute('SELECT count(*) AS n FROM users')).fetchone())['n']==0
+
+
+async def test_trial_import_preserves_original_avatar_bytes_outside_small_inline_limit(db,settings,tmp_path):
+    import io
+    import os
+    from PIL import Image
+    from alcor_api.profile_media import ProfileMedia
+    data,_=snapshot()
+    image=Image.frombytes('RGB',(160,160),os.urandom(160*160*3))
+    output=io.BytesIO();image.save(output,format='PNG');raw=output.getvalue()
+    assert len(raw)>49152
+    data['users'][0].update(avatar='/uploads/avatar/source.png',avatar_original_type='image/png',avatar_original_base64=base64.b64encode(raw).decode())
+    settings.file_root=tmp_path/'files'
+    name=conninfo_to_dict(settings.database_url.get_secret_value())['dbname']
+    await import_trial_snapshot(db,data,source_key=b'SyntheticIdentityKey9',expected_database=name)
+    async with db.connection() as conn:
+        profile=await(await conn.execute('SELECT avatar,avatar_object_id FROM user_profiles')).fetchone()
+        assert profile['avatar'] is None and profile['avatar_object_id']
+        copied,kind=await ProfileMedia(settings).read(conn,'source-user-001',profile['avatar_object_id'])
+        assert copied==raw and kind=='image/png'
+    assert (await import_trial_snapshot(db,data,source_key=b'SyntheticIdentityKey9',expected_database=name))['already_imported']
+    assert len(list((settings.file_root/'profile-media').iterdir()))==1
+
+
+async def test_trial_import_never_discards_avatar_or_accepts_ambiguous_original(db,settings):
+    data,_=snapshot();name=conninfo_to_dict(settings.database_url.get_secret_value())['dbname']
+    data['users'][0].update(avatar='/uploads/avatar/source.gif',avatar_original_type='image/gif',avatar_original_base64=base64.b64encode(b'GIF89aOriginalSource').decode())
+    with pytest.raises(ValueError):await import_trial_snapshot(db,data,source_key=b'SyntheticIdentityKey9',expected_database=name)
+    data['users'][0]['avatar_data']='data:image/png;base64,AAAA'
+    with pytest.raises(ValueError):await import_trial_snapshot(db,data,source_key=b'SyntheticIdentityKey9',expected_database=name)
+    async with db.connection() as conn:
+        assert (await(await conn.execute('SELECT count(*) AS n FROM users')).fetchone())['n']==0

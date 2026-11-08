@@ -21,6 +21,7 @@ const loaders: Record<string, () => Promise<unknown>> = {
   users: () => import("@/components/views/UsersView"),
   library: () => import("@/components/views/AssetLibraryView"),
   cards: () => import("@/components/views/CardLibraryView"),
+  "backup-recovery": () => import("@/components/views/BackupRecoveryView"),
   "quote-pool": () => import("@/components/views/QuotePoolView"),
   global: () => import("@/components/views/GlobalPreviewView"),
   pnl: () => import("@/components/AssetPnlAnalysis")

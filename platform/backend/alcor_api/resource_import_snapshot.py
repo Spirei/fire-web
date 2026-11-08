@@ -43,13 +43,13 @@ MAX_METADATA = 128 * 1024 * 1024
 MAX_ROWS = 200000
 
 
-async def pg_schema(conn, check=None):
+async def pg_schema(conn, check=None,*,schema_name='public'):
     if check:
         check()
     rows = await (
         await conn.execute(
-            "SELECT table_name,column_name,data_type,udt_name,is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name=ANY(%s) ORDER BY table_name,ordinal_position",
-            (list(TABLES),),
+            "SELECT table_name,column_name,data_type,udt_name,is_nullable FROM information_schema.columns WHERE table_schema=%s AND table_name=ANY(%s) ORDER BY table_name,ordinal_position",
+            (schema_name,list(TABLES)),
         )
     ).fetchall()
     return {
@@ -136,15 +136,15 @@ async def capture(definition, resource, owner, consume, after_table=None):
                     raise ResourceSourceError("source_persistent_identity_not_verified")
                 if (
                     schema_digest(
-                        await PgSnapshot().schema(conn, check=lambda: definition.require_access(owner))
+                        await PgSnapshot().schema(conn, check=lambda: definition.require_access(owner),schema_name=definition.schema_name)
                     )
                     != definition.expected_schema_hash
                 ):
                     raise ResourceSourceError("source_identity_schema_changed")
-                found = await (await execute("SELECT id FROM users WHERE id=%s LIMIT 2", (owner,))).fetchall()
+                found = await (await execute(sql.SQL("SELECT id FROM {} WHERE id=%s LIMIT 2").format(sql.Identifier(definition.schema_name,'users')), (owner,))).fetchall()
                 if len(found) != 1:
                     raise ResourceSourceError("source_owner_not_verified")
-                schema = await pg_schema(conn, check=lambda: definition.require_access(owner))
+                schema = await pg_schema(conn, check=lambda: definition.require_access(owner),schema_name=definition.schema_name)
                 check_schema(schema, resource)
                 for table, (_, columns) in TABLES.items():
                     counts[table] = 0
@@ -168,7 +168,7 @@ async def capture(definition, resource, owner, consume, after_table=None):
                     query = sql.SQL(
                         'SELECT {} FROM {} WHERE user_id=%s ORDER BY {}::text COLLATE "C"'
                     ).format(
-                        sql.SQL(",").join(expressions), sql.Identifier(table), sql.Identifier(identifier)
+                        sql.SQL(",").join(expressions), sql.Identifier(definition.schema_name,table), sql.Identifier(identifier)
                     )
                     async with conn.cursor(name="resource_source_" + table) as cursor:
                         cursor.itersize = 4

@@ -27,7 +27,7 @@ def load_registry(settings):
         if (
             set(value) != {"version", "platformInstance", "sources"}
             or type(value["version"]) is not int
-            or value["version"] not in (1, 2)
+            or value["version"] not in (1, 2, 3)
             or UUID(value["platformInstance"]) != settings.instance_id
             or not isinstance(value["sources"], list)
             or not 1 <= len(value["sources"]) <= 8
@@ -49,7 +49,8 @@ def load_registry(settings):
                 "expectedFileIdentity",
                 "expectedDatasetIdentity",
             }
-            allowed = required | ({"migrationWindow"} if value["version"] == 2 else set())
+            if value['version']==3:required=required|{'schemaName'}
+            allowed = required | ({"migrationWindow"} if value["version"] >= 2 else set())
             if set(item) - allowed or not required <= set(item):
                 raise RegistryError()
             if not re.fullmatch('[a-z0-9][a-z0-9_-]{2,63}',item['alias']) or item['alias'] in result or item['kind'] != 'postgres' or not re.fullmatch('[a-f0-9]{64}',item['schemaHash']):raise RegistryError()
@@ -76,6 +77,7 @@ def load_registry(settings):
                 migration_window=parse_window(item.get("migrationWindow")),
                 window_registry_path=path,
                 window_platform_instance=settings.instance_id,
+                schema_name=item.get('schemaName','public'),
             )
             result[definition.alias]=definition
         return result

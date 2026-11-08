@@ -13,6 +13,7 @@ export type SystemOverview = {services:SystemService[];task_counts:Record<string
 export type SystemTask = {id:string;request_id:string;kind:string;status:string;created_at:string;attempts:number;result:unknown;error_code:string|null};
 export type WebSession = {user:User;csrf:string;instance_id:string};
 export type WorkspaceInitial = {
+ backupRecovery?:import('@/components/views/BackupRecoveryView').BackupRecoveryInitial;
  logs?:{userLogs:import("./types").SystemLog[];systemLogs:import("./types").SystemLog[]};
  watchGroups?:import("./watchGroupsStore").WatchGroupDto[];
  material?:{key:string;data:MaterialListing};

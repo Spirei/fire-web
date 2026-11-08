@@ -119,6 +119,7 @@ def identity_fields(d):
         d.expected_role,
         d.expected_file_identity,
         d.expected_dataset_identity,
+        d.schema_name,
     )
 
 
