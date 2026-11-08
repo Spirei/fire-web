@@ -10,7 +10,6 @@ type Step = 1 | 2 | 3;
 export default function FirstRunSetup({ requireSetupToken = false }: { requireSetupToken?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
-  const [host, setHost] = useState("当前主机:3000");
   const [setupToken, setSetupToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +20,6 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setHost(window.location.host || "当前主机:3000");
     fetch("/api/settings/public")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -92,13 +90,10 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
         .fr-page { width:min(100% - 48px,1020px); min-height:100dvh; margin:auto; display:flex; flex-direction:column; color:var(--text); background:var(--bg); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif; }
         .fr-top { height:72px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
         .fr-brand { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:650; }
-        .fr-brand img { width:20px; height:20px; filter:invert(1); }
-        .fr-server { display:flex; align-items:center; gap:8px; color:var(--faint); font-size:11px; }
-        .fr-server i { width:6px; height:6px; border-radius:50%; background:var(--green); }
+        .fr-brand svg { width:20px; height:20px; }
         .fr-main { width:min(100%,680px); margin:0 auto; padding:72px 0 80px; flex:1; }
         .fr-kicker { margin:0 0 18px; color:var(--faint); font-size:11px; letter-spacing:.12em; }
         .fr-page h1 { margin:0; font-size:32px; line-height:1.25; letter-spacing:-.04em; font-weight:700; }
-        .fr-lead { margin:12px 0 0; color:var(--muted); font-size:13px; line-height:1.7; }
         .fr-panel { margin-top:42px; border:1px solid var(--line); border-radius:14px; background:var(--panel); overflow:hidden; }
         .fr-panel-head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--line); }
         .fr-panel-head strong { font-size:14px; }
@@ -109,9 +104,6 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
         .fr-page label { display:grid; gap:8px; color:var(--muted); font-size:12px; }
         .fr-page input { width:100%; height:42px; padding:0 12px; border:1px solid var(--line); border-radius:8px; outline:none; color:var(--text); background:var(--panel-2); transition:border-color .18s,box-shadow .18s; }
         .fr-page input::placeholder { color:#5f6b7b; }
-        .fr-page input:focus { border-color:#648bc9; box-shadow:0 0 0 3px #648bc91c; }
-        .fr-hint { display:flex; align-items:center; gap:7px; margin-top:10px; color:var(--faint); font-size:11px; }
-        .fr-hint svg { width:13px; height:13px; flex:none; }
         .fr-error { margin-top:12px; color:#ff8d8d; font-size:12px; }
         .fr-actions { display:flex; justify-content:flex-end; align-items:center; gap:18px; margin-top:28px; }
         .fr-secondary { border:0; color:var(--muted); background:none; cursor:pointer; font-size:12px; }
@@ -126,23 +118,13 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
         .fr-switch.on { background:#34c759; }
         .fr-switch span { position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .3s cubic-bezier(.32,.72,0,1); }
         .fr-switch.on span { transform:translateX(16px); }
-        .fr-info { display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:12px; border:1px solid var(--line); border-radius:14px; background:#101721; }
-        .fr-info-block { padding:18px 20px; }
-        .fr-info-block + .fr-info-block { border-left:1px solid var(--line); }
-        .fr-info-title { display:flex; align-items:center; gap:8px; margin-bottom:9px; font-size:12px; font-weight:650; }
-        .fr-info-title i { width:6px; height:6px; border-radius:50%; background:var(--green); }
-        .fr-info-block p { margin:0; color:var(--faint); font-size:11px; line-height:1.7; }
-        .fr-info-block code { color:#aabbd4; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
-        .fr-foot { display:flex; justify-content:space-between; height:54px; padding-top:18px; border-top:1px solid var(--line); color:var(--faint); font-size:10px; }
         .fr-ready { display:grid; gap:8px; color:var(--muted); font-size:13px; line-height:1.7; }
         @media (max-width:620px) {
           .fr-page { width:min(100% - 28px,520px); }
           .fr-top { height:62px; }
-          .fr-server { font-size:10px; }
           .fr-main { padding:52px 0 60px; }
           .fr-page h1 { font-size:28px; }
-          .fr-fields, .fr-info { grid-template-columns:1fr; }
-          .fr-info-block + .fr-info-block { border-top:1px solid var(--line); border-left:0; }
+          .fr-fields { grid-template-columns:1fr; }
           .fr-actions { justify-content:space-between; }
           .fr-primary { flex:1; justify-content:center; }
         }
@@ -150,21 +132,16 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
       <div className="fr-page">
         <header className="fr-top">
           <div className="fr-brand">
-            <img src="/uploads/asset/icon/fire.svg" alt="" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d="M3 17l5-6 4 3 6-8" />
+              <path d="M15 6h3v3" />
+            </svg>
             <span>Alcor</span>
           </div>
-          <div className="fr-server"><i />服务已启动 · {host}</div>
         </header>
         <main className="fr-main">
           <p className="fr-kicker">首次设置</p>
           <h1>{step === 3 ? "可以开始使用了" : "欢迎使用 Alcor"}</h1>
-          <p className="fr-lead">
-            {step === 1
-              ? "完成管理员设置后，开始记录你的资产与自选股。"
-              : step === 2
-                ? "站点名称会出现在浏览器标签页和首页。这些以后仍可在设置里修改。"
-                : "管理员已就绪。导入数据前，请确认群晖已持久化 data 与 uploads。"}
-          </p>
           <section className="fr-panel" aria-labelledby="setup-title">
             <div className="fr-panel-head">
               <strong id="setup-title">
@@ -197,10 +174,6 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
                     <PasswordInput id="fr-confirm" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="再次输入密码" autoComplete="new-password" />
                   </label>
                 </div>
-                <div className="fr-hint">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
-                  账户信息只保存在当前实例。
-                </div>
                 {error && <p className="fr-error">{error}</p>}
                 <div className="fr-actions">
                   <button className="fr-secondary" type="button" onClick={skipToLogin}>稍后设置</button>
@@ -228,7 +201,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
                 <div className="fr-toggle">
                   <div>
                     <strong style={{ fontSize: 13 }}>允许新用户注册</strong>
-                    <p>关闭后只有管理员能创建账号。可随时在设置里改。</p>
+                    <p>关闭后只有管理员能创建账号。</p>
                   </div>
                   <button
                     type="button"
@@ -254,7 +227,6 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
               <div className="fr-form">
                 <div className="fr-ready">
                   <p>管理员 <strong style={{ color: "var(--text)" }}>{username.trim()}</strong> 已创建。</p>
-                  <p>接下来可以导入持仓、整理自选股，或先在设置里接好行情数据源。</p>
                 </div>
                 <div className="fr-actions">
                   <button className="fr-primary" type="button" onClick={() => router.push("/records")}>
@@ -265,21 +237,7 @@ export default function FirstRunSetup({ requireSetupToken = false }: { requireSe
               </div>
             )}
           </section>
-          <section className="fr-info" aria-label="实例信息">
-            <div className="fr-info-block">
-              <div className="fr-info-title"><i />实例运行正常</div>
-              <p>Alcor Api 已启动，访问地址为 {host}。</p>
-            </div>
-            <div className="fr-info-block">
-              <div className="fr-info-title">数据会被保留</div>
-              <p>群晖 Docker 请确认 <code>data</code> 与 <code>uploads</code> 已挂载。</p>
-            </div>
-          </section>
         </main>
-        <footer className="fr-foot">
-          <span>Alcor · 投资记录与行情</span>
-          <span>首次设置不会修改已有数据</span>
-        </footer>
       </div>
     </>
   );

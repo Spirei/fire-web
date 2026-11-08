@@ -8142,7 +8142,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   date: "2026-11-08",
   summary: "统一启动与发布检查，补齐构建验证",
   software: V0_1_76_ENTRY.software.map(item => ({ ...item, version: "v0.1.77" })),
-  changes: [{ kind: "fix", title: "清理展示台退役残留", desc: "移除无调用的旧展示台审计和限流转发；保留动态页共用的模型服务与历史用量，数据库清理按真实依赖单独核对。" }, { kind: "fix", title: "统一推送前快检", desc: "本地与 CI 共用源码、部署、发布契约、前端、类型及隔离 PG 启动回执检查。快检通过后才启动完整八组平台回归，随后仍保留生产构建与 Linux 镜像内运行用户、主目录可写和启动入口校验；合并后重验、修复必跑原用例、推送跟进到终态。" }, { kind: "fix", title: "发布标题不再显示内部编号", desc: "GitHub 发布列表保留 Build and publish Alcor image 原名称，不再拼接请求 UUID；回执编号移到构建内部步骤，保留旧标题回执兼容和响应丢失后的只读查询，不猜测关联或自动重发。站内构建进度将此步骤显示为登记发布请求。" }, { kind: "fix", title: "修复容器启动入口", desc: "Python 启动脚本更名，避免遮蔽标准库 platform 导致 Linux 的 uuid 导入失败；配置检查、内置后端、Worker 与数据库检查回归使用同一新入口，修复完整检查仍加载旧文件名的遗漏。" }],
+  changes: [{ kind: "fix", title: "首次设置精简提示并修复图标", desc: "移除重复的启动状态、访问地址、挂载与账户存储说明；左上角改用内置品牌矢量图标，不再依赖上传素材，保留必要的表单要求和错误反馈。" }, { kind: "fix", title: "清理展示台退役残留", desc: "移除无调用的旧展示台审计和限流转发；保留动态页共用的模型服务与历史用量，数据库清理按真实依赖单独核对。" }, { kind: "fix", title: "统一推送前快检", desc: "本地与 CI 共用源码、部署、发布契约、前端、类型及隔离 PG 启动回执检查。快检通过后才启动完整八组平台回归，随后仍保留生产构建与 Linux 镜像内运行用户、主目录可写和启动入口校验；合并后重验、修复必跑原用例、推送跟进到终态。" }, { kind: "fix", title: "发布标题不再显示内部编号", desc: "GitHub 发布列表保留 Build and publish Alcor image 原名称，不再拼接请求 UUID；回执编号移到构建内部步骤，保留旧标题回执兼容和响应丢失后的只读查询，不猜测关联或自动重发。站内构建进度将此步骤显示为登记发布请求。" }, { kind: "fix", title: "修复容器启动入口", desc: "Python 启动脚本更名，避免遮蔽标准库 platform 导致 Linux 的 uuid 导入失败；配置检查、内置后端、Worker 与数据库检查回归使用同一新入口，修复完整检查仍加载旧文件名的遗漏。" }],
 };
 
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
