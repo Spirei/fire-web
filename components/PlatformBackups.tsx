@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppModal from "./AppModal";
-import { Capsule, CapsuleLink } from "@/components/Capsule";
+import BackupHistory, { type BackupHistoryItem } from "./BackupHistory";
+import { Capsule } from "@/components/Capsule";
 import { platformRequest as read } from "@/lib/platformRequest";
 import {
   useWorkspaceActive,
@@ -15,16 +16,8 @@ type Task = {
   error_code: string | null;
   result: Record<string, unknown> | null;
 };
-type Backup = {
-  id: string;
-  created_at: string;
-  bytes: number;
-  sha256: string;
-  verified_at: string | null;
-  download_available: boolean;
-};
 type Listing = {
-  items: Backup[];
+  items: BackupHistoryItem[];
   configured: boolean;
   key_fingerprint: string | null;
 };
@@ -273,6 +266,8 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
       {open && (
         <AppModal
           title="联合备份"
+          size="lg"
+          className="backup-management-modal"
           desc="包含所有用户和执行状态；恢复密钥须独立保存。"
           onClose={close}
         >
@@ -292,14 +287,12 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
                 </Capsule>
               ) : (
                 <>
-                  <p className="break-all">
-                    恢复密钥指纹：{data.key_fingerprint}
-                  </p>
+                  <dl className="backup-key-fingerprint"><dt>恢复密钥指纹</dt><dd><code>{data.key_fingerprint}</code></dd></dl>
                   <p>
                     请单独保管配置中备份密钥目录里的
                     backup.key；网页不读取或下载密钥原文。
                   </p>
-                  <label>
+                  <label className="backup-key-confirmation">
                     <input
                       type="checkbox"
                       checked={saved}
@@ -332,51 +325,18 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
               <span>
                 {task ? states[task.status] || task.status : "受理结果待核对"}
               </span>
-              <button
+              <Capsule variant="secondary" size="sm"
                 disabled={busy || !csrf.current}
                 onClick={() => void lookup()}
               >
                 查询原请求
-              </button>
+              </Capsule>
             </div>
           )}
           {task?.result && (
             <p className="mt-3 text-sm">{String(task.result.message || "")}</p>
           )}
-          {!!data?.items.length && (
-            <div className="system-table-wrap mt-4">
-              <table className="system-table">
-                <thead>
-                  <tr>
-                    <th>创建时间</th>
-                    <th>大小</th>
-                    <th>备份</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((b) => (
-                    <tr key={b.id}>
-                      <td>{new Date(b.created_at).toLocaleString()}</td>
-                      <td>{(b.bytes / 1024 / 1024).toFixed(1)} MB</td>
-                      <td>
-                        {b.download_available ? (
-                          <CapsuleLink size="sm" variant="secondary" href={`/api/fire/backups/${b.id}/download`}>
-                            下载加密备份
-                          </CapsuleLink>
-                        ) : (
-                          "已按保留策略清理"
-                        )}
-                        <small className="break-all">SHA-256 {b.sha256}</small>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {data && !data.items.length && (
-            <p className="system-empty">暂无联合备份</p>
-          )}
+          {data && <BackupHistory items={data.items} downloads />}
           {error && (
             <p role="alert" className="system-error">
               {error}

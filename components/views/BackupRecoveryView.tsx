@@ -8,13 +8,14 @@ import PasswordInput from "@/components/PasswordInput";
 import { requestAdminProof } from "@/lib/adminProof";
 import { appConfirm } from "@/lib/appDialog";
 import PlatformBackups from "@/components/PlatformBackups";
+import BackupHistory, { type BackupHistoryItem } from "@/components/BackupHistory";
 import { platformRequest as request, PlatformRequestError } from "@/lib/platformRequest";
 import { useWorkspaceActive, useWorkspaceSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import type { MigrationConnectionData, MigrationConnectionCheck, MigrationSourceConfig,MigrationPreparationTask } from "@/lib/databaseMigration";
 import type { WorkspaceInitial, WebSession } from "@/lib/workspaceInitial";
 
 const empty: MigrationSourceConfig = { host: "", port: 5432, database: "", username: "", schema_name: "public", ssl_mode: "disable" };
-type Listing = { items: { id: string; created_at: string; bytes: number; sha256: string; verified_at: string | null; download_available: boolean }[]; configured: boolean; key_fingerprint: string | null };
+type Listing = { items: BackupHistoryItem[]; configured: boolean; key_fingerprint: string | null };
 type Initial = { identity: WebSession; connections: MigrationConnectionData; backups: Listing; preparations:MigrationPreparationTask[]; preparation?:MigrationPreparationTask };
 export type BackupRecoveryInitial = Initial;
 const validUuid = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
@@ -266,10 +267,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
     {unknown && <div className="mt-4 flex flex-wrap items-center gap-3"><span className="text-ink-2">保存结果待核对</span><Capsule variant="secondary" busy={busy === "receipt"} disabled={!!busy} onClick={() => void resolve()}>查询原回执</Capsule><Capsule variant="secondary" busy={busy==='cancel-save'} disabled={!!busy} onClick={()=>void cancelSave()}>取消未完成请求</Capsule></div>}
     {tab === "backups" ? <div className="mt-6 rounded-3xl border border-edge bg-white p-6">
       <div className="flex flex-wrap items-center justify-between gap-4"><h2 className="text-lg font-semibold text-ink">完整备份</h2><PlatformBackups ownerId={ownerId} buttonOnly onClose={()=>void run('read',signal=>load(signal))}/></div>
-      <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-ink-3"><tr><th className="py-3">创建时间</th><th>大小</th><th>校验状态</th><th>SHA-256</th></tr></thead><tbody>
-        {listing?.items.map(item => <tr key={item.id} className="border-t border-edge"><td className="py-4"><time dateTime={item.created_at}>{item.created_at.slice(0,19).replace('T',' ')} UTC</time></td><td>{(item.bytes / 1048576).toFixed(1)} MB</td><td>{item.verified_at ? "已校验" : "待校验"}</td><td><code title={item.sha256}>{item.sha256.slice(0,12)}</code></td></tr>)}
-        {listing && !listing.items.length && <tr><td colSpan={4} className="py-10 text-center text-ink-3">暂无备份</td></tr>}
-      </tbody></table></div>
+      {listing && <BackupHistory items={listing.items} />}
     </div> : <><div className="migration-connections mt-6" data-active={active && visible}>
       <div className="migration-database-card">
         <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><IconDatabase size={22} /><h2 className="text-lg font-semibold">旧数据库</h2></div>
@@ -277,14 +275,14 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
         </div>
         {editing ? <form className="mt-6" onSubmit={event => { event.preventDefault(); void saveSource(); }}>
           <div className="migration-connection-fields">
-            {([['host','地址'],['port','端口'],['database','数据库'],['schema_name','Schema'],['username','账号']] as const).map(([key,label]) => <label key={key} className="grid gap-2 text-sm text-ink-3">{label}<input required disabled={disabled} autoComplete="off" type={key === 'port' ? 'number' : 'text'} min={key === 'port' ? 1 : undefined} max={key === 'port' ? 65535 : undefined} maxLength={key === 'port' ? undefined : key === 'schema_name' ? 63 : key==='host'?253:128} value={key==='port'?portDraft:source[key]} onChange={event => {if(key==='port')setPortDraft(event.target.value);setSource(value => ({ ...value, [key]: key === 'port' ? Number(event.target.value) : event.target.value }));}} /></label>)}
+            {([['host','地址'],['port','端口'],['database','数据库'],['schema_name','Schema'],['username','账号']] as const).map(([key,label]) => <label key={key} data-field={key} className="grid gap-2 text-sm text-ink-3">{label}<input required disabled={disabled} autoComplete="off" type={key === 'port' ? 'number' : 'text'} min={key === 'port' ? 1 : undefined} max={key === 'port' ? 65535 : undefined} maxLength={key === 'port' ? undefined : key === 'schema_name' ? 63 : key==='host'?253:128} value={key==='port'?portDraft:source[key]} onChange={event => {if(key==='port')setPortDraft(event.target.value);setSource(value => ({ ...value, [key]: key === 'port' ? Number(event.target.value) : event.target.value }));}} /></label>)}
             <label className="grid gap-2 text-sm text-ink-3">{data?.source?.password_configured ? "密码（已配置）" : "密码"}<PasswordInput value={password} maxLength={1024} autoComplete="new-password" disabled={disabled || clearPassword} onChange={event => setPassword(event.target.value)} /></label>
             <label className="grid gap-2 text-sm text-ink-3">连接加密<AppSelect value={source.ssl_mode ?? "disable"} disabled={disabled} ariaLabel="旧库连接加密" options={[{ value:'disable',label:'不启用' },{ value:'require',label:'TLS' },{ value:'verify-ca',label:'TLS · 验证证书' },{ value:'verify-full',label:'TLS · 验证证书与主机' }]} onChange={value => setSource(current => ({ ...current, ssl_mode: value as MigrationSourceConfig['ssl_mode'] }))} /></label>
           </div>
           <label className="mt-4 flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" checked={clearPassword} disabled={disabled} onChange={event => { setClearPassword(event.target.checked); setPassword(""); }} />不使用密码</label>
           <div className="mt-4 flex flex-wrap justify-end gap-3">{data?.source && <Capsule variant="secondary" disabled={disabled} onClick={() => { setEditing(false); setPassword(""); }}>取消</Capsule>}<Capsule type="submit" busy={busy === "save"} disabled={disabled}>保存连接</Capsule></div>
         </form> : <><ConnectionFields config={data?.source?.config} passwordConfigured={data?.source?.password_configured} />
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">{status('source',sourceCheck,sourceReady)}<Capsule variant="secondary" busy={busy === "source"} disabled={disabled || !data?.source} onClick={() => void testSource()}>测试连接</Capsule></div>
+          <div className="migration-connection-footer flex flex-wrap items-center justify-between gap-3">{status('source',sourceCheck,sourceReady)}<Capsule variant="secondary" busy={busy === "source"} disabled={disabled || !data?.source} onClick={() => void testSource()}>测试连接</Capsule></div>
         </>}
       </div>
       <div className="migration-connection-flow" data-state={checking ? "checking" : sourceReady && targetReady ? "connected" : "idle"} aria-label={checking ? "正在检查连接" : sourceReady && targetReady ? "两边连接检查通过" : "等待连接检查"}>
@@ -292,7 +290,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       </div>
       <div className="migration-database-card"><div className="flex items-center gap-3"><IconDatabase size={22} /><h2 className="text-lg font-semibold">新数据库</h2></div>
         <ConnectionFields config={data?.target.config} passwordConfigured={data?.target.password_configured} />
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">{status('target',data?.checks.target,targetReady)}<Capsule variant="secondary" busy={busy === "target"} disabled={disabled || !data} onClick={() => void testTarget()}>测试连接</Capsule></div>
+        <div className="migration-connection-footer flex flex-wrap items-center justify-between gap-3">{status('target',data?.checks.target,targetReady)}<Capsule variant="secondary" busy={busy === "target"} disabled={disabled || !data} onClick={() => void testTarget()}>测试连接</Capsule></div>
       </div>
     </div>
       <div className="mt-4 flex justify-end"><Capsule disabled={disabled||!sourceReady||!targetReady||!sourceCheck?.persistent_identity_verified||!data?.checks.target?.persistent_identity_verified} busy={busy==='prepare'} onClick={()=>void prepare()}>准备迁移</Capsule></div>
@@ -328,5 +326,5 @@ function PreparationProgress({task,requestId,moving,busy,onCancel}:{task:Migrati
 }
 
 function ConnectionFields({ config, passwordConfigured }: { config?: MigrationSourceConfig; passwordConfigured?: boolean }) {
-  return <dl className="migration-connection-fields mt-6">{([['地址',config?.host],['端口',config?.port],['数据库',config?.database],['Schema',config?.schema_name],['账号',config?.username],['密码',passwordConfigured ? '已配置' : '未配置']] as const).map(([label,value]) => <div key={label} className="min-w-0"><dt className="text-sm text-ink-3">{label}</dt><dd className="mt-2 break-words text-ink">{value ?? '—'}</dd></div>)}</dl>;
+  return <dl className="migration-connection-summary mt-6">{([['地址',config?.host],['端口',config?.port],['数据库',config?.database],['Schema',config?.schema_name],['账号',config?.username],['密码',passwordConfigured ? '已配置' : '未配置']] as const).map(([label,value]) => <div key={label} data-field={label === "地址" ? "host" : undefined} className="min-w-0"><dt className="text-sm text-ink-3">{label}</dt><dd className="mt-2 break-words text-ink">{value ?? '—'}</dd></div>)}</dl>;
 }

@@ -7135,7 +7135,39 @@ html:root[data-palette] body .app-modal-form .capsule-control { min-height:34px;
 
 .migration-connections { display:grid; grid-template-columns:minmax(0,1fr) 56px minmax(0,1fr); align-items:stretch; }
 .migration-database-card { min-width:0; padding:24px; border:1px solid rgb(var(--site-edge)); border-radius:24px; background:rgb(var(--site-surface)); color:rgb(var(--site-ink)); }
-.migration-connection-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px 20px; }
+.migration-connection-fields, .migration-connection-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.migration-connection-fields [data-field="host"], .migration-connection-summary [data-field="host"] { grid-column:1/-1; }
+.migration-connection-summary dt { line-height:1.5; }
+.migration-connection-summary dd { line-height:1.6; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.migration-connection-footer { margin-top:24px; padding-top:20px; border-top:1px solid rgb(var(--site-edge)); }
+.backup-history-wrap { container-type:inline-size; margin-top:24px; min-width:0; }
+.backup-history { width:100%; table-layout:fixed; text-align:left; font-size:14px; line-height:1.5; color:rgb(var(--site-ink)); }
+.backup-history th { padding:0 16px 14px; color:rgb(var(--site-muted)); font-size:12px; font-weight:500; }
+.backup-history td { padding:20px 16px; border-top:1px solid rgb(var(--site-edge)); vertical-align:middle; overflow-wrap:anywhere; }
+.backup-history th:first-child, .backup-history td:first-child { padding-left:0; }
+.backup-history th:last-child, .backup-history td:last-child { padding-right:0; }
+.backup-history-time { display:grid; gap:4px; font-variant-numeric:tabular-nums; }
+.backup-history-time small, .backup-history-size small { color:rgb(var(--site-muted)); font-size:12px; }
+.backup-history-size { font-variant-numeric:tabular-nums; }
+.backup-history-hash { display:block; color:rgb(var(--site-muted)); font-size:11px; line-height:1.7; overflow-wrap:anywhere; }
+.backup-history-empty { margin:0; padding:40px 0; text-align:center; color:rgb(var(--site-muted)); font-size:14px; }
+.backup-key-fingerprint { display:grid; gap:8px; line-height:1.6; }
+.backup-key-fingerprint dt { color:rgb(var(--site-muted)); font-size:12px; }
+.backup-key-fingerprint dd { margin:0; overflow-wrap:anywhere; font-size:12px; }
+.backup-key-confirmation { display:flex; align-items:flex-start; gap:10px; line-height:1.6; }
+.backup-key-confirmation input { flex:none; margin-top:4px; }
+.backup-management-modal .system-receipt { gap:12px; line-height:1.6; }
+.backup-management-modal .system-receipt code { overflow-wrap:anywhere; min-width:0; }
+.dark .backup-history { color:rgb(var(--site-ink)); }
+.dark .backup-history td, .dark .migration-connection-footer { border-color:rgb(var(--site-edge)); }
+@container(max-width:640px) {
+  .backup-history, .backup-history tbody, .backup-history tr { display:block; }
+  .backup-history thead { display:none; }
+  .backup-history tr { padding:18px 0; border-top:1px solid rgb(var(--site-edge)); }
+  .backup-history td, .backup-history td:first-child, .backup-history td:last-child { display:grid; grid-template-columns:76px minmax(0,1fr); align-items:start; gap:16px; padding:7px 0; border:0; }
+  .backup-history td > a { justify-self:start; }
+  .backup-history td::before { content:attr(data-label); color:rgb(var(--site-muted)); font-size:12px; line-height:21px; }
+}
 .migration-connection-fields input:not([type="checkbox"]), .migration-connection-fields button[aria-haspopup] { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid rgb(var(--site-edge)); border-radius:12px; background:rgb(var(--site-bg)); color:rgb(var(--site-ink)); }
 .migration-connection-fields .password-input { min-width:0; width:100%; }
 .migration-connection-fields .password-input-control { padding-right:46px!important; }
@@ -7165,7 +7197,11 @@ html:root[data-palette] body .app-modal-form .capsule-control { min-height:34px;
   .migration-connection-flow[data-state="checking"] .migration-flow-line::after { width:2px; height:35%; animation-name:migration-connection-check-vertical; }
 }
 @keyframes migration-connection-check-vertical { from { transform:translateY(-100%); } to { transform:translateY(390%); } }
-@media(max-width:420px) { .migration-connection-fields { column-gap:14px; } }
+@media(max-width:420px) {
+  .migration-connection-fields { grid-template-columns:minmax(0,1fr); gap:20px; }
+  .migration-connection-summary { gap:20px 16px; }
+  .backup-recovery-view > .rounded-3xl { padding:20px; }
+}
 @media(prefers-reduced-motion:reduce) {
   .migration-connection-flow[data-state="checking"] .migration-flow-line::after { animation:none; width:100%; height:100%; }
   .migration-flow-line, .migration-connection-flow > svg { transition:none; }
