@@ -1,0 +1,20 @@
+/* Deployment is a standalone surface; never recolor the workspace. */
+.deploy-status-page { --deploy-bg:#f1f4f7; --deploy-surface:#fff; --deploy-text:#253348; --deploy-muted:#617086; --deploy-edge:#d7dfe8; background:var(--deploy-bg); color:var(--deploy-text); }
+.dark .deploy-status-page { --deploy-bg:#24303e; --deploy-surface:#1b222c; --deploy-text:#9fadc5; --deploy-muted:#8d9bad; --deploy-edge:#303e4f; background:var(--deploy-bg); color:var(--deploy-text); }
+html:root[data-palette] .deploy-status-page section, .deploy-status-page section { background:var(--deploy-surface); border-color:var(--deploy-edge); box-shadow:none; }
+.deploy-status-page :is(.text-slate-400,.text-slate-500,.text-slate-600) { color:var(--deploy-muted); }
+.deploy-status-page :is(h1,h2,.text-slate-800,.text-slate-900) { color:var(--deploy-text); }
+.dark .deploy-status-page :is(.dark\:text-slate-100,.dark\:text-slate-200,.dark\:text-slate-300) { color:var(--deploy-text); }
+.deploy-status-page :is(.border-slate-200,.border-slate-300,.dark\:border-slate-700,.dark\:border-slate-800) { border-color:var(--deploy-edge); }
+.dark .deploy-status-page :is(a,button):not(.deploy-publish) { box-shadow:none; }
+.dark .deploy-status-page :is(a,button):not(.deploy-publish):hover { background-color:#263441; }
+.deploy-status-page .deploy-publish { background:#e3f1f0; border-color:#c0d8d5; color:#17685e; box-shadow:none; }
+.deploy-status-page .deploy-publish:hover { background:#d3e9e6; border-color:#9dc5c0; }
+.dark .deploy-status-page .deploy-publish { background:#061d24; border-color:#18333d; color:#b4ced4; box-shadow:none; }
+.dark .deploy-status-page .deploy-publish:hover { background:#0c3038; border-color:#28505a; }
+.deploy-status-page .deploy-publish:disabled { opacity:1; }
+.deploy-status-page .deploy-observation-error { color:#b45309; }
+.dark .deploy-status-page .deploy-observation-error { color:#e9b75c; }
+.deploy-status-page .deployment-build-stages details { border-color:var(--deploy-edge); }
+.dark .deploy-status-page .deployment-build-stages details { background:#17212c; }
+.dark .deploy-status-page .deployment-build-stages details:has(.text-amber-500) { border-color:#6e5c33; background:#2c2c28; }

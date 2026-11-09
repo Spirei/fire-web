@@ -137,6 +137,7 @@ def mount_legacy_deployment(app, settings, db):
             if not build
             else {
                 "id": build["id"],
+                "event": build["event"],
                 "status": build["status"],
                 "conclusion": build["conclusion"],
                 "sha": build["sha"][:7],
@@ -187,7 +188,7 @@ def mount_legacy_deployment(app, settings, db):
             "image": {
                 "latestSuccessfulSha": release_sha,
                 "latestSuccessfulShortSha": release_sha[:7] if release_sha else None,
-                "latestSuccessfulAt": None,
+                "latestSuccessfulAt": state.get("release_published_at"),
                 "latestSuccessfulUrl": None,
                 "matchesMain": release_sha == source_sha if release_sha and source_sha else None,
             },
@@ -202,6 +203,8 @@ def mount_legacy_deployment(app, settings, db):
             "configured": state["configured"],
             "sourceError": state["source_error"],
             "releaseError": state["release_error"],
+            "check": state.get("check"),
+            "buildError": state.get("build_error") or state.get("jobs_error"),
         }
 
     @app.get(PREFIX + "/config")

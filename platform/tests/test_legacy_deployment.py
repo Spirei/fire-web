@@ -445,6 +445,6 @@ async def test_configured_status_maps_source_jobs_and_bounded_history_without_fa
     assert value["runtime"]["matchesImage"] is None and value["runtime"]["sha"] == "unknown"
     assert value["imageProgress"]["jobs"][0]["steps"][0]["startedAt"] == when
     assert value["heatmap"] == {"2026-01-03": 1} and value["heatmapComplete"] is True
-    assert "/actions/runs?branch=main&per_page=100&page=1" in seen
+    assert "/actions/runs?branch=main&per_page=20&page=1" in seen
     async with db.connection() as conn, conn.transaction():
         assert await business_hashes(conn) == before

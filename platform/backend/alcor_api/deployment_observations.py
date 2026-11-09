@@ -3,7 +3,9 @@ Never interpret a missing response as a successful check, zero history or a depl
 """
 
 import asyncio
+import hashlib
 import re
+import time
 from datetime import datetime
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -30,7 +32,7 @@ STAGE_ORDER = {
 }
 
 
-async def publication_results(settings, runs):
+async def publication_results(settings, runs, *, cache=None):
     """Historical job observations only; never a deployable-release proof."""
     gate = asyncio.Semaphore(5)
 
@@ -43,6 +45,14 @@ async def publication_results(settings, runs):
             return "pending"
         if run["conclusion"] != "success":
             return "failed"
+        token = getattr(settings, "deployment_github_token", None)
+        key = (getattr(settings, "deployment_repository", ""),
+               str(getattr(settings, "deployment_config_revision", "")),
+               hashlib.sha256(token.get_secret_value().encode()).hexdigest() if token else "",
+               run["id"], run["sha"], run["updated_at"])
+        cached = cache.get(key) if cache is not None else None
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
         try:
             async with gate:
                 raw = await asyncio.to_thread(
@@ -53,9 +63,16 @@ async def publication_results(settings, runs):
                 return "unknown"
             publish = [j for j in jobs if j.get("name") == "Publish linux/amd64 image"]
             if len(publish) == 1 and publish[0].get("status") == "completed":
-                return {"success": "published", "skipped": "reused"}.get(
+                result = {"success": "published", "skipped": "reused"}.get(
                     publish[0].get("conclusion"), "unknown"
                 )
+                if cache is not None and result in {"published", "reused"}:
+                    # Only completed historical evidence is cached. Active runs,
+                    # source checks and the current image progress are always live.
+                    if len(cache) >= 256:
+                        cache.pop(next(iter(cache)))
+                    cache[key] = (time.monotonic() + 60, result)
+                return result
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             pass
         return "unknown"
@@ -123,7 +140,7 @@ async def observation(settings):
             checks = await asyncio.to_thread(
                 github_json,
                 settings,
-                "/actions/workflows/" + getattr(settings, 'deployment_checks_workflow', 'checks.yml') + "/runs?branch=main&per_page=1&head_sha=" + sha,
+                "/actions/workflows/" + getattr(settings, 'deployment_checks_workflow', 'docker-publish.yml') + "/runs?branch=main&event=push&per_page=1&head_sha=" + sha,
             )
             runs = checks.get("workflow_runs", [])
             if runs:
@@ -135,19 +152,25 @@ async def observation(settings):
 
     async def build():
         try:
-            raw = await asyncio.to_thread(
-                github_json, settings, "/actions/workflows/docker-publish.yml/runs?per_page=1&branch=main"
-            )
-            runs = raw.get("workflow_runs", [])
+            # Push runs perform checks only. Keep the last actual publication
+            # visible even when a newer main revision is being checked.
+            pages = await asyncio.gather(*(
+                asyncio.to_thread(github_json, settings,
+                    f"/actions/workflows/docker-publish.yml/runs?per_page=1&branch=main&event={event}")
+                for event in ("workflow_dispatch", "schedule")
+            ))
+            runs = [r for page in pages for r in page["workflow_runs"]
+                    if r.get("event") in {"workflow_dispatch", "schedule"}
+                    and r.get("path") == ".github/workflows/docker-publish.yml"]
             if not runs:
                 return
-            latest = run_view(settings, runs[0])
+            latest = run_view(settings, max(runs, key=lambda r: r["id"]))
             result["build"] = {**latest, "head_sha": latest["sha"], "created_at": latest["started_at"]}
             try:
                 raw_jobs = await asyncio.to_thread(
                     github_json, settings, f"/actions/runs/{latest['id']}/jobs?per_page=20"
                 )
-                if not isinstance(raw_jobs.get("jobs"), list):
+                if not isinstance(raw_jobs.get("jobs"), list) or raw_jobs.get("total_count", len(raw_jobs.get("jobs") or [])) > len(raw_jobs.get("jobs") or []):
                     raise TypeError("jobs missing")
                 result["jobs"] = [
                     {
@@ -214,11 +237,28 @@ async def history_page(request, who, *, page=1, per_page=5):
             "repository": settings.deployment_repository,
         }
     try:
+        # 100 GitHub run records can exceed the fixed 1 MiB response budget.
+        # Preserve the requested history window using bounded provider pages.
+        size = min(per_page, 20)
+        start = (page - 1) * per_page
+        first_page = start // size + 1
         raw = await asyncio.to_thread(
-            github_json, settings, f"/actions/runs?branch=main&per_page={per_page}&page={page}"
+            github_json, settings, f"/actions/runs?branch=main&per_page={size}&page={first_page}"
         )
-        items = [run_view(settings, r) for r in raw["workflow_runs"]]
-        outcomes = await publication_results(settings, items)
+        records = raw["workflow_runs"]
+        offset = start % size
+        if len(records) == size and offset + per_page > size:
+            remaining = min(offset + per_page - size, max(0, raw.get("total_count", start + per_page) - (first_page - 1) * size - size))
+            pages = await asyncio.gather(*(
+                asyncio.to_thread(github_json, settings,
+                    f"/actions/runs?branch=main&per_page={size}&page={number}")
+                for number in range(first_page + 1, first_page + 1 + (remaining + size - 1) // size)
+            ))
+            records = records + [run for result in pages for run in result["workflow_runs"]]
+        items = list({r["id"]: run_view(settings, r) for r in records[offset:offset + per_page]}.values())
+        if not hasattr(request.app.state, "deployment_publications"):
+            request.app.state.deployment_publications = {}
+        outcomes = await publication_results(settings, items, cache=request.app.state.deployment_publications)
         for item in items:
             item["publication"] = outcomes[item["id"]]
         return {

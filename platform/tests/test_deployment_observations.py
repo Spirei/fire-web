@@ -199,3 +199,86 @@ async def test_package_metadata_failure_does_not_hide_new_source_commit(app, mon
     assert result["source_error"] is None
     assert result["check"] is None and result["build"] is None
     assert result["package_url"] == "https://github.com/synthetic?tab=packages"
+
+
+async def test_newer_push_check_cannot_replace_last_image_publication(app, monkeypatch):
+    setup(app)
+    published = run(123)
+    checked = run(130, sha="b" * 40) | {"event": "push", "status": "in_progress", "conclusion": None}
+    paths = []
+    def github(settings, path):
+        paths.append(path)
+        if path == "":
+            return {"owner": {"login": "synthetic", "type": "User"}}
+        if path == "/commits/main":
+            return {"sha": checked["head_sha"]}
+        if "head_sha=" in path:
+            assert "event=push" in path
+            return {"workflow_runs": [checked]}
+        if "event=workflow_dispatch" in path:
+            return {"workflow_runs": [published]}
+        if "event=schedule" in path:
+            return {"workflow_runs": []}
+        if "/jobs?" in path:
+            assert "/runs/123/" in path
+            return {"jobs": []}
+        raise AssertionError(path)
+    monkeypatch.setattr(observations, "github_json", github)
+    result = await observations.observation(app.state.settings)
+    assert result["check"]["id"] == 130 and result["check"]["status"] == "in_progress"
+    assert result["build"]["id"] == 123 and result["build"]["status"] == "completed"
+    assert result["build"]["event"] == "workflow_dispatch"
+    assert not any("per_page=1&branch=main" in p and "event=" not in p for p in paths)
+
+
+async def test_history_keeps_100_records_in_provider_pages_below_response_budget(client, admin, app, monkeypatch):
+    import json
+    from urllib.parse import urlsplit, parse_qs
+    setup(app)
+    records = [run(300 - i) | {"event": "push", "provider_metadata": "x" * 12000} for i in range(100)]
+    assert len(json.dumps({"workflow_runs": records}).encode()) > 1048576
+    paths = []
+    def github(settings, path):
+        paths.append(path)
+        params = parse_qs(urlsplit(path).query)
+        size, page = int(params["per_page"][0]), int(params["page"][0])
+        result = {"workflow_runs": records[(page-1)*size:page*size], "total_count": 100}
+        assert len(json.dumps(result).encode()) < 1048576
+        return result
+    monkeypatch.setattr(observations, "github_json", github)
+    # Legacy page needs 100 records; the public history route still supports 5.
+    from types import SimpleNamespace
+    request = SimpleNamespace(app=app)
+    result = await observations.history_page(request, None, per_page=100)
+    assert len(result["items"]) == 100 and result["total"] == 100
+    assert len(set(item["id"] for item in result["items"])) == 100
+    assert len(paths) == 5 and all("per_page=20" in p for p in paths)
+    result = await observations.history_page(request, None, page=2, per_page=25)
+    assert [item["id"] for item in result["items"]] == [item["id"] for item in records[25:50]]
+
+
+async def test_only_completed_history_evidence_is_reused_and_scope_changes_invalidate(monkeypatch):
+    from types import SimpleNamespace
+    settings = SimpleNamespace(deployment_repository="synthetic/repo", deployment_config_revision="one", deployment_github_token=SecretStr("synthetic-only"))
+    value = observations.run_view(settings, run())
+    calls = []
+    def github(*args):
+        calls.append(args[-1])
+        return {"jobs": [{"name": "Publish linux/amd64 image", "status": "completed", "conclusion": "success"}]}
+    monkeypatch.setattr(observations, "github_json", github)
+    cache = {}
+    for _ in range(2):
+        assert await observations.publication_results(settings, [value], cache=cache) == {123: "published"}
+    assert len(calls) == 1
+    value["updated_at"] = "2026-11-09T01:00:00Z"
+    await observations.publication_results(settings, [value], cache=cache)
+    assert len(calls) == 2
+    settings.deployment_github_token = SecretStr("rotated-synthetic")
+    await observations.publication_results(settings, [value], cache=cache)
+    assert len(calls) == 3
+    settings.deployment_config_revision = "two"
+    await observations.publication_results(settings, [value], cache=cache)
+    assert len(calls) == 4
+    value["status"] = "in_progress"
+    assert await observations.publication_results(settings, [value], cache=cache) == {123: "pending"}
+    assert len(calls) == 4

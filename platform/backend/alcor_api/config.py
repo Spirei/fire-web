@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     mail_tls: Literal["starttls", "tls"] = "starttls"
     mail_timeout: float = Field(default=10, ge=1, le=30)
     deployment_config_revision: UUID | None = None
-    deployment_checks_workflow: str = Field(default='checks.yml', pattern=r'^[A-Za-z0-9_.-]+\.yml$')
+    deployment_checks_workflow: str = Field(default='docker-publish.yml', pattern=r'^[A-Za-z0-9_.-]+\.yml$')
     deployment_repository: str = Field(default='', pattern=r'^(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?$')
     deployment_image: str = Field(default='', pattern=r'^(?:ghcr\.io/[a-z0-9._-]+/[a-z0-9._-]+)?$')
     deployment_github_token: SecretStr | None = None

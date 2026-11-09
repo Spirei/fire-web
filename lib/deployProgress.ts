@@ -17,6 +17,7 @@ export type BuildJob = {
   steps: BuildStep[];
 };
 export type ImageProgress = {
+  event?: string;
   id: number;
   status: string;
   conclusion: string | null;
