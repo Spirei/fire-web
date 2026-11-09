@@ -18,6 +18,7 @@ services:
       FIRE_CONNECTION_SECRET_DIR: /private/state/connection-secrets
       FIRE_FILE_ROOT: /private/files
       FIRE_ASSET_ROOT: /private/assets
+      FIRE_WORKER: ${FIRE_WORKER:-on}
       FIRE_BACKUP_DIR: /private/backups
       FIRE_BACKUP_SECRET_DIR: /private/backup-key
       FIRE_DEPLOYMENT_UPDATER_URL: http://fire-updater:8080/v1/update

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppModal from "./AppModal";
 import BackupHistory, { type BackupHistoryItem } from "./BackupHistory";
+import { requestAdminProof } from "@/lib/adminProof";
 import { Capsule } from "@/components/Capsule";
 import { platformRequest as read } from "@/lib/platformRequest";
 import {
@@ -20,6 +21,8 @@ type Listing = {
   items: BackupHistoryItem[];
   configured: boolean;
   key_fingerprint: string | null;
+  key_error?: string | null;
+  worker_available?: boolean;
 };
 const states: Record<string, string> = {
   queued: "等待执行",
@@ -37,6 +40,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [saved, setSaved] = useState(false),
+    [verify, setVerify] = useState(false),
     [requestId, setRequestId] = useState(""),
     [task, setTask] = useState<Task | null>(null);
   const operation = useRef(0);
@@ -50,6 +54,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     setTask(null);
     setRequestId("");
     setSaved(false);
+    setVerify(false);
     csrf.current = "";
   }, []);
   const load = useCallback(
@@ -152,16 +157,6 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     };
   }, [open, active, requestId, busy, load, reset]);
   useEffect(() => {
-    if (!open) return;
-    const hidden = () => {
-      if (document.hidden) {
-        close();
-      }
-    };
-    document.addEventListener("visibilitychange", hidden);
-    return () => document.removeEventListener("visibilitychange", hidden);
-  }, [open]);
-  useEffect(() => {
     if (!active) {
       close();
     }
@@ -177,7 +172,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
       if (ticket !== operation.current) return;
       await load();
     } catch (e) {
-      if (ticket === operation.current) setError((e as Error).message);
+      if (ticket === operation.current) { setError((e as Error).message); setVerify(!!(e as {reauthentication?: boolean}).reauthentication); }
     } finally {
       if (ticket === operation.current) setBusy(false);
     }
@@ -216,6 +211,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
             window.history.replaceState(null, "", u);
           }
           setError((e as Error).message);
+          setVerify(!!(e as {reauthentication?: boolean}).reauthentication);
         } else
           setError("受理结果待核对，请查询原请求编号。" + (e as Error).message);
       }
@@ -237,7 +233,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
       setTask(current);
       await load();
     } catch (e) {
-      if (ticket === operation.current) setError((e as Error).message);
+      if (ticket === operation.current) { setError((e as Error).message); setVerify(!!(e as {reauthentication?: boolean}).reauthentication); }
     } finally {
       if (ticket === operation.current) setBusy(false);
     }
@@ -255,12 +251,12 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
           <b>联合备份</b>
           <span>完整 PG、登记原件与加密密钥 · 独立 Worker</span>
         </div>}
-        <Capsule variant="ghost" size="sm"
+        <Capsule variant={buttonOnly ? "primary" : "secondary"} size="sm"
           type="button"
           className=""
           onClick={() => setOpen(true)}
         >
-          管理备份
+          {buttonOnly ? "创建备份" : "管理备份"}
         </Capsule>
       </div>
       {open && (
@@ -275,8 +271,10 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
           {data && !data.configured && (
             <p>请先配置私有备份目录和独立恢复密钥目录。</p>
           )}
-          {data?.configured && (
+          {data?.key_error && <p role="alert" className="system-error">{data.key_error}</p>}
+          {data?.configured && !data.key_error && (
             <div className="flex flex-col gap-4 text-sm">
+              {data.worker_available === false && <div className="flex flex-wrap items-center justify-between gap-3"><span role="status">后台任务进程未连接，暂时无法执行备份。</span><Capsule variant="secondary" size="sm" busy={busy} onClick={() => void load()}>重新检查</Capsule></div>}
               {!data.key_fingerprint ? (
                 <Capsule variant="secondary"
                   className="px-4 py-3"
@@ -305,6 +303,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
                     disabled={
                       busy ||
                       !saved ||
+                      data.worker_available === false ||
                       (!!requestId && !task) ||
                       (!!task &&
                         ["queued", "running", "cancel_requested"].includes(
@@ -337,6 +336,18 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
             <p className="mt-3 text-sm">{String(task.result.message || "")}</p>
           )}
           {data && <BackupHistory items={data.items} downloads />}
+          {verify && <div className="mt-4"><Capsule variant="secondary" busy={busy} onClick={async () => {
+            if (busy) return;
+            const ticket = ++operation.current;
+            setBusy(true);
+            try {
+              const proof = await requestAdminProof();
+              if (!proof || ticket !== operation.current) return;
+              await read("/api/fire/connections/reauthenticate", {method:"POST", headers:{"content-type":"application/json","x-csrf-token":csrf.current}, body:JSON.stringify(proof)});
+              if (ticket === operation.current) { setVerify(false); setError(""); await load(); }
+            } catch (e) { if (ticket === operation.current) setError((e as Error).message); }
+            finally { if (ticket === operation.current) setBusy(false); }
+          }}>验证身份</Capsule></div>}
           {error && (
             <p role="alert" className="system-error">
               {error}

@@ -111,6 +111,8 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
             from .asset_library_access import assert_material_read
             await assert_material_read(request, db)
             kind = first(request, "type")
+            if kind == "icon":
+                raise HTTPException(400, "素材分类无效")
             if kind not in (*TYPES, "card") or (version is not None and kind not in V1_TYPES):
                 kind = None
             if web and kind == "stock" and first(request, "marketAvailability") == "1":
@@ -192,7 +194,6 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
                                 "metal",
                                 "broker",
                                 "group",
-                                "icon",
                                 "card",
                             )
                         )
@@ -201,7 +202,7 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
                                 400,
                                 "type 必须为 stock / market / flag / crypto / metal"
                                 if version
-                                else "type 必须为 stock / market / flag / broker / crypto / metal / group / icon / card",
+                                else "type 必须为 stock / market / flag / broker / crypto / metal / group / card",
                             )
                         kind = raw["type"]
                         market = "GROUP" if kind == "broker" else trim(js_text(raw.get("market")))
@@ -209,7 +210,7 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
                             raise HTTPException(400, "缺少市场标识")
                         if kind == "stock" and not trim(js_text(raw.get("code"))):
                             raise HTTPException(400, "股票图标需要股票代码")
-                        if kind in ("flag", "crypto", "metal", "broker", "icon") and not trim(
+                        if kind in ("flag", "crypto", "metal", "broker") and not trim(
                             js_text(raw.get("code"))
                         ):
                             raise HTTPException(

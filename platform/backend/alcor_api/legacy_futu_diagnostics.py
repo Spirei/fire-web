@@ -214,9 +214,13 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
             started = time.perf_counter()
             try:
                 observed = await transport.diagnostic(policy, action)
+            except TimeoutError:
+                observed = {"errorCode":"diagnostic_timeout"}
             except Exception:  # noqa: BLE001 -- Optional SDK failures contain no safe client-visible details.
-                observed = {}
-            elapsed_ms = round((time.perf_counter() - started) * 1000)
+                observed = {"errorCode":"sdk_or_connection_unavailable"}
+            total_elapsed_ms = round((time.perf_counter() - started) * 1000)
+            measured = observed.get("connectionElapsedMs")
+            elapsed_ms = measured if type(measured) is int and 0 <= measured <= total_elapsed_ms else total_elapsed_ms
             async with db.connection() as conn, conn.transaction():
                 await authority.owner_lock(conn, who)
                 await lock_mutation_identity(conn, who, require_admin=True)
@@ -234,7 +238,10 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                     "sourceRevision": str(revision),
                     "licenseRevision": policy.license_revision,
                     "observedAt": datetime.now(UTC).isoformat(),
+                    "observationRecorded": True,
                     "elapsedMs": elapsed_ms,
+                    "totalElapsedMs": total_elapsed_ms,
+                    "sdkStartupMs": observed.get("sdkStartupMs") if type(observed.get("sdkStartupMs")) is int else None,
                 }
                 if action == "futu.test":
                     logged = observed.get("qotLogined")
@@ -251,6 +258,8 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                             if known and logged
                             else "OpenD已响应，行情未登录"
                             if known
+                            else "OpenD 检测超时，请检查连接与 SDK 响应"
+                            if observed.get("errorCode") == "diagnostic_timeout"
                             else "SDK/OpenD状态未知或不可用",
                             "qotLogined": logged if known else None,
                             "quotePermissionVerified": False,

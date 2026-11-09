@@ -7,7 +7,10 @@ import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard 
 
 import { memo, useEffect, useLayoutEffect, useMemo, useId, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from "react";
 import { CELEBS, type Celeb, type CelebHolding } from "@/lib/celebs";
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { pickStockIcon } from "@/lib/stockIconKey";
+import { normalizeCelebDirectory, celebPortrait, displayPercent } from "@/lib/celebDirectory";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
+import { useAssetIcons, ensureStockIcon } from "@/lib/useAssetIcons";
 import { showToast } from "@/lib/toast";
 import CelebsManageModal from "@/components/CelebsManageModal";
 import { CURRENCIES, useDisplayCurrency } from "@/lib/currencyPrefs";
@@ -28,9 +31,6 @@ function fmtCompact(n: number | undefined, symbol = "$"): string {
   return `${symbol}${Math.round(n)}`;
 }
 
-/* 美股公司图标兜底（与全球预览 / 财报日历同一来源，素材库优先） */
-const US_LOGO_BASE = "https://g.foolcdn.com/art/companylogos/square/";
-
 function CelebLogo({
   code,
   name,
@@ -46,60 +46,19 @@ function CelebLogo({
   overrideSrc?: string;
   market?: string;
 }) {
-  const { stockIcons, assetIcons, cdnEnabled } = useAssetIcons(["stock", "crypto", "metal"], { loadCdnSetting: true });
+  const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto", "metal"]);
   const key = code.toUpperCase();
-  // 股票图标按「市场:代码」查素材库；加密货币 / 贵金属按代码查 assetIcons（素材库 type=crypto/metal）
-  const src = stockIcons[`${market || "US"}:${key}`] || stockIcons[`US:${key}`] || assetIcons[key];
-  const [err, setErr] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-  const remote = `${US_LOGO_BASE}${code.toUpperCase()}.png`;
-  // 全部走素材库：本地有图标优先；CDN 通道关闭时素材库没有的股票不请求外部图标（显示首字母）
-  const url = overrideSrc || src || (cdnEnabled ? remote : "");
-  const isRemote = cdnEnabled && !overrideSrc && !src;
-  // 外部兜底图标：失败 / 超时后记入 sessionStorage，本次会话刷新不再重复请求慢 CDN（如 foolcdn）
-  const failKey = `fire:logo-fail:${key}`;
-  const [cachedFail, setCachedFail] = useState(false);
-  useLayoutEffect(() => {
-    try { setCachedFail(isRemote && sessionStorage.getItem(failKey) === "1"); }
-    catch { setCachedFail(false); }
-  }, [isRemote, failKey]);
-  const showImg = !!url && !err && !timedOut && !cachedFail;
-
-  useEffect(() => {
-    if (!showImg || !isRemote) return;
-    // 1.5s 未加载完成即降级为占位并记忆，避免外部图片长时间阻塞页面
-    const t = window.setTimeout(() => {
-      setTimedOut(true);
-      try {
-        sessionStorage.setItem(failKey, "1");
-      } catch {
-        /* 忽略 */
-      }
-    }, 1500);
-    return () => window.clearTimeout(t);
-  }, [showImg, isRemote, failKey]);
-
+  const url = overrideSrc || pickStockIcon(stockIcons, market || "US", key) || assetIcons[key] || "";
+  const [failedUrl, setFailedUrl] = useState("");
+  useEffect(() => { void ensureStockIcon(market || "US", code); }, [market, code]);
+  const showImg = !!url && failedUrl !== url;
   if (showImg) {
     return (
       <img
         src={url}
         alt=""
         loading="lazy"
-        onLoad={() => {
-          try {
-            sessionStorage.removeItem(failKey);
-          } catch {
-            /* 忽略 */
-          }
-        }}
-        onError={() => {
-          setErr(true);
-          try {
-            sessionStorage.setItem(failKey, "1");
-          } catch {
-            /* 忽略 */
-          }
-        }}
+        onError={() => setFailedUrl(url)}
         style={{ width: size, height: size }}
         className={`flex-none object-cover ${ring ? "rounded-full bg-white" : "rounded-full ring-1 ring-black/10 dark:ring-white/15"}`}
       />
@@ -138,7 +97,8 @@ function StockIconUpload({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const key = code.toUpperCase();
-  const src = stockIcons[`${market || "US"}:${key}`] || stockIcons[`US:${key}`] || assetIcons[key];
+  const src = pickStockIcon(stockIcons, market || "US", key) || assetIcons[key];
+  useEffect(() => { void ensureStockIcon(market || "US", code); }, [market, code]);
 
   async function upload(f: File) {
     setBusy(true);
@@ -227,21 +187,21 @@ function StockIconUpload({
   );
 }
 
-function SourceBadge({ celeb, detail }: { celeb: Celeb; detail?: string }) {
+function SourceBadge({ celeb, detail }: { celeb: Celeb; detail?: unknown }) {
   const map: Record<string, { cls: string; label: string }> = {
     sec13f: { cls: "bg-bg-gray text-muted dark:bg-white/5 dark:text-[#aab2c0]", label: "SEC 13F" },
     secform4: { cls: "bg-bg-gray text-muted dark:bg-white/5 dark:text-[#aab2c0]", label: "SEC Form 4" },
     sample: { cls: "bg-bg-gray text-muted dark:bg-white/5 dark:text-[#aab2c0]", label: "示例数据" }
   };
-  const m = map[celeb.dataSource] ?? map.sample;
+  const m = map[celeb.dataSource] ?? { cls: "bg-bg-gray text-muted", label: "已登记披露" };
   // 真实 SEC 来源：来源类型 · 报告期 · 申报日（如「SEC 13F · 2026Q2 · 08/14」）；名人管理自定义标签优先
   let label = m.label;
   if (celeb.dataSource !== "sample") {
-    const sourceTitle = detail && !/^(SEC EDGAR|示例|公开披露)/.test(detail) ? detail : m.label;
+    const sourceTitle = typeof detail === "string" && !/^(SEC EDGAR|示例|公开披露)/.test(detail) ? detail : m.label;
     const updated = (celeb.updated || "").replace(" 更新", "");
     label = [sourceTitle, celeb.reportQuarter, updated].filter(Boolean).join(" · ");
   } else {
-    label = detail || m.label;
+    label = typeof detail === "string" ? detail : m.label;
   }
   const fallback = celeb.dataSource === "sample" && !label.includes("示例") ? " · 当前为示例兜底数据（SEC 暂不可达）" : "";
   return (
@@ -259,45 +219,6 @@ function SourceBadge({ celeb, detail }: { celeb: Celeb; detail?: string }) {
 const RING_BRIGHT: [number, number, number] = [43, 93, 227]; // #2B5DE3
 const RING_DARK: [number, number, number] = [14, 29, 71]; // #0E1D47
 const RING_BASE = "rgb(14, 29, 71)";
-const AVATAR_CACHE_KEY = "fire:celebs-avatars";
-const CELEBS_CACHE_KEY = "fire:celebs:data";
-
-function loadAvatarCache(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(AVATAR_CACHE_KEY) || "{}") as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-function saveAvatarCache(map: Record<string, string>) {
-  try {
-    localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(map));
-  } catch {
-    /* 忽略存储失败 */
-  }
-}
-
-function loadCelebsCache(): { celebs?: Celeb[]; detail?: Record<string, string>; source?: string } {
-  try {
-    return JSON.parse(localStorage.getItem(CELEBS_CACHE_KEY) || "{}") as {
-      celebs?: Celeb[];
-      detail?: Record<string, string>;
-      source?: string;
-    };
-  } catch {
-    return {};
-  }
-}
-
-function saveCelebsCache(data: { celebs: Celeb[]; detail: Record<string, string>; source: string }) {
-  try {
-    localStorage.setItem(CELEBS_CACHE_KEY, JSON.stringify({ ...data, at: Date.now() }));
-  } catch {
-    /* 忽略存储失败 */
-  }
-}
-
 /* 旧缓存没有对比基准指数时兜底：spxPoints → 标普500 */
 function withBenchmarkFallback(c: Celeb): Celeb {
   const ret = c.returns;
@@ -321,6 +242,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
   const [hover, setHover] = useState<number | null>(null);
   const [avatarHover, setAvatarHover] = useState(false);
   const [avatarBroken, setAvatarBroken] = useState(false);
+  const portrait = avatarBroken ? celebPortrait(celeb.id) : celeb.avatar || celebPortrait(celeb.id);
   const [avatarTransparent, setAvatarTransparent] = useState(false);
   const ringRef = useRef<HTMLDivElement | null>(null);
 
@@ -331,7 +253,7 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
 
   // 检测头像是否为透明 PNG：透明图用自由轮廓（不圆形硬切，保留肩膀/衣领），非透明图保持圆形裁剪
   useEffect(() => {
-    if (!celeb.avatar) {
+    if (!portrait) {
       setAvatarTransparent(false);
       return;
     }
@@ -361,13 +283,14 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
     img.onerror = () => {
       if (!cancelled) setAvatarTransparent(false);
     };
-    img.src = celeb.avatar;
+    img.src = portrait;
     return () => {
       cancelled = true;
     };
-  }, [celeb.avatar]);
-  const top = celeb.holdings.slice(0, 5);
-  const rest = celeb.holdings.slice(5);
+  }, [portrait]);
+  const weighted = celeb.holdings.filter(h => typeof h.weight === "number" && Number.isFinite(h.weight) && h.weight > 0);
+  const top = weighted.slice(0, 5);
+  const rest = weighted.slice(5);
   const restWeight = rest.reduce((s, h) => s + h.weight, 0);
   const weights =
     rest.length > 0
@@ -542,9 +465,9 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
           }}
         >
           <span className="absolute inset-0 rounded-full bg-transparent" />
-          {celeb.avatar && !avatarBroken && (
+          {portrait && (
             <img
-              src={celeb.avatar}
+              src={portrait}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
@@ -577,9 +500,9 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
           }}
         >
           <span className="absolute inset-0 rounded-full bg-transparent" />
-          {celeb.avatar && !avatarBroken && (
+          {portrait && (
             <img
-              src={celeb.avatar}
+              src={portrait}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
@@ -608,9 +531,9 @@ function CelebRing({ celeb, size = 138 }: { celeb: Celeb; size?: number }) {
         >
           {/* 低调底色占位（无文字）：图片加载完成即覆盖，刷新不闪现中文名 */}
           <span className="absolute inset-0 rounded-full bg-bg-gray/70 dark:bg-white/10" />
-          {celeb.avatar && !avatarBroken && (
+          {portrait && (
             <img
-              src={celeb.avatar}
+              src={portrait}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
@@ -683,8 +606,7 @@ function TradeRow({ code, name, changePct, action }: { code: string; name: strin
     <div className="flex items-center gap-2 rounded-xl border border-edge/80 bg-white/60 px-2.5 py-1.5 text-xs transition-colors hover:border-edge-strong dark:border-[#3b4354]/70 dark:bg-white/[0.04] dark:hover:border-[#4a5468]">
       <span className="font-semibold text-ink">{code}</span>
       <span className={`tabular-nums ${changePct >= 0 ? UP : DOWN}`}>
-        {changePct >= 0 ? "+" : ""}
-        {changePct.toFixed(2)}%
+                {displayPercent(changePct)}
       </span>
       <span
         className={`ml-auto rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
@@ -705,7 +627,7 @@ const CHART_RANGES: { key: ChartRange; label: string }[] = [
   { key: "5y", label: "近5年" }
 ];
 
-const fmtPct = (v: number | undefined | null) => `${(v ?? 0) >= 0 ? "+" : ""}${(v ?? 0).toFixed(2)}%`;
+const fmtPct = (v: number | undefined | null) => displayPercent(v);
 
 /* 对比基准指数线条色（可扩展：后续加纳指 / 上证 / 恒生等时依次取色即可） */
 const BENCH_COLORS = ["#4a90d9", "#6ba7e0", "#9cc3ef"];
@@ -785,6 +707,7 @@ function buildRangeSeries(
   returns: Celeb["returns"],
   range: ChartRange
 ): { data: number[]; benchmarks: { code: string; name: string; points: number[] }[] } {
+  if (!Array.isArray(returns.points) || returns.points.length < 2 || !returns.points.every(Number.isFinite)) return {data:[],benchmarks:[]};
   const base = Array.isArray(returns.points) && returns.points.length >= 2 ? returns.points : [0, returns.y1];
   const data = buildSeriesForRange(base, range, returns.y5 || 0);
   const ratio = Math.max(1, (returns.y5 || 0) / Math.max(1, returns.y1 || 1));
@@ -1142,6 +1065,7 @@ function ReturnAnalysis({ celeb }: { celeb: Celeb }) {
   const idx = hoverIdx !== null && hoverIdx < n ? hoverIdx : n - 1;
   const comboVal = series.data[idx] ?? 0;
 
+  if (!series.data.length) return <div className="card p-5 text-sm text-muted">暂无已核验的收益走势</div>;
   return (
     <div className="card w-full max-w-full p-4 sm:p-5">
       <div className="mb-2.5 flex items-center gap-1.5 text-sm font-bold text-ink">
@@ -1257,20 +1181,18 @@ export default function CelebsView({
   initialData?: import("@/lib/celebsData").CelebsResult | null;
 }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
+  const foreground = useWorkspaceForeground();
+  const seeded = useRef(!!initialData);
+  const [directoryError, setDirectoryError] = useState("");
+  const [directoryLoading, setDirectoryLoading] = useState(!initialData);
   const searchParams = useSearchParams();
   const [active, setActive] = useState<Celeb | null>(() => {
-    const found = (initialData?.celebs || CELEBS).find(item => item.id === searchParams.get("celeb"));
+    const found = (initialData ? normalizeCelebDirectory(initialData).celebs : []).find(item => item.id === searchParams.get("celeb"));
     return found ? { ...found, avatar: initialAvatars?.[found.id] || found.avatar } : null;
   });
-  // 初始值统一用默认（服务端 / 客户端首帧一致，避免 hydration 不匹配），
-  // SSR 首帧即带服务端读出的最新自定义头像，缓存的自定义头像在挂载后的客户端副作用里秒出兜底
-  const [celebs, setCelebs] = useState<Celeb[]>(() =>
-    initialData ? initialData.celebs : initialAvatars && Object.keys(initialAvatars).length > 0
-      ? CELEBS.map((c) => (initialAvatars[c.id] ? { ...c, avatar: initialAvatars[c.id] } : c))
-      : CELEBS
-  );
-  const [detail, setDetail] = useState<Record<string, string>>(initialData?.detail || {});
-  const [source, setSource] = useState<string>(initialData?.source || "sample");
+  const [celebs, setCelebs] = useState<Celeb[]>(() => initialData ? normalizeCelebDirectory(initialData).celebs : []);
+  const [detail, setDetail] = useState<Record<string, unknown>>(initialData?.detail || {});
+  const [source, setSource] = useState<string>(initialData?.source || "stored_public_disclosures");
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -1284,26 +1206,6 @@ export default function CelebsView({
   const avatarFileRef = useRef<HTMLInputElement | null>(null);
   const pendingIdRef = useRef<string | null>(null);
 
-  // 服务端上传映射 / 新的内置定制头像比浏览器旧业务缓存更可信。
-  // 已有用户上传会出现在 initialAvatars，因此不会被内置值覆盖。
-  function withCurrentAvatar(c: Celeb): Celeb {
-    const builtIn = CELEBS.find((item) => item.id === c.id)?.avatar;
-    const avatar = initialAvatars?.[c.id] || builtIn || c.avatar;
-    return avatar === c.avatar ? c : { ...c, avatar };
-  }
-
-  // 预加载全部名人头像：刷新 / 睡眠唤醒后尽早并行加载，缩短首屏等待
-  useEffect(() => {
-    const urls = new Set<string>();
-    CELEBS.forEach((c) => c.avatar && urls.add(c.avatar));
-    (initialAvatars ? Object.values(initialAvatars) : []).forEach((u) => u && urls.add(u));
-    urls.forEach((u) => {
-      const img = new Image();
-      img.src = u;
-    });
-  }, [initialAvatars]);
-
-  // 详情页 URL 同步：/celebs?celeb=<id>，刷新 / 前进后退保持当前名人，无感不刷新
   function openCeleb(c: Celeb | null) {
     pendingIdRef.current = c ? c.id : null;
     setActive(c);
@@ -1314,105 +1216,36 @@ export default function CelebsView({
     }
   }
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const id = searchParams.get("celeb");
-    if (!id) return;
     pendingIdRef.current = id;
-    if (initialData) return;
-    // 首帧兜底：用示例 + 自定义头像先渲染，防止空白；pendingId 保留到真实数据到位
-    const over = loadAvatarCache();
-    const fallback = CELEBS.find((x) => x.id === id);
-    if (fallback) setActive(withCurrentAvatar(over[fallback.id] ? { ...fallback, avatar: over[fallback.id] } : fallback));
-    // 秒出缓存数据（含自定义头像与真实持仓），避免停留在示例数据
-    const saved = loadCelebsCache();
-    if (Array.isArray(saved.celebs) && saved.celebs.length > 0) {
-      const c = saved.celebs.find((x) => x.id === id);
-      if (c) {
-        setActive(withCurrentAvatar(c));
-        setDetail(saved.detail ?? {});
-        setSource(saved.source ?? "sample");
-      }
-    }
-  }, []);
-
-  // 浏览器前进 / 后退：跟随 ?celeb= 变化切换详情与列表
-  useEffect(() => {
-    const onPop = () => {
-      if (!canUseWorkspaceUrl()) return;
-      const id = new URLSearchParams(window.location.search).get("celeb");
-      if (!id) {
-        setActive(null);
-        pendingIdRef.current = null;
-        return;
-      }
-      pendingIdRef.current = id;
-      const c = celebs.find((x) => x.id === id) || CELEBS.find((x) => x.id === id);
-      if (c) setActive(c);
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [celebs]);
-
-  // 缓存头像在绘制前应用，刷新不闪现原始头像且不影响 hydration
-  useLayoutEffect(() => {
-    if (initialData) return;
-    const over = loadAvatarCache();
-    if (Object.keys(over).length > 0) {
-      setCelebs((prev) => prev.map((c) => withCurrentAvatar(over[c.id] ? { ...c, avatar: over[c.id] } : c)));
-      setActive((prev) => (prev ? withCurrentAvatar(over[prev.id] ? { ...prev, avatar: over[prev.id] } : prev) : prev));
-    }
-    // 名人列表缓存：刷新先秒出真实列表（含来源与自定义头像），再后台拉最新
-    const saved = loadCelebsCache();
-    if (Array.isArray(saved.celebs) && saved.celebs.length > 0) {
-      setCelebs(saved.celebs.map(withBenchmarkFallback).map(withCurrentAvatar));
-      if (saved.detail) setDetail(saved.detail);
-      if (saved.source) setSource(saved.source);
-    }
-  }, []);
+    setActive(id ? celebs.find(c => c.id === id) ?? null : null);
+  }, [searchParams, celebs]);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/celebs")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !data?.celebs?.length) return;
-        setCelebs(data.celebs);
-        setDetail(data.detail ?? {});
-        setSource(data.source);
-        // 深链 / 前进后退恢复：真实数据到位后用最新数据定位，避免停留在示例
-        if (pendingIdRef.current) {
-          const c = data.celebs.find((x: { id: string }) => x.id === pendingIdRef.current);
-          if (c) {
-            setActive(c);
-            pendingIdRef.current = null;
-          }
-        }
-        saveCelebsCache({ celebs: data.celebs, detail: data.detail ?? {}, source: data.source });
-        const over: Record<string, string> = {};
-        data.celebs.forEach((c: { id: string; avatar?: string }) => {
-          if (c.avatar) over[c.id] = c.avatar;
-        });
-        saveAvatarCache(over);
+    if (!foreground) return;
+    if (seeded.current && refreshKey === 0) { seeded.current = false; return; }
+    seeded.current = false;
+    const controller = new AbortController();
+    setDirectoryLoading(true);
+    setDirectoryError("");
+    fetch("/api/celebs", {signal:controller.signal,cache:"no-store"})
+      .then(async response => { if (!response.ok) throw Error("名人持仓读取失败"); return normalizeCelebDirectory(await response.json()); })
+      .then(data => {
+        if (controller.signal.aborted) return;
+        setCelebs(data.celebs); setDetail(data.detail); setSource(data.source);
       })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
+      .catch(error => { if (!controller.signal.aborted) setDirectoryError((error as Error).message); })
+      .finally(() => { if (!controller.signal.aborted) setDirectoryLoading(false); });
+    return () => controller.abort();
+  }, [foreground, refreshKey]);
 
-  const sourceLabel =
-    source === "sec-edgar"
-      ? "SEC EDGAR 13F / Form 4 实时拉取"
-      : source === "cache"
-        ? "缓存数据（24h 内）"
-        : "示例数据（SEC 暂不可达时自动兜底）";
+  const sourceLabel = source === "stored_public_disclosures" ? "已登记的公开披露" : source === "sec-edgar" ? "SEC EDGAR" : source === "cache" ? "已保存的披露" : "示例数据";
 
   function updateAvatar(id: string, url: string) {
     setCelebs((prev) => prev.map((c) => (c.id === id ? { ...c, avatar: url } : c)));
     setActive((prev) => (prev && prev.id === id ? { ...prev, avatar: url } : prev));
-    const over = loadAvatarCache();
-    over[id] = url;
-    saveAvatarCache(over);
+
   }
 
   useEffect(()=>{
@@ -1472,8 +1305,7 @@ export default function CelebsView({
             </div>
             <p className="mt-0.5 text-xs text-muted">{active.title}</p>
             <div className={`mt-2 text-3xl font-extrabold tabular-nums ${up ? UP : DOWN}`}>
-              {active.gain250 >= 0 ? "+" : ""}
-              {active.gain250.toFixed(2)}%
+                            {displayPercent(active.gain250)}
             </div>
             <div className="mt-1 text-xs text-faint">250日涨幅 · {active.updated}</div>
           </div>
@@ -1574,7 +1406,7 @@ export default function CelebsView({
             ))}
           </div>
           {active.holdings.map((h: CelebHolding) => {
-            const gap = h.target ? ((h.target - h.price) / h.price) * 100 : null;
+            const gap = h.target && h.price ? ((h.target - h.price) / h.price) * 100 : null;
             const cell = (c: { key: string }) => {
               switch (c.key) {
                 case "code":
@@ -1592,14 +1424,13 @@ export default function CelebsView({
                 case "changePct":
                   return (
                     <span className={`text-right tabular-nums ${h.changePct >= 0 ? UP : DOWN}`}>
-                      {h.changePct >= 0 ? "+" : ""}
-                      {h.changePct.toFixed(2)}%
+                                            {displayPercent(h.changePct)}
                     </span>
                   );
                 case "weight":
                   return (
                     <span className="flex flex-col items-end text-right tabular-nums text-ink-2">
-                      <span>{h.weight.toFixed(1)}%</span>
+                      <span>{typeof h.weight === "number" ? `${h.weight.toFixed(1)}%` : "—"}</span>
                       {h.isNew ? (
                         <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold leading-tight ${UP}`} title="本报告期新进（上一报告期未持有）">
                           <span className="inline-block h-1 w-1 rounded-full bg-current" />
@@ -1733,6 +1564,8 @@ export default function CelebsView({
       </div>
       {manageOpen && <CelebsManageModal onClose={() => setManageOpen(false)} onChanged={() => setRefreshKey((k) => k + 1)} />}
 
+      {directoryError && <p role="alert" className="system-error">{directoryError}</p>}
+      {!celebs.length && <p role="status" className="py-12 text-center text-muted">{directoryLoading ? "正在读取名人持仓…" : "暂无已登记的名人持仓"}</p>}
       {/* 单行卡片：左侧数据，右侧圆环 */}
       <div className="flex flex-col gap-4">
         {celebs.map((c) => {
@@ -1759,8 +1592,7 @@ export default function CelebsView({
                 </div>
                 <div className="mt-1.5 flex items-end gap-2">
                   <span className={`text-[26px] font-extrabold leading-none tabular-nums ${up ? UP : DOWN}`}>
-                    {c.gain250 >= 0 ? "+" : ""}
-                    {c.gain250.toFixed(2)}%
+                                        {displayPercent(c.gain250)}
                   </span>
                   <span className="pb-0.5 text-[11px] text-faint">250日涨幅 · {c.updated}</span>
                 </div>

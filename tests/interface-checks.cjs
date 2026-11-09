@@ -9,7 +9,7 @@ const h=hooks(),requests=[],polls=[],toasts=[];
 const transport=(url,options={})=>{const pending=deferred();requests.push({url,options,...pending});return pending.promise;};
 class RequestError extends Error{}
 const mocks={react:h.api,'react/jsx-runtime':require('react/jsx-runtime'),'@tabler/icons-react':{IconRefresh:'svg'},'./ServiceIcon':{__esModule:true,default:'i'},'./Capsule':{Capsule:'button',IconButton:'button'},'@/lib/platformRequest':{platformRequest:transport,PlatformRequestError:RequestError},'@/lib/randomId':{clientRequestId:()=> 'receipt-one'},'@/lib/toast':{showToast:(...args)=>toasts.push(args)},'@/lib/visiblePolling':{startVisiblePolling({read}){const c=new AbortController();const p={controller:c,refresh:()=>read(c.signal),stop:()=>c.abort()};polls.push(p);void read(c.signal);return p;}}};
-const context={exports:{},require:id=>mocks[id],AbortController,Map};
+const context={exports:{},require:id=>mocks[id],AbortController,Map,Date,Number};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/InterfaceChecks.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText,context);
 let props={active:true,ownerId:'owner-a',onSettings(){}};
 const flatten=node=>Array.isArray(node)?node.flatMap(flatten):node&&typeof node==='object'?[node,...flatten(node.props?.children)]:[];
@@ -24,6 +24,7 @@ const action=tree=>tree.find(n=>n.type==='button'&&['检测','核对结果'].inc
  const recovered=action(tree).props.onClick();assert(requests[3].url.includes('/receipts/receipt-one'));assert.equal(requests[3].options.method,undefined,'recovery only queries; it must not submit a second test');
  requests[1].resolve({state:'unknown'});await first;assert.equal(action(render()).props.busy,true,'old completion cannot unlock a newer operation');
  requests[3].resolve({state:'completed',ok:true,message:'连接成功'});await flush();requests[4].resolve({items:[{...check,state:'up'}]});await recovered;await flush();tree=render();assert.equal(action(tree).props.busy,false);assert.equal(action(tree).props.children,'检测');assert.equal(requests.filter(r=>r.options.method==='POST').length,1);
+ const observedUnknown=action(render()).props.onClick();requests[5].resolve({state:'unknown',observationRecorded:true,observedAt:'2026-11-10T00:00:00Z'});await flush();requests[6].resolve({items:[check]});await observedUnknown;await flush();assert.equal(action(render()).props.children,'检测','A recorded unknown observation is complete; a new user action may test again instead of querying forever');
  tree=render({ownerId:'owner-b'},false);assert(!tree.some(n=>n.props?.children==='Synthetic broker A'),'account changes hide old rows before effects run');h.commit();h.cleanup();
  console.log('PASS interface checks: aborted workspace recovers, unknown receipt is queried once, late completion cannot unlock a new request, and account rows never flash');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,13 @@
+const fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm'),assert=require('node:assert/strict');
+const context={exports:{}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/celebDirectory.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,context);
+const {normalizeCelebDirectory,displayPercent,celebPortrait}=context.exports;
+const raw={celebs:[{id:'buffett',name:'Synthetic public disclosure',avatar:'',gain250:null,holdings:[{code:'EXAMPLE',weight:'24.52',price:null,changePct:null}],trades:[{changePct:null}]}],detail:{buffett:{revision:3}},source:'stored_public_disclosures'};
+const data=normalizeCelebDirectory(raw);
+assert.equal(data.celebs[0].holdings[0].weight,24.52);assert.equal(data.celebs[0].holdings[0].price,null);assert.equal(displayPercent(data.celebs[0].gain250),'—');assert.equal(displayPercent(data.celebs[0].trades[0].changePct),'—');assert.equal(displayPercent('1.23'),'+1.23%');assert.equal(raw.celebs[0].holdings[0].weight,'24.52');
+assert.equal(normalizeCelebDirectory({celebs:[]}).celebs.length,0,'An empty PG directory never becomes fictional sample holdings');
+assert.throws(()=>normalizeCelebDirectory({}),/响应格式/);
+for(const id of ['buffett','pelosi','huang','cathie','trump','duan'])assert(celebPortrait(id).startsWith('/uploads/celebs/'));
+assert.equal(celebPortrait('../private'),'');
+const view=fs.readFileSync('components/views/CelebsView.tsx','utf8');assert(!view.includes('foolcdn'));assert(!view.includes('localStorage.getItem'));assert(view.includes('ensureStockIcon'));assert(!view.includes('gain250.toFixed'));
+console.log('PASS celebrity refresh: PG decimal/null observations, empty collection, uploads portraits, no browser sample fallback, and local stock-icon demand');

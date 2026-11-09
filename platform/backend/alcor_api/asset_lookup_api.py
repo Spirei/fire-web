@@ -123,7 +123,6 @@ def mount_asset_catalog(app, settings, db):
             "metal",
             "broker",
             "group",
-            "icon",
             "card",
         ):
             raise HTTPException(400, "素材分类无效")

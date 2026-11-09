@@ -1,6 +1,6 @@
 {
   "name": "alcor",
-  "version": "0.1.78",
+  "version": "0.1.79",
   "private": true,
   "scripts": {
     "predev": "node scripts/prepare-system-media.mjs && node scripts/generate-api-request-routes.mjs",

@@ -13,7 +13,7 @@ from psycopg.types.json import Jsonb
 
 from .asset_lookup_contract import trim
 
-TYPES = ("stock", "market", "flag", "crypto", "metal", "broker", "group", "icon")
+TYPES = ("stock", "market", "flag", "crypto", "metal", "broker", "group")
 V1_TYPES = ("stock", "market", "flag", "crypto", "metal")
 
 
@@ -177,7 +177,7 @@ class AssetManagement:
                         "market:" + market
                         if kind == "market"
                         else kind + ":" + code
-                        if kind in ("flag", "crypto", "metal", "icon") or kind == "broker" and market in ("GROUP", "OTHER")
+                        if kind in ("flag", "crypto", "metal") or kind == "broker" and market in ("GROUP", "OTHER")
                         else "broker:" + market + ":" + code
                         if kind == "broker"
                         else "stock:" + market + ":" + code
@@ -330,6 +330,8 @@ class AssetManagement:
             legacy = next((r for r in await self.legacy_directory.entries() if r['id'] == aid), None) if self.legacy_directory is not None and row is None and source is None else None
             tombstone = await (await conn.execute("SELECT * FROM asset_catalog_tombstones WHERE asset_id=%s AND restored_at IS NULL", (aid,))).fetchone()
             material = row or source or legacy
+            if material and material["type"] not in (*TYPES, "card"):
+                raise HTTPException(400, "素材分类无效")
             if material and material['type'] == 'market':
                 market_alias = 'market:' + (material['market'] or material['code']).upper()
             else:
@@ -442,10 +444,10 @@ class AssetManagement:
             removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
             rows = await (
                 await conn.execute(
-                    """SELECT e.* FROM asset_catalog_entries e WHERE (%s::text IS NULL OR type=%s)
+                    """SELECT e.* FROM asset_catalog_entries e WHERE type=ANY(%s) AND (%s::text IS NULL OR type=%s)
                 AND (%s::text IS NULL OR market=%s) AND EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL)=%s
                 ORDER BY type,market,code LIMIT 5001""",
-                    (kind, kind, market, market, deleted),
+                    (list(TYPES), kind, kind, market, market, deleted),
                 )
             ).fetchall()
             cards = (
@@ -470,6 +472,8 @@ class AssetManagement:
                 known_rows = await (await conn.execute("SELECT type,market,code FROM asset_catalog_entries")).fetchall()
                 known = {public_identity(r) for r in known_rows}
                 for entry in await self.legacy_directory.entries():
+                    if entry["type"] not in (*TYPES, "card"):
+                        continue
                     if entry["type"] == "card" and (entry["id"] in known_card_ids or unquote(entry["legacyPath"]) in known_paths):
                         continue
                     key = public_identity(entry)

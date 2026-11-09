@@ -5,6 +5,7 @@ import contextlib
 import json
 import math
 import sys
+import time
 
 
 def records(frame, limit=1000):
@@ -180,6 +181,7 @@ def collect(factory, ret_ok, payload, enums):
 
 def main():
     payload = json.load(sys.stdin)
+    startup = time.perf_counter()
     with contextlib.redirect_stdout(sys.stderr):
         import logging
 
@@ -190,9 +192,13 @@ def main():
         for handler in tuple(logger.file_logger.handlers):
             handler.close()
             logger.file_logger.removeHandler(handler)
+        ready = time.perf_counter()
         value = collect(
             OpenQuoteContext, RET_OK, payload, {"AuType": AuType, "KLType": KLType, "Session": Session, "SubType": SubType}
         )
+    if payload.get("action") in {"futu.test", "futu.quota"}:
+        value["sdkStartupMs"] = round((ready - startup) * 1000)
+        value["connectionElapsedMs"] = round((time.perf_counter() - ready) * 1000)
     print(json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
 
 

@@ -217,7 +217,7 @@ function EmptyMarketIcon() {
 
 
 function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
-  const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto", "metal", "icon"]);
+  const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto", "metal"]);
   const [items, setItems] = useState<TopAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");

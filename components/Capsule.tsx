@@ -121,3 +121,8 @@ export function CloseButton(props: Omit<Parameters<typeof IconButton>[0], "label
 export const CapsuleLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & {href: string; variant?: Variant; size?: "sm" | "md" | "lg"}>(function CapsuleLink({href,variant="primary",size="md",className="",...props},ref){
   return <a {...props} ref={ref} href={href} className={`capsule-control ${className}`} data-capsule-variant={variant} data-size={size}/>;
 });
+
+/** Links and buttons share the same compact, non-shrinking icon hit area. */
+export const IconLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & {href: string; label: string; size?: "sm" | "md"; framed?: boolean}>(function IconLink({label,size="md",framed=false,className="",title,...props},ref){
+  return <a {...props} ref={ref} aria-label={label} title={title ?? label} data-size={size} data-framed={framed || undefined} data-capsule="off" className={`capsule-icon-control ${className}`} />;
+});

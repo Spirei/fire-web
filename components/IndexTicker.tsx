@@ -105,19 +105,19 @@ function TickerChip({ item }: { item: TickerItem }) {
   // 昨收 = 现价 − 涨跌额（接口给的是今日涨跌额）；拿不到就不画基准线
   const baseline = item.price != null && item.change != null ? item.price - item.change : null;
   return (
-    <div className="ticker-item flex items-center gap-2.5 rounded-2xl px-3 py-2 transition-colors duration-200 hover:bg-brand-hover">
+    <div className="ticker-item flex max-w-full items-center gap-2.5 rounded-2xl px-3 py-2 transition-colors duration-200 hover:bg-brand-hover">
       <span className="group/icon relative flex-none">
         <MarketIcon market={item.market} size={22} title="" />
         <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-edge bg-white px-2 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-[0_6px_18px_rgba(10,14,25,.14)] transition-all duration-150 group-hover/icon:opacity-100 dark:bg-[#1c2433] dark:text-[#e7ebf1]">
           {marketMeta(item.market).label} · {item.label}
         </span>
       </span>
-      <span className="whitespace-nowrap text-[13px] font-semibold text-ink">{item.label}</span>
+      <span className="ticker-label whitespace-nowrap text-[13px] font-semibold text-ink">{item.label}</span>
       <span className="whitespace-nowrap text-[15px] font-bold tabular-nums text-ink">{fmtPrice(item.price)}</span>
       {item.change !== null && <svg viewBox="0 0 24 24" fill="currentColor" className={`h-[10px] w-[10px] flex-none ${color}`} aria-hidden>
         {up ? <path d="M12 5 20 19H4Z" /> : <path d="M12 19 4 5h16Z" />}
       </svg>}
-      <Sparkline points={item.points} up={up} baseline={baseline} />
+      <span className="ticker-spark"><Sparkline points={item.points} up={up} baseline={baseline} /></span>
       <span className={`whitespace-nowrap text-[12.5px] font-semibold tabular-nums ${color}`}>
         {fmtSigned(item.change)} {fmtSigned(item.changePct, "%")}
       </span>
@@ -194,7 +194,7 @@ export default function IndexTicker() {
   const current = items[idx];
   if (!current) {
     return (
-      <div className="flex h-[42px] w-[300px] animate-pulse items-center gap-2.5 rounded-2xl bg-bg-gray px-3">
+      <div className="flex h-[42px] w-full max-w-[300px] animate-pulse items-center gap-2.5 rounded-2xl bg-bg-gray px-3">
         <span className="h-6 w-6 flex-none rounded bg-bg-gray" />
         <span className="h-3 w-20 rounded bg-bg-gray" />
         <span className="h-4 w-14 rounded bg-bg-gray" />

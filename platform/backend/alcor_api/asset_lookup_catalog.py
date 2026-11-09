@@ -348,7 +348,7 @@ class AssetCatalog:
             images = await (
                 await conn.execute(
                     "SELECT id,public_path,folder,served_sha256 FROM system_asset_versions WHERE kind='asset' AND folder=ANY(%s) ORDER BY created_at DESC LIMIT 201",
-                    (["stock", "market", "flag", "crypto", "metal", "broker", "group", "icon"],),
+                    (["stock", "market", "flag", "crypto", "metal", "broker", "group"],),
                 )
             ).fetchall()
             return {
@@ -381,8 +381,8 @@ class AssetCatalog:
         async with self.context() as conn:
             rows = await (
                 await conn.execute(
-                    "SELECT * FROM asset_catalog_entries e WHERE (%s::text IS NULL OR type=%s) AND NOT EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL) ORDER BY id LIMIT 201",
-                    (kind, kind),
+                    "SELECT * FROM asset_catalog_entries e WHERE type=ANY(%s) AND (%s::text IS NULL OR type=%s) AND NOT EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL) ORDER BY id LIMIT 201",
+                    (["stock", "market", "flag", "crypto", "metal", "broker", "group"], kind, kind),
                 )
             ).fetchall()
             cache = {}

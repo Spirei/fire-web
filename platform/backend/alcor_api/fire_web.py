@@ -222,11 +222,22 @@ async def backup_list(request: Request, who: Admin):
     from .backups import list_backups
 
     result = await list_backups(request, who)
+    result["key_fingerprint"] = None
+    result["key_error"] = None
     try:
         key = existing_key(request.app.state.settings)
         result["key_fingerprint"] = hashlib.sha256(key).hexdigest()
+    except FileNotFoundError:
+        if result["items"]:
+            result["key_error"] = "恢复密钥缺失，请找回原 backup.key，不能重新生成替代密钥。"
     except (OSError, ValueError, StreamFailure):
-        result["key_fingerprint"] = None
+        if result["configured"]:
+            result["key_error"] = "恢复密钥或目录权限不正确，请核对私有密钥目录。"
+    async with request.app.state.db.connection() as conn:
+        row = await (await conn.execute(
+            "SELECT coalesce(bool_or(observed_at>clock_timestamp()-interval '30 seconds'),false) AS online FROM worker_heartbeats"
+        )).fetchone()
+    result["worker_available"] = row["online"]
     return result
 
 
@@ -235,7 +246,9 @@ async def prepare_backup(request: Request, who: Admin):
     import asyncio
     import hashlib
 
-    from .backups import BackupFailure, backup_key
+    from .backups import BackupFailure, backup_key, private_dir, tools
+    from .backup_stream_storage import existing_key
+    from .backup_stream_codec import StreamFailure
     from .client_auth import recent
     from .security import lock_mutation_identity
 
@@ -243,9 +256,24 @@ async def prepare_backup(request: Request, who: Admin):
         await lock_mutation_identity(conn, who)
         await recent(conn, who)
         try:
-            key = await asyncio.to_thread(backup_key, request.app.state.settings)
+            settings = request.app.state.settings
+            # Validate tools/configuration before creating any recovery material.
+            tools(settings, "pg_dump")
+            tools(settings, "pg_restore")
+            if not (settings.backup_dir and settings.backup_secret_dir and settings.connection_secret_dir):
+                raise BackupFailure("请先配置私有备份目录和独立恢复密钥目录")
+            try:
+                key = await asyncio.to_thread(existing_key, settings)
+            except FileNotFoundError:
+                previous = await (await conn.execute("SELECT 1 FROM backups LIMIT 1")).fetchone()
+                if previous:
+                    raise BackupFailure("恢复密钥缺失，请找回原 backup.key，不能重新生成替代密钥。")
+                key = await asyncio.to_thread(backup_key, settings)
+            await asyncio.to_thread(private_dir, settings.backup_dir)
         except BackupFailure as exc:
             raise HTTPException(422, str(exc)) from None
+        except (OSError, ValueError, StreamFailure):
+            raise HTTPException(422, "备份目录不可写或恢复密钥权限不正确") from None
         await conn.execute(
             "INSERT INTO audit_events(actor_id,action) VALUES(%s,'fire.backup.key.prepared')", (who.id,)
         )

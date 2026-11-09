@@ -37,7 +37,6 @@ const categories = [
   ["broker", "券商图标"],
   ["group", "股票分组"],
   ["card", "卡片"],
-  ["icon", "功能图标"],
 ] as const;
 const markets = [
   "US",

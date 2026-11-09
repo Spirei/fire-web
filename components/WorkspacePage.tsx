@@ -52,7 +52,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const initialQuotePool=initialWorkspace.quotePool,initialAssetLibrary=null,initialCardLibrary=initialWorkspace.cards,initialCelebs=initialWorkspace.celebs,initialFeed=initialWorkspace.feed;
   const initialWatchGroups=initialWorkspace.watchGroups ?? [];
   const initialUserLogs=initialWorkspace.logs?.userLogs ?? [];
-  const initialStockIcons={},initialMarketIcons={},initialNavIcons={};
+  const initialStockIcons=initialCelebs?.stockIcons??{},initialMarketIcons={};
   const initialFlagIcons:Record<string,string>={};
   const initialAvatar=user.avatar;
   const initialCardCovers:string[]=[];
@@ -100,7 +100,6 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
           initialFundBalances={initialFundBalances}
           initialStockIcons={initialStockIcons}
           initialMarketIcons={initialMarketIcons}
-          initialNavIcons={initialNavIcons}
           initialFlagIcons={initialFlagIcons}
           initialAssetLibrary={initialAssetLibrary}
           initialCardLibrary={initialCardLibrary}

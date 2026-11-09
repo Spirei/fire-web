@@ -33,10 +33,9 @@ import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import { applyQuoteBatches, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot } from "@/lib/quoteBatches";
 import SettingsWindow from "@/components/SettingsWindow";
-import { primeFlagIconCache, primeMarketIconCache, primeNavIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
+import { primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { pickStockIcon } from "@/lib/stockIconKey";
 import { NAV_ICONS } from "@/lib/navIcons";
-import SafeAssetImage from "@/components/SafeAssetImage";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import GlobalSectionNav from "@/components/GlobalSectionNav";
 import SidebarScrollIndicator from "@/components/SidebarScrollIndicator";
@@ -134,7 +133,6 @@ export default function RecordsApp({
   initialSettings,
   initialStockIcons,
   initialMarketIcons = {},
-  initialNavIcons = {},
   initialFlagIcons = {},
   initialAssetLibrary = null,
   initialCardLibrary = null,
@@ -160,7 +158,6 @@ export default function RecordsApp({
   initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
-  initialNavIcons?: Record<string, string>;
   initialFlagIcons?: Record<string, string>;
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
@@ -302,8 +299,7 @@ export default function RecordsApp({
   const [groups, setGroups] = useState<GroupConfig[]>(initialSettings.groups);
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
-  const { assetIcons, stockIcons } = useAssetIcons(["icon", "stock"], { stockIconCdn: initialSettings.stockIconCdn });
-  const [navIconsHydrated, setNavIconsHydrated] = useState(false);
+  const { stockIcons } = useAssetIcons(["stock"], { stockIconCdn: initialSettings.stockIconCdn });
   const attemptedIconBackfillRef = useRef(new Set<string>());
 
   // 市场色块是模块级 store（不是 React 状态）：必须在水合首帧之前按服务端设置初始化。
@@ -317,9 +313,7 @@ export default function RecordsApp({
   // 首屏 HTML 直接就是图标；浏览器仅请求当前视图实际渲染的图片。
   useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons]);
   useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
-  useMemo(() => primeNavIconCache(initialNavIcons), [initialNavIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
-  useEffect(() => setNavIconsHydrated(true), []);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
@@ -955,23 +949,9 @@ export default function RecordsApp({
       navTabs
         .filter((t) => (user?.role === "admin") || (t.key !== "users" && t.key !== "library" && !SYSTEM_TABS.some(item=>item.key===t.key)))
         .map((t) => {
-          // SSR 与客户端水合首帧必须使用同一份服务端快照；本地缓存只在水合完成后补充。
-          const key = t.key.toUpperCase();
-          const custom = key === "TRADING" ? undefined : initialNavIcons[key] || (navIconsHydrated ? assetIcons[key] : undefined);
-          return {
-            key: t.key as TabKey,
-            label: t.label,
-            icon: (
-              <SafeAssetImage
-                src={custom}
-                loading="lazy"
-                fallback={NAV_ICONS[t.key]}
-                className="nav-custom-icon h-[17px] w-[17px] flex-none object-contain"
-              />
-            )
-          };
+          return { key: t.key as TabKey, label: t.label, icon: NAV_ICONS[t.key] };
         }),
-    [navTabs, user, assetIcons, initialNavIcons, navIconsHydrated]
+    [navTabs, user]
   );
   useEffect(() => {
     // Warm only the two likely next destinations. Other views load on hover,

@@ -166,7 +166,7 @@ class Transport:
             },
         )
         try:
-            async with asyncio.timeout(12):
+            async with asyncio.timeout(30):
                 process.stdin.write(
                     canonical({"action": action, "host": pins[0], "port": target.port}).encode()
                 )

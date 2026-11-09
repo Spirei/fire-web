@@ -42,6 +42,7 @@ const nextConfig = {
       { source: "/uploads/reports/:path*", destination: "/api/private-reports/:path*" },
       { source: "/uploads/asset/:path*", destination: "/api/managed-upload/asset/:path*" },
       { source: "/uploads/cards/:path*", destination: "/api/managed-upload/cards/:path*" },
+      { source: "/uploads/celebs/:filename", destination: "/api/celeb-portraits/:filename" },
       // Run upload authorization before static public files, including encoded folder names.
       { source: "/:uploadPrefix((?:u|%75)(?:p|%70)(?:l|%6[cC])(?:o|%6[fF])(?:a|%61)(?:d|%64)(?:s|%73))/:path*", destination: "/api/upload-files/:path*" }
     ] };

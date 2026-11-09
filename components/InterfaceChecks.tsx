@@ -61,9 +61,9 @@ export default function InterfaceChecks({active,ownerId,onSettings}:{active:bool
     const signal=controller.signal,pending=unresolved.current.get(item.id),id=pending||clientRequestId();
     unresolved.current.set(item.id,id);
     try{
-      const result=await platformRequest<{state:string;message?:string;ok?:boolean}>(pending?`/api/fire/system/interface-checks/receipts/${id}`:"/api/futu/test",pending?{signal}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({requestId:id,sourceRevision:item.sourceRevision}),signal},20000);
+      const result=await platformRequest<{state:string;message?:string;ok?:boolean;observationRecorded?:boolean;observedAt?:string}>(pending?`/api/fire/system/interface-checks/receipts/${id}`:"/api/futu/test",pending?{signal}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({requestId:id,sourceRevision:item.sourceRevision}),signal},40000);
       if(signal.aborted)return;
-      if(result.state!=="unknown")unresolved.current.delete(item.id);
+      if(result.state!=="unknown"||result.observationRecorded===true||typeof result.observedAt==="string"&&Number.isFinite(Date.parse(result.observedAt)))unresolved.current.delete(item.id);
       showToast(result.message||"检测结果待核对",result.ok===true?"ok":"err");
       await read(signal);
     }catch(e){
@@ -82,9 +82,9 @@ export default function InterfaceChecks({active,ownerId,onSettings}:{active:bool
     {error&&<p className="system-error" role="alert">{error}</p>}
     <div className="interface-check-grid" aria-busy={!items&&!error || refreshing}>{(items||[]).map(item=>{
       const points=item.points.slice(-12),last=points.at(-1);
-      return <article key={item.id} className="interface-check-card" data-state={item.state} data-kind={item.kind} data-scope={item.scope}>
+      return <article key={item.id} className="interface-check-card" data-state={item.state} data-kind={item.kind} data-scope={item.scope} data-checking={busy===item.id||refreshing||undefined} data-active={active||undefined}>
         <header><ServiceIcon kind={item.kind}/><h3>{item.label}</h3><span className="interface-check-tag">{item.scope==="connection"?"连接":"采集"}</span></header>
-        <div className="interface-check-samples"><strong>{last?.elapsedMs!=null?`${Math.round(last.elapsedMs)} ms`:names[item.state]||"未知"}</strong><div className="interface-check-dots" aria-label="最近检测结果">{Array.from({length:12},(_,index)=>{const point=points[index-(12-points.length)];return <span key={index} data-state={point?.state||"empty"} title={point?`${new Date(point.at).toLocaleString("zh-CN")} · ${names[point.state]||"未知"}${point.elapsedMs!=null?` · ${Math.round(point.elapsedMs)} ms`:""}`:"尚无记录"}/>;})}</div></div>
+        <div className="interface-check-samples"><strong>{last?.elapsedMs!=null?`${Math.round(last.elapsedMs)} ms`:names[item.state]||"未知"}</strong><div className="interface-check-dots" aria-label="最近检测结果">{Array.from({length:12},(_,index)=>{const point=points[index-(12-points.length)];return <span key={`${index}:${point?.at||"empty"}`} data-latest={index===11&&!!point||undefined} data-state={point?.state||"empty"} title={point?`${new Date(point.at).toLocaleString("zh-CN")} · ${names[point.state]||"未知"}${point.elapsedMs!=null?` · ${Math.round(point.elapsedMs)} ms`:""}`:"尚无记录"}/>;})}</div></div>
         <p>{item.detail}</p><footer><small>{last?new Date(last.at).toLocaleString("zh-CN"):""}</small>{item.canTest?<Capsule size="sm" variant="secondary" busy={busy===item.id} disabled={busy!==null||refreshing} onClick={()=>void test(item)}>{unresolved.current.has(item.id)?"核对结果":"检测"}</Capsule>:!item.configured?<Capsule size="sm" variant="ghost" onClick={()=>onSettings(item.kind)}>配置</Capsule>:null}</footer>
       </article>;
     })}{!items&&!error&&<p role="status" className="interface-check-loading text-sm text-muted">正在读取检测记录…</p>}</div>

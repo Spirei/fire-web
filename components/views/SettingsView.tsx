@@ -1,7 +1,7 @@
 "use client";
 import Avatar from "@/components/Avatar";
 import { SESSION_PROOF, requestAdminProof } from "@/lib/adminProof";
-import { Capsule, IconButton } from "@/components/Capsule";
+import { Capsule, IconButton, IconLink } from "@/components/Capsule";
 import MailTemplatesSettings from "@/components/MailTemplatesSettings";
 import { DiscordFields, FeishuFields, QqFields, TelegramFields, WebPushFields, WecomFields } from "@/components/NotifyChannelFields";
 
@@ -695,47 +695,9 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   useEffect(() => () => passkeyData.invalidate(), [passkeyData]);
   const isAdminUser = user?.role === "admin";
   const { unit: currencyDisplayUnit, setUnit: setCurrencyDisplayUnit } = useCurrencyDisplayUnit();
-  const { assets: libraryAssets, assetIcons } = useAssetIcons(["broker", "icon"]);
+  const { assets: libraryAssets } = useAssetIcons(["broker"]);
   const brokerIconOf = (groupId: string) =>
     libraryAssets.find((a) => a.type === "broker" && a.code.toLowerCase() === groupId.toLowerCase())?.url ?? "";
-  const navIconRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  // 上传导航图标：写入素材库 icon:<KEY>，侧栏 / 移动端标签 / 素材库 icon 类目全局生效
-  async function uploadNavIcon(file: File, key: string, label: string) {
-    const busyKey = `nav-icon:${key}`;
-    setBlockSaving((b) => ({ ...b, [busyKey]: true }));
-    try {
-      const fd = new FormData();
-      fd.append("kind", "asset");
-      fd.append("folder", "icon");
-      fd.append("code", key.toUpperCase());
-      fd.append("name", label);
-      fd.append("file", file);
-      const up = await fetch("/api/upload", { method: "POST", body: fd });
-      const upData = await up.json().catch(() => null);
-      if (!up.ok) throw new Error(upData?.error || "上传失败");
-      const existing = libraryAssets.find((a) => a.type === "icon" && a.code.toUpperCase() === key.toUpperCase());
-      const res = await fetch("/api/assets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "icon",
-          market: "OTHER",
-          code: key.toUpperCase(),
-          name: existing?.name || label,
-          url: upData.url,
-          id: existing?.id || undefined
-        })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "保存失败");
-      window.dispatchEvent(new Event("fire:assets-updated"));
-      showToast(`「${label}」图标已更新，全局生效`);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "上传失败", "err");
-    } finally {
-      setBlockSaving((b) => ({ ...b, [busyKey]: false }));
-    }
-  }
   const visibleGroups = SUB_GROUPS
     .map((g) => ({ ...g, items: g.items.filter((it) => isAdminUser || !ADMIN_SUB_KEYS.has(it.key)) }))
     .filter((g) => g.items.length > 0);
@@ -2367,7 +2329,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                 </div>
 
                 <SettingsSection id="mobile-nav" icon="mobile-nav" title="手机导航" desc="前四项显示在底部，其余收进更多。拖动或用箭头调整后自动保存。">
-                  {activeAnchor === "mobile-nav" && <MobileNavigationSettings tabs={tabs} order={site.mobileNavigationOrder ?? []} icons={assetIcons} onSave={order => saveBlock("mobile-nav", { mobileNavigationOrder: order }, "已保存")} />}
+                  {activeAnchor === "mobile-nav" && <MobileNavigationSettings tabs={tabs} order={site.mobileNavigationOrder ?? []} onSave={order => saveBlock("mobile-nav", { mobileNavigationOrder: order }, "已保存")} />}
                   {blockMsg["mobile-nav"]?.type === "err" && <p role="alert" className="settings-form-message is-error">{blockMsg["mobile-nav"]?.text}</p>}
                 </SettingsSection>
 
@@ -2430,45 +2392,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                           )}
                         </button> : <span className="inline-flex h-5 w-5 flex-none items-center justify-center">{t.default && <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-ink"><path d="m4 10 3.5 3.5L16 5.5" /></svg>}</span>}
                         <div className={editingTabs ? "flex min-w-0 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}>
-                          <IconButton size="sm" framed
-                            type="button"
-                            disabled={t.key === "trading" || !editingTabs || !!blockSaving[`nav-icon:${t.key}`]}
-                            onClick={() => navIconRefs.current[t.key]?.click()}
-                            className="group relative flex-none overflow-hidden"
-                            label={t.key === "trading" ? "动态使用专属报纸图标" : `上传/更换「${t.label}」导航图标`}
-                          >
-                            <SafeAssetImage
-                              src={t.key === "trading" ? undefined : assetIcons[t.key.toUpperCase()]}
-                              fallback={<span className="flex h-[18px] w-[18px] items-center justify-center text-ink opacity-[.72]">{NAV_ICONS[t.key] ?? null}</span>}
-                              className="nav-custom-icon h-full w-full object-contain"
-                            />
-                            {editingTabs && t.key !== "trading" && <span className="absolute inset-0 flex items-center justify-center rounded-[9px] bg-black/45 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                              {blockSaving[`nav-icon:${t.key}`] ? (
-                                <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-                                  <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                </svg>
-                              ) : (
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
-                                  <path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" />
-                                  <circle cx="12" cy="13" r="3" />
-                                </svg>
-                              )}
-                            </span>}
-                          </IconButton>
-                          <input
-                            ref={(el) => {
-                              navIconRefs.current[t.key] = el;
-                            }}
-                            type="file"
-                            accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-                            className="hidden"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) void uploadNavIcon(f, t.key, t.label);
-                              e.target.value = "";
-                            }}
-                          />
+                          <span className="flex h-8 w-8 flex-none items-center justify-center text-muted" aria-hidden="true">{NAV_ICONS[t.key]}</span>
                           <input
                             value={t.label}
                             readOnly={!editingTabs}
@@ -3136,32 +3060,28 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                   )}
                                   {/^https?:\/\//i.test(value) && (
                                     <span className="settings-source-actions">
-                                      <button
+                                      <IconButton size="sm" framed
                                         type="button"
-                                        className="settings-source-link"
-                                        title={`复制${f.name}`}
-                                        aria-label={`复制${f.name}链接`}
+                                        label={`复制${f.name}链接`}
                                         onClick={async () => {
                                           const copied = await copyText(value);
                                           showToast(copied ? "链接已复制" : "复制失败", copied ? undefined : "err");
                                         }}
                                       >
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
-                                      </button>
-                                      <a
+                                      </IconButton>
+                                      <IconLink size="sm" framed
                                         href={value}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="settings-source-link"
-                                        title={`打开${f.name}`}
-                                        aria-label={`在新窗口打开${f.name}`}
+                                        label={`在新窗口打开${f.name}`}
                                       >
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                           <path d="M14 5h5v5" />
                                           <path d="m19 5-9 9" />
                                           <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
                                         </svg>
-                                      </a>
+                                      </IconLink>
                                     </span>
                                   )}
                                 </div>

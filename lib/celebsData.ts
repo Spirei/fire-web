@@ -22,9 +22,10 @@ interface CacheShape {
 }
 export interface CelebsResult {
   celebs: Celeb[];
-  source: "sec-edgar" | "cache" | "sample";
+  source: "sec-edgar" | "cache" | "sample" | "stored_public_disclosures";
   updatedAt: string;
-  detail: Record<string, string>;
+  detail: Record<string, unknown>;
+  stockIcons?: Record<string, string>;
 }
 export interface ReturnsDaily {
   dates: string[];

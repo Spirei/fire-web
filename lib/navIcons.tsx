@@ -3,7 +3,7 @@ import {IconLayoutDashboard,IconClipboardList,IconApi,IconDatabaseExport} from "
 
 /**
  * 导航默认图标（主侧栏 / 移动端标签 / 设置-导航菜单预览共用）。
- * 素材库 icon 类目上传自定义图标后，按 tab key（大写）全局替换显示。
+ * 系统导航固定使用内置矢量图标，避免上传素材或旧缓存改变导航语义。
  */
 export const NAV_ICONS: Record<string, React.ReactNode> = {
  "system-overview":<IconLayoutDashboard size={18}/>,"background-tasks":<IconClipboardList size={18}/>,"backup-recovery":<IconDatabaseExport size={18}/>,"api-migration":<IconApi size={18}/>,

@@ -203,3 +203,6 @@ html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="t
 html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="true"],[data-selected="true"]):is(:hover,:focus-visible):not(:disabled) { background:color-mix(in srgb,var(--capsule-fill) 10%,rgb(var(--site-surface)))!important; }
 html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="true"],[data-selected="true"],:hover,:focus-visible)>strong { color:rgb(var(--site-ink))!important; }
 html:root[data-palette] body .capsule-control.metric-control:is([aria-pressed="true"],[data-selected="true"],:hover,:focus-visible)>span { color:rgb(var(--site-muted))!important; }
+
+/* Compact link actions obey the same geometry as icon buttons. */
+html:root[data-palette] body a.capsule-icon-control { flex-shrink:0; text-decoration:none; }

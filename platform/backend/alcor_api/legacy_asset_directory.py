@@ -323,3 +323,11 @@ class LegacyAssetDirectory:
             fileVariants=variants,
         )
         return result
+
+
+class LegacyCelebPortraits(LegacyAssetDirectory):
+    """Read a named public portrait from the existing uploads mount; never enumerate or write."""
+    def path_parts(self, path):
+        if not re.fullmatch(r"celebs/[A-Za-z0-9][A-Za-z0-9_-]{0,150}\.(?:png|jpg|jpeg|webp|gif)", path):
+            raise HTTPException(404, "人物图片路径无效")
+        return path.split("/")

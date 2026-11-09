@@ -19,6 +19,6 @@ export default function WorkspaceTicker() {
     return () => observer.disconnect();
   }, []);
   return <div ref={ref} className="app-shell-ticker min-w-0 overflow-hidden">
-    {visible && !materialPage ? <IndexTicker /> : <div className="h-[42px] w-[300px]" aria-hidden="true" />}
+    {visible && !materialPage ? <IndexTicker /> : <div className="h-[42px] w-full max-w-[300px]" aria-hidden="true" />}
   </div>;
 }

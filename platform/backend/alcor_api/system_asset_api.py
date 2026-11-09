@@ -196,8 +196,18 @@ def mount_system_assets(app, settings, db, rate_limit):
         row, stream = await service.original(await admin(request), identifier)
         return content(request, row, stream, private=True)
 
+    @app.get("/api/celeb-portraits/{filename}")
+    async def celeb_portrait(filename: str, request: Request):
+        from .legacy_asset_directory import LegacyCelebPortraits, public_upload_root
+        if set(request.query_params) - {"sha256"} or len(request.query_params.getlist("sha256")) > 1:
+            raise HTTPException(400, "图片参数无效")
+        row, stream = await asyncio.to_thread(LegacyCelebPortraits(public_upload_root(settings)).open_bytes, "celebs/" + filename, request.query_params.get("sha256"))
+        return content(request, row, stream, immutable=request.query_params.get("sha256") is not None)
+
     @app.get("/uploads/{path:path}")
     async def public(path: str, request: Request):
+        if path.startswith("celebs/"):
+            return await celeb_portrait(path[len("celebs/"):], request)
         if path.startswith(("asset/", "cards/")):
             from .asset_library_access import assert_material_read
             await assert_material_read(request, db)

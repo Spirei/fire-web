@@ -11,7 +11,7 @@ export async function workspaceBootstrap(tab:string,query:URLSearchParams,identi
   }
   initial.backupRecovery={identity,connections,backups,preparations:preparations.items,preparation};
  }else if(tab==='library'&&identity.user.role==='admin'){
-  const type=['market','stock','crypto','metal','flag','broker','group','card','icon'].includes(query.get('tab')||'')?query.get('tab')!:'market';
+  const type=['market','stock','crypto','metal','flag','broker','group','card'].includes(query.get('tab')||'')?query.get('tab')!:'market';
   const market=query.get('market')||'ALL',q=(query.get('q')||'').slice(0,200),page=Math.max(1,Number(query.get('page'))||1),removed=type!=='group'&&query.get('removed')==='1';
   let data:MaterialListing;
   if(type==='group'){
@@ -24,7 +24,15 @@ export async function workspaceBootstrap(tab:string,query:URLSearchParams,identi
  else if(tab==='watchlist'){const value=await read<{data:{groups:NonNullable<WorkspaceInitial['watchGroups']>}}>('/api/v1/watch-groups');initial.watchGroups=value.data.groups;}
  else if(tab==='activities')initial.logs=await read('/api/activities');
  else if(tab==='trading')initial.feed=await read('/api/feed?'+new URLSearchParams({group:query.get('feedGroup')||'default',author:query.get('feedPerson')||'',limit:'10'}));
- else if(tab==='celebs')initial.celebs=await read('/api/celebs');
+ else if(tab==='celebs'){
+  const directory=await read<NonNullable<WorkspaceInitial['celebs']>>('/api/celebs');
+  const keys=[...new Set(directory.celebs.flatMap(person=>person.holdings.map(item=>`${item.market||'US'}:${item.code}`)))].slice(0,100);
+  const icons:Record<string,string>={};
+  if(keys.length){
+   try{const result=await read<{assets:{market:string;code:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=stock&keys='+encodeURIComponent(keys.join(',')));for(const item of result.assets||[])if(item.imageUrl||item.url)icons[`${item.market}:${item.code}`]=item.imageUrl||item.url!;}catch{/* Portraits and disclosed records remain visible if icons are temporarily unavailable. */}
+  }
+  initial.celebs={...directory,stockIcons:icons};
+ }
  else if(tab==='users'&&identity.user.role==='admin')initial.users=await read('/api/users');
  else if(tab==='quote-pool'){
   type Snapshot=NonNullable<WorkspaceInitial['quotePool']>['mine'];

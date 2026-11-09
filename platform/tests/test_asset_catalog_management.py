@@ -56,9 +56,8 @@ async def test_original_asset_ids_default_fields_and_page_goldens(client, admin)
         {"type": "crypto", "market": "", "code": " btc ", "name": ""},
         {"type": "broker", "market": "GROUP", "code": " demo ", "name": "Public broker icon"},
         {"type": "group", "market": "GROUP", "code": "", "name": "Public group icon"},
-        {"type": "icon", "market": "", "code": " demo ", "name": "Public icon"},
     ]
-    for revision, (asset, golden) in enumerate(zip(inputs, original["assets"], strict=True)):
+    for revision, (asset, golden) in enumerate(zip(inputs, [item for item in original["assets"] if item["type"] != "icon"], strict=True)):
         saved = await client.post(
             PATH,
             json={
@@ -215,7 +214,7 @@ async def test_legacy_management_accepts_only_web_session_family_never_native_ad
 
 async def test_explicit_public_icon_types_share_catalog_and_tombstones(client, admin, app, db):
     revision = 0
-    for kind in ("broker", "group", "icon"):
+    for kind in ("broker", "group"):
         image, _ = await upload(client, raw=SVG, name=kind + ".svg", folder=kind, market="GROUP", code="DEMO")
         assert image.status_code == 200, image.text
         saved = await client.post(
@@ -318,3 +317,17 @@ async def test_legacy_web_http_paging_sort_unknowns_and_app_literal_query(client
     assert len(unpaged.json()["assets"]) == 5
     no_type = await client.get("/api/assets", params={"paged": "1", "q": "missing"})
     assert len(no_type.json()["assets"]) == 5
+
+
+async def test_retired_function_icons_are_not_listed_or_editable(client, admin, settings):
+    root = settings.file_root / "asset" / "icon"
+    root.mkdir(parents=True)
+    original = root / "fire.svg"
+    original.write_bytes(SVG)
+    assert (await client.get("/api/assets?type=icon")).status_code == 400
+    assert (await client.get("/api/assets/catalog?type=icon")).status_code in (400, 401)
+    saved = await client.post(PATH, json=command(type="icon", code="FIRE"))
+    assert saved.status_code == 409
+    listing = (await client.get("/api/assets")).json()
+    assert not any(row["type"] == "icon" for row in listing["assets"])
+    assert original.read_bytes() == SVG  # Retirement preserves historical originals for recovery.
