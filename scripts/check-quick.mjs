@@ -9,7 +9,7 @@ const checks = [
   ["镜像发布契约", process.execPath, ["tests/deploy-publication.mjs"]],
   ["前端与启动回归", "npm", ["run", "test:review"]],
   ["类型检查", process.execPath, ["node_modules/typescript/bin/tsc", "--noEmit"]],
-  ["数据库只读检查与发布回执", "uv", ["run", "--frozen", "--project", "platform", "--group", "dev", "pytest", "platform/tests/test_fire_config_database.py", "platform/tests/test_deployment_build_receipts.py", "-q"]],
+  ["版本一致性、数据库只读检查与发布回执", "uv", ["run", "--frozen", "--project", "platform", "--group", "dev", "pytest", "platform/tests/test_releases.py", "platform/tests/test_fire_config_database.py", "platform/tests/test_deployment_build_receipts.py", "-q"]],
 ];
 
 for (const [label, command, args] of checks) {
