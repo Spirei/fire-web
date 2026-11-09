@@ -40,7 +40,7 @@ let passed=0;async function test(name,fn){await fn();passed++;console.log('PASS 
   p=h.value.test();h.reply(2,{ok:true,error:'需要管理员权限'},403);await p;h.render();assert.equal(h.value.label,'检测失败');assert.equal(h.value.result.msg,'需要管理员权限');h.close();
  });
  await test('double clicks share one test; a timeout aborts once and permits an explicit retry',async()=>{
-  const h=harness();h.render();h.health();await h.drain();const p=h.value.test();await h.value.test();assert.equal(h.requests.length,2);h.tick(15000);await p;await h.drain();assert(h.requests[1].init.signal.aborted);assert.equal(h.value.result.msg,'连接测试超时，请重试');assert.equal(h.timers.size,0);
+  const h=harness();h.render();h.health();await h.drain();const p=h.value.test();await h.value.test();assert.equal(h.requests.length,2);h.tick(30000);assert.equal(h.requests[1].init.signal.aborted,false);h.tick(10000);await p;await h.drain();assert(h.requests[1].init.signal.aborted);assert.equal(h.value.result.msg,'连接测试超时，请重试');assert.equal(h.timers.size,0);
   const next=h.value.test();h.reply(2,{ok:true});await next;h.render();assert.equal(h.value.label,'已连接');h.close();
  });
  await test('unmount cancels health/test requests and leaves no active timer',async()=>{

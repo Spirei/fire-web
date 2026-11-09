@@ -39,7 +39,7 @@ export function useFutuConnectionStatus(host: string, port: string) {
     if (pending.current || !alive.current) return;
     const id = ++sequence.current, controller = new AbortController(); pending.current = controller;
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 15_000);
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 40_000);
     pendingTimer.current = timer;
     const active = () => alive.current && sequence.current === id && currentEndpoint.current === endpoint;
     setResult({ endpoint, busy: true });
