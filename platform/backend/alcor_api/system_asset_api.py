@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+import secrets
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, Request, Response
@@ -10,7 +11,7 @@ from starlette.datastructures import UploadFile
 
 from .profile_http import bounded_body
 from .resource_api import PrivateResourceResponse, byte_range
-from .security import digest, identity
+from .security import COOKIE, csrf_token, digest, identity
 from .system_assets import SystemAssets
 
 # Bundled illustration from the old security-check route. Host volumes are not consulted.
@@ -37,7 +38,17 @@ def mount_system_assets(app, settings, db, rate_limit):
         if "authorization" in request.headers:
             raise HTTPException(403, "请使用当前网页管理员会话")
         from .legacy_identity import OLD_COOKIE, WEB_COOKIE
-        if request.cookies.get(WEB_COOKIE) or request.cookies.get(OLD_COOKIE):
+        token = request.cookies.get(COOKIE, "")
+        binding = request.headers.get("x-csrf-token")
+        # Two browser surfaces can coexist. An explicit CSRF proof selects its
+        # own session; do not let an unrelated legacy cookie replace that proof.
+        platform_bound = bool(token and (
+            binding is None or (
+                re.fullmatch(r"[0-9a-f]{64}", binding)
+                and secrets.compare_digest(binding, csrf_token(token))
+            )
+        ))
+        if not platform_bound and (request.cookies.get(WEB_COOKIE) or request.cookies.get(OLD_COOKIE)):
             from .fire_web import member
             who = await member(request)
         else:
