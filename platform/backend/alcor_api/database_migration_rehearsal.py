@@ -13,7 +13,7 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from .backups import BackupFailure,private_read,tools,write_private
+from .backups import BackupFailure,private_dir,private_read,tools,write_private
 from .database_migration_capture import canonical,file_sha,sha,sync_directory
 
 ROLE='migration_restore'
@@ -92,9 +92,34 @@ def verify_database(dsn,manifest,folder,budget,cancel,progress,label):
     return checks
 
 
-def rehearse(settings,root,summaries,budget,cancel,progress):
+def completed_receipt(folder,manifest,summary):
+    raw=private_read(folder/'restore-receipt.json',16*1024**2)
+    return validate_completed_receipt(raw,manifest,summary)
+
+
+def validate_completed_receipt(raw,manifest,summary):
+    receipt=json.loads(raw)
+    expected=[{'schema':t['schema'],'table':t['name'],'rows':t['rows'],'multiset_sha256':t['multiset_sha256']} for t in manifest['tables']]
+    if (receipt.get('scope')!='isolated_restore' or receipt.get('archive_sha256')!=summary['archive_sha256']
+        or receipt.get('ordinary_restore_role') is not True or receipt.get('listen_addresses')!=[] or receipt.get('tables')!=expected):
+        raise BackupFailure('已完成的恢复核对记录与原归档不匹配')
+    return raw
+
+
+def rehearse(settings,root,summaries,budget,cancel,progress,*,archive_root=None,completed=None):
     if os.geteuid()==0:raise BackupFailure('隔离演练须由应用普通用户执行')
-    manifests={label:verify_manifest(root,label,summaries[label],cancel) for label in ('source','target')}
+    archive_root=archive_root or root;completed=completed or {}
+    manifests={label:verify_manifest(archive_root,label,summaries[label],cancel) for label in ('source','target')}
+    results={}
+    for label,raw in completed.items():
+        if label not in manifests:raise BackupFailure('原恢复核对范围无效')
+        validate_completed_receipt(raw,manifests[label],summaries[label])
+        folder=private_dir(root/label)
+        # Preserve the exact prior proof; never turn a partial phase into success.
+        budget.object(root,cancel);budget.account(root,cancel,len(raw))
+        write_private(folder/'restore-receipt.json',raw);sync_directory(folder)
+        results[label]={**summaries[label],'restore_verified':True,'restore_reused':True,'restore_receipt_sha256':sha(raw)}
+    if len(results)==2:return results
     data=root/'rehearsal-cluster'
     if data.exists():raise BackupFailure('隔离演练目录已存在，不能覆盖')
     budget.check(root,cancel,128*1024**2)
@@ -116,16 +141,17 @@ def rehearse(settings,root,summaries,budget,cancel,progress):
             if administrator.execute('SHOW listen_addresses').fetchone()[0]!='':raise BackupFailure('隔离实例出现网络监听')
             administrator.execute(sql.SQL('CREATE ROLE {} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS').format(sql.Identifier(ROLE)))
             for label in ('source','target'):
+                if label in results:continue
                 administrator.execute(sql.SQL('CREATE DATABASE {} OWNER {} TEMPLATE template0').format(sql.Identifier(label+'_snapshot'),sql.Identifier(ROLE)))
                 administrator.execute(sql.SQL('REVOKE ALL ON DATABASE {} FROM PUBLIC').format(sql.Identifier(label+'_snapshot')))
-        results={}
         for label in ('source','target'):
-            folder=root/label;dbname=label+'_snapshot'
+            if label in results:continue
+            folder=private_dir(root/label);archive=archive_root/label;dbname=label+'_snapshot'
             progress({'phase':label+'_restore','processed':0,'total':None,'unit':'archive'})
             restore_env={**env,'PGHOST':str(socket),'PGUSER':ROLE,'PGDATABASE':dbname,'PGCONNECT_TIMEOUT':'3','PGOPTIONS':'-c search_path=pg_catalog -c statement_timeout=30000'}
-            run(settings,'pg_restore',['--no-password','--no-owner','--no-privileges','--single-transaction','--exit-on-error','--dbname='+dbname,str(folder/'database.dump')],restore_env,root,budget,cancel,data=data)
+            run(settings,'pg_restore',['--no-password','--no-owner','--no-privileges','--single-transaction','--exit-on-error','--dbname='+dbname,str(archive/'database.dump')],restore_env,root,budget,cancel,data=data)
             progress({'phase':label+'_reconcile','processed':0,'total':len(manifests[label]['tables']),'unit':'tables'})
-            checks=verify_database(make_conninfo(host=str(socket),dbname=dbname,user=ROLE),manifests[label],folder,budget,cancel,progress,label)
+            checks=verify_database(make_conninfo(host=str(socket),dbname=dbname,user=ROLE),manifests[label],archive,budget,cancel,progress,label)
             evidence=canonical({'scope':'isolated_restore','archive_sha256':summaries[label]['archive_sha256'],'tables':checks,'listen_addresses':[],'ordinary_restore_role':True})
             budget.object(root,cancel);budget.account(root,cancel,len(evidence));write_private(folder/'restore-receipt.json',evidence)
             sync_directory(folder)

@@ -70,7 +70,7 @@ async def submit(db,who,data):
 
 def public_task(row):
     return {**{key:str(row[key]) if key in ('id','request_id') else row[key] for key in ('id','request_id','kind','status','result','error_code')},
-            'source_revision':row['payload']['source_revision'],'created_at':row['created_at'].isoformat()}
+            'source_revision':row['payload']['source_revision'],'created_at':row['created_at'].isoformat(),'retry_of':row['payload'].get('retry_of')}
 
 
 async def cancel_request(db,who,request_id):
@@ -125,7 +125,9 @@ async def guard(db,task,progress=None):
 
 
 async def execute(db,task):
-    from .worker import finish
+    if task['payload'].get('_retry'):
+        from .database_migration_retry import execute_retry
+        return await execute_retry(db,task)
     settings=db.settings
     source=await guard(db,task)
     config=SourceConfig.model_validate(source['config'])
@@ -138,9 +140,7 @@ async def execute(db,task):
     if attempt.exists():raise BackupFailure('此迁移尝试已存在，不能覆盖原归档')
     private_dir(attempt)
     budget=CaptureBudget(settings.backup_stream_max_bytes,settings.backup_stream_disk_reserve_bytes,settings.backup_stream_seconds,settings.backup_stream_max_objects)
-    cancel=threading.Event();loop=asyncio.get_running_loop();queue=asyncio.Queue()
-    def publish(event):loop.call_soon_threadsafe(queue.put_nowait,event)
-    def capture():
+    def capture(cancel,publish):
         old=capture_database(settings,make_conninfo(**values),attempt,'source',budget,cancel,publish,expected_identity=task['payload']['_source_identity'],schema=config.schema_name)
         new=capture_database(settings,settings.database_url.get_secret_value(),attempt,'target',budget,cancel,publish,expected_identity=task['payload']['_target_identity'],schema='public')
         from .database_migration_rehearsal import rehearse
@@ -151,7 +151,14 @@ async def execute(db,task):
         encoded=canonical(result);budget.object(attempt,cancel);budget.account(attempt,cancel,len(encoded));write_private(attempt/'receipt.json',encoded)
         for directory in (attempt,root,root.parent,settings.backup_dir):sync_directory(directory)
         return result
-    work=asyncio.create_task(asyncio.to_thread(capture))
+    await run_preparation(db,task,attempt,budget,capture)
+
+
+async def run_preparation(db,task,attempt,budget,capture):
+    from .worker import finish
+    cancel=threading.Event();loop=asyncio.get_running_loop();queue=asyncio.Queue()
+    def publish(event):loop.call_soon_threadsafe(queue.put_nowait,event)
+    work=asyncio.create_task(asyncio.to_thread(capture,cancel,publish))
     try:
         while not work.done():
             await asyncio.wait({work},timeout=.5)

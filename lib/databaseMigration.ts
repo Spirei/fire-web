@@ -15,6 +15,7 @@ export type MigrationConnectionData = {
 export type MigrationPreparationTask = {
   id:string; request_id:string; kind:'database.migration.prepare';
   source_revision?:string|null;created_at?:string;
+  retry_of?:string|null;
   status:'queued'|'running'|'cancel_requested'|'cancelled'|'succeeded'|'failed'; error_code?:string|null;
   result?:{phase:string;business_written:boolean;cutover_ready:boolean;message?:string;source_revision?:string;
     progress?:{phase:string;processed:number;total:number|null;unit:string};

@@ -6,6 +6,7 @@ from fastapi import APIRouter,Depends,Request,Response,HTTPException
 
 from .database_migration_connections import MigrationConnections,SourceSave,SourceTest
 from .database_migration_jobs import PreparationInput,PreparationCancellation,submit,listing,cancel_request
+from .database_migration_retry import PreparationRetry,submit_retry
 from .security import administrator,Identity
 from .fire_web import administrator as fire_administrator
 
@@ -59,6 +60,11 @@ def mount_database_migration(app,db):
         async def prepare(data:PreparationInput,response:Response,who:Admin):
             headers(response)
             return await submit(db,who,data)
+
+        @router.post('/preparations/{task_id}/retry',status_code=202,operation_id=key+'_migration_preparation_retry',summary='重试未完成的迁移准备步骤',description='复用原归档和已完成的隔离恢复核对，仅执行未完成步骤；不重新采集或写入业务数据。')
+        async def retry_preparation(task_id:UUID,data:PreparationRetry,response:Response,who:Admin):
+            headers(response)
+            return await submit_retry(db,who,task_id,data)
 
         @router.post('/preparations/cancel',operation_id=key+'_migration_preparation_cancel',summary='按原请求编号取消迁移准备')
         async def cancel_preparation(data:PreparationCancellation,response:Response,who:Admin):

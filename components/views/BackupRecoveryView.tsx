@@ -205,20 +205,21 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       setUnknown(''); url('sourceRequest', ''); await load(signal, true);
     });
   }
-  async function prepare(){
+  async function prepare(retryTask?:MigrationPreparationTask){
     if(!data?.source)return;
     const requestId=crypto.randomUUID(),revision=data.source.revision;
     await run('prepare',async signal=>{
       setTask(null);setPreparationRequest(requestId);url('migrationRequest',requestId);
       try{
-        const accepted=await request<MigrationPreparationTask>('/api/fire/database-migration/preparations',{method:'POST',headers:headers(),signal,body:JSON.stringify({request_id:requestId,source_revision:revision})});
+        const path=retryTask?'/api/fire/database-migration/preparations/'+retryTask.id+'/retry':'/api/fire/database-migration/preparations';
+        const accepted=await request<MigrationPreparationTask>(path,{method:'POST',headers:headers(),signal,body:JSON.stringify(retryTask?{request_id:requestId}:{request_id:requestId,source_revision:revision})});
         if(signal.aborted)return;
         if(accepted.request_id!==requestId||accepted.kind!=='database.migration.prepare')throw new Error('迁移准备回执不匹配，请查询原任务');
         setTask(accepted);
         setPreparations(value=>[accepted,...value.filter(item=>item.id!==accepted.id)].slice(0,20));
       }catch(error){
         const status=(error as PlatformRequestError).status;
-        if(status&&status<500&&!signal.aborted){setPreparationRequest('');url('migrationRequest','');}
+        if(status&&status<500&&!signal.aborted){setTask(retryTask??null);setPreparationRequest(retryTask?.request_id??'');url('migrationRequest',retryTask?.request_id??'');}
         throw error;
       }
     });
@@ -296,14 +297,14 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       </div>
     </div>
       <div className="mt-4 flex justify-end"><Capsule disabled={disabled||!sourceReady||!targetReady||!sourceCheck?.persistent_identity_verified||!data?.checks.target?.persistent_identity_verified} busy={busy==='prepare'} onClick={()=>void prepare()}>准备迁移</Capsule></div>
-      {!!preparations.length&&<div className="mt-6 flex flex-wrap items-center gap-3"><span className="text-sm text-ink-3">准备记录</span><AppSelect ariaLabel="准备记录" value={preparationRequest} options={preparations.map(item=>({value:item.request_id,label:`${item.created_at?.slice(0,19).replace('T',' ')??item.request_id.slice(0,8)} · ${item.status==='succeeded'&&item.result?.source?.restore_verified&&item.result.target?.restore_verified?'恢复核对通过':{queued:'等待中',running:'进行中',succeeded:'归档已校验',failed:'失败',cancelled:'已取消',cancel_requested:'取消中'}[item.status]}`}))} onChange={value=>{const selected=preparations.find(item=>item.request_id===value);if(selected){setTask(selected);setPreparationRequest(value);url('migrationRequest',value);}}} /></div>}
-      {preparationRequest&&<><PreparationProgress task={task} moving={active&&visible} busy={!!busy} onCancel={()=>void cancelPreparation()}/>{(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
+      {!!preparations.length&&<div className="mt-6 flex flex-wrap items-center gap-3"><span className="text-sm text-ink-3">准备记录</span><AppSelect ariaLabel="准备记录" value={preparationRequest} disabled={!!busy} triggerContent={preparationRequest&&!preparations.some(item=>item.request_id===preparationRequest)?<IconLoader2 size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none"/>:undefined} options={preparations.map(item=>({value:item.request_id,label:`${item.created_at?.slice(0,19).replace('T',' ')??item.request_id.slice(0,8)} · ${item.retry_of?'重试 · ':''}${item.status==='succeeded'&&item.result?.source?.restore_verified&&item.result.target?.restore_verified?'恢复核对通过':{queued:'等待中',running:'进行中',succeeded:'归档已校验',failed:'失败',cancelled:'已取消',cancel_requested:'取消中'}[item.status]}`}))} onChange={value=>{const selected=preparations.find(item=>item.request_id===value);if(selected){setTask(selected);setPreparationRequest(value);url('migrationRequest',value);}}} /></div>}
+      {preparationRequest&&<><PreparationProgress task={task} moving={active&&visible} busy={!!busy} retryDisabled={anyPreparationActive} onRetry={()=>task&&void prepare(task)} onCancel={()=>void cancelPreparation()}/>{(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
     </>}
   </section>;
 }
 
 const preparationPhases=[['source_archive','旧库备份'],['source_rows','旧库逐表副本'],['source_verify','旧库归档校验'],['target_archive','新库备份'],['target_rows','新库逐表副本'],['target_verify','新库归档校验'],['source_restore','隔离恢复旧库'],['source_reconcile','核对旧库内容'],['target_restore','隔离恢复新库'],['target_reconcile','核对新库内容']] as const;
-function PreparationProgress({task,moving,busy,onCancel}:{task:MigrationPreparationTask|null;moving:boolean;busy:boolean;onCancel:()=>void}){
+function PreparationProgress({task,moving,busy,retryDisabled,onRetry,onCancel}:{task:MigrationPreparationTask|null;moving:boolean;busy:boolean;retryDisabled:boolean;onRetry:()=>void;onCancel:()=>void}){
   const completed=task?.status==='succeeded'&&task.result?.phase==='awaiting_mapping'&&task.result.source?.restore_verified&&task.result.target?.restore_verified;
   const phases=preparationPhases.map(([key])=>key as string);
   const last=task?.result?.progress?.phase??task?.events?.filter(event=>phases.includes(event.phase)).at(-1)?.phase;
@@ -315,7 +316,7 @@ function PreparationProgress({task,moving,busy,onCancel}:{task:MigrationPreparat
   const message=task?.result?.message;
   const expectedCancellation=cancelled&&(message==='迁移准备已停止'||message==='迁移准备已停止或执行权已变化');
   return <div className="migration-preparation mt-6" data-moving={moving&&active}>
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold text-ink">{label}</h2>{(!task||['queued','running'].includes(task.status))&&<Capsule variant="secondary" size="sm" disabled={busy} onClick={onCancel}>取消准备</Capsule>}</div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold text-ink">{label}</h2>{failed?<Capsule size="sm" busy={busy} disabled={retryDisabled} onClick={onRetry}>重试未完成步骤</Capsule>:(!task||['queued','running'].includes(task.status))&&<Capsule variant="secondary" size="sm" disabled={busy} onClick={onCancel}>取消准备</Capsule>}</div>
     <ol className="migration-phase-list mt-5">{preparationPhases.map(([key,title],position)=>{
       const state=position<index?'complete':position===index&&failed?'failed':position===index&&active?'running':'pending';
       return <li key={key} data-state={state}><span className="migration-phase-icon">{state==='complete'?<IconCheck size={18}/>:state==='failed'?<IconAlertCircle size={18}/>:state==='running'?<IconLoader2 size={18}/>:<IconCircle size={18}/>}</span><span>{title}</span>{state==='running'&&progress?.phase===key&&progress.total!==null&&<small>{progress.processed} / {progress.total}</small>}</li>;
