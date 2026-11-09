@@ -65,9 +65,12 @@ async def test_binding_requires_admin_csrf_and_complete_fields(client,admin):
     assert (await send(client,await body(client))).status_code==403
 
 async def test_current_fire_browser_upload_requires_bound_csrf_and_preserves_original(client,admin,settings):
+    platform_proof=client.headers['x-csrf-token']
     client.headers.pop('x-csrf-token',None)
     login=await client.post('/api/auth/login',json={'username':'AdminOne','password':'Synthetic9Pass'})
     assert login.status_code==200
+    # A legacy login does not invalidate another surface's explicit platform proof.
+    assert (await client.get(P,headers={'x-csrf-token':platform_proof})).status_code==200
     # Do not let a separate new-Web cookie authorize this browser operation.
     from alcor_api.security import COOKIE
     client.cookies.delete(COOKIE)
