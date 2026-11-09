@@ -211,6 +211,12 @@ async def test_retry_reuses_snapshots_and_completed_source_only_restores_target_
     assert response.json()['result']['progress']['phase']=='target_restore'
     assert (await client.post(path,json=payload)).json()['id']==response.json()['id']
     assert (await client.post(path,json={'request_id':str(uuid4())})).status_code==409
+    # A retry can fail before creating a workspace; the prior successful proof
+    # must remain reusable through that intermediate failed task.
+    interrupted=await claim(db,uuid4());assert str(interrupted['id'])==response.json()['id']
+    assert await finish(db,interrupted,{'business_written':False},error_code='synthetic_pre_execution_failure')
+    path='/api/fire/database-migration/preparations/'+str(interrupted['id'])+'/retry';payload={'request_id':str(uuid4())}
+    response=await client.post(path,json=payload);assert response.status_code==202,response.text
     def forbidden_capture(*args,**kwargs):raise AssertionError('retry must never capture either live database')
     monkeypatch.setattr(jobs,'capture_database',forbidden_capture)
     original=module.run;restores=[]
@@ -225,7 +231,7 @@ async def test_retry_reuses_snapshots_and_completed_source_only_restores_target_
     result=detail['result'];assert result['capture_reused'] is True and result['business_written'] is False and result['cutover_ready'] is False
     assert result['source']['restore_reused'] is True and result['source']['restore_verified'] is True and result['target']['restore_verified'] is True
     assert restores==['--dbname=target_snapshot']
-    assert result['archive_id']==str(parent['id']) and result['resumed_from']==str(parent['id'])
+    assert result['archive_id']==str(parent['id']) and result['resumed_from']==str(interrupted['id']) and result['verified_proof_from']==str(parent['id'])
     assert before=={str(p.relative_to(folder)):hashlib.sha256(p.read_bytes()).hexdigest() for label in ('source','target') for p in (folder/label).rglob('*') if p.is_file()}
     assert (await client.post(path,json=payload)).json()['status']=='succeeded'
     assert (await client.post(path,json={'request_id':str(uuid4())})).status_code==409

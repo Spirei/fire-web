@@ -106,6 +106,16 @@ async def submit_retry(db,who,parent_id,data):
             raise HTTPException(409,'已有迁移准备任务，请先核对原任务')
         previous=parent['payload'].get('_retry',{})
         archive_task=previous.get('archive_task',str(parent_id));archive_attempt=previous.get('archive_attempt',parent['attempts'])
+        proof_task=str(parent_id);proof_attempt=parent['attempts']
+        if previous:
+            try:
+                parent_folder=attempt_path(db.settings,parent_id,parent['attempts'])
+                if (parent_folder/'rehearsal-cluster'/'postmaster.pid').exists():raise HTTPException(409,'原隔离实例尚未确认停止')
+                has_proof=any((parent_folder/label/'restore-receipt.json').exists() for label in ('source','target'))
+            except FileNotFoundError:has_proof=False
+            except (BackupFailure,StreamFailure,OSError):raise HTTPException(422,'原重试目录不可用，请核对权限') from None
+            if not has_proof:
+                proof_task=previous['proof_task'];proof_attempt=previous['proof_attempt']
         origin=await(await conn.execute("SELECT payload,created_at FROM tasks WHERE id=%s AND owner_id=%s AND kind='database.migration.prepare' FOR SHARE",(UUID(archive_task),who.id))).fetchone()
         if not origin:raise HTTPException(409,'原归档不属于当前管理员')
         if await(await conn.execute("SELECT 1 FROM tasks WHERE owner_id=%s AND kind='database.migration.prepare' AND status='succeeded' AND payload->'_retry'->>'archive_task'=%s LIMIT 1",(who.id,archive_task))).fetchone():
@@ -113,13 +123,13 @@ async def submit_retry(db,who,parent_id,data):
         try:
             identities={label:origin['payload']['_'+label+'_identity'] for label in ('source','target')}
             for name in ('pg_restore','initdb','pg_ctl','postgres'):tools(db.settings,name)
-            _,seal,_=await asyncio.to_thread(sealed_state,db.settings,archive_task,archive_attempt,str(parent_id),parent['attempts'],identities)
+            _,seal,_=await asyncio.to_thread(sealed_state,db.settings,archive_task,archive_attempt,proof_task,proof_attempt,identities)
         except (BackupFailure,StreamFailure,OSError,KeyError,TypeError,ValueError):
             raise HTTPException(422,'原归档或已完成记录不可复用，请核对后重新准备') from None
         client='legacy-web' if getattr(who,'legacy_client',False) and not getattr(who,'legacy_platform',False) else 'new-web'
         intent.update(_session_hash=who.token_hash,_session_client=client,
             _vault_fingerprint=hashlib.sha256(Vault(db.settings.connection_secret_dir,read_only=True).key()).hexdigest() if source['password_ciphertext'] else None,
-            _retry={'archive_task':archive_task,'archive_attempt':archive_attempt,'proof_task':str(parent_id),'proof_attempt':parent['attempts'],
+            _retry={'archive_task':archive_task,'archive_attempt':archive_attempt,'proof_task':proof_task,'proof_attempt':proof_attempt,
                     'archive_created_at':origin['created_at'].isoformat(),'identities':identities,'seal':seal})
         phase='target_restore' if 'source' in seal['completed'] else 'source_restore'
         result={'phase':phase,'progress':{'phase':phase,'processed':0,'total':None,'unit':'archive'},'business_written':False,'cutover_ready':False,'source_revision':intent['source_revision']}
@@ -147,7 +157,7 @@ async def execute_retry(db,task):
         result={'phase':'awaiting_mapping','source':restored['source'],'target':restored['target'],'business_written':False,'cutover_ready':False,
             'build_sha':settings.source_revision or None,'software_version':__version__,'runtime_binding':task['payload']['runtime_binding'],
             'files_included':False,'source_revision':task['payload']['source_revision'],'archive_id':retry['archive_task'],'archive_attempt':retry['archive_attempt'],
-            'attempt':task['attempts'],'resumed_from':retry['proof_task'],'capture_reused':True,'archive_created_at':retry['archive_created_at'],'created_at':datetime.now(UTC).isoformat()}
+            'attempt':task['attempts'],'resumed_from':task['payload']['retry_of'],'verified_proof_from':retry['proof_task'],'capture_reused':True,'archive_created_at':retry['archive_created_at'],'created_at':datetime.now(UTC).isoformat()}
         encoded=canonical(result);budget.object(attempt,cancel);budget.account(attempt,cancel,len(encoded));write_private(attempt/'receipt.json',encoded)
         for directory in (attempt,root,root.parent,settings.backup_dir):sync_directory(directory)
         return result
