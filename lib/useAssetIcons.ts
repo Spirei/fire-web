@@ -173,14 +173,18 @@ export function primeFlagIconCache(icons: Record<string, string>) {
 }
 
 const flagInflight = new Map<string, Promise<void>>();
+const flagCodeInflight = new Map<string, Promise<void>>();
 const subscribedFlagCodes = new Set<string>();
 
 /** 货币/地区组件按实际代码取素材库国旗，不再拉取全部 250 个条目。 */
 export function ensureFlagIcons(codes: readonly string[], force = false) {
   const normalized = [...new Set(codes.map((code) => code.trim().toUpperCase()).filter((code) => /^[A-Z]{2}$/.test(code)))];
   const existing = new Set((cache.get("flag")?.assets ?? []).map((asset) => asset.code.toUpperCase()));
-  const missing = force ? normalized : normalized.filter((code) => !existing.has(code));
-  if (!missing.length) return;
+  const missing = normalized.filter(code => (force || !existing.has(code)) && !flagCodeInflight.has(code));
+  if (!missing.length) {
+    const pending = [...new Set(normalized.map(code => flagCodeInflight.get(code)).filter((task): task is Promise<void> => !!task))];
+    return pending.length ? Promise.all(pending).then(() => undefined) : undefined;
+  }
   const key = `${force ? "force:" : ""}${missing.slice().sort().join(",")}`;
   const pending = flagInflight.get(key);
   if (pending) return pending;
@@ -197,8 +201,9 @@ export function ensureFlagIcons(codes: readonly string[], force = false) {
       }
     })
     .catch(() => { /* 保留素材库内置路径兜底 */ })
-    .finally(() => flagInflight.delete(key));
+    .finally(() => { flagInflight.delete(key); for (const code of missing) if (flagCodeInflight.get(code) === task) flagCodeInflight.delete(code); });
   flagInflight.set(key, task);
+  missing.forEach(code => flagCodeInflight.set(code, task));
   return task;
 }
 

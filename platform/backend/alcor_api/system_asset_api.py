@@ -36,7 +36,12 @@ def mount_system_assets(app, settings, db, rate_limit):
     async def admin(request):
         if "authorization" in request.headers:
             raise HTTPException(403, "请使用当前网页管理员会话")
-        who = await identity(request)
+        from .legacy_identity import OLD_COOKIE, WEB_COOKIE
+        if request.cookies.get(WEB_COOKIE) or request.cookies.get(OLD_COOKIE):
+            from .fire_web import member
+            who = await member(request)
+        else:
+            who = await identity(request)
         if who.role != "admin":
             raise HTTPException(403, "需要管理员权限")
         return who

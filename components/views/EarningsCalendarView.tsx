@@ -1,4 +1,6 @@
 "use client";
+import DataUnavailable from "@/components/DataUnavailable";
+import { readFailure } from "@/lib/readFailure";
 import { Capsule, IconButton } from "@/components/Capsule";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
@@ -263,7 +265,8 @@ function Fireo({
 
 export default function EarningsCalendarView({ records = [], canManage = false, initialNow }: { records?: StockRecord[]; canManage?: boolean; initialNow: number }) {
   const [months, setMonths] = useState<Record<string, EarnRow[] | null>>({});
-  const [failed, setFailed] = useState(false);
+  const [readErrors, setReadErrors] = useState<Record<string,string>>({});
+  const [readAttempt, setReadAttempt] = useState(0);
   const [logoBases, setLogoBases] = useState<{ us: string; cn: string } | null>(null);
   const [timeKey, setTimeKey] = usePersistedState<TimeKey>("fire:earnings-time", "all");
   const [capKey, setCapKey] = usePersistedState<CapKey | CapKeyCN>("fire:earnings-cap", "all");
@@ -342,6 +345,8 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
   const cursorKey = `${cursor.y}-${pad2(cursor.m + 1)}`;
   const dataKey = `${marketKey}:${cursorKey}`;
   const items = months[dataKey] ?? null;
+  const failed = Boolean(readErrors[dataKey]);
+  const retry = () => { loadedKeys.current.delete(dataKey); setReadAttempt(value => value + 1); };
 
   useEffect(() => {
     if (!items?.length) return;
@@ -373,50 +378,46 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
 
   useEffect(() => {
     if (!EARNINGS_MARKETS.includes(marketKey)) return; // 该市场暂无数据源
-    if (months[dataKey] || loadedKeys.current.has(dataKey)) return; // 已加载
+    if (loadedKeys.current.has(dataKey)) return; // 已核对的本月结果
     let cancelled = false;
-    setFailed(false);
-    // 本地已有当月数据：服务端这一轮若返回空（上游抽风 / 空档月），保留本地这份，不把整月清空
-    let localCache: EarnRow[] | null = null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    setReadErrors(values => ({...values,[dataKey]:""}));
+    // 请求进行时展示上次结果；成功返回的空目录也按真实结果更新。
     // 本地缓存秒出（上次访问过的月份立即展示，再后台刷新）
     try {
       const raw = localStorage.getItem(`fire:earnings:${dataKey}`);
       if (raw) {
         const arr = JSON.parse(raw) as EarnRow[];
         if (Array.isArray(arr) && arr.length > 0) {
-          localCache = arr;
           setMonths((prev) => ({ ...prev, [dataKey]: arr }));
         }
       }
     } catch {
       /* 缓存无效忽略 */
     }
-    fetch(`/api/earnings?month=${cursorKey}&market=${marketKey}`)
-      .then((res) => (res.ok ? res.json() : null))
+    fetch(`/api/earnings?month=${cursorKey}&market=${marketKey}`, {signal:controller.signal,cache:"no-store"})
+      .then(async res => { const data = await res.json(); if (!res.ok) throw Error(readFailure(data,"财报数据暂不可用")); return data; })
       .then((data) => {
         if (cancelled) return;
         if (Array.isArray(data?.items)) {
           const incoming = data.items as EarnRow[];
           loadedKeys.current.add(dataKey); // 请求成功后标记，避免 StrictMode 双挂载重复请求
-          if (incoming.length > 0 || !localCache) {
-            setMonths((prev) => ({ ...prev, [dataKey]: incoming }));
-            try {
-              localStorage.setItem(`fire:earnings:${dataKey}`, JSON.stringify(incoming));
-            } catch {
-              /* 忽略 */
-            }
+          setMonths((prev) => ({ ...prev, [dataKey]: incoming }));
+          try {
+            localStorage.setItem(`fire:earnings:${dataKey}`, JSON.stringify(incoming));
+          } catch {
+            /* 忽略 */
           }
         } else {
-          setFailed(true);
+          setReadErrors(values => ({...values,[dataKey]:"财报响应格式无效"}));
         }
       })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [cursorKey, dataKey, marketKey, months]);
+      .catch(error => {
+        if (!cancelled) setReadErrors(values => ({...values,[dataKey]:controller.signal.aborted ? "读取超时，请重新读取" : error instanceof Error ? error.message : "财报数据暂不可用"}));
+      }).finally(() => clearTimeout(timer));
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
+  }, [cursorKey, dataKey, marketKey, readAttempt]);
 
   const caps = marketKey === "CN" ? CN_CAPS : marketKey === "HK" ? HK_CAPS : US_CAPS;
 
@@ -620,8 +621,8 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
 
   let emptyHint = "";
   if (marketKey === "JP" || marketKey === "KR") emptyHint = "该市场财报数据源暂未接入，敬请期待";
-  else if (items === null || items === undefined) emptyHint = failed ? "财报数据加载失败，请稍后重试" : "loading";
-  else if (failed && items.length === 0) emptyHint = "财报数据加载失败，请稍后重试";
+  else if (items === null || items === undefined) emptyHint = failed ? readErrors[dataKey] : "loading";
+  else if (failed && items.length === 0) emptyHint = readErrors[dataKey];
   else if (items.length === 0) {
     // A 股不是每个月都有预约披露：年报 / 一季报集中在 3-4 月、半年报 7-8 月、三季报 10 月，其余月份是空档
     emptyHint = marketKey === "CN"
@@ -670,13 +671,8 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
               >
                 回到本月
               </button>
-              <span className="hidden items-center gap-1.5 rounded-full bg-brand-light px-2.5 py-1 text-[11px] font-semibold text-brand-deep sm:flex">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#34c759]" />
-                实时
-              </span>
-              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted">
-                共 {filtered.length} 家
-              </span>
+              {items !== null && <span className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold text-muted">{loadedKeys.current.has(dataKey) && !failed ? "已读取" : "上次读取"}</span>}
+              {items !== null && !failed && <span className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted">共 {filtered.length} 家</span>}
             </div>
           </div>
 
@@ -720,6 +716,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
 
         {/* 月历网格 */}
         <div className="earnings-calendar-grid overflow-hidden px-3 py-4 sm:px-5">
+          {failed && items && items.length > 0 && <p role="status" className="mb-3 text-sm text-muted">{readErrors[dataKey]}，保留上次读取结果。</p>}
           {emptyHint === "loading" ? (
             <>
               {/* 先渲染日历骨架，财报数据异步填充，避免日历迟迟不出 */}
@@ -751,7 +748,7 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
               </div>
               <div className="mt-3 h-3 w-40 mx-auto animate-pulse rounded bg-bg-gray" aria-hidden />
             </>
-          ) : emptyHint ? (
+          ) : failed && emptyHint ? <DataUnavailable title="财报日历暂不可用" detail={readErrors[dataKey]} onRetry={retry} /> : emptyHint ? (
             <div className="py-16 text-center text-sm text-faint">
               <p className="mx-auto max-w-[520px] leading-relaxed">{emptyHint}</p>
               {marketKey === "CN" && items?.length === 0 && canPrev && (
@@ -943,9 +940,9 @@ export default function EarningsCalendarView({ records = [], canManage = false, 
           </div>
         </div>
 
-        <div className="border-t border-edge bg-bg-gray/50 px-5 py-2.5 text-right text-xs text-faint">
-          美股数据来自 Nasdaq，港股数据来自雪球财报日历，A股数据来自东方财富预约披露，财报实时更新，仅供参考
-        </div>
+        {!failed && items !== null && <div className="border-t border-edge bg-bg-gray/50 px-5 py-2.5 text-right text-xs text-faint">
+          美股 Nasdaq · 港股雪球财报日历 · A股东方财富预约披露
+        </div>}
       </div>
     </div>
   );

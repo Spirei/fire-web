@@ -17,7 +17,9 @@ import {
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import MarketIcon from "@/components/MarketIcon";
-import AppModal, { ModalForm, ModalField, ModalMedia, ModalActions } from "@/components/AppModal";
+import AppModal, { ModalForm, ModalField, ModalMedia, ModalActions, ModalChoiceGrid } from "@/components/AppModal";
+import AssetImageControl from "@/components/AssetImageControl";
+import { uploadMaterialImage } from "@/lib/materialImageUpload";
 import CollectionToolbar from "@/components/CollectionToolbar";
 import CollectionSkeleton from "@/components/CollectionSkeleton";
 import Pagination from "@/components/Pagination";
@@ -116,7 +118,10 @@ export default function AssetCatalogView({
   const seenTick = useRef(0);
   const directoryFile = useRef<HTMLInputElement>(null);
   const editorFile = useRef<HTMLInputElement>(null);
-  const Identity = selecting ? "div" : "button";
+  const uploadTarget = useRef<Item | null>(null);
+  const imageFile = useRef<HTMLInputElement>(null);
+  const chooseImage = (item: Item) => { uploadTarget.current = item; imageFile.current?.click(); };
+  const IdentityText = selecting ? "span" : "button";
   const toggleSelection = (id: string) =>
     setSelection((ids) =>
       ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id],
@@ -424,26 +429,7 @@ export default function AssetCatalogView({
       if (!response.ok) throw Error(data.message || "上传失败");
       return { ...item, url: data.data.group.icon, imageUrl: undefined };
     }
-    form.set("kind", "asset");
-    form.set("folder", item.type);
-    form.set("code", item.code);
-    form.set("name", item.name);
-    form.set("market", item.market);
-    form.set("file", file);
-    const currentResponse = await fetch(`/api/assets/catalog?type=${encodeURIComponent(item.type)}`, { cache: "no-store" });
-    const currentCatalog = await currentResponse.json();
-    if (!currentResponse.ok) throw Error(currentCatalog.error || "素材读取失败");
-    const r = await fetch("/api/upload", { method: "POST", body: form });
-    const d = await r.json();
-    if (!r.ok || !d.url) throw Error(d.error || "上传失败");
-    const saved = await fetch("/api/assets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-alcor-request-id": crypto.randomUUID(), "x-alcor-assets-revision": currentCatalog.revision },
-      body: JSON.stringify({ id: item.id, type: item.type, market: item.market, code: item.code, name: item.name, url: d.url, urlDark: item.urlDark || "" }),
-    });
-    const body = await saved.json();
-    if (!saved.ok) throw Error(body.error || "素材登记失败");
-    return { ...body.asset, brokerMarkets: body.asset.brokerMarkets || [] } as Item;
+    return {...item,...await uploadMaterialImage(file,item)};
   }
   async function importFiles() {
     if (!importRows || busy) return;
@@ -661,14 +647,13 @@ export default function AssetCatalogView({
           <div
             ref={table}
             className={`material-table ${grid ? "is-grid" : ""}`}
+            data-kind={type}
           >
             {!grid && (
               <div className="material-table-head">
                 <span>序号</span>
                 <span>{type === "market" ? "市场" : "名称 / 代码"}</span>
-                <span>
-                  {type === "stock" || type === "broker" ? "市场" : ""}
-                </span>
+                {(type === "stock" || type === "broker") && <span>市场</span>}
                 <span />
               </div>
             )}
@@ -739,39 +724,18 @@ export default function AssetCatalogView({
                     ((displayed?.page || page) - 1) * 10 + index + 1
                   )}
                 </span>
-                <Identity
-                  type={selecting ? undefined : "button"}
-                  className="material-identity"
-                  data-capsule="off"
-                  onClick={selecting ? undefined : () => beginEdit(item)}
-                >
-                  <span
-                    className={`material-thumb ${type === "card" ? "is-card" : ""}`}
-                  >
-                    <SafeAssetImage
-                      src={item.imageUrl || item.url}
-                      alt={item.name}
-                      fallback={<span>{item.name.slice(0, 1)}</span>}
-                      loading="lazy"
-                      style={{ width: "100%", height: "100%" }}
-                      className="h-full w-full object-contain"
-                    />
-                  </span>
-                  <span>
-                    <strong>{item.name || item.code}</strong>
-                    <small>
-                      {type === "stock" && (
-                        <MarketCodeBadge
-                          market={item.market}
-                          code={item.code}
-                          alwaysVisible
-                          className="material-stock-badge"
-                        />
-                      )}
+                <div className="material-identity">
+                  <AssetImageControl src={item.imageUrl || item.url} name={item.name} card={type === "card"}
+                    disabled={busy || removed} onUpload={selecting || removed ? undefined : () => chooseImage(item)} />
+                  <IdentityText type={selecting ? undefined : "button"} className="material-identity-text" data-capsule="off"
+                    disabled={selecting ? undefined : busy} onClick={selecting ? undefined : () => beginEdit(item)}>
+                    <strong title={item.name || item.code}>{item.name || item.code}</strong>
+                    {(type !== "card" || item.code.toLocaleLowerCase() !== item.name.toLocaleLowerCase()) && <small>
+                      {type === "stock" && <MarketCodeBadge market={item.market} code={item.code} alwaysVisible className="material-stock-badge" />}
                       <span className="material-code" title={item.code}>{item.code}</span>
-                    </small>
-                  </span>
-                </Identity>
+                    </small>}
+                  </IdentityText>
+                </div>
                 <div className="material-row-market">
                   {type === "stock" && (
                     <>
@@ -834,6 +798,21 @@ export default function AssetCatalogView({
           onChange={(n) => update({ page: String(n) })}
         />
       </section>
+      <input ref={imageFile} type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        onChange={async event => {
+          const file = event.target.files?.[0], item = uploadTarget.current;
+          event.target.value = "";
+          if (!file || !item || busy) return;
+          setBusy(true);
+          try {
+            const updated = await upload(file, item);
+            setEditing(current => current?.id === item.id ? updated : current);
+            refresh();
+            window.dispatchEvent(new Event("fire:assets-updated"));
+            showToast("图片已更新");
+          } catch (error) { showToast(error instanceof Error ? error.message : "上传失败", "err"); }
+          finally { setBusy(false); uploadTarget.current = null; }
+        }} />
       <input
         ref={directoryFile}
         type="file"
@@ -872,7 +851,8 @@ export default function AssetCatalogView({
       {editing && (
         <AppModal
           title="编辑素材"
-          size="xs"
+          size="sm"
+          className="material-editor"
           closeDisabled={busy}
           onClose={() => setEditing(null)}
         >
@@ -882,7 +862,7 @@ export default function AssetCatalogView({
               void save();
             }}
           >
-            <ModalMedia
+            <ModalMedia plain card={type === "card"}
               preview={
                 <SafeAssetImage
                   src={editing.imageUrl || editing.url}
@@ -895,7 +875,7 @@ export default function AssetCatalogView({
               <div>
                 <strong>{editing.name}</strong>
                 <small>
-                  {editing.market} · {editing.code}
+                  {[editing.market, editing.code].filter(Boolean).join(" · ")}
                 </small>
               </div>
               <Capsule
@@ -947,25 +927,8 @@ export default function AssetCatalogView({
             {type === "broker" && (
               <fieldset>
                 <legend>市场分类</legend>
-                <div className="material-classification">
-                  {markets.map((m) => (
-                    <label key={m}>
-                      <input
-                        type="checkbox"
-                        disabled={busy}
-                        checked={classification.includes(m)}
-                        onChange={(e) =>
-                          setClassification((values) =>
-                            e.target.checked
-                              ? [...values, m]
-                              : values.filter((v) => v !== m),
-                          )
-                        }
-                      />
-                      {marketMeta(m).label}
-                    </label>
-                  ))}
-                </div>
+                <ModalChoiceGrid options={markets.map(value => ({value, label: marketMeta(value).label}))}
+                  values={classification} disabled={busy} onChange={setClassification} />
               </fieldset>
             )}
             <ModalActions>

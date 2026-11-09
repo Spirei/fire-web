@@ -63,3 +63,23 @@ async def test_binding_requires_admin_csrf_and_complete_fields(client,admin):
     assert (await send(client,data)).status_code==400
     client.headers.pop("x-csrf-token")
     assert (await send(client,await body(client))).status_code==403
+
+async def test_current_fire_browser_upload_requires_bound_csrf_and_preserves_original(client,admin,settings):
+    client.headers.pop('x-csrf-token',None)
+    login=await client.post('/api/auth/login',json={'username':'AdminOne','password':'Synthetic9Pass'})
+    assert login.status_code==200
+    # Do not let a separate new-Web cookie authorize this browser operation.
+    from alcor_api.security import COOKIE
+    client.cookies.delete(COOKIE)
+    session=(await client.get('/api/fire/session')).json()
+    data=await body(client)
+    assert (await send(client,data)).status_code==403
+    client.headers['x-csrf-token']='wrong'
+    assert (await send(client,data)).status_code==403
+    client.headers['x-csrf-token']=session['csrf']
+    assert (await client.post(P+'/upload',data=data,files={'file':('image.svg',SVG,'image/svg+xml')},headers={'origin':'https://unrelated.invalid'})).status_code==403
+    assert (await client.get(P,headers={'authorization':'Bearer unrelated'})).status_code==403
+    result=await send(client,data,SVG.replace(b'M0 0',b'M1 1'))
+    assert result.status_code==200,result.text
+    assert result.json()['binding']['id']=='stock:US:DEMO'
+    assert (settings.file_root/'asset/stock/US/DEMO.svg').read_bytes()==SVG

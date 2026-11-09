@@ -1,4 +1,7 @@
 "use client";
+import type { FxRatesInitial } from "@/lib/fxRatesClient";
+import DataUnavailable from "@/components/DataUnavailable";
+import { readFailure } from "@/lib/readFailure";
 import Pagination from "@/components/Pagination";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
@@ -221,6 +224,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   const [items, setItems] = useState<TopAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [readAttempt, setReadAttempt] = useState(0);
   const [page, setPage] = useState(1);
   const { currency, rate, symbol } = useDisplayCurrency();
 
@@ -233,8 +237,11 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/top-stocks?market=ALL")
-      .then((res) => (res.ok ? res.json() : null))
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    setLoading(true);
+    fetch("/api/top-stocks?market=ALL", {signal:controller.signal,cache:"no-store"})
+      .then(async res => { const data = await res.json(); if (!res.ok) throw Error(readFailure(data,"全球市值排行暂不可用")); return data; })
       .then((data) => {
         if (cancelled) return;
         if (data?.items) {
@@ -262,12 +269,10 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
           setErr("获取全球市值排行失败，请稍后重试");
         }
       })
-      .catch(() => !cancelled && setErr("网络异常，无法获取全球市值排行"))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      .catch(error => !cancelled && setErr(controller.signal.aborted ? "读取超时，请重新读取" : error instanceof Error ? error.message : "无法读取全球市值排行"))
+      .finally(() => { clearTimeout(timer); if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
+  }, [readAttempt]);
 
   useEffect(() => {
     void ensureStockIcons(items.flatMap(item => { const key = marketCapStockKey(item); return key ? [key] : []; }));
@@ -289,7 +294,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
           <CurrencySelect align="left" />
         </div>
         <p className="mt-0.5 text-xs text-muted">
-          全球市值前 {items.length || 100} 名 · 数据来源 CompaniesMarketCap · 市值与价格有延迟
+          {items.length ? `全球市值前 ${items.length} 名 · 市值与价格有延迟` : "CompaniesMarketCap"}
         </p>
       </div>
 
@@ -302,7 +307,7 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
           ))}
         </div>
       ) : err && items.length === 0 ? (
-        <p className="rounded-[14px] border border-dashed border-edge-strong py-12 text-center text-sm text-faint">{err}</p>
+        <DataUnavailable title="市值排行暂不可用" detail={err} onRetry={() => setReadAttempt(value => value + 1)} />
       ) : (
         <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
           <div className="data-table-scroll">
@@ -403,7 +408,7 @@ function parseGlobalSection(value: string | null): GlobalSection {
   return "ledger";
 }
 
-export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePool, ledger }: { pageSize?: number; initialNow?: number; onOpenQuotePool?: () => void; ledger?: ReactNode }) {
+export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePool, ledger, initialFx }: { pageSize?: number; initialNow?: number; onOpenQuotePool?: () => void; ledger?: ReactNode; initialFx?: FxRatesInitial }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
@@ -426,7 +431,7 @@ export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePoo
     <div className="global-economy-page flex flex-col gap-6">
       <GlobalSectionNav section={section} onSelect={selectSection} />
       <div key={section} className="global-section-panel">
-        {section === "ledger" ? ledger : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter />}
+        {section === "ledger" ? ledger : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter initial={initialFx} />}
       </div>
     </div>
   );

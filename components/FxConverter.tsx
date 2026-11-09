@@ -2,13 +2,14 @@
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil, IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
+import { ensureFlagIcons } from "@/lib/useAssetIcons";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { useDisplayCurrency } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { showToast } from "@/lib/toast";
-import { FxRatesError, readFxRates } from "@/lib/fxRatesClient";
+import { FxRatesError, readFxRates, parseFxRatesSnapshot, type FxRatesInitial } from "@/lib/fxRatesClient";
 import {
   FX_CURRENCIES,
   FX_EXTRA_CURRENCIES,
@@ -60,7 +61,9 @@ function DragHandle({ label }: { label: string }) {
   );
 }
 
-export default function FxConverter() {
+export default function FxConverter({ initial }: {initial?: FxRatesInitial}) {
+  const [initialSnapshot] = useState(() => { try { return initial?.data ? parseFxRatesSnapshot(initial.data) : null; } catch { return null; } });
+  const hasRead = useRef(Boolean(initial));
   const { currency: displayCurrency } = useDisplayCurrency();
   const start = isFxCurrency(displayCurrency) ? displayCurrency : "USD";
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
@@ -73,19 +76,22 @@ export default function FxConverter() {
   const text = draft?.query === query ? draft.amount : savedAmount;
   const [savedOrder, setSavedOrder] = usePersistedState<FxCurrency[]>(FX_ORDER_KEY, [...FX_CURRENCIES]);
   const [hidden, setHidden] = usePersistedState<FxCurrency[]>(FX_HIDDEN_KEY, []);
-  const [rates, setRates] = useState<Record<string, number>>({ USD: 1 });
-  const [quoted, setQuoted] = useState<Set<string>>(() => new Set(["USD"]));
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
-  const [estimatedMop, setEstimatedMop] = useState(false);
-  const [loadingRates, setLoadingRates] = useState(true);
+  const [rates, setRates] = useState<Record<string, number>>(initialSnapshot?.rates || { USD: 1 });
+  const [quoted, setQuoted] = useState<Set<string>>(() => initialSnapshot?.quoted || new Set(["USD"]));
+  const [updatedAt, setUpdatedAt] = useState<number | null>(initialSnapshot?.updatedAt ?? null);
+  const [estimatedMop, setEstimatedMop] = useState(initialSnapshot?.estimatedMop || false);
+  const [loadingRates, setLoadingRates] = useState(!initial);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshSuccess, setRefreshSuccess] = useState(false);
   const [adding, setAdding] = useState(false);
   const [managing, setManaging] = useState(false);
-  const [rateError, setRateError] = useState<{ text: string; force: boolean } | null>(null);
+  const [rateError, setRateError] = useState<{ text: string; force: boolean } | null>(initial?.error ? {text:initial.error,force:false} : null);
   const allCodes = normalizeFxOrder(savedOrder);
   const codes = visibleFxOrder(savedOrder, hidden);
   const visibleKey = codes.join("|");
+  const [settledFlags, setSettledFlags] = useState<Set<string>>(() => new Set());
+  const flagsReady = codes.every(code => !fxCurrencyMeta(code).iso || settledFlags.has(code));
+  useLayoutEffect(() => { void ensureFlagIcons(codes.map(code => fxCurrencyMeta(code).iso)); }, [visibleKey]);
   const addable = [...FX_CURRENCIES, ...FX_EXTRA_CURRENCIES].filter(code => !codes.includes(code) && (code === "MOP" || FX_CURRENCIES.includes(code as typeof FX_CURRENCIES[number]) || (quoted.has(code) && (rates[code] ?? 0) > 0))).sort((a, b) => a.localeCompare(b));
   const addableByContinent = FX_CONTINENTS.map(continent => ({ continent, items: addable.filter(code => fxContinent(code) === continent) })).filter(group => group.items.length > 0);
   const inputRefs = useRef<Partial<Record<FxCurrency, HTMLInputElement | null>>>({});
@@ -129,6 +135,7 @@ export default function FxConverter() {
       try {
         const data = await readFxRates(force, controller.signal);
         if (requestId !== rateRequestRef.current) return;
+        hasRead.current = true;
         setEstimatedMop(data.estimatedMop);
         setQuoted(data.quoted);
         setRates(data.rates);
@@ -140,6 +147,7 @@ export default function FxConverter() {
         }
       } catch (error) {
         if (requestId !== rateRequestRef.current) return;
+        hasRead.current = true;
         setRateError({ text: error instanceof FxRatesError ? error.message : "汇率加载失败，请重试", force });
         if (force) {
           showToast("汇率刷新失败");
@@ -157,7 +165,7 @@ export default function FxConverter() {
   }, []);
 
   useEffect(() => {
-    void loadRates();
+    if (!initial || Date.now() - (initial.checkedAt || 0) >= 60000) void loadRates();
     const onRates = () => { void loadRates(); };
     window.addEventListener("fire:rates-updated", onRates);
     return () => {
@@ -193,7 +201,7 @@ export default function FxConverter() {
 
   const amount = parseFxAmount(text);
   const amountError = text && text !== "." && amount == null ? "请输入有效金额（0～1,000 万亿）" : "";
-  const unavailableLabel = loadingRates ? "加载中…" : rateError && updatedAt == null ? "加载失败" : "暂无汇率";
+  const unavailableLabel = loadingRates && !hasRead.current ? "加载中…" : rateError && updatedAt == null ? "加载失败" : "暂无汇率";
   const refreshLabel = refreshing ? "正在刷新汇率" : refreshSuccess ? "汇率已刷新" : "刷新汇率";
 
   function hasQuote(code: string) {
@@ -308,7 +316,7 @@ export default function FxConverter() {
             >
               <DragHandle label={meta.label} />
               <span className="fx-converter-flag">
-                {meta.iso ? <CurrencyFlag market={meta.iso} size={28} /> : <span className="fx-converter-code-mark fx-converter-code-mark-large">{code.slice(0, 1)}</span>}
+                {meta.iso ? <span style={{width:28,height:28,flexShrink:0,visibility:flagsReady ? "visible" : "hidden"}}><CurrencyFlag market={meta.iso} size={28} onSettled={() => setSettledFlags(current => current.has(code) ? current : new Set([...current, code]))} /></span> : <span className="fx-converter-code-mark fx-converter-code-mark-large">{code.slice(0, 1)}</span>}
               </span>
               <label className="fx-converter-body">
                 <span className="fx-converter-meta">

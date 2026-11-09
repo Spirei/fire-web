@@ -175,6 +175,16 @@ export function ModalForm({ className = "", ...props }: React.FormHTMLAttributes
 export function ModalField({ className = "", ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   return <label {...props} className={`app-modal-field ${className}`} />;
 }
-export function ModalMedia({ preview, children }: { preview: React.ReactNode; children: React.ReactNode }) {
-  return <div className="app-modal-media"><span className="app-modal-preview">{preview}</span>{children}</div>;
+export function ModalMedia({ preview, children, plain = false, card = false }: { preview: React.ReactNode; children: React.ReactNode; plain?: boolean; card?: boolean }) {
+  return <div className="app-modal-media" data-plain={plain || undefined} data-card={card || undefined}><span className="app-modal-preview">{preview}</span>{children}</div>;
+}
+
+export function ModalChoiceGrid({ options, values, onChange, disabled = false }: {
+  options: { value: string; label: string }[]; values: string[]; onChange: (values: string[]) => void; disabled?: boolean;
+}) {
+  return <div className="app-modal-choice-grid">{options.map(option => <label key={option.value} data-selected={values.includes(option.value) || undefined}>
+    <input type="checkbox" checked={values.includes(option.value)} disabled={disabled}
+      onChange={event => onChange(event.target.checked ? [...values, option.value] : values.filter(value => value !== option.value))} />
+    <span>{option.label}</span>
+  </label>)}</div>;
 }

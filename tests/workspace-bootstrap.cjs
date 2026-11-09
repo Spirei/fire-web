@@ -1,7 +1,11 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm');
-const context={exports:{},URLSearchParams};
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/workspaceBootstrap.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,context);
-const bootstrap=context.exports.workspaceBootstrap;
+const path=require('node:path');
+function load(file){
+ const context={exports:{},URLSearchParams,require:id=>load(path.resolve(path.dirname(file),id+'.ts'))};
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,context);
+ return context.exports;
+}
+const bootstrap=load(path.resolve('lib/workspaceBootstrap.ts')).workspaceBootstrap;
 const identity={user:{id:'owner-one',role:'admin'},csrf:'synthetic',instance_id:'synthetic'};
 (async()=>{
  const calls=[],read=async path=>{calls.push(path);return {assets:[],items:[],total:0,page:1,revision:'1',marketCounts:{}};};
@@ -18,5 +22,12 @@ const identity={user:{id:'owner-one',role:'admin'},csrf:'synthetic',instance_id:
  calls.length=0;await bootstrap('cards',new URLSearchParams(),identity,read);assert.deepEqual(calls,['/api/cards']);
  calls.length=0;const backup=await bootstrap('backup-recovery',new URLSearchParams('tab=migration'),identity,read);assert.equal(backup.backupRecovery.identity.user.id,'owner-one');assert.deepEqual(calls,['/api/fire/database-migration/connections','/api/fire/backups','/api/fire/database-migration/preparations']);
  calls.length=0;await bootstrap('backup-recovery',new URLSearchParams(),{...identity,user:{id:'reader',role:'user'}},read);assert.equal(calls.length,0,'Migration configuration is never bootstrapped for ordinary members');
+ calls.length=0;
+ const fx=await bootstrap('global',new URLSearchParams('section=convert'),identity,async path=>{calls.push(path);return path==='/api/rates'?{base:'USD',rates:{USD:1},quoted:[],updatedAt:null}:{assets:[{code:'EU',imageUrl:'/api/assets/images/custom-eu'}]};},{'fire:fx-order':['EUR','USD','CHF'],'fire:fx-hidden':['CHF']});
+ assert.equal(calls.filter(path=>path.startsWith('/api/assets')).length,1,'All visible flags are read in one batch');
+ const flags=new URLSearchParams(calls.find(path=>path.startsWith('/api/assets')).split('?')[1]).get('keys').split(',');
+ assert(flags.includes('EU')&&flags.includes('US')&&!flags.includes('CH'));
+ assert.equal(fx.global.flagIcons.EU,'/api/assets/images/custom-eu');
+ assert.equal(fx.global.fx.data.rates.USD,1);assert.equal(fx.global.fx.data.quoted.length,0,'Missing rates remain missing in server bootstrap');assert(fx.global.fx.checkedAt>0);
  console.log('PASS refresh bootstrap reads only the current page, preserves URL filters and ownership, and avoids a second client session waterfall');
 })().catch(error=>{console.error(error);process.exitCode=1;});

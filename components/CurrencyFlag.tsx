@@ -7,11 +7,13 @@ import { defaultFlagUrl } from "@/lib/flagAssets";
 export default function CurrencyFlag({
   market,
   size = 18,
-  className = ""
+  className = "",
+  onSettled
 }: {
   market: string;
   size?: number;
   className?: string;
+  onSettled?: () => void;
 }) {
   const code = (market || "").trim().toLowerCase();
   const customUrl = useFlagIcon(code);
@@ -21,6 +23,7 @@ export default function CurrencyFlag({
   return (
     <SafeAssetImage
       src={src}
+      onSettled={onSettled}
       title={market}
       className={`block flex-none rounded-full object-cover ${className}`}
       style={{ width: size, height: size }}

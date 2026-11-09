@@ -1178,7 +1178,7 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" && initialWorkspace.logs ? initialNow : 0} />}
-          {activeTab === "global" && <GlobalPreviewView initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} ledger={
+          {activeTab === "global" && <GlobalPreviewView initialFx={initialWorkspace.global?.fx} initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} ledger={
             <HoldingsView
               records={records}
               quotes={quotes}

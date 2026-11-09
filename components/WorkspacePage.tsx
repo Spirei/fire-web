@@ -16,6 +16,7 @@ import Toaster from '@/components/Toaster';
 import {CurrencyProvider,type CurrencyCode} from '@/lib/currencyPrefs';
 import {displayCurrencyFlagCode} from '@/lib/flagAssets';
 import {CURRENT_VERSION} from '@/lib/versions';
+import {parsePrefsCookie} from '@/lib/prefsCookie';
 export const dynamic='force-dynamic';
 export default async function WorkspacePage({params,searchParams}:{params:Promise<{slug?:string[]}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){
   const path='/'+((await params).slug||[]).join('/');
@@ -26,6 +27,9 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const initialNow=Date.now();
   const requestHeaders=await headers();
   const rawCookie=requestHeaders.get('cookie')||'';
+  const rawPrefs=rawCookie.split(';').map(p=>p.trim()).find(p=>p.startsWith('fire_prefs='))?.slice('fire_prefs='.length);
+  let preferences:Record<string,unknown>={};
+  try{preferences=parsePrefsCookie(rawPrefs?decodeURIComponent(rawPrefs):undefined);}catch{}
   const [identity,settingsSnapshot]=await Promise.all([getWebSession(rawCookie),getSiteSettingsSnapshot()]);
   const settings=settingsSnapshot.settings;
   if(!identity)redirect(await needsSetup()?'/setup':'/login');
@@ -43,7 +47,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const [initialRecords,funds,initialWorkspace]=await Promise.all([
     financial?platformJson<StockRecord[]>('/api/records',cookieHeaders):Promise.resolve([]),
     ['holdings','global'].includes(tab.key)?platformJson<{balances:Record<string,number|null>}>('/api/fire/funds',cookieHeaders):Promise.resolve({balances:{}}),
-    workspaceBootstrap(tab.key,query,identity,path=>platformJson(path,cookieHeaders,{signal:AbortSignal.timeout(8000)})).catch(()=>({} as WorkspaceInitial))
+    workspaceBootstrap(tab.key,query,identity,path=>platformJson(path,cookieHeaders,{signal:AbortSignal.timeout(8000)}),preferences).catch(()=>({} as WorkspaceInitial))
   ]);
   const initialFundBalances=funds.balances;
   const currencyCookie=rawCookie.split(';').map(p=>p.trim()).find(p=>p.startsWith('fire-display-currency='))?.split('=')[1] as CurrencyCode|undefined;
@@ -53,7 +57,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const initialWatchGroups=initialWorkspace.watchGroups ?? [];
   const initialUserLogs=initialWorkspace.logs?.userLogs ?? [];
   const initialStockIcons=initialCelebs?.stockIcons??{},initialMarketIcons={};
-  const initialFlagIcons:Record<string,string>={};
+  const initialFlagIcons:Record<string,string>=initialWorkspace.global?.flagIcons??{};
   const initialAvatar=user.avatar;
   const initialCardCovers:string[]=[];
   return (
@@ -65,6 +69,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
           .filter(Boolean)
           .map((u) => <link key={u} rel="preload" as="image" href={u} fetchPriority="high" />)}
       {initialFlagIcons[currencyFlagCode] && !initialFlagIcons[currencyFlagCode].startsWith("data:") && <link rel="preload" as="image" href={initialFlagIcons[currencyFlagCode]} />}
+      {Object.entries(initialFlagIcons).filter(([code,url])=>code!==currencyFlagCode&&url&&!url.startsWith('data:')).map(([code,url])=><link key={code} rel="preload" as="image" href={url} />)}
       {initialCardCovers.map((url) => <link key={url} rel="preload" as="image" href={url} />)}
       <Toaster />
       <header className="app-shell-header site-header sticky top-0 z-50 h-[72px] border-b border-edge/80">

@@ -1,8 +1,21 @@
 import type { WorkspaceInitial, WebSession, MaterialListing } from './workspaceInitial';
+import { FX_CURRENCIES, fxCurrencyMeta, visibleFxOrder } from './fxConvert';
+import { defaultFlagUrl } from './flagAssets';
 /** Request-local reads only. No cross-account cache and no speculative financial requests. */
-export async function workspaceBootstrap(tab:string,query:URLSearchParams,identity:WebSession,read:<T>(path:string)=>Promise<T>):Promise<WorkspaceInitial>{
+export async function workspaceBootstrap(tab:string,query:URLSearchParams,identity:WebSession,read:<T>(path:string)=>Promise<T>,preferences:Record<string,unknown>={}):Promise<WorkspaceInitial>{
  const initial:WorkspaceInitial={};
- if(tab==='backup-recovery'&&identity.user.role==='admin'){
+ if(tab==='global'&&query.get('section')==='convert'){
+  const order=Array.isArray(preferences['fire:fx-order'])?(preferences['fire:fx-order'] as unknown[]).filter((v):v is string=>typeof v==='string'):[...FX_CURRENCIES];
+  const hidden=Array.isArray(preferences['fire:fx-hidden'])?(preferences['fire:fx-hidden'] as unknown[]).filter((v):v is string=>typeof v==='string'):[];
+  const codes=[...new Set(visibleFxOrder(order,hidden).map(code=>fxCurrencyMeta(code).iso).filter(code=>/^[A-Z]{2}$/.test(code)))];
+  const [fx,assets]=await Promise.all([
+   read<unknown>('/api/rates').then(data=>({data})).catch(()=>({data:null,error:'汇率暂时无法读取'})),
+   codes.length?read<{assets:{code:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=flag&keys='+encodeURIComponent(codes.join(','))).catch(()=>({assets:[]})):Promise.resolve({assets:[]})
+  ]);
+  const flagIcons:Record<string,string>=Object.fromEntries(codes.map(code=>[code,defaultFlagUrl(code)]));
+  for(const item of assets.assets||[])if(item.imageUrl||item.url)flagIcons[item.code.toUpperCase()]=item.imageUrl||item.url!;
+  initial.global={fx:{...fx,checkedAt:Date.now()},flagIcons};
+ }else if(tab==='backup-recovery'&&identity.user.role==='admin'){
   const [connections,backups,preparations]=await Promise.all([read<NonNullable<WorkspaceInitial['backupRecovery']>['connections']>('/api/fire/database-migration/connections'),read<NonNullable<WorkspaceInitial['backupRecovery']>['backups']>('/api/fire/backups'),read<{items:import('./databaseMigration').MigrationPreparationTask[]}>('/api/fire/database-migration/preparations')]);
   const requested=query.get('migrationRequest')||'';
   let preparation=requested?preparations.items.find(item=>item.request_id===requested):preparations.items[0];

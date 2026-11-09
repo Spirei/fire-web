@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 /**
  * 素材库图标安全加载：图片加载失败（如容器内默认素材文件缺失，或用户上传后文件被清理）
@@ -26,7 +26,8 @@ export default function SafeAssetImage({
   title,
   alt = "",
   loading,
-  showFallbackWhileLoading = true
+  showFallbackWhileLoading = true,
+  onSettled
 }: {
   src?: string | null;
   fallback: ReactNode;
@@ -36,8 +37,13 @@ export default function SafeAssetImage({
   alt?: string;
   loading?: "lazy" | "eager";
   showFallbackWhileLoading?: boolean;
+  onSettled?: () => void;
 }) {
   const [imageState, setImageState] = useState(() => ({ src, failed: false }));
+  const imageRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    if (!src || imageRef.current?.complete || (imageState.src === src && imageState.failed)) onSettled?.();
+  }, [src, imageState.failed, onSettled]);
   // A changed URL retries immediately; a late error from the previous image cannot hide it.
   if (imageState.src !== src) setImageState({ src, failed: false });
 
@@ -46,12 +52,14 @@ export default function SafeAssetImage({
     <span className="relative inline-flex flex-none items-center justify-center" style={style} title={title}>
       <span aria-hidden style={showFallbackWhileLoading ? undefined : { visibility: "hidden" }}>{fallback}</span>
       <img
+        ref={imageRef}
         src={src}
         alt={alt}
         loading={loading}
         className={`absolute inset-0 ${className}`}
         style={style}
-        onError={() => setImageState(current => current.src === src ? { src, failed: true } : current)}
+        onLoad={onSettled}
+        onError={() => { setImageState(current => current.src === src ? { src, failed: true } : current); onSettled?.(); }}
       />
     </span>
   );

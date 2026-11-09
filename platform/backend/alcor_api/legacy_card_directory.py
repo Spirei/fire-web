@@ -7,7 +7,7 @@ from urllib.parse import quote, unquote
 from fastapi import HTTPException
 
 from .card_catalog_contract import manifest_value, public_manifest
-from .legacy_asset_directory import LegacyAssetDirectory, EXTENSIONS, SVG_LIMIT
+from .legacy_asset_directory import LegacyAssetDirectory, EXTENSIONS
 
 
 def card_id(path):
@@ -66,7 +66,9 @@ class LegacyCardDirectory(LegacyAssetDirectory):
 
     def read_original(self, path):
         parts = self.path_parts(path)
-        return self.read_parts(parts, SVG_LIMIT if Path(path).suffix.lower() == '.svg' else 20 * 1024 * 1024)
+        # Explicit manifest originals include SVGs containing full-size raster
+        # card faces. New uploads retain their separate, stricter limits.
+        return self.read_parts(parts, 20 * 1024 * 1024)
 
     async def entries(self):
         async with self.lock:

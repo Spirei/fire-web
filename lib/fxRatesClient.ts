@@ -4,6 +4,7 @@ export interface FxRatesSnapshot {
   updatedAt: number | null;
   estimatedMop: boolean;
 }
+export type FxRatesInitial = { data: unknown; error?: string; checkedAt?: number };
 
 export class FxRatesError extends Error {}
 
