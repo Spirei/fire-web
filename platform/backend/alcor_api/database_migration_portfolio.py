@@ -76,12 +76,19 @@ async def submit(db,who,conversion_id,data):
         return public_task(row)
 
 
+async def complete_on_connection(conn,task,result):
+    await conn.execute("UPDATE tasks SET status='succeeded',result=%s,error_code=NULL,finished_at=clock_timestamp(),lease_until=NULL WHERE id=%s",(Jsonb(result),task['id']))
+    await conn.execute("INSERT INTO task_events(task_id,phase) VALUES(%s,'succeeded')",(task['id'],))
+
+
 async def committed(db,task):
     async with db.connection() as conn,conn.transaction():
-        await conn.execute('SELECT id FROM tasks WHERE id=%s FOR UPDATE',(task['id'],))
+        original=await(await conn.execute('SELECT status,fingerprint,owner_id,request_id FROM tasks WHERE id=%s FOR UPDATE',(task['id'],))).fetchone()
         row=await(await conn.execute('SELECT result,fingerprint FROM database_migration_portfolio_imports WHERE owner_id=%s AND request_id=%s',(task['owner_id'],task['request_id']))).fetchone()
         if row:
-            if row['fingerprint']!=task['fingerprint']:raise BackupFailure('原导入请求内容不一致')
+            if not original or row['fingerprint']!=task['fingerprint'] or original['fingerprint']!=task['fingerprint'] or original['owner_id']!=task['owner_id'] or original['request_id']!=task['request_id']:raise BackupFailure('原导入请求内容不一致')
+            # A proven commit cannot be relabeled cancelled by a late request.
+            if original['status']!='succeeded':await complete_on_connection(conn,task,row['result'])
             return row['result']
 
 
@@ -113,9 +120,9 @@ async def source_connection(db,task,source,portfolio):
 
 
 async def execute(db,task):
-    from .worker import finish,owned_row
+    from .worker import owned_row
     prior=await committed(db,task)
-    if prior:await finish(db,task,prior);return
+    if prior:return
     source=await guard(db,task)
     async with db.connection() as conn:
         conversion=await(await conn.execute("SELECT * FROM tasks WHERE id=%s AND owner_id=%s AND kind='database.migration.convert'",(UUID(task['payload']['conversion_id']),task['owner_id']))).fetchone()
@@ -190,6 +197,6 @@ async def execute(db,task):
             await conn.execute('INSERT INTO database_migration_portfolio_imports(owner_id,request_id,task_id,conversion_id,source_instance,source_owner,fingerprint,plan_sha256,before_image,result) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                 (who.id,task['request_id'],task['id'],conversion['id'],portfolio['source_instance'],portfolio['source_owner'],task['fingerprint'],task['payload']['plan_sha256'],Jsonb(before),Jsonb(result)))
             await conn.execute("INSERT INTO audit_events(actor_id,action,target_id,request_id) VALUES(%s,'database-migration.portfolio.imported',%s,%s)",(who.id,str(task['id']),task['request_id']))
-        await finish(db,task,result)
+            await complete_on_connection(conn,task,result)
     finally:
         await old.rollback();await old.close()

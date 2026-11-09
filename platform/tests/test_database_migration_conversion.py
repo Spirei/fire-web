@@ -95,12 +95,21 @@ async def test_real_conversion_retains_exact_values_and_blocks_unproved_import(c
         for table in ('portfolio_records','broker_accounts','trade_ledger','cash_ledger_entries','database_migration_portfolio_imports'):
             assert (await(await conn.execute(f'SELECT count(*) AS n FROM {table}')).fetchone())['n']==0
     monkeypatch.setattr(PortfolioRecords,'confirm',original_confirm)
+    import alcor_api.worker as worker
+    original_finish=worker.finish
+    async def forbidden_separate_finish(*args,**kwargs):
+        raise AssertionError('business, receipt and completed task must commit together')
+    monkeypatch.setattr(worker,'finish',forbidden_separate_finish)
     await import_portfolio(db,import_task)
+    monkeypatch.setattr(worker,'finish',original_finish)
     imported=(await client.get('/api/fire/tasks/'+str(import_task['id']))).json()
     assert imported['status']=='succeeded',imported
     assert imported['result']['counts']=={'records':2,'holdings':1,'accounts':1,'groups':0}
     assert imported['result']['business_written'] is True and imported['result']['cash_posted'] is False
     assert imported['result']['history_imported'] is False and imported['result']['identity_switched'] is False
+    cancelled=await client.post('/api/fire/database-migration/portfolio/cancel',json={'request_id':payload['request_id']})
+    assert cancelled.status_code==200 and cancelled.json()['status']=='succeeded'
+    assert cancelled.json()['result']['business_written'] is True
     async with db.connection() as conn:
         rows=await(await conn.execute('SELECT code,qty,cost,price,history_state FROM portfolio_records ORDER BY code')).fetchall()
         position=next(row for row in rows if row['code']=='TEST')
