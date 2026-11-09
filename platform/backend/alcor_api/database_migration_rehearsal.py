@@ -108,7 +108,9 @@ def rehearse(settings,root,summaries,budget,cancel,progress):
     try:
         run(settings,'initdb',['-D',str(data),'-U',ADMIN,'--auth-local=trust','--auth-host=reject','--encoding=UTF8','--no-locale'],env,root,budget,cancel,data=data)
         # No application credentials are inherited by the rehearsal server.
-        options="-c listen_addresses='' -c unix_socket_directories='"+str(socket)+"' -c unix_socket_permissions=0700 -c shared_buffers=32MB -c max_connections=12 -c jit=off -c fsync=off -c full_page_writes=off -c log_min_error_statement=panic -c log_parameter_max_length_on_error=0"
+        # Single-transaction restores hold locks for tables, indexes and constraints.
+        # The small connection pool must not shrink that budget below a full application schema.
+        options="-c listen_addresses='' -c unix_socket_directories='"+str(socket)+"' -c unix_socket_permissions=0700 -c shared_buffers=32MB -c max_connections=12 -c max_locks_per_transaction=4096 -c jit=off -c fsync=off -c full_page_writes=off -c log_min_error_statement=panic -c log_parameter_max_length_on_error=0"
         run(settings,'pg_ctl',['-D',str(data),'-l',str(root/'rehearsal-server.log'),'-o',options,'-w','-t','30','start'],env,root,budget,cancel,data=data)
         with psycopg.connect(host=str(socket),dbname='postgres',user=ADMIN,autocommit=True,connect_timeout=3) as administrator:
             if administrator.execute('SHOW listen_addresses').fetchone()[0]!='':raise BackupFailure('隔离实例出现网络监听')

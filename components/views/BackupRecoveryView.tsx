@@ -241,6 +241,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
     </span>;
   }
   const preparationActive=!!preparationRequest&&(!task||['queued','running','cancel_requested'].includes(task.status));
+  const transferring=task?.status==='running'||task?.status==='cancel_requested';
   const anyPreparationActive=preparationActive||preparations.some(item=>['queued','running','cancel_requested'].includes(item.status));
   const disabled = !!busy || !!unknown || !data || anyPreparationActive;
   async function refresh(){
@@ -285,8 +286,9 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
           <div className="migration-connection-footer flex flex-wrap items-center justify-between gap-3">{status('source',sourceCheck,sourceReady)}<Capsule variant="secondary" busy={busy === "source"} disabled={disabled || !data?.source} onClick={() => void testSource()}>测试连接</Capsule></div>
         </>}
       </div>
-      <div className="migration-connection-flow" data-state={checking ? "checking" : sourceReady && targetReady ? "connected" : "idle"} aria-label={checking ? "正在检查连接" : sourceReady && targetReady ? "两边连接检查通过" : "等待连接检查"}>
-        <span className="migration-flow-line" /><IconArrowRight size={24} aria-hidden="true" />
+      <div className="migration-connection-flow" data-state={transferring ? "transferring" : checking ? "checking" : sourceReady && targetReady ? "connected" : "idle"} aria-label={transferring ? "正在准备迁移" : checking ? "正在检查连接" : sourceReady && targetReady ? "两边连接检查通过" : "等待连接检查"}>
+        <span className="migration-flow-line" aria-hidden="true" /><IconArrowRight size={24} aria-hidden="true" />
+        {transferring&&<span className="migration-flow-packets" aria-hidden="true"><i/><i/><i/></span>}
       </div>
       <div className="migration-database-card"><div className="flex items-center gap-3"><IconDatabase size={22} /><h2 className="text-lg font-semibold">新数据库</h2></div>
         <ConnectionFields config={data?.target.config} passwordConfigured={data?.target.password_configured} />
@@ -295,13 +297,13 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
     </div>
       <div className="mt-4 flex justify-end"><Capsule disabled={disabled||!sourceReady||!targetReady||!sourceCheck?.persistent_identity_verified||!data?.checks.target?.persistent_identity_verified} busy={busy==='prepare'} onClick={()=>void prepare()}>准备迁移</Capsule></div>
       {!!preparations.length&&<div className="mt-6 flex flex-wrap items-center gap-3"><span className="text-sm text-ink-3">准备记录</span><AppSelect ariaLabel="准备记录" value={preparationRequest} options={preparations.map(item=>({value:item.request_id,label:`${item.created_at?.slice(0,19).replace('T',' ')??item.request_id.slice(0,8)} · ${item.status==='succeeded'&&item.result?.source?.restore_verified&&item.result.target?.restore_verified?'恢复核对通过':{queued:'等待中',running:'进行中',succeeded:'归档已校验',failed:'失败',cancelled:'已取消',cancel_requested:'取消中'}[item.status]}`}))} onChange={value=>{const selected=preparations.find(item=>item.request_id===value);if(selected){setTask(selected);setPreparationRequest(value);url('migrationRequest',value);}}} /></div>}
-      {preparationRequest&&<><PreparationProgress task={task} requestId={preparationRequest} moving={active&&visible} busy={!!busy} onCancel={()=>void cancelPreparation()}/>{(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
+      {preparationRequest&&<><PreparationProgress task={task} moving={active&&visible} busy={!!busy} onCancel={()=>void cancelPreparation()}/>{(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
     </>}
   </section>;
 }
 
 const preparationPhases=[['source_archive','旧库备份'],['source_rows','旧库逐表副本'],['source_verify','旧库归档校验'],['target_archive','新库备份'],['target_rows','新库逐表副本'],['target_verify','新库归档校验'],['source_restore','隔离恢复旧库'],['source_reconcile','核对旧库内容'],['target_restore','隔离恢复新库'],['target_reconcile','核对新库内容']] as const;
-function PreparationProgress({task,requestId,moving,busy,onCancel}:{task:MigrationPreparationTask|null;requestId:string;moving:boolean;busy:boolean;onCancel:()=>void}){
+function PreparationProgress({task,moving,busy,onCancel}:{task:MigrationPreparationTask|null;moving:boolean;busy:boolean;onCancel:()=>void}){
   const completed=task?.status==='succeeded'&&task.result?.phase==='awaiting_mapping'&&task.result.source?.restore_verified&&task.result.target?.restore_verified;
   const phases=preparationPhases.map(([key])=>key as string);
   const last=task?.result?.progress?.phase??task?.events?.filter(event=>phases.includes(event.phase)).at(-1)?.phase;
@@ -321,7 +323,6 @@ function PreparationProgress({task,requestId,moving,busy,onCancel}:{task:Migrati
     {active&&percentage!==null&&<div className="migration-stage-progress" role="progressbar" aria-label="当前阶段进度" aria-valuenow={Math.round(percentage)} aria-valuemin={0} aria-valuemax={100}><span style={{width:`${percentage}%`}}/></div>}
     {message&&!expectedCancellation&&<p className="mt-4 text-sm text-red-500" role="alert">{message}</p>}
     {completed&&<dl className="mt-5 grid grid-cols-2 gap-4 text-sm"><div><dt className="text-ink-3">旧库</dt><dd className="mt-1 text-ink">{task?.result?.source?.tables} 张表 · {task?.result?.source?.rows} 条记录</dd></div><div><dt className="text-ink-3">新库</dt><dd className="mt-1 text-ink">{task?.result?.target?.tables} 张表 · {task?.result?.target?.rows} 条记录</dd></div></dl>}
-    <details className="mt-4 text-xs text-ink-3"><summary>操作回执</summary><code className="mt-2 block break-all">{requestId}</code></details>
   </div>;
 }
 

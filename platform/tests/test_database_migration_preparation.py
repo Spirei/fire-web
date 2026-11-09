@@ -57,6 +57,15 @@ async def migration_source(client,admin,settings,pg,tmp_path):
 
 async def test_fire_worker_preparation_archives_both_databases_with_true_scope_and_restores_source(client,db,settings,pg,migration_source):
     config,revision=migration_source
+    # Exercise shared lock pressure through a real restored CHECK function.
+    # Advisory and relation locks share the same bounded PostgreSQL lock pool.
+    with psycopg.connect(pg.get_uri(database=config['database'])) as conn:
+        conn.execute('''CREATE FUNCTION ledger.restore_lock_budget() RETURNS boolean LANGUAGE plpgsql AS $$
+            BEGIN
+                FOR lock_id IN 1..4096 LOOP PERFORM pg_catalog.pg_advisory_xact_lock(903173,lock_id); END LOOP;
+                RETURN true;
+            END $$''')
+        conn.execute('ALTER TABLE ledger.originals ADD CONSTRAINT restore_lock_budget CHECK (ledger.restore_lock_budget())')
     payload={'request_id':str(uuid4()),'source_revision':revision}
     started=await client.post('/api/fire/database-migration/preparations',json=payload)
     assert started.status_code==202,started.text
