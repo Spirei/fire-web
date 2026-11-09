@@ -52,7 +52,7 @@ async def submit(db,who,data):
             if not checked or not checked['fresh'] or checked['result'].get('state')!='connected':raise HTTPException(409,'请先重新测试两边的连接')
             if not checked['result'].get('persistent_identity_verified'):raise HTTPException(409,('旧库' if scope=='source' else '新库')+'的持久身份尚未核对，暂不能创建迁移快照')
             intent['_'+scope+'_identity']=checked['result']['identity_fingerprint']
-        if await(await conn.execute("SELECT 1 FROM tasks WHERE kind='database.migration.prepare' AND status IN ('queued','running','cancel_requested') LIMIT 1")).fetchone():
+        if await(await conn.execute("SELECT 1 FROM tasks WHERE kind LIKE 'database.migration.%' AND status IN ('queued','running','cancel_requested') LIMIT 1")).fetchone():
             raise HTTPException(409,'已有迁移准备任务，请先核对原任务')
         try:
             for name in ('pg_dump','pg_restore','initdb','pg_ctl','postgres'):tools(db.settings,name)
@@ -70,26 +70,26 @@ async def submit(db,who,data):
 
 def public_task(row):
     return {**{key:str(row[key]) if key in ('id','request_id') else row[key] for key in ('id','request_id','kind','status','result','error_code')},
-            'source_revision':row['payload']['source_revision'],'created_at':row['created_at'].isoformat(),'retry_of':row['payload'].get('retry_of')}
+            'source_revision':row['payload']['source_revision'],'created_at':row['created_at'].isoformat(),'retry_of':row['payload'].get('retry_of'),'conversion_id':row['payload'].get('conversion_id')}
 
 
-async def cancel_request(db,who,request_id):
+async def cancel_request(db,who,request_id,*,kind='database.migration.prepare'):
     async with db.connection() as conn,conn.transaction():
         await lock_mutation_identity(conn,who)
         await conn.execute('SELECT pg_advisory_xact_lock(67132153)')
         prior=await(await conn.execute('SELECT * FROM tasks WHERE owner_id=%s AND request_id=%s FOR UPDATE',(who.id,request_id))).fetchone()
-        if prior and prior['kind']!='database.migration.prepare':raise HTTPException(409,'此请求编号不属于迁移准备')
+        if prior and prior['kind']!=kind:raise HTTPException(409,'此请求编号不属于迁移准备')
         if prior:
             if prior['status'] not in ('queued','running'):return public_task(prior)
             status='cancelled' if prior['status']=='queued' else 'cancel_requested'
             row=await(await conn.execute("UPDATE tasks SET status=%s,finished_at=CASE WHEN %s='cancelled' THEN clock_timestamp() ELSE NULL END WHERE id=%s RETURNING *",(status,status,prior['id']))).fetchone()
         else:
             payload={'source_revision':None,'_admission_cancelled':True}
-            row=await(await conn.execute("INSERT INTO tasks(id,owner_id,request_id,fingerprint,kind,status,payload,result,finished_at) VALUES(%s,%s,%s,%s,'database.migration.prepare','cancelled',%s,%s,clock_timestamp()) RETURNING *",
-                (uuid4(),who.id,request_id,fingerprint({'cancelled_request':str(request_id)}),Jsonb(payload),Jsonb({'phase':'cancelled','business_written':False,'cutover_ready':False})))).fetchone()
+            row=await(await conn.execute("INSERT INTO tasks(id,owner_id,request_id,fingerprint,kind,status,payload,result,finished_at) VALUES(%s,%s,%s,%s,%s,'cancelled',%s,%s,clock_timestamp()) RETURNING *",
+                (uuid4(),who.id,request_id,fingerprint({'cancelled_request':str(request_id)}),kind,Jsonb(payload),Jsonb({'phase':'cancelled','business_written':False,'cutover_ready':False})))).fetchone()
             status='cancelled'
         await conn.execute('INSERT INTO task_events(task_id,phase) VALUES(%s,%s)',(row['id'],status))
-        await conn.execute("INSERT INTO audit_events(actor_id,action,target_id,request_id) VALUES(%s,'database-migration.preparation.cancelled',%s,%s)",(who.id,str(row['id']),request_id))
+        await conn.execute("INSERT INTO audit_events(actor_id,action,target_id,request_id) VALUES(%s,%s,%s,%s)",(who.id,'database-migration.conversion.cancelled' if kind=='database.migration.convert' else 'database-migration.preparation.cancelled',str(row['id']),request_id))
         return public_task(row)
 
 

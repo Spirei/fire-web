@@ -102,7 +102,7 @@ async def submit_retry(db,who,parent_id,data):
         if parent['status']!='failed':raise HTTPException(409,'只有失败的准备任务可以重试')
         source=await(await conn.execute('SELECT revision,password_ciphertext FROM database_migration_source WHERE singleton FOR SHARE')).fetchone()
         if not source or str(source['revision'])!=intent['source_revision']:raise HTTPException(409,'旧库配置已变化，请重新准备')
-        if await(await conn.execute("SELECT 1 FROM tasks WHERE kind='database.migration.prepare' AND status IN ('queued','running','cancel_requested') LIMIT 1")).fetchone():
+        if await(await conn.execute("SELECT 1 FROM tasks WHERE kind LIKE 'database.migration.%' AND status IN ('queued','running','cancel_requested') LIMIT 1")).fetchone():
             raise HTTPException(409,'已有迁移准备任务，请先核对原任务')
         previous=parent['payload'].get('_retry',{})
         archive_task=previous.get('archive_task',str(parent_id));archive_attempt=previous.get('archive_attempt',parent['attempts'])

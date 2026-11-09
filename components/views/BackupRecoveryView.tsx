@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconArrowRight, IconDatabase, IconEdit, IconRefresh,IconCheck,IconCircle,IconLoader2,IconAlertCircle } from "@tabler/icons-react";
+import { IconDatabase, IconEdit, IconRefresh,IconCheck,IconCircle,IconLoader2,IconAlertCircle } from "@tabler/icons-react";
 import { Capsule, IconButton } from "@/components/Capsule";
 import AppSelect from "@/components/AppSelect";
+import DatabaseMigrationConversion from '@/components/DatabaseMigrationConversion';
 import PasswordInput from "@/components/PasswordInput";
 import { requestAdminProof } from "@/lib/adminProof";
 import { appConfirm } from "@/lib/appDialog";
@@ -288,8 +289,8 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
         </>}
       </div>
       <div className="migration-connection-flow" data-state={transferring ? "transferring" : checking ? "checking" : sourceReady && targetReady ? "connected" : "idle"} aria-label={transferring ? "正在准备迁移" : checking ? "正在检查连接" : sourceReady && targetReady ? "两边连接检查通过" : "等待连接检查"}>
-        <span className="migration-flow-line" aria-hidden="true" /><IconArrowRight size={24} aria-hidden="true" />
-        {transferring&&<span className="migration-flow-packets" aria-hidden="true"><i/><i/><i/></span>}
+        <span className="migration-flow-line" aria-hidden="true" />
+        {transferring&&<span className="migration-flow-packets" aria-hidden="true"><i/></span>}
       </div>
       <div className="migration-database-card"><div className="flex items-center gap-3"><IconDatabase size={22} /><h2 className="text-lg font-semibold">新数据库</h2></div>
         <ConnectionFields config={data?.target.config} passwordConfigured={data?.target.password_configured} />
@@ -297,8 +298,9 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       </div>
     </div>
       <div className="mt-4 flex justify-end"><Capsule disabled={disabled||!sourceReady||!targetReady||!sourceCheck?.persistent_identity_verified||!data?.checks.target?.persistent_identity_verified} busy={busy==='prepare'} onClick={()=>void prepare()}>准备迁移</Capsule></div>
-      {!!preparations.length&&<div className="mt-6 flex flex-wrap items-center gap-3"><span className="text-sm text-ink-3">准备记录</span><AppSelect ariaLabel="准备记录" value={preparationRequest} disabled={!!busy} triggerContent={preparationRequest&&!preparations.some(item=>item.request_id===preparationRequest)?<IconLoader2 size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none"/>:undefined} options={preparations.map(item=>({value:item.request_id,label:`${item.created_at?.slice(0,19).replace('T',' ')??item.request_id.slice(0,8)} · ${item.retry_of?'重试 · ':''}${item.status==='succeeded'&&item.result?.source?.restore_verified&&item.result.target?.restore_verified?'恢复核对通过':{queued:'等待中',running:'进行中',succeeded:'归档已校验',failed:'失败',cancelled:'已取消',cancel_requested:'取消中'}[item.status]}`}))} onChange={value=>{const selected=preparations.find(item=>item.request_id===value);if(selected){setTask(selected);setPreparationRequest(value);url('migrationRequest',value);}}} /></div>}
-      {preparationRequest&&<><PreparationProgress task={task} moving={active&&visible} busy={!!busy} retryDisabled={anyPreparationActive} onRetry={()=>task&&void prepare(task)} onCancel={()=>void cancelPreparation()}/>{(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
+      {!!preparations.length&&<div className="mt-6 flex flex-wrap items-center gap-3"><span className="text-sm text-ink-3">准备记录</span><AppSelect ariaLabel="准备记录" value={preparationRequest} disabled={!!busy} triggerContent={preparationRequest&&!preparations.some(item=>item.request_id===preparationRequest)?<IconLoader2 size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none"/>:undefined} options={preparations.map(item=>({value:item.request_id,label:`${item.created_at?.slice(0,19).replace('T',' ')??item.request_id.slice(0,8)} · ${item.retry_of?'重试 · ':''}${item.status==='succeeded'&&item.result?.source?.restore_verified&&item.result.target?.restore_verified?'恢复核对通过':{queued:'等待中',running:'进行中',succeeded:'归档已校验',failed:'失败',cancelled:'已取消',cancel_requested:'取消中'}[item.status]}`}))} onChange={value=>{const selected=preparations.find(item=>item.request_id===value);if(selected){url('conversionRequest','');url('portfolioRequest','');setTask(selected);setPreparationRequest(value);url('migrationRequest',value);}}} /></div>}
+      {preparationRequest&&<><PreparationProgress task={task} moving={active&&visible} busy={!!busy} retryDisabled={anyPreparationActive} onRetry={()=>task&&void prepare(task)} onCancel={()=>void cancelPreparation()}/>{task?.status==='succeeded'&&task.result?.phase==='awaiting_mapping'&&task.result.source?.restore_verified&&task.result.target?.restore_verified&&<DatabaseMigrationConversion key={task.id} preparationId={task.id} ownerId={ownerId} active={active&&visible}/>}
+      {(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
     </>}
   </section>;
 }
@@ -312,7 +314,7 @@ function PreparationProgress({task,moving,busy,retryDisabled,onRetry,onCancel}:{
   const active=task?.status==='running',failed=task?.status==='failed',cancelled=task?.status==='cancelled';
   const progress=task?.result?.progress;
   const percentage=progress?.total&&progress.total>0?Math.max(0,Math.min(100,progress.processed/progress.total*100)):null;
-  const label=completed?'双库恢复核对通过 · 待数据转换':failed?'准备失败':cancelled?'已取消':task?.status==='cancel_requested'?'取消中':task?.status==='queued'?'等待执行':active?'正在准备':'正在核对原任务';
+  const label=completed?'双库恢复核对通过':failed?'准备失败':cancelled?'已取消':task?.status==='cancel_requested'?'取消中':task?.status==='queued'?'等待执行':active?'正在准备':'正在核对原任务';
   const message=task?.result?.message;
   const expectedCancellation=cancelled&&(message==='迁移准备已停止'||message==='迁移准备已停止或执行权已变化');
   return <div className="migration-preparation mt-6" data-moving={moving&&active}>

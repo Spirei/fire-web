@@ -7,6 +7,8 @@ from fastapi import APIRouter,Depends,Request,Response,HTTPException
 from .database_migration_connections import MigrationConnections,SourceSave,SourceTest
 from .database_migration_jobs import PreparationInput,PreparationCancellation,submit,listing,cancel_request
 from .database_migration_retry import PreparationRetry,submit_retry
+from .database_migration_conversion import ConversionInput,context as conversion_context,submit as submit_conversion
+from .database_migration_portfolio import PortfolioImportInput,submit as submit_portfolio
 from .security import administrator,Identity
 from .fire_web import administrator as fire_administrator
 
@@ -70,6 +72,31 @@ def mount_database_migration(app,db):
         async def cancel_preparation(data:PreparationCancellation,response:Response,who:Admin):
             headers(response)
             return await cancel_request(db,who,data.request_id)
+
+        @router.post('/conversions/cancel',operation_id=key+'_migration_conversion_cancel',summary='取消数据转换或未确认的转换请求')
+        async def cancel_conversion(data:PreparationCancellation,response:Response,who:Admin):
+            headers(response)
+            return await cancel_request(db,who,data.request_id,kind='database.migration.convert')
+
+        @router.post('/conversions/{task_id}/portfolio',status_code=202,operation_id=key+'_migration_portfolio',summary='导入持仓与自选',description='按已核对转换计划原值导入当前登记持仓、自选和券商分组；不重放成交、不补零费用、不入现金、不切换身份。')
+        async def import_portfolio(task_id:UUID,data:PortfolioImportInput,response:Response,who:Admin):
+            headers(response)
+            return await submit_portfolio(db,who,task_id,data)
+
+        @router.post('/portfolio/cancel',operation_id=key+'_migration_portfolio_cancel',summary='取消持仓与自选导入请求')
+        async def cancel_portfolio(data:PreparationCancellation,response:Response,who:Admin):
+            headers(response)
+            return await cancel_request(db,who,data.request_id,kind='database.migration.portfolio')
+
+        @router.get('/preparations/{task_id}/conversion',operation_id=key+'_migration_conversion_context',summary='读取数据转换范围与记录')
+        async def conversion_read(task_id:UUID,response:Response,who:Admin):
+            headers(response)
+            return await conversion_context(db,who,task_id)
+
+        @router.post('/preparations/{task_id}/conversion',status_code=202,operation_id=key+'_migration_conversion',summary='转换并校验业务数据',description='复用已恢复核对的归档，保留原值与来源，转换业务结构并列出账户、交易、资金及文件差异；不会自动导入。')
+        async def convert(task_id:UUID,data:ConversionInput,response:Response,who:Admin):
+            headers(response)
+            return await submit_conversion(db,who,task_id,data)
 
         @router.get('/preparations',operation_id=key+'_migration_preparations',summary='读取迁移准备历史')
         async def preparations(response:Response,who:Admin):
