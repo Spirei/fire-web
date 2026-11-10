@@ -9,4 +9,4 @@ assert.equal(deploymentRunTitle({...run,event:'push'}),run.title);assert.equal(d
 assert.equal(deploymentRunTitle({...run,title:'',name:IMAGE_WORKFLOW_NAME}),IMAGE_WORKFLOW_NAME);
 console.log('PASS publish titles: restore known renamed release titles, retain custom/check titles, isolate workflows and preserve historical IDs/results/receipts');
 
-const workflow=fs.readFileSync('.github/workflows/docker-publish.yml','utf8'),runName=workflow.split('\n').find(line=>line.startsWith('run-name:'));assert(runName.includes("'源码检查'"));assert(!runName.includes('head_commit.message'),'Commit bodies must never become workflow list titles');assert(workflow.startsWith('name: Build and publish Alcor image\n'));
+const workflow=fs.readFileSync('.github/workflows/docker-publish.yml','utf8'),runName=workflow.split('\n').find(line=>line.startsWith('run-name:'));assert(!runName.includes('head_commit.message'),'GitHub should use its default commit subject, never the full body');assert(!runName.includes('源码检查'));assert(runName.includes("|| ''"),'Pushes retain GitHub default commit-subject naming');assert(workflow.startsWith('name: Build and publish Alcor image\n'));
