@@ -1,5 +1,5 @@
 name: Build and publish Alcor image
-run-name: "${{ github.event_name == 'push' && github.event.head_commit.message || github.event_name == 'pull_request' && github.event.pull_request.title || inputs.verify_only && 'Check Alcor image' || 'Build and publish Alcor image' }}"
+run-name: "${{ github.event_name == 'push' && '源码检查' || github.event_name == 'pull_request' && github.event.pull_request.title || inputs.verify_only && 'Check Alcor image' || 'Build and publish Alcor image' }}"
 
 on:
   push:
