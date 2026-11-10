@@ -307,8 +307,10 @@ async def private_redis(tmp_path):
         else:
             raise RuntimeError("Owned isolated Redis did not start")
         assert path.parent == directory and process.poll() is None and path.stat().st_uid == os.getuid()
+        # Optional CLIENT SETINFO is unavailable before Redis 7.2 and is not
+        # required by the probe; redis-py tolerates its absence or ACL denial.
         await client.execute_command(
-            "ACL", "SETUSER", "cache-user", "on", ">" + PASSWORD, "~*", "+ping", "+select", "+client|setinfo"
+            "ACL", "SETUSER", "cache-user", "on", ">" + PASSWORD, "~*", "+ping", "+select"
         )
         yield path
     finally:
@@ -359,7 +361,7 @@ async def test_redis_acl_without_ping_is_distinguished_from_bad_password(client,
     )
     control = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
     try:
-        await control.execute_command("ACL", "SETUSER", "no-ping-user", "on", ">" + PASSWORD, "~*", "+select", "+client|setinfo")
+        await control.execute_command("ACL", "SETUSER", "no-ping-user", "on", ">" + PASSWORD, "~*", "+select")
         response = await client.post(P + "redis/test", json={
             "request_id": str(uuid4()), "revision": None,
             "config": RedisConfig(host=str(private_redis), username="no-ping-user").model_dump(),
