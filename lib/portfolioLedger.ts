@@ -7,6 +7,7 @@ export interface LedgerPnlRow {
   totalPnl: number;
   investedCapital: number;
   complete: boolean;
+  sourceRegistered?: boolean;
 }
 
 interface EconomicState {
@@ -108,6 +109,19 @@ export function buildPortfolioLedger(
     const currentCost = Number(record.cost) || 0;
     const price = Number(livePrice(record)) || Number(record.price) || 0;
     const recordOrders = grouped.get(record.id) || [];
+
+    if (recordOrders.some(order => order.executionModel === "source_registered_history")) {
+      // Original registered P/L is an observation. Replaying it with today's
+      // cost algorithm would replace the very values the migration preserves.
+      const realizedPnl = recordOrders.reduce((sum, order) => sum + (
+        (order.side === "sell" || order.side === "dividend") && order.realizedPnl != null && Number.isFinite(Number(order.realizedPnl))
+          ? Number(order.realizedPnl) : 0
+      ), 0);
+      const unrealizedPnl = (price - currentCost) * currentQty;
+      result.set(record.id, {recordId:record.id,realizedPnl,unrealizedPnl,totalPnl:realizedPnl+unrealizedPnl,
+        investedCapital:Math.abs(currentCost*currentQty),complete:false,sourceRegistered:true});
+      continue;
+    }
 
     if (recordOrders.length === 0) {
       const unrealizedPnl = (price - currentCost) * currentQty;

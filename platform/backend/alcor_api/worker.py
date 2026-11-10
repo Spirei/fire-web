@@ -36,7 +36,7 @@ async def claim(db: Database, worker_id):
             await conn.execute(
                 """
             WITH candidate AS (
-                SELECT id FROM tasks WHERE kind IN ('system.diagnostics','backup.create','backup.verify','backup.restore','backup.retention','database.migration.prepare','database.migration.convert','database.migration.portfolio','dividends.source.import','dividends.entitlements.review','feed.source_test','feed.refresh','feed.discussion','celeb.sec_collect','asset.source','agent.runtime') AND attempts<3
+                SELECT id FROM tasks WHERE kind IN ('system.diagnostics','backup.create','backup.verify','backup.restore','backup.retention','database.migration.prepare','database.migration.convert','database.migration.portfolio','database.migration.history','database.migration.complete','dividends.source.import','dividends.entitlements.review','feed.source_test','feed.refresh','feed.discussion','celeb.sec_collect','asset.source','agent.runtime') AND attempts<3
                   AND (status='queued' OR (status='running' AND lease_until<clock_timestamp()))
                 ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1
             ) UPDATE tasks t SET status='running',attempts=attempts+1,lease_version=lease_version+1,
@@ -207,8 +207,18 @@ async def run(settings=None, stop=None):
                     try:
                         if task['kind']=='system.diagnostics':
                             await diagnose(db, cache, task)
-                        elif task['kind']=='database.migration.portfolio':
-                            from .database_migration_portfolio import execute as import_portfolio,committed as imported_portfolio
+                        elif task['kind']=='database.migration.complete':
+                            from .database_migration_completion import execute as complete_migration,committed as completed_migration,incomplete as incomplete_migration
+                            from .backups import BackupFailure
+                            try:await complete_migration(db,task)
+                            except BackupFailure as exc:
+                                result=await completed_migration(db,task)
+                                await finish(db,task,result or await incomplete_migration(db,task,str(exc)),error_code=None if result else 'database_migration_completion_failed')
+                        elif task['kind'] in ('database.migration.portfolio','database.migration.history'):
+                            if task['kind']=='database.migration.history':
+                                from .database_migration_history import execute as import_portfolio,committed as imported_portfolio
+                            else:
+                                from .database_migration_portfolio import execute as import_portfolio,committed as imported_portfolio
                             from .backups import BackupFailure
                             try:await import_portfolio(db,task)
                             except BackupFailure as exc:
@@ -245,8 +255,16 @@ async def run(settings=None, stop=None):
                             except BackupFailure as exc:
                                 await finish(db,task,{'scope':'backup','message':str(exc)},error_code='backup_failed')
                     except Exception:
-                        if task['kind']=='database.migration.portfolio':
-                            from .database_migration_portfolio import committed as imported_portfolio
+                        if task['kind']=='database.migration.complete':
+                            from .database_migration_completion import committed as completed_migration,incomplete as incomplete_migration
+                            result=await completed_migration(db,task)
+                            await finish(db,task,result or await incomplete_migration(db,task,'迁移中断，已完成部分保留'),error_code=None if result else 'database_migration_completion_unknown')
+                            log.warning('database_migration_completion_interrupted')
+                        elif task['kind'] in ('database.migration.portfolio','database.migration.history'):
+                            if task['kind']=='database.migration.history':
+                                from .database_migration_history import committed as imported_portfolio
+                            else:
+                                from .database_migration_portfolio import committed as imported_portfolio
                             result=await imported_portfolio(db,task)
                             await finish(db,task,result or {'phase':'failed','business_written':False,'cutover_ready':False,'message':'导入未提交，请核对原记录'},error_code=None if result else 'database_migration_portfolio_unknown')
                             log.warning('database_migration_portfolio_interrupted')

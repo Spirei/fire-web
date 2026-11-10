@@ -117,7 +117,7 @@ async def guard(db,task,progress=None):
         key=task['payload'].get('_vault_fingerprint')
         if key and hashlib.sha256(Vault(db.settings.connection_secret_dir,read_only=True).key()).hexdigest()!=key:raise BackupFailure('迁移凭据密钥已变化')
         if progress is not None:
-            await conn.execute('UPDATE tasks SET result=%s WHERE id=%s',(Jsonb({'phase':progress['phase'],'progress':progress,'business_written':False,'cutover_ready':False,'source_revision':task['payload']['source_revision']}),task['id']))
+            await conn.execute('UPDATE tasks SET result=%s WHERE id=%s',(Jsonb({'phase':progress['phase'],'progress':progress,'business_written':progress.get('business_written',False),'completed_domains':progress.get('completed_domains',[]),'cutover_ready':False,'source_revision':task['payload']['source_revision']}),task['id']))
             last=await(await conn.execute('SELECT phase FROM task_events WHERE task_id=%s ORDER BY id DESC LIMIT 1',(task['id'],))).fetchone()
             if not last or last['phase']!=progress['phase']:await conn.execute('INSERT INTO task_events(task_id,phase) VALUES(%s,%s)',(task['id'],progress['phase']))
         await conn.execute('UPDATE tasks SET lease_until=clock_timestamp()+make_interval(secs=>%s) WHERE id=%s',(db.settings.lease_seconds,task['id']))

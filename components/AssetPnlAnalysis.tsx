@@ -404,7 +404,8 @@ export default function AssetPnlAnalysis({
   const realizedPnlTotal = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.realizedPnl || 0), 0), [lifetimeFiltered]);
   const unrealizedPnlTotal = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0), [lifetimeFiltered]);
   const costBasis = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.investedCapital || 0), 0), [lifetimeFiltered]);
-  const returnPct = costBasis ? (totalPnl / costBasis) * 100 : 0;
+  const hasRegisteredHistory=orders.some(order=>order.executionModel==='source_registered_history');
+  const returnPct = hasRegisteredHistory ? null : costBasis ? (totalPnl / costBasis) * 100 : 0;
 
   // 盈亏总额卡片：货币换算 + 基准（多市场）
   const currencyFactor = rates[displayCurrency] || 1;
@@ -508,6 +509,7 @@ export default function AssetPnlAnalysis({
   // 全部：累计账本盈亏；其余周期：期末实际资产 − 期初实际资产 − 区间净流入。
   // 使用筛选区间之前的最后一个交易日作基线，避免所有周期误用同一个累计总额。
   const periodMetrics = useMemo(() => {
+    if(hasRegisteredHistory&&period!=="全部")return {pnl:null,rate:null};
     if (period === "全部" || dailyAssetFiltered.length === 0) return { pnl: totalPnl, rate: returnPct };
     const first = dailyAssetFiltered[0];
     const last = dailyAssetFiltered[dailyAssetFiltered.length - 1];
@@ -519,7 +521,7 @@ export default function AssetPnlAnalysis({
       pnl: Number.isFinite(pnl) ? pnl : 0,
       rate: Number.isFinite(rate) ? rate : 0
     };
-  }, [period, dailyAsset, dailyAssetFiltered, totalPnl, returnPct]);
+  }, [period, dailyAsset, dailyAssetFiltered, totalPnl, returnPct,hasRegisteredHistory]);
   const periodPnl = periodMetrics.pnl;
   const periodRate = periodMetrics.rate;
 
@@ -742,8 +744,9 @@ export default function AssetPnlAnalysis({
 
                 {/* 盈亏总额大数字 / 收益率 / 日期（居中，对齐图1） */}
                 <div className="mt-4 text-center">
-                  <p className={`text-3xl font-extrabold tracking-tight tabular-nums ${periodPnl >= 0 ? "text-up" : "text-down"}`}>{moneyDisp(periodPnl)}</p>
-                  <p className={`mt-2 text-lg font-bold ${periodRate >= 0 ? "text-up" : "text-down"}`}>{periodRate >= 0 ? "+" : ""}{periodRate.toFixed(2)}%</p>
+                  {hasRegisteredHistory&&period==="全部"&&<p className="mb-2 text-xs text-muted">已登记盈亏</p>}
+                  <p className={`text-3xl font-extrabold tracking-tight tabular-nums ${periodPnl==null?"text-muted":periodPnl >= 0 ? "text-up" : "text-down"}`}>{periodPnl==null?'—':moneyDisp(periodPnl)}</p>
+                  <p className={`mt-2 text-lg font-bold ${periodRate==null?"text-muted":periodRate >= 0 ? "text-up" : "text-down"}`}>{periodRate==null?'—':`${periodRate>=0?'+':''}${periodRate.toFixed(2)}%`}</p>
                   <p className="mt-1.5 text-xs text-muted">{dateRange}</p>
                   {period === "全部" ? (
                     <p className="mt-2 text-[11px] text-muted">
@@ -751,9 +754,9 @@ export default function AssetPnlAnalysis({
                       <span className="mx-2 text-faint">·</span>
                       未实现 <span className={unrealizedPnlTotal >= 0 ? "text-up" : "text-down"}>{moneyDisp(unrealizedPnlTotal)}</span>
                     </p>
-                  ) : (
+                  ) : periodPnl!=null ? (
                     <p className="mt-2 text-xs text-muted">已扣除买卖净流入</p>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* 收益率走势 / 总资产趋势（资产分析-账户资产-收益率趋势图同款下划线 tab） */}

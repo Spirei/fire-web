@@ -753,6 +753,12 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       }));
       const benchmarkItems = benchItems;
       const fetchedOrdersAll: TradeOrder[] = bundle?.orders ?? [];
+      if (fetchedOrdersAll.some(order => order.executionModel === "source_registered_history" && order.historicalCoverageKnown !== true)) {
+        setOrders(fetchedOrdersAll);
+        trendRef.current=[];setTrend([]);setRecordCloses({});setTrendLoading(false);
+        try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* storage unavailable */ }
+        return;
+      }
       const benchmarkFallback =
         benchmarkItems.length === 0 && benchmarkRef.current.key === benchKey
           ? benchmarkRef.current.items

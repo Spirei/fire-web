@@ -43,7 +43,7 @@ class NativeOrders(InternalOrders):
                     continue
                 items.append(item)
             return scalar({'accountId':who.id,'asOf':now,'scope':scope,'status':status,'recordId':record_id,
-                'source':'local_trade_ledger','executionModel':'atomic_internal_orders','items':items,'count':len(items),
+                'source':'platform_native_and_registered_history' if any(row.get('executionModel')=='source_registered_history' for row in items) else 'local_trade_ledger','executionModel':'registered_history_and_atomic_internal_orders' if any(row.get('executionModel')=='source_registered_history' for row in items) else 'atomic_internal_orders','items':items,'count':len(items),
                 'settlesPendingOrders':False,'dateBasis':'exchange_local_calendar_date','timeZones':TIME_ZONES,
                 'unknownDateOrderIds':unknown_dates,'supportedStatuses':['pending','filled','cancelled','expired'],
                 'rejectedOrdersAvailable':False,'partialFillsAvailable':False})

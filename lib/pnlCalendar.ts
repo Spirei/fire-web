@@ -138,6 +138,9 @@ export function buildDailyAssetSeries({
   orders: TradeOrder[];
   rates: Record<string, number>;
 }): CalendarAssetPoint[] {
+  // A sealed order history does not establish historical holdings, cash, FX
+  // or opening NAV. It must not manufacture an asset curve or account return.
+  if (orders.some(order => order.executionModel === "source_registered_history" && order.historicalCoverageKnown !== true)) return [];
   const byId = new Map(positions.map((p) => [p.id, p]));
   const recordItems = Object.entries(closesMap)
     .map(([id, items]) => ({

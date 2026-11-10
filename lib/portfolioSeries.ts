@@ -19,6 +19,10 @@ const BUNDLE_TTL = 5 * 60 * 1000;
 const bundleCache = new Map<string, PortfolioBundle>();
 const bundleCachedAt = new Map<string, number>();
 const bundleInflight = new Map<string, Promise<PortfolioBundle | null>>();
+let bundleEpoch=0;
+if(typeof window!=="undefined")window.addEventListener('fire:records-updated',()=>{
+  bundleEpoch+=1;bundleCache.clear();bundleCachedAt.clear();bundleInflight.clear();
+});
 
 /** 同一页面树内同步读取已经完成的组合数据，供二级页首帧直接复用。 */
 export function peekPortfolioBundle(days = 330): PortfolioBundle | null {
@@ -40,6 +44,7 @@ export async function fetchPortfolioBundle({
   force?: boolean;
 } = {}): Promise<PortfolioBundle | null> {
   const key = String(days);
+  const epoch=bundleEpoch;
   const hit = bundleCache.get(key);
   if (!force && hit && Date.now() - (bundleCachedAt.get(key) || 0) < BUNDLE_TTL) return hit;
   const pending = bundleInflight.get(key);
@@ -61,12 +66,13 @@ export async function fetchPortfolioBundle({
         days: Number(data.days) || days,
         at: Number(data.at) || Date.now()
       };
+      if(epoch!==bundleEpoch)return null;
       bundleCache.set(key, bundle);
       bundleCachedAt.set(key, Date.now());
       return bundle;
     } catch {
       // 源站 / 限流抖动时回退上一次成功结果，避免趋势图与日历被清空
-      return hit ?? null;
+      return epoch===bundleEpoch ? hit ?? null : null;
     } finally {
       if (bundleInflight.get(key) === task) bundleInflight.delete(key);
     }

@@ -423,6 +423,8 @@ export default function SystemView({
                       "database.migration.prepare": "数据库迁移准备",
                       "database.migration.convert": "数据转换与校验",
                       "database.migration.portfolio": "导入持仓与自选",
+                      "database.migration.history": "导入交易与资金",
+                      "database.migration.complete": "完成数据迁移",
                       "backup.create": "创建备份",
                       "backup.verify": "校验备份",
                       "backup.restore": "恢复备份",

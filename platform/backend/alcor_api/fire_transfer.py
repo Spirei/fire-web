@@ -122,7 +122,7 @@ def plan_transfer(stored, incoming, current_year):
             'historicalFxRecomputed': False}
 
 
-async def import_on_connection(conn, who, request_id, expected_revision, incoming):
+async def import_on_connection(conn, who, request_id, expected_revision, incoming, *, actor_guard=None):
     from .account_signals import guard
     from .security import lock_mutation_identity
 
@@ -139,7 +139,10 @@ async def import_on_connection(conn, who, request_id, expected_revision, incomin
                        ('identity-management:' + who.id,))
     await conn.execute('SELECT id FROM users WHERE id=%s FOR UPDATE', (who.id,))
     await lock_mutation_identity(conn, who, require_admin=False)
-    await guard(conn, who, 'portfolio.write')
+    if actor_guard is None:
+        await guard(conn, who, 'portfolio.write')
+    else:
+        await actor_guard(conn,who)
     previous = await (await conn.execute(
         'SELECT fingerprint,result FROM fire_planning_operations WHERE owner_id=%s AND request_id=%s',
         (who.id, request_id),

@@ -85,7 +85,8 @@ async def context(db,who,parent_id):
             if key:labels[key]=labels.get(key,0)+1
         conversions=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind='database.migration.convert' AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 10",(who.id,str(parent_id)))).fetchall()
         imports=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind='database.migration.portfolio' AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 20",(who.id,str(parent_id)))).fetchall()
-        return {'imports':[public_task(row) for row in imports],'preparation_id':str(parent_id),'users':users,'accounts':accounts,'broker_labels':[{'label':key,'rows':value} for key,value in sorted(labels.items())],
+        history=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind IN ('database.migration.history','database.migration.complete') AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 20",(who.id,str(parent_id)))).fetchall()
+        return {'history_imports':[public_task(row) for row in history],'imports':[public_task(row) for row in imports],'preparation_id':str(parent_id),'users':users,'accounts':accounts,'broker_labels':[{'label':key,'rows':value} for key,value in sorted(labels.items())],
             'orders':[{'id':str(row['id']),'owner_id':str(row['user_id']),'market':row['market'],'code':row['code'],'name':row['name'],'broker':row.get('broker') or ''} for row in tables.rows(schema,'trade_orders')],
             'items':[public_task(row)|{'input':{key:row['payload'].get(key) for key in ('source_owner','account_kinds','broker_labels','market_accounts','order_accounts','timezone')}} for row in conversions]}
 

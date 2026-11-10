@@ -177,6 +177,19 @@ class LegacyFunds:
                 AND (%s::text IS NULL OR e.currency=%s)"""
             args = (who.id, currency, currency)
             sql = "SELECT e.*,f.id AS fund_id,f.origin_type,c.original_id,o.original_id AS original_order_id,p.code AS stock_code,o.original->>'name' AS stock_name,p.market AS stock_market,t.side AS stock_side,CASE WHEN t.id IS NULL THEN NULL ELSE NOT (" + PENDING_FEE_SQL + ") END AS actual_fee_known" + joins + where + ' ORDER BY e.occurred_at DESC,e.created_at DESC,e.id'
+            from .database_migration_history import registered_funds
+            historical=await registered_funds(conn,who.id)
+            if historical:
+                native=await(await conn.execute(sql+' LIMIT 10001',args)).fetchall()
+                if len(native)>10000:raise HTTPException(409,'资金记录超过完整合并预算，请按原币缩小范围')
+                historical=[row for row in historical if not currency or row['currency']==currency]
+                combined=[transaction(row) for row in native]+historical
+                if text:
+                    combined=[row for row in combined if search_match({'note':row.get('note') or '','occurred_at':row.get('occurredAt'),'currency':row['currency'],'origin_type':row['type'],'kind':row['type'],'stock_code':row.get('stockCode'),'stock_name':row.get('stockName'),'stock_market':row.get('stockMarket')},text)]
+                combined.sort(key=lambda row:(row.get('occurredAt') or '',row.get('createdAt') or '',row['id']),reverse=True)
+                result={'transactions':combined[offset:offset+limit],'pagination':{'limit':limit,'offset':offset,'total':len(combined),'hasMore':offset+limit<len(combined)}}
+                if query.get('recordsOnly')!='1':result.update(await self.state_on_connection(conn,who))
+                return result
             if text:
                 rows, total = [], 0
                 async with conn.cursor(name='fund_search_' + uuid4().hex) as stream:

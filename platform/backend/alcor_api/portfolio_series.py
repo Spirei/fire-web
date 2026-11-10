@@ -43,6 +43,8 @@ def period_analysis(orders,closes,coverage,start,through):
     with localcontext() as precision:
         precision.prec=160
         for order in orders:
+            if not order.get('tradedAt') or order.get('amount') is None or order.get('fees') is None:
+                continue
             local=datetime.fromisoformat(order['tradedAt']).astimezone(ZoneInfo(ZONES.get(order['market'],'UTC'))).date().isoformat()
             if not start<=local<=through:continue
             currency=order['currency']
@@ -189,9 +191,12 @@ class PortfolioSeries:
                         'factId':str(fact['id']),'pageId':str(fact['page_id']),'sourceRevision':str(source),'licenseRevision':policy.license_revision,
                         'adjust':query.adjust,'currency':fact['contents'].get('currency'),'marketTimezone':ZONES[record['market']]})
                 closes[rid]=values
-            orders.sort(key=lambda row:(row['tradedAt'],row['createdAt'],row['id']),reverse=True)
+            from .database_migration_history import registered_orders
+            imported_history=[row for row in await registered_orders(conn,who.id) if row['recordId'] in ids and row['accountKind']==account_kind and row['status']=='filled']
+            orders.extend(packed(imported_history))
+            orders.sort(key=lambda row:(row['tradedAt'] or '',row['createdAt'] or '',row['id']),reverse=True)
             token=hashed({'accountKind':account_kind,'account':broker_account_id,'record':record_id,'days':days,'source':str(revision),
-                'adjust':adjust,'start':begin.isoformat(),'through':end.isoformat(),'records':records,'trades':trades,'fees':corrections,'projections':projections,'heads':heads})
+                'adjust':adjust,'start':begin.isoformat(),'through':end.isoformat(),'records':records,'trades':trades,'fees':corrections,'projections':projections,'heads':heads,'registeredHistory':imported_history})
             if expected_revision is not None and expected_revision!=token:raise HTTPException(409,'金融或行情证据版本已变化，请重新读取第一页')
             coverage={'partial':bool(missing),'missing':missing,'historyCoverageKnown':False,'basis':'stored_observations_only_no_calendar_fill',
                 'cashFxHistoricalCoverageKnown':False,'unassignedExcluded':True,'excludedUnknownKindAccounts':sum(row['account_kind'] not in ('real','simulated') for row in accounts),'accountKindsSeparated':True}

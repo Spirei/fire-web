@@ -9,6 +9,8 @@ from .database_migration_jobs import PreparationInput,PreparationCancellation,su
 from .database_migration_retry import PreparationRetry,submit_retry
 from .database_migration_conversion import ConversionInput,context as conversion_context,submit as submit_conversion
 from .database_migration_portfolio import PortfolioImportInput,submit as submit_portfolio
+from .database_migration_history import submit as submit_history
+from .database_migration_completion import submit as submit_completion
 from .security import administrator,Identity
 from .fire_web import administrator as fire_administrator
 
@@ -87,6 +89,26 @@ def mount_database_migration(app,db):
         async def cancel_portfolio(data:PreparationCancellation,response:Response,who:Admin):
             headers(response)
             return await cancel_request(db,who,data.request_id,kind='database.migration.portfolio')
+
+        @router.post('/conversions/{task_id}/history',status_code=202,operation_id=key+'_migration_history',summary='导入历史交易与资金',description='复用原转换计划和持仓映射，原值保存交易、资金及费用证据；不重复执行交易、不重算持仓，不把未核对费用当作实付。')
+        async def import_history(task_id:UUID,data:PortfolioImportInput,response:Response,who:Admin):
+            headers(response)
+            return await submit_history(db,who,task_id,data)
+
+        @router.post('/history/cancel',operation_id=key+'_migration_history_cancel',summary='取消历史导入请求')
+        async def cancel_history(data:PreparationCancellation,response:Response,who:Admin):
+            headers(response)
+            return await cancel_request(db,who,data.request_id,kind='database.migration.history')
+
+        @router.post('/conversions/{task_id}/complete',status_code=202,operation_id=key+'_migration_complete',summary='完成剩余数据迁移',description='先备份新库，接续原历史、素材、个人数据及旧账号安全信息；已完成部分复用，身份切换最后提交，完成后使用旧账号重新登录。')
+        async def complete_migration(task_id:UUID,data:PortfolioImportInput,response:Response,who:Admin):
+            headers(response)
+            return await submit_completion(db,who,task_id,data)
+
+        @router.post('/completion/cancel',operation_id=key+'_migration_completion_cancel',summary='停止剩余迁移步骤')
+        async def cancel_completion(data:PreparationCancellation,response:Response,who:Admin):
+            headers(response)
+            return await cancel_request(db,who,data.request_id,kind='database.migration.complete')
 
         @router.get('/preparations/{task_id}/conversion',operation_id=key+'_migration_conversion_context',summary='读取数据转换范围与记录')
         async def conversion_read(task_id:UUID,response:Response,who:Admin):

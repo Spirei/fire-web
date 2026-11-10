@@ -184,6 +184,9 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
         orders.append({'id':str(order['id']),'orderNo':presentation.get(('internal_order',str(order['id']))),'orderNoSource':'platform_assigned','registrationContextKnown':intent is not None,'registrationContextSource':'explicit_owner_internal_intent' if intent else 'unknown','originalOrderNo':None,'recordId':order['record_id'],'market':order['record_market'],'code':order['record_code'],'name':record['name'],'side':order['side'],'status':order['status'],'revision':order['revision'],'recordRevision':record['revision'],
           'identityMatches':True,'accountMarket':record['account_market'] or record['market'],'accountCurrency':order['currency'],'settlementCurrency':None,'settlementAmount':None,
           'qty':order['quantity'],'price':order['limit_price'],'fees':order['fees'],'amount':order['quantity']*order['limit_price'],'orderType':intent.get('orderType') if intent else None,'orderPrice':order['limit_price'],'executedPrice':None,'filledQty':0,'filledQtySource':'atomic_order_status','continuousExecution':False,'executionStatus':'自动执行未启用' if order['status']=='pending' else None,'executionModel':'internal_pending','parentOrderId':None,'attachmentRole':None,'attachments':None,'attachmentInputsAvailable':False,'tif':intent.get('tif') if intent else None,'expiresAt':intent.get('expiresAt') if intent else None,'session':intent.get('session') if intent else None,'triggerPrice':(intent.get('triggerPrice') or intent.get('priceExact')) if intent and intent.get('orderType') in ('trigger_buy','trigger_sell','rebound_buy','rebound_sell') else intent.get('triggerPrice') if intent else None,'triggerStatus':None,'realizedPnl':None,'positionQtyBefore':None,'positionQtyAfter':None,'positionCostBefore':None,'positionCostAfter':None,'tradedAt':order['created_at'],'createdAt':order['created_at'],'broker':by_broker.get(order['account_id'],{}).get('name'),'note':order['note'],'currentPrice':None,'currentPriceSource':'unavailable','currentPriceAt':None,'currentRecordBrokerAccountId':order['account_id'],'brokerAccountId':order['account_id'],'brokerAccountIdSource':'recorded_order_entry','feeSource':'estimated_not_actual_paid','feeBreakdown':None,'feeBreakdownSource':'unavailable','cancellable':order['status']=='pending'})
+    from .database_migration_history import registered_orders
+    historical=await registered_orders(conn,who.id)
+    historical=[row for row in historical if (scope_record_id is None or row['recordId']==scope_record_id) and (scoped_account is None or row['brokerAccountId']==scoped_account)]
     missing_context=[row['id'] for row in orders if not row.get('registrationContextKnown')]
     if strict and missing_context:raise HTTPException(409,'旧交易协议需要原委托上下文；当前成交未登记此事实，请使用可表达未知的客户端')
     currencies={row['currency'] for row in state['openings']}|{row['currency'] for row in state['cash']}
@@ -193,6 +196,7 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
     missing=sorted(required-currencies)
     complete=not missing and all(row['opening_at'] is not None for row in state['openings'])
     def at(value):
+        if value is None:return datetime.min.replace(tzinfo=UTC)
         return value if isinstance(value,datetime) else datetime.fromisoformat(value)
     positions=[]
     active_by_record=defaultdict(list)
@@ -232,6 +236,8 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
     cash={'nativeBalancesByCurrency':balances if complete else None,'sourceComplete':complete,'balancesByCurrency':balances if complete and set(balances)<={'USD'} else None,'complete':complete and set(balances)<={'USD'},'source':'recorded_cash_ledger','valuationIndependent':True,'unavailableReasons':[] if complete else ['missing_recorded_opening'],'missingOpeningCurrencies':missing,'marketAllocationAvailable':False}
     if scoped_account is not None:
         cash.update(nativeBalancesByCurrency=None,balancesByCurrency=None,sourceComplete=False,complete=False,unavailableReasons=['owner_scope_incomplete_not_requested'])
+    orders.extend(historical)
+    revision=hashed({'native':revision,'registeredHistory':historical})
     public={'accountId':who.id,'snapshotRevision':revision,'collectionRevision':state['collectionRevision'],'asOf':observed,'cash':cash,'positions':positions,'orderContextComplete':not missing_context,'unknownOrderContextIds':missing_context,'orders':sorted(orders,key=lambda row:(at(row['tradedAt']),at(row['createdAt']),row['id']),reverse=True)}
     if scope_record is not None:
         public['projectionScope']={'kind':'owned_record','recordId':scope_record_id,'brokerAccountId':scope_record['broker_account_id'],'accountKind':brokers[0]['account_kind'],'ownerComplete':False,'ownerTotalsKnown':False}
