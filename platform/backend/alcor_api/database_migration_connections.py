@@ -85,18 +85,23 @@ class MigrationConnections:
                             'build':self.db.settings.source_revision,'software':__version__,'driver':psycopg.__version__,'format':'database-migration/1'})
 
     async def read(self,who):
+        config,password=current_config(self.db.settings,'postgresql')
         async with self.db.connection() as conn,conn.transaction():
             await lock_mutation_identity(conn,who)
             row=await(await conn.execute('SELECT * FROM database_migration_source WHERE singleton')).fetchone()
-            checks={}
+            checks={};last_checks={}
             for scope in ('source','target'):
                 observed=await(await conn.execute('''SELECT result FROM database_migration_connection_observations
                     WHERE scope=%s AND runtime_binding=%s AND source_revision IS NOT DISTINCT FROM %s ORDER BY id DESC LIMIT 1''',
                     (scope,self.runtime_binding(),row['revision'] if scope=='source' and row else None))).fetchone()
                 checks[scope]=observed['result'] if observed else None
-        config,password=current_config(self.db.settings,'postgresql')
+                if scope=='source':
+                    previous=await(await conn.execute("SELECT result FROM database_migration_connection_observations WHERE scope='source' AND source_revision IS NOT DISTINCT FROM %s ORDER BY id DESC LIMIT 1",(row['revision'] if row else None,))).fetchone()
+                else:
+                    previous=await(await conn.execute("SELECT result FROM database_migration_connection_observations WHERE scope='target' AND result->>'instance_id'=%s AND result->>'database'=%s ORDER BY id DESC LIMIT 1",(str(self.db.settings.instance_id),config.database))).fetchone()
+                last_checks[scope]=previous['result']|{'historical':True} if previous else None
         return {'source':source_view(row),'target':{'config':config.model_dump(),'password_configured':bool(password),
-                                                   'instance_id':str(self.db.settings.instance_id),'environment':self.db.settings.environment,'managed_by':'environment'},'checks':checks}
+                                                   'instance_id':str(self.db.settings.instance_id),'environment':self.db.settings.environment,'managed_by':'environment'},'checks':checks,'last_checks':last_checks}
 
     async def save(self,who,data):
         # Bind the password hash to idempotency without ever saving or logging its plaintext.

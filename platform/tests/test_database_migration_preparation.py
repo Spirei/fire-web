@@ -177,7 +177,9 @@ async def test_changed_build_rejects_old_checks_and_queued_preparation(client,db
     task=await claim(db,uuid4())
     with pytest.raises(BackupFailure,match='配置已变化'):await execute(db,task)
     assert not (settings.backup_dir/'database-migrations'/str(task['id'])).exists()
-    assert (await client.get('/api/fire/database-migration/connections')).json()['checks']=={'source':None,'target':None}
+    connections=(await client.get('/api/fire/database-migration/connections')).json()
+    assert connections['checks']=={'source':None,'target':None}
+    assert all(connections['last_checks'][scope]['historical'] is True and connections['last_checks'][scope]['state']=='connected' for scope in ('source','target'))
 
 
 @pytest_asyncio.fixture

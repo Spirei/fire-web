@@ -179,7 +179,7 @@ async def authorized_job(conn,task,settings=None):
         raise BackupFailure("任务操作授权已失效")
 
 
-async def guard(db, task):
+async def guard(db, task, progress=None):
     from .worker import owned_row
 
     async with db.connection() as conn, conn.transaction():
@@ -187,6 +187,8 @@ async def guard(db, task):
         if not row or row["status"] != "running":
             raise BackupFailure("任务已取消或执行权已变化")
         await authorized_job(conn,task,db.settings)
+        if progress is not None:
+            await conn.execute('UPDATE tasks SET result=%s WHERE id=%s',(Jsonb({'scope':'backup','phase':progress['phase'],'progress':progress}),task['id']))
         await conn.execute(
             "UPDATE tasks SET lease_until=clock_timestamp()+make_interval(secs=>%s) WHERE id=%s",
             (db.settings.lease_seconds, task["id"]),
@@ -227,7 +229,7 @@ async def command(settings, db, task, name, args, dsn, directory, *, output=None
         await waiter
 
 
-async def tables_and_hashes(conn):
+async def tables_and_hashes(conn, progress=None):
     await conn.execute("SET LOCAL TIME ZONE 'UTC'")
     names = [
         r["name"]
@@ -238,6 +240,7 @@ async def tables_and_hashes(conn):
         ).fetchall()
     ]
     result = {}
+    if progress:progress(0,len(names))
     for name in names:
         count = 0
         h = hashlib.sha256()
@@ -253,6 +256,7 @@ async def tables_and_hashes(conn):
                 h.update(raw)
                 count += 1
         result[name] = {"rows": count, "sha256": h.hexdigest()}
+        if progress:progress(len(result),len(names))
     return result
 
 

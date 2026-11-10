@@ -204,6 +204,9 @@ async def project_alert_demands(authority):
                 if row is not None:
                     await conn.execute("UPDATE market_streams SET demand_generation=demand_generation+1 WHERE owner_id=%s AND id=%s",
                                        (rule["owner_id"],stream["id"]))
+                    if query.kind == 'latest':
+                        await conn.execute("UPDATE market_streams SET next_due=least(next_due,clock_timestamp()) WHERE owner_id=%s AND id=%s",
+                                           (rule["owner_id"],stream["id"]))
                 elif query.kind=='price_series':
                     # A live rule explicitly authorizes bounded new observations, not replay of an unknown call.
                     # Known completed RT snapshots may advance every 30s; failed/unknown jobs require an explicit new intent.

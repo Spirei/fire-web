@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg.types.json import Jsonb
 
 from alcor_api.backups import BackupFailure
 from alcor_api.database_migration_capture import CaptureBudget
@@ -124,6 +125,26 @@ async def test_real_conversion_retains_exact_values_and_blocks_unproved_import(c
     async with db.connection() as conn:
         assert (await(await conn.execute('SELECT count(*) AS n FROM portfolio_records')).fetchone())['n']==2
         assert (await(await conn.execute('SELECT count(*) AS n FROM database_migration_portfolio_imports')).fetchone())['n']==1
+    resumed=(await client.get(prefix)).json()
+    assert resumed['resume']['preparation']['id']==str(task['id'])
+    assert resumed['resume']['portfolio_request_id']==payload['request_id']
+    assert resumed['previous_input']['market_accounts']==command['market_accounts']
+    # A later verified snapshot must still lead to the original business import.
+    async with db.connection() as conn:
+        original_preparation=await(await conn.execute('SELECT * FROM tasks WHERE id=%s',(task['id'],))).fetchone()
+        newer_id=uuid4()
+        newer_payload=original_preparation['payload']|{'_retry':{'archive_task':str(task['id']),'archive_attempt':1}}
+        await conn.execute("INSERT INTO tasks(id,owner_id,request_id,fingerprint,kind,status,attempts,payload,result) VALUES(%s,%s,%s,'synthetic-new-snapshot','database.migration.prepare','succeeded',1,%s,%s)",
+                           (newer_id,task['owner_id'],uuid4(),Jsonb(newer_payload),Jsonb(original_preparation['result'])))
+    newer=(await client.get('/api/fire/database-migration/preparations/'+str(newer_id)+'/conversion')).json()
+    assert newer['resume']['preparation']['id']==str(task['id'])
+    assert newer['resume']['conversion_request_id']==command['request_id']
+    listing=(await client.get('/api/fire/database-migration/preparations')).json()['items']
+    assert listing[0]['id']==str(task['id']) and listing[0]['has_imports'] is True
+    settings.source_revision='b'*40
+    duplicate=await client.post('/api/fire/database-migration/preparations',json={'request_id':str(uuid4()),'source_revision':revision})
+    assert duplicate.status_code==409 and '无需重新准备' in duplicate.text
+    settings.source_revision='a'*40
     # Changing the sealed source after admission must stop the next task before conversion.
     next_command=command|{'request_id':str(uuid4())}
     again=await client.post(prefix,json=next_command);assert again.status_code==202,again.text

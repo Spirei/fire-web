@@ -70,10 +70,10 @@ async def backup_target(db,task):
     cancel=threading.Event();loop=asyncio.get_running_loop();events=asyncio.Queue()
     def progress(value):loop.call_soon_threadsafe(events.put_nowait,value)
     work=asyncio.create_task(asyncio.to_thread(capture_database,settings,settings.database_url.get_secret_value(),root,'target',budget,cancel,progress,expected_identity=task['payload']['_archive']['identities']['target'],schema='public'))
+    latest=None
     try:
         while not work.done():
             await asyncio.wait({work},timeout=.5)
-            latest=None
             while not events.empty():latest=events.get_nowait()
             await guard(db,task,{'phase':'completion_backup','processed':latest.get('processed',0) if latest else 0,'total':latest.get('total') if latest else None,'unit':latest.get('unit') if latest else 'archive'})
         value=await work

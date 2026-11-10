@@ -20,7 +20,7 @@ async def read_overview(app, who):
         ).fetchone()
         counts = await (
             await conn.execute(
-                "SELECT status,count(*) AS count FROM tasks WHERE owner_id=%s GROUP BY status", (who.id,)
+                "SELECT status,count(*) AS count,count(*) FILTER (WHERE kind='market.latest') AS recurring FROM tasks WHERE owner_id=%s GROUP BY status", (who.id,)
             )
         ).fetchall()
         configured_rows = await (
@@ -91,6 +91,7 @@ async def read_overview(app, who):
         "topology": "single-app-external-pg-redis",
         "services": services,
         "task_counts": {r["status"]: r["count"] for r in counts},
+        "recurring_task_counts": {r["status"]: r["recurring"] for r in counts},
         "compatibility": {
             "ios_v1": False,
             "ios_v2": False,

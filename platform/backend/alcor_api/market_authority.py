@@ -353,6 +353,8 @@ class Authority:
                 "UPDATE market_streams SET demand_generation=demand_generation+1 WHERE owner_id=%s AND id=%s",
                 (who.id, stream["id"]),
             )
+            if query.kind=='latest':
+                await conn.execute('UPDATE market_streams SET next_due=least(next_due,clock_timestamp()) WHERE owner_id=%s AND id=%s',(who.id,stream['id']))
             return await self.save_receipt(
                 conn,
                 who.id,

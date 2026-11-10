@@ -45,6 +45,11 @@ async def submit(db,who,data):
             return public_task(prior)
         source=await(await conn.execute('SELECT * FROM database_migration_source WHERE singleton FOR SHARE')).fetchone()
         if not source or source['revision']!=data.source_revision:raise HTTPException(409,'旧库配置已变化，请重新读取')
+        verified=await(await conn.execute("""SELECT 1 FROM tasks WHERE owner_id=%s AND kind='database.migration.prepare'
+            AND payload->>'source_revision'=%s AND status='succeeded' AND result->>'phase'='awaiting_mapping'
+            AND result->'source'->>'restore_verified'='true' AND result->'target'->>'restore_verified'='true' LIMIT 1""",
+            (who.id,str(data.source_revision)))).fetchone()
+        if verified:raise HTTPException(409,'已有恢复核对通过的记录，请继续原迁移，无需重新准备')
         for scope in ('source','target'):
             checked=await(await conn.execute('''SELECT result,created_at>clock_timestamp()-interval '2 minutes' AS fresh FROM database_migration_connection_observations
                 WHERE scope=%s AND runtime_binding=%s AND source_revision IS NOT DISTINCT FROM %s ORDER BY id DESC LIMIT 1''',
@@ -70,7 +75,7 @@ async def submit(db,who,data):
 
 def public_task(row):
     return {**{key:str(row[key]) if key in ('id','request_id') else row[key] for key in ('id','request_id','kind','status','result','error_code')},
-            'source_revision':row['payload']['source_revision'],'created_at':row['created_at'].isoformat(),'retry_of':row['payload'].get('retry_of'),'conversion_id':row['payload'].get('conversion_id')}
+            'source_revision':row['payload']['source_revision'],'created_at':row['created_at'].isoformat(),'retry_of':row['payload'].get('retry_of'),'conversion_id':row['payload'].get('conversion_id'),'has_imports':bool(row.get('has_imports',False))}
 
 
 async def cancel_request(db,who,request_id,*,kind='database.migration.prepare'):
@@ -96,7 +101,11 @@ async def cancel_request(db,who,request_id,*,kind='database.migration.prepare'):
 async def listing(db,who):
     async with db.connection() as conn,conn.transaction():
         await lock_mutation_identity(conn,who)
-        rows=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind='database.migration.prepare' ORDER BY created_at DESC,id DESC LIMIT 20",(who.id,))).fetchall()
+        rows=await(await conn.execute("""SELECT t.*,EXISTS(SELECT 1 FROM tasks child WHERE child.owner_id=t.owner_id
+            AND child.kind IN ('database.migration.portfolio','database.migration.history','database.migration.complete')
+            AND child.payload->>'preparation_id'=t.id::text AND child.status='succeeded' AND child.result->>'business_written'='true') AS has_imports
+            FROM tasks t WHERE t.owner_id=%s AND t.kind='database.migration.prepare'
+            ORDER BY has_imports DESC,t.created_at DESC,t.id DESC LIMIT 20""",(who.id,))).fetchall()
     return {'items':[public_task(row) for row in rows]}
 
 

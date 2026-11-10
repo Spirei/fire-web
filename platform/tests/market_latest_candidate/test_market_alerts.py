@@ -72,3 +72,25 @@ async def test_cached_or_stale_pg_fact_does_not_trigger_and_stopping_rule_releas
     task = await claim(app.state.db, uuid4())
     assert await execute(authority, task, transport) == "authorization_revoked"
     assert transport.calls == 1
+
+
+async def test_new_price_alert_wakes_an_existing_sleeping_client_stream(market):
+    client, app, authority, transport, revision = market
+    await attach(app, authority)
+    await demand(client, revision)
+    await schedule(authority)
+    original = await claim(app.state.db, uuid4())
+    assert await execute(authority, original, transport) == 'observed'
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE market_demands SET hot_until=clock_timestamp()-interval '1 second'")
+        await conn.execute("UPDATE market_streams SET next_due=clock_timestamp()-interval '1 second'")
+    cold = await claim(app.state.db, uuid4())
+    assert await execute(authority, cold, transport) == 'sleeping'
+    assert await claim(app.state.db, uuid4()) is None
+    await upsert(client)
+    assert await project_alert_demands(authority) == 1
+    assert await schedule(authority) == 0
+    awake = await claim(app.state.db, uuid4())
+    assert awake and awake['id'] == original['id']
+    assert await execute(authority, awake, transport) == 'observed'
+    assert transport.calls == 2

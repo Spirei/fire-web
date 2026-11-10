@@ -55,7 +55,7 @@ async def submit(db, who, data: TaskInput):
                     raise HTTPException(422, str(exc)) from None
             count = await (
                 await conn.execute(
-                    "SELECT count(*) AS n FROM tasks WHERE owner_id=%s AND status IN ('queued','running','cancel_requested')",
+                    "SELECT count(*) AS n FROM tasks WHERE owner_id=%s AND kind<>'market.latest' AND status IN ('queued','running','cancel_requested')",
                     (who.id,),
                 )
             ).fetchone()

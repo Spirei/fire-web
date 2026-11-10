@@ -8,7 +8,10 @@ import { platformRequest as read } from "@/lib/platformRequest";
 import {
   useWorkspaceActive,
   useWorkspaceLocationGuard,
+  useWorkspaceSearchParams,
 } from "@/lib/workspacePanel";
+import { IconLoader2, IconCheck } from "@tabler/icons-react";
+
 type Task = {
   id: string;
   kind: string;
@@ -35,7 +38,8 @@ const states: Record<string, string> = {
 export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }: { ownerId: string; buttonOnly?: boolean; onClose?: () => void }) {
   const active = useWorkspaceActive(),
     canUseLocation = useWorkspaceLocationGuard();
-  const [open, setOpen] = useState(false),
+  const params=useWorkspaceSearchParams();
+  const [open, setOpen] = useState(()=>/^[a-f0-9-]{36}$/i.test(params.get('backupRequest')??'')),
     [data, setData] = useState<Listing | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -44,6 +48,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     [requestId, setRequestId] = useState(""),
     [task, setTask] = useState<Task | null>(null);
   const operation = useRef(0);
+  const taskOwner=useRef(ownerId);
   const csrf = useRef(""),
     instance = useRef(""),
     generation = useRef(0);
@@ -57,6 +62,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     setVerify(false);
     csrf.current = "";
   }, []);
+  useEffect(()=>{if(taskOwner.current!==ownerId){taskOwner.current=ownerId;reset();setOpen(false);}},[ownerId,reset]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       const ticket = ++generation.current;
@@ -240,10 +246,17 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
   }
   function close() {
     generation.current++;
-    reset();
+    operation.current++;
+    setBusy(false);setData(null);setSaved(false);setVerify(false);setError('');csrf.current='';
     setOpen(false);
     onClose?.();
   }
+  const progress=task?.result?.progress as {phase?:string;processed?:number;total?:number|null;unit?:string}|undefined;
+  const processed=typeof progress?.processed==='number'&&Number.isFinite(progress.processed)&&progress.processed>=0?progress.processed:0;
+  const total=typeof progress?.total==='number'&&Number.isFinite(progress.total)&&progress.total>0?progress.total:null;
+  const phaseLabels:Record<string,string>={backup_snapshot:'准备一致快照',backup_sources:'核对备份原件',backup_tables:'逐表校验',backup_database:'归档数据库',backup_encrypt:'加密备份',backup_verify:'校验备份文件',backup_publish:'保存备份'};
+  const running=!!task&&['queued','running','cancel_requested'].includes(task.status);
+  const pending=!!requestId&&(!task||running);
   return (
     <>
       <div className={buttonOnly ? undefined : "sw-row"}>
@@ -256,10 +269,10 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
           className=""
           onClick={() => setOpen(true)}
         >
-          {buttonOnly ? "创建备份" : "管理备份"}
+          {buttonOnly ? requestId&&(!task||["queued","running","cancel_requested"].includes(task.status))?"查看备份进度":"创建备份" : "管理备份"}
         </Capsule>
       </div>
-      {open && (
+      {open && taskOwner.current===ownerId && (
         <AppModal
           title="联合备份"
           size="lg"
@@ -272,7 +285,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
             <p>请先配置私有备份目录和独立恢复密钥目录。</p>
           )}
           {data?.key_error && <p role="alert" className="system-error">{data.key_error}</p>}
-          {data?.configured && !data.key_error && (
+          {data?.configured && !data.key_error && !pending && (
             <div className="flex flex-col gap-4 text-sm">
               {data.worker_available === false && <div className="flex flex-wrap items-center justify-between gap-3"><span role="status">后台任务进程未连接，暂时无法执行备份。</span><Capsule variant="secondary" size="sm" busy={busy} onClick={() => void load()}>重新检查</Capsule></div>}
               {!data.key_fingerprint ? (
@@ -318,24 +331,15 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
               )}
             </div>
           )}
-          {requestId && (
-            <div className="system-receipt mt-4">
-              <code>{requestId}</code>
-              <span>
-                {task ? states[task.status] || task.status : "受理结果待核对"}
-              </span>
-              <Capsule variant="secondary" size="sm"
-                disabled={busy || !csrf.current}
-                onClick={() => void lookup()}
-              >
-                查询原请求
-              </Capsule>
+          {requestId && <div className="backup-operation-progress mt-4" role="status">
+            <div className="flex flex-wrap items-center gap-3">{running?<IconLoader2 size={18} className="animate-spin motion-reduce:animate-none"/>:task?.status==='succeeded'?<IconCheck size={18}/>:null}<strong>{task?.status==='running'?(phaseLabels[progress?.phase??'']??'正在备份'):task?.status==='succeeded'?'备份已完成':task?states[task.status]??task.status:'受理结果待核对'}</strong>
+              {task?.status==='running'&&(total!==null||processed>0)&&<span className="ml-auto tabular-nums text-sm text-ink-3">{processed}{total!==null?' / '+total:''}{progress?.unit==='tables'?' 张表':progress?.unit==='objects'?' 项':''}</span>}
+              {!task&&<Capsule variant="secondary" size="sm" disabled={busy||!csrf.current} onClick={()=>void lookup()}>查询原任务</Capsule>}
             </div>
-          )}
-          {task?.result && (
-            <p className="mt-3 text-sm">{String(task.result.message || "")}</p>
-          )}
-          {data && <BackupHistory items={data.items} downloads />}
+            {task?.status==='running'&&total!==null&&<div className="migration-stage-progress" role="progressbar" aria-label="当前备份阶段" aria-valuemin={0} aria-valuemax={total} aria-valuenow={Math.min(processed,total)}><span style={{width:`${Math.min(100,processed/total*100)}%`}}/></div>}
+            {task?.status==='failed'&&!!task.result?.message&&<p className="mt-3 text-sm text-red-500" role="alert">{String(task.result.message)}</p>}
+          </div>}
+          {data && (data.items.length>0||!pending) && <BackupHistory items={data.items} downloads />}
           {verify && <div className="mt-4"><Capsule variant="secondary" busy={busy} onClick={async () => {
             if (busy) return;
             const ticket = ++operation.current;

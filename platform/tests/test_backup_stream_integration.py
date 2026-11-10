@@ -238,3 +238,28 @@ async def test_stream_deadline_stops_worker_before_publication_and_releases_owne
         await checked_work(backup_app.state.db, task, slow)
     assert stopped.is_set() and not list(configured.backup_dir.glob("*.enc"))
     assert await finish(backup_app.state.db, task, error_code="synthetic_deadline")
+
+
+async def test_slow_source_inventory_keeps_owned_lease_and_reports_phase(bc,backup_app,configured,monkeypatch):
+    from alcor_api import backup_stream_jobs as jobs
+    configured.lease_seconds=2
+    started=asyncio.Event();proceed=asyncio.Event()
+    original=jobs.collect_sources
+    async def slow(*args,**kwargs):
+        started.set();await proceed.wait()
+        return await original(*args,**kwargs)
+    monkeypatch.setattr(jobs,'collect_sources',slow)
+    job,_=await old.submit(bc)
+    work=asyncio.create_task(old.execute(backup_app,configured,UUID(job['id'])))
+    try:
+        await asyncio.wait_for(started.wait(),10)
+        await asyncio.sleep(3)
+        async with backup_app.state.db.connection() as conn:
+            row=await(await conn.execute('SELECT status,lease_until>clock_timestamp() AS owned,result FROM tasks WHERE id=%s',(UUID(job['id']),))).fetchone()
+        assert row['status']=='running' and row['owned']
+        assert row['result']['progress']['phase']=='backup_sources'
+    finally:
+        proceed.set()
+        result=await work
+    assert result['message']=='备份已完成'
+    assert await backups.row_for(backup_app.state.db,UUID(job['id']))

@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm');
+const context={exports:{}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/systemTasks.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,context);
+const {systemTaskView:view,finiteTaskCounts:counts}=context.exports;
+assert.equal(view({kind:'market.latest',status:'queued',attempts:0,result:{state:'observed',page:23}}).state,'等待更新');
+assert.equal(view({kind:'market.latest',status:'queued',attempts:0,result:{page:23}}).executions,23);
+assert.equal(view({kind:'market.latest',status:'queued',attempts:0,result:{state:'sleeping',page:23}}).state,'已休眠');
+assert.equal(view({kind:'market.latest',status:'running',attempts:1,result:null}).state,'采集中');
+assert.equal(view({kind:'backup.create',status:'queued',attempts:0,result:null}).state,'等待中');
+const total={queued:106,running:2,succeeded:5},recurring={queued:106,running:1};const actual=counts(total,recurring);
+assert.equal(actual.queued,0);assert.equal(actual.running,1);assert.equal(actual.recurring,107);assert.equal(actual.succeeded,5);assert.equal(total.queued,106);
+assert.equal(counts(total).queued,106,'Older servers retain their factual counts');
+console.log('PASS recurring observation counts and states remain distinct from finite queued jobs without changing source totals');

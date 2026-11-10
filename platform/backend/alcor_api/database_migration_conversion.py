@@ -86,7 +86,21 @@ async def context(db,who,parent_id):
         conversions=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind='database.migration.convert' AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 10",(who.id,str(parent_id)))).fetchall()
         imports=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind='database.migration.portfolio' AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 20",(who.id,str(parent_id)))).fetchall()
         history=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind IN ('database.migration.history','database.migration.complete') AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 20",(who.id,str(parent_id)))).fetchall()
-        return {'history_imports':[public_task(row) for row in history],'imports':[public_task(row) for row in imports],'preparation_id':str(parent_id),'users':users,'accounts':accounts,'broker_labels':[{'label':key,'rows':value} for key,value in sorted(labels.items())],
+        previous=await(await conn.execute("""SELECT payload FROM tasks WHERE owner_id=%s AND kind='database.migration.convert'
+            AND payload->>'source_revision'=%s AND status='succeeded' ORDER BY created_at DESC,id DESC LIMIT 1""",
+            (who.id,parent['payload']['source_revision']))).fetchone()
+        previous_input={key:previous['payload'].get(key) for key in ('source_owner','account_kinds','broker_labels','market_accounts','order_accounts')} if previous else None
+        existing=await(await conn.execute("""SELECT p.*,c.request_id AS conversion_request,i.request_id AS portfolio_request,
+            (SELECT h.request_id FROM tasks h WHERE h.owner_id=i.owner_id AND h.kind IN ('database.migration.history','database.migration.complete')
+             AND h.payload->>'conversion_id'=c.id::text ORDER BY h.created_at DESC,h.id DESC LIMIT 1) AS history_request
+            FROM tasks i JOIN tasks c ON c.owner_id=i.owner_id AND c.id::text=i.payload->>'conversion_id'
+            JOIN tasks p ON p.owner_id=i.owner_id AND p.id::text=c.payload->>'preparation_id'
+            WHERE i.owner_id=%s AND i.kind='database.migration.portfolio' AND i.status='succeeded' AND i.result->>'business_written'='true'
+            AND c.payload->'_archive'->'identities'->>'source'=%s ORDER BY i.created_at DESC,i.id DESC LIMIT 1""",
+            (who.id,bound['identities']['source']))).fetchone()
+        resume={'preparation':public_task(existing)|{'has_imports':True},'conversion_request_id':str(existing['conversion_request']),'portfolio_request_id':str(existing['portfolio_request']),
+                'history_request_id':str(existing['history_request']) if existing['history_request'] else None} if existing else None
+        return {'resume':resume,'previous_input':previous_input,'history_imports':[public_task(row) for row in history],'imports':[public_task(row) for row in imports],'preparation_id':str(parent_id),'users':users,'accounts':accounts,'broker_labels':[{'label':key,'rows':value} for key,value in sorted(labels.items())],
             'orders':[{'id':str(row['id']),'owner_id':str(row['user_id']),'market':row['market'],'code':row['code'],'name':row['name'],'broker':row.get('broker') or ''} for row in tables.rows(schema,'trade_orders')],
             'items':[public_task(row)|{'input':{key:row['payload'].get(key) for key in ('source_owner','account_kinds','broker_labels','market_accounts','order_accounts','timezone')}} for row in conversions]}
 

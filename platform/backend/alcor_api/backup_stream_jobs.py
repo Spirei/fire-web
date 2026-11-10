@@ -79,7 +79,7 @@ async def checked_work(db, task, function):
         raise
 
 
-async def collect_sources(snapshot, settings):
+async def collect_sources(snapshot, settings, progress=None):
     from .media_storage import valid_asset_name
 
     limits = limits_for(settings)
@@ -106,6 +106,7 @@ async def collect_sources(snapshot, settings):
                     raise StreamFailure("素材名称无效")
                 size, sha = await asyncio.to_thread(file_hash, path, limits.max_bytes)
                 blobs.append(Blob.file(prefix + "/" + path.name, path, size, sha))
+            if progress:progress(len(blobs))
     packages = await (await snapshot.execute("SELECT to_regclass('public.fire_app_packages') AS relation")).fetchone()
     if packages['relation']:
         indexed = {blob.name:blob.size for blob in blobs}
@@ -148,10 +149,32 @@ async def collect_sources(snapshot, settings):
     await backups.capture_provider_key(snapshot, settings, small)
     for name, raw in small.items():
         blobs.append(Blob.memory(name, raw))
+    if progress:progress(len(blobs))
     return blobs
 
 
 async def create_stream_backup(settings, db, task):
+    # Cover the entire snapshot, including source scans and table hashing, not
+    # just the pg_dump/encryption subprocess. Only this task's valid lease is renewed.
+    latest={'phase':'backup_snapshot','processed':0,'total':None,'unit':'objects'}
+    def report(phase,processed=0,total=None,unit='objects'):
+        latest.update(phase=phase,processed=processed,total=total,unit=unit)
+    work=asyncio.create_task(_create_stream_backup(settings,db,task,report))
+    started=time.monotonic()
+    try:
+        while not work.done():
+            await asyncio.wait({work},timeout=min(2,max(.05,settings.lease_seconds/4)))
+            if work.done():break
+            await backups.guard(db,task,dict(latest))
+            if time.monotonic()-started>settings.backup_stream_seconds:
+                raise backups.BackupFailure('备份超过执行时间预算')
+        return await work
+    finally:
+        if not work.done():work.cancel()
+        await asyncio.gather(work,return_exceptions=True)
+
+
+async def _create_stream_backup(settings, db, task, report):
     from .worker import checkpoint, owned_row
 
     try:
@@ -198,7 +221,8 @@ async def create_stream_backup(settings, db, task):
                 exported = (await (await snapshot.execute("SELECT pg_export_snapshot() AS id")).fetchone())[
                     "id"
                 ]
-                blobs = await collect_sources(snapshot, settings)
+                report("backup_sources")
+                blobs = await collect_sources(snapshot, settings,lambda n:report("backup_sources",n))
                 blobs.append(
                     Blob.memory(
                         "secrets/connections.key",
@@ -221,7 +245,9 @@ async def create_stream_backup(settings, db, task):
                 )["size"]
                 reserve = settings.backup_stream_disk_reserve_bytes
                 check_space(root, sum(blob.size for blob in blobs) + database_size * 2 + reserve)
-                hashes = await backups.tables_and_hashes(snapshot)
+                report("backup_tables",unit="tables")
+                hashes = await backups.tables_and_hashes(snapshot,lambda n,total:report("backup_tables",n,total,"tables"))
+                report("backup_database",unit="archive")
                 await backups.command(
                     settings,
                     db,
@@ -279,6 +305,7 @@ async def create_stream_backup(settings, db, task):
                         os.fsync(output.fileno())
                     return count, sha
 
+                report("backup_encrypt")
                 count, sha = await checked_work(db, task, encode)
             # Media pin remains held until all original bytes have been sealed.
             # Revalidate complete encrypted bytes before a publication transaction.
@@ -292,7 +319,9 @@ async def create_stream_backup(settings, db, task):
                 read_archive(configured, probe, cancelled=cancel)
                 os.rename(directory / (str(task["id"]) + ".enc"), capsule)
 
+            report("backup_verify")
             await checked_work(db, task, verify)
+            report("backup_publish")
             async with db.connection() as conn, conn.transaction():
                 owned = await owned_row(conn, task)
                 if not owned or owned["status"] != "running":

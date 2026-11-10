@@ -7359,3 +7359,11 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 .dark .migration-stepper button { color:rgb(var(--site-muted)); border-bottom-color:rgb(var(--site-edge)); }
 .dark .migration-stepper button[aria-current="step"] { color:var(--capsule-fill,var(--site-action,#0866ff)); border-color:currentColor; }
 @media(max-width:600px) { .migration-stepper { gap:6px; } .migration-stepper button { flex-direction:column; align-items:flex-start; gap:8px; padding:10px 4px; } .migration-stepper button strong { font-size:12px; } }
+
+.system-task-row { cursor:pointer; transition:background-color .15s; }
+.system-task-row:hover,.dark .system-task-row:hover { background:rgb(var(--site-ink) / .035); }
+.system-load-more { display:flex; justify-content:center; padding:24px 0 4px; }
+.system-load-more > .capsule-control { width:min(100%,280px); min-height:44px; font-size:14px; }
+
+.backup-operation-progress { border:1px solid rgb(var(--site-edge)); border-radius:16px; padding:16px; color:rgb(var(--site-ink)); }
+.dark .backup-operation-progress { border-color:rgb(var(--site-edge)); color:rgb(var(--site-ink)); }

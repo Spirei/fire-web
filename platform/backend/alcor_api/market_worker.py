@@ -112,7 +112,11 @@ async def claim(db, worker, *, kind=None):
                 """WITH candidate AS (SELECT t.id FROM tasks t JOIN market_data_jobs j ON j.task_id=t.id
             JOIN market_streams s ON s.owner_id=j.owner_id AND s.id=j.stream_id WHERE t.kind IN ('market.latest','market.history')
             AND (%s::text IS NULL OR t.kind=%s) AND s.next_due<=clock_timestamp() AND (t.status='queued' OR t.status='running' AND t.lease_until<clock_timestamp())
-            ORDER BY CASE WHEN t.kind='market.latest' THEN 0 ELSE 1 END,s.next_due,t.id FOR UPDATE OF t SKIP LOCKED LIMIT 1)
+            ORDER BY CASE WHEN t.kind='market.latest' THEN CASE WHEN EXISTS (
+              SELECT 1 FROM market_demands d WHERE d.owner_id=s.owner_id AND d.stream_id=s.id
+              AND d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp())
+              AND (d.origin='price.alert' OR d.hot_until>clock_timestamp())) THEN 0 ELSE 1 END ELSE 2 END,
+              s.next_due,t.id FOR UPDATE OF t SKIP LOCKED LIMIT 1)
             UPDATE tasks t SET status='running',lease_owner=%s,lease_version=lease_version+1,lease_until=clock_timestamp()+interval '30 seconds',attempts=attempts+1,
             started_at=COALESCE(started_at,clock_timestamp()) FROM candidate c WHERE t.id=c.id RETURNING t.*""",
                 (kind, kind, worker),
@@ -245,6 +249,17 @@ async def execute(authority, task, transport):
             await conn.execute("SELECT * FROM market_data_jobs WHERE task_id=%s", (task["id"],))
         ).fetchone()
         query = query_from(stream["query"])
+        if query.kind=='latest':
+            demands=await active_demands(conn,stream,authority)
+            now=(await(await conn.execute('SELECT clock_timestamp() AS now')).fetchone())['now']
+            # A seven-day registration is retention, not permission to poll an
+            # invisible client continuously. Alert subscriptions remain active.
+            if demands and not any(d['origin']=='price.alert' or d['hot_until']>now for d in demands):
+                due=min((d['expires_at'] for d in demands if d['expires_at']),default=now+timedelta(minutes=5))
+                await conn.execute('UPDATE market_streams SET next_due=%s WHERE owner_id=%s AND id=%s',(due,task['owner_id'],stream['id']))
+                await conn.execute("UPDATE market_data_jobs SET state='sleeping' WHERE task_id=%s",(task['id'],))
+                await conn.execute("UPDATE tasks SET status='queued',attempts=0,lease_until=NULL,result=%s WHERE id=%s",(Jsonb({'streamId':str(stream['id']),'state':'sleeping','page':job['page_count']}),task['id']))
+                return 'sleeping'
         if getattr(transport, "fixture", False) and db.settings.environment != "test":
             raise ValueError("fixture_transport_outside_test")
     # An archived page beyond the published checkpoint is an uncertain prior

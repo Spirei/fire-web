@@ -1,6 +1,7 @@
 import type { WorkspaceInitial, WebSession, MaterialListing } from './workspaceInitial';
 import { FX_CURRENCIES, fxCurrencyMeta, visibleFxOrder } from './fxConvert';
 import { defaultFlagUrl } from './flagAssets';
+import { selectMigrationPreparation } from './databaseMigration';
 /** Request-local reads only. No cross-account cache and no speculative financial requests. */
 export async function workspaceBootstrap(tab:string,query:URLSearchParams,identity:WebSession,read:<T>(path:string)=>Promise<T>,preferences:Record<string,unknown>={}):Promise<WorkspaceInitial>{
  const initial:WorkspaceInitial={};
@@ -18,7 +19,7 @@ export async function workspaceBootstrap(tab:string,query:URLSearchParams,identi
  }else if(tab==='backup-recovery'&&identity.user.role==='admin'){
   const [connections,backups,preparations]=await Promise.all([read<NonNullable<WorkspaceInitial['backupRecovery']>['connections']>('/api/fire/database-migration/connections'),read<NonNullable<WorkspaceInitial['backupRecovery']>['backups']>('/api/fire/backups'),read<{items:import('./databaseMigration').MigrationPreparationTask[]}>('/api/fire/database-migration/preparations')]);
   const requested=query.get('migrationRequest')||'';
-  let preparation=requested?preparations.items.find(item=>item.request_id===requested):preparations.items[0];
+  let preparation=selectMigrationPreparation(preparations.items,connections.source?.revision,requested);
   if(requested&&!preparation&&/^[a-f0-9-]{36}$/i.test(requested)){
    try{const receipt=await read<import('./databaseMigration').MigrationPreparationTask>('/api/fire/tasks/receipts/'+requested);if(receipt.kind==='database.migration.prepare')preparation=receipt;}catch{}
   }
@@ -60,7 +61,7 @@ export async function workspaceBootstrap(tab:string,query:URLSearchParams,identi
   initial.system={mode,filter,identity};
   if(mode==='migration')initial.system.directory=await read('/api/fire/system/api-migration');
   else{
-   const [overview,tasks]=await Promise.all([read<NonNullable<WorkspaceInitial['system']>['overview']>('/api/fire/system/overview'),read<NonNullable<WorkspaceInitial['system']>['tasks']>('/api/fire/tasks?limit=25'+(mode==='tasks'&&filter?'&status='+filter:''))]);
+   const [overview,tasks]=await Promise.all([read<NonNullable<WorkspaceInitial['system']>['overview']>('/api/fire/system/overview'),read<NonNullable<WorkspaceInitial['system']>['tasks']>('/api/fire/tasks?limit='+(mode==='overview'?5:25)+(mode==='tasks'&&filter?'&status='+filter:''))]);
    Object.assign(initial.system,{overview,tasks});
   }
  }

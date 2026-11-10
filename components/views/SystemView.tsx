@@ -5,7 +5,7 @@ import {
   IconRefresh,
   IconActivity,
   IconApi,
-  IconSearch, IconCircleCheck, IconClock, IconArchive,
+  IconSearch, IconCircleCheck, IconClock, IconArchive, IconChevronDown, IconLoader2,
 } from "@tabler/icons-react";
 import { useWorkspaceActive, useWorkspaceLocationGuard, useWorkspaceSearchParams } from "@/lib/workspacePanel";
 import AppModal from "@/components/AppModal";
@@ -23,6 +23,8 @@ import ApiCatalogue, { apiDisplayNumber, apiStatusLabel, type ApiOperation } fro
 import VerificationField from "@/components/VerificationField";
 import PasswordInput from "@/components/PasswordInput";
 import { ServiceIllustration } from "@/components/ServiceIllustration";
+
+import { systemTaskView, finiteTaskCounts } from "@/lib/systemTasks";
 
 type Mode = "overview" | "tasks" | "migration";
 type Service = {
@@ -47,7 +49,7 @@ type Operation = {
   path: string;
   status: "connected" | "pending" | "presentation";
 };
-type Overview = { services: Service[]; task_counts: Record<string, number> };
+type Overview = { services: Service[]; task_counts: Record<string, number>; recurring_task_counts?:Record<string,number> };
 type Migration = {
   etag?: string;
   items: (Operation & ApiOperation)[];
@@ -112,6 +114,7 @@ export default function SystemView({
   const [error, setError] = useState(""),
     [loading, setLoading] = useState(false),
     [connection, setConnection] = useState<"postgresql" | "redis" | null>(null);
+  const [loadingMore,setLoadingMore]=useState(false);
   const [visibleLimit, setVisibleLimit] = useState(100);
   const [cursor, setCursor] = useState<string | null>(seed?.tasks?.next_cursor ?? null);
   const params = useWorkspaceSearchParams();
@@ -143,7 +146,7 @@ export default function SystemView({
   const actionScope = useRef(0);
   const detailRequest = useRef(0);
   useEffect(() => {
-    setBusy(false);
+    setBusy(false);setLoadingMore(false);
     return () => { actionScope.current++; };
   }, [active, mode, ownerId, filter]);
   const firstSeed = useRef(!!seed);
@@ -203,7 +206,7 @@ export default function SystemView({
         const readTasks = async () => {
           const items: Task[] = [];
           let next: string | null = null;
-          const count = mode === "tasks" ? visibleTaskCount.current : 25;
+          const count = mode === "tasks" ? visibleTaskCount.current : 5;
           do {
             const page: { items: Task[]; next_cursor: string | null } =
               await json(
@@ -368,7 +371,7 @@ export default function SystemView({
   async function more() {
     if (!cursor || busy) return;
     const ticket = actionScope.current;
-    setBusy(true);
+    setBusy(true);setLoadingMore(true);
     try {
       const list = await json<{ items: Task[]; next_cursor: string | null }>(
         "/api/fire/tasks?limit=25&cursor=" +
@@ -388,7 +391,7 @@ export default function SystemView({
     } catch (e) {
       if (ticket === actionScope.current) fail(e);
     } finally {
-      if (ticket === actionScope.current) setBusy(false);
+      if (ticket === actionScope.current) {setBusy(false);setLoadingMore(false);}
     }
   }
   const visible =
@@ -400,8 +403,9 @@ export default function SystemView({
             .toLowerCase()
             .includes(query.toLowerCase())),
     ) || [];
+  const taskCounts=finiteTaskCounts(overview?.task_counts??{},overview?.recurring_task_counts);
   const taskTable = (
-    <div className="system-table-wrap">
+    <div className="system-task-list"><div className="system-table-wrap">
       <table className="system-table">
         <thead>
           <tr>
@@ -413,35 +417,18 @@ export default function SystemView({
           </tr>
         </thead>
         <tbody>
-          {tasks.map((task) => (
-            <tr key={task.id}>
-              <td>
-                <button className="text-left" onClick={() => void detail(task)}>
-                  {(
-                    {
-                      "system.diagnostics": "系统连接检查",
-                      "database.migration.prepare": "数据库迁移准备",
-                      "database.migration.convert": "数据转换与校验",
-                      "database.migration.portfolio": "导入持仓与自选",
-                      "database.migration.history": "导入交易与资金",
-                      "database.migration.complete": "完成数据迁移",
-                      "backup.create": "创建备份",
-                      "backup.verify": "校验备份",
-                      "backup.restore": "恢复备份",
-                    } as Record<string, string>
-                  )[task.kind] || "后台任务"}
-                  <small>{task.id.slice(0, 8)}</small>
-                </button>
-              </td>
-              <td>{status(task.status)}</td>
+          {(mode==='overview'?tasks.slice(0,5):tasks).map((task) => (
+            <tr key={task.id} className="system-task-row" tabIndex={0} aria-label={systemTaskView(task).title+' · '+task.id.slice(0,8)} aria-haspopup="dialog" onClick={()=>void detail(task)} onKeyDown={event=>{if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();void detail(task);}}}>
+              <td><span>{systemTaskView(task).title}</span><small>{task.id.slice(0, 8)}</small></td>
+              <td>{systemTaskView(task).state}</td>
               <td>{time(task.created_at)}</td>
-              <td>{task.attempts}</td>
+              <td>{systemTaskView(task).executions}</td>
               <td>
                 {["queued", "running"].includes(task.status) && (
                   <Capsule variant="ghost" size="sm"
                     className=""
                     disabled={busy}
-                    onClick={() => void cancel(task)}
+                    onClick={event => {event.stopPropagation();void cancel(task);}}
                   >
                     取消
                   </Capsule>
@@ -450,16 +437,11 @@ export default function SystemView({
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
       {!tasks.length && (!loading || overview) && <p className="system-empty">暂无任务</p>}
       {mode === "tasks" && cursor && (
-        <Capsule variant="secondary"
-          className=""
-          disabled={busy}
-          onClick={() => void more()}
-        >
-          加载更多
-        </Capsule>
+        <div className="system-load-more"><Capsule variant="secondary" disabled={busy} busy={loadingMore} onClick={() => void more()}>{loadingMore?<IconLoader2 size={17} className="animate-spin motion-reduce:animate-none"/>:<IconChevronDown size={17}/>}
+{loadingMore?'加载中':'加载更多'}</Capsule></div>
       )}
     </div>
   );
@@ -546,9 +528,7 @@ export default function SystemView({
                 最近任务
               </h2>
               <p className="text-sm text-muted">
-                等待 {overview.task_counts.queued || 0} · 运行{" "}
-                {overview.task_counts.running || 0} · 完成{" "}
-                {overview.task_counts.succeeded || 0}
+                等待 {taskCounts.queued} · 运行 {taskCounts.running} · 完成 {taskCounts.succeeded}{taskCounts.recurring>0&&<> · 行情订阅 {taskCounts.recurring}</>}
               </p>
             </div>
             <button onClick={() => onNavigate("/background-tasks")}>
@@ -601,7 +581,7 @@ export default function SystemView({
       )}
       {active && selected && (
         <SystemDialog label="任务详情" onClose={() => setSelected(null)}>
-          <p>{status(selected.status)}</p>
+          <p>{systemTaskView(selected).title} · {systemTaskView(selected).state}</p>
           <code className="break-all">{selected.id}</code>
           {selected.error_code && <p role="alert">{selected.error_code}</p>}
           {selected.result == null ? (

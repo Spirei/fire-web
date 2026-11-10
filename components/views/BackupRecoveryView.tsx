@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { IconDatabase, IconEdit, IconRefresh,IconCheck,IconCircle,IconLoader2,IconAlertCircle } from "@tabler/icons-react";
 import { Capsule, IconButton } from "@/components/Capsule";
 import AppSelect from "@/components/AppSelect";
-import DatabaseMigrationConversion from '@/components/DatabaseMigrationConversion';
+import DatabaseMigrationConversion,{type MigrationResume} from '@/components/DatabaseMigrationConversion';
+import { migrationStorageKey } from '@/lib/migrationDraft';
 import PasswordInput from "@/components/PasswordInput";
 import { requestAdminProof } from "@/lib/adminProof";
 import { appConfirm } from "@/lib/appDialog";
@@ -13,6 +14,7 @@ import BackupHistory, { type BackupHistoryItem } from "@/components/BackupHistor
 import { platformRequest as request, PlatformRequestError } from "@/lib/platformRequest";
 import { useWorkspaceActive, useWorkspaceSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 import type { MigrationConnectionData, MigrationConnectionCheck, MigrationSourceConfig,MigrationPreparationTask } from "@/lib/databaseMigration";
+import { selectMigrationPreparation,verifiedMigrationPreparation } from "@/lib/databaseMigration";
 import type { WorkspaceInitial, WebSession } from "@/lib/workspaceInitial";
 
 const empty: MigrationSourceConfig = { host: "", port: 5432, database: "", username: "", schema_name: "public", ssl_mode: "disable" };
@@ -41,6 +43,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
   const [task,setTask]=useState<MigrationPreparationTask|null>(seed?.preparation ?? null);
   const [preparations,setPreparations]=useState<MigrationPreparationTask[]>(seed?.preparations??[]);
   const [preparationRequest,setPreparationRequest]=useState(validUuid(migrationRequestFromUrl)?migrationRequestFromUrl:seed?.preparation?.request_id ?? '');
+  const [rememberedStep,setRememberedStep]=useState<{request:string;step:string}|null>(null);
   const [failed, setFailed] = useState({ source: false, target: false });
   const identity = useRef<WebSession | null>(seed?.identity ?? null), first = useRef(!!seed), generation = useRef(0);
   const sourceRevision = useRef(seed?.connections.source?.revision);
@@ -74,6 +77,8 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
     if (sourceRevision.current !== connections.source?.revision) setFailed(value => ({ ...value, source: false }));
     sourceRevision.current = connections.source?.revision;
     setData(connections); setListing(backups);setPreparations(history.items);
+    const selected=selectMigrationPreparation(history.items,connections.source?.revision);
+    if(selected){setTask(current=>current??selected);setPreparationRequest(current=>current||selected.request_id);}
     if (refreshDraft) { draftRevision.current=connections.source?.revision??null; setSource(connections.source?.config ?? empty);setPortDraft(String(connections.source?.config.port??5432)); setEditing(!connections.source); setPassword(""); setClearPassword(false); }
   }, [ownerId, retire]);
   useEffect(() => {
@@ -208,9 +213,13 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
   }
   async function prepare(retryTask?:MigrationPreparationTask){
     if(!data?.source)return;
+    if(!retryTask){
+      const existing=selectMigrationPreparation(preparations,data.source.revision);
+      if(existing&&(verifiedMigrationPreparation(existing)||['queued','running','cancel_requested'].includes(existing.status))){selectPreparation(existing,true);return;}
+    }
     const requestId=crypto.randomUUID(),revision=data.source.revision;
     await run('prepare',async signal=>{
-      setTask(null);setPreparationRequest(requestId);url('migrationRequest',requestId);url('migrationStep','preparation');
+      setTask(null);setPreparationRequest(requestId);url('conversionRequest','');url('portfolioRequest','');url('historyRequest','');url('migrationRequest',requestId);url('migrationStep','preparation');
       try{
         const path=retryTask?'/api/fire/database-migration/preparations/'+retryTask.id+'/retry':'/api/fire/database-migration/preparations';
         const accepted=await request<MigrationPreparationTask>(path,{method:'POST',headers:headers(),signal,body:JSON.stringify(retryTask?{request_id:requestId}:{request_id:requestId,source_revision:revision})});
@@ -225,6 +234,11 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       }
     });
   }
+  function selectPreparation(selected:MigrationPreparationTask,continueMigration=false){
+    if(selected.request_id!==preparationRequest){url('conversionRequest','');url('portfolioRequest','');url('historyRequest','');}
+    setTask(selected);setPreparationRequest(selected.request_id);url('migrationRequest',selected.request_id);
+    url('migrationStep',continueMigration&&verifiedMigrationPreparation(selected)?'conversion':'preparation');
+  }
   async function cancelPreparation(){
     if(!preparationRequest)return;
     await run('cancel',async signal=>{
@@ -232,27 +246,53 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       if(!signal.aborted){setTask(value=>value?{...value,...cancelled,events:value.events}:cancelled);setPreparations(value=>[cancelled,...value.filter(item=>item.id!==cancelled.id)].slice(0,20));}
     });
   }
-  const fresh = (check?: MigrationConnectionCheck | null) => check?.state === 'connected' && now - Date.parse(check.observed_at) >= -5000 && now - Date.parse(check.observed_at) < 120000;
-  const sourceCheck = data?.checks.source?.revision === data?.source?.revision ? data?.checks.source : null;
-  const sourceReady = !editing && !failed.source && busy !== 'source' && fresh(sourceCheck), targetReady = !failed.target && busy !== 'target' && fresh(data?.checks.target);
+  const fresh = (check?: MigrationConnectionCheck | null) => !check?.historical && check?.state === 'connected' && now - Date.parse(check.observed_at) >= -5000 && now - Date.parse(check.observed_at) < 120000;
+  const observedSource=data?.checks.source??data?.last_checks?.source;
+  const sourceCheck = observedSource?.revision === data?.source?.revision ? observedSource : null;
+  const targetCheck=data?.checks.target??data?.last_checks?.target;
+  const sourceReady = !editing && !failed.source && busy !== 'source' && fresh(sourceCheck), targetReady = !failed.target && busy !== 'target' && fresh(targetCheck);
   const recoveryVerified=task?.status==='succeeded'&&task.result?.phase==='awaiting_mapping'&&task.result.source?.restore_verified&&task.result.target?.restore_verified;
   const steps=[['connections','连接数据库'],['preparation','备份与核对'],['conversion','转换与迁入']] as const;
   const requestedStep=params.get('migrationStep');
   const defaultStep=params.get('conversionRequest')||recoveryVerified?'conversion':preparationRequest?'preparation':'connections';
-  const selectedStep=steps.some(([key])=>key===requestedStep)?requestedStep:defaultStep;
+  const savedStep=rememberedStep?.request===preparationRequest?rememberedStep.step:defaultStep;
+  const latestStep=steps.findIndex(([key])=>key===defaultStep)>=steps.findIndex(([key])=>key===savedStep)?defaultStep:savedStep;
+  const selectedStep=steps.some(([key])=>key===requestedStep)?requestedStep:latestStep;
   const step=selectedStep==='conversion'&&!recoveryVerified&&task?preparationRequest?'preparation':'connections':selectedStep==='preparation'&&!preparationRequest?'connections':selectedStep;
   const showStep=(key:string)=>url('migrationStep',key);
+  useEffect(()=>{
+    if(!active||!identity.current?.instance_id||!preparationRequest)return;
+    const key=migrationStorageKey('step',identity.current.instance_id,ownerId,preparationRequest);
+    try{
+      if(steps.some(([key])=>key===requestedStep)){localStorage.setItem(key,requestedStep!);setRememberedStep({request:preparationRequest,step:requestedStep!});}
+      else{const saved=localStorage.getItem(key);if(steps.some(([key])=>key===saved))setRememberedStep({request:preparationRequest,step:saved!});}
+    }catch{}
+  // A view preference never submits or restarts a migration.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[active,ownerId,preparationRequest,requestedStep]);
+  function resumeMigration(resume:MigrationResume){
+    setTask(resume.preparation);setPreparationRequest(resume.preparation.request_id);
+    setPreparations(items=>[resume.preparation,...items.filter(item=>item.id!==resume.preparation.id)]);
+    if(canUseLocation()){
+      const next=new URL(window.location.href);next.searchParams.set('migrationRequest',resume.preparation.request_id);next.searchParams.set('migrationStep','conversion');
+      next.searchParams.set('conversionRequest',resume.conversion_request_id);next.searchParams.set('portfolioRequest',resume.portfolio_request_id);
+      if(resume.history_request_id)next.searchParams.set('historyRequest',resume.history_request_id);else next.searchParams.delete('historyRequest');
+      window.history.replaceState(null,'',next);
+    }
+  }
   const checking = active && (busy === "source" || busy === "target");
   function status(scope: 'source' | 'target', check: MigrationConnectionCheck | null | undefined, connected: boolean) {
     const failure = failed[scope] || check?.state === 'failed';
     return <span className="migration-connection-status" data-connected={connected} data-error={failure} title={check?.observed_at}>
-      <span aria-hidden="true" />{busy === scope ? '检查中' : failure ? '连接失败' : connected ? check?.persistent_identity_verified===false ? '已连接 · 身份待核对' : `已连接 · ${check?.response_ms} ms` : check ? "待重新检测" : "未检测"}
+      <span aria-hidden="true" />{busy === scope ? '检查中' : failure ? check?.historical?'上次连接失败':'连接失败' : connected ? check?.persistent_identity_verified===false ? '已连接 · 身份待核对' : `已连接 · ${check?.response_ms} ms` : check?.state==='connected'?'上次连接正常':"未检测"}
     </span>;
   }
   const preparationActive=!!preparationRequest&&(!task||['queued','running','cancel_requested'].includes(task.status));
   const transferring=task?.status==='running'||task?.status==='cancel_requested';
   const anyPreparationActive=preparationActive||preparations.some(item=>['queued','running','cancel_requested'].includes(item.status));
   const disabled = !!busy || !!unknown || !data || anyPreparationActive;
+  const resumable=selectMigrationPreparation(preparations,data?.source?.revision);
+  const canResume=!!resumable&&(verifiedMigrationPreparation(resumable)||['queued','running','cancel_requested'].includes(resumable.status));
   async function refresh(){
     await run('read',async signal=>{
       const dirty=editing&&(!!password||clearPassword||JSON.stringify(source)!==JSON.stringify(data?.source?.config??empty));
@@ -302,16 +342,16 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       </div>
       <div className="migration-database-card"><div className="flex items-center gap-3"><IconDatabase size={22} /><h2 className="text-lg font-semibold">新数据库</h2></div>
         <ConnectionFields config={data?.target.config} passwordConfigured={data?.target.password_configured} />
-        <div className="migration-connection-footer flex flex-wrap items-center justify-between gap-3">{status('target',data?.checks.target,targetReady)}<Capsule variant="secondary" busy={busy === "target"} disabled={disabled || !data} onClick={() => void testTarget()}>测试连接</Capsule></div>
+        <div className="migration-connection-footer flex flex-wrap items-center justify-between gap-3">{status('target',targetCheck,targetReady)}<Capsule variant="secondary" busy={busy === "target"} disabled={disabled || !data} onClick={() => void testTarget()}>测试连接</Capsule></div>
       </div>
     </div>
-      <div className="mt-4 flex justify-end"><Capsule disabled={disabled||!sourceReady||!targetReady||!sourceCheck?.persistent_identity_verified||!data?.checks.target?.persistent_identity_verified} busy={busy==='prepare'} onClick={()=>void prepare()}>准备迁移</Capsule></div></div>
+      <div className="mt-4 flex justify-end"><Capsule disabled={canResume?!!busy||!!unknown:disabled||!sourceReady||!targetReady||!sourceCheck?.persistent_identity_verified||!data?.checks.target?.persistent_identity_verified} busy={busy==='prepare'} onClick={()=>void prepare()}>{canResume?resumable&&verifiedMigrationPreparation(resumable)?'继续迁移':'查看准备进度':'准备迁移'}</Capsule></div></div>
       <div hidden={step!=='preparation'}>
       {!!preparations.length&&<div className="mt-6 flex flex-wrap items-center gap-3"><span className="text-sm text-ink-3">准备记录</span><AppSelect ariaLabel="准备记录" value={preparationRequest} disabled={!!busy} triggerContent={preparationRequest&&!preparations.some(item=>item.request_id===preparationRequest)?<IconLoader2 size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none"/>:undefined} options={preparations.map(item=>({value:item.request_id,label:`${item.created_at?.slice(0,19).replace('T',' ')??item.request_id.slice(0,8)} · ${item.retry_of?'重试 · ':''}${item.status==='succeeded'&&item.result?.source?.restore_verified&&item.result.target?.restore_verified?'恢复核对通过':{queued:'等待中',running:'进行中',succeeded:'归档已校验',failed:'失败',cancelled:'已取消',cancel_requested:'取消中'}[item.status]}`}))} onChange={value=>{const selected=preparations.find(item=>item.request_id===value);if(selected){url('conversionRequest','');url('portfolioRequest','');url('historyRequest','');setTask(selected);setPreparationRequest(value);url('migrationRequest',value);url('migrationStep','preparation');}}} /></div>}
       {preparationRequest&&<><PreparationProgress task={task} moving={active&&visible} busy={!!busy} retryDisabled={anyPreparationActive} onRetry={()=>task&&void prepare(task)} onCancel={()=>void cancelPreparation()}/>
       {(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
     </div>
-    <div hidden={step!=='conversion'}>{recoveryVerified&&task&&<DatabaseMigrationConversion key={task.id} preparationId={task.id} ownerId={ownerId} active={active&&visible}/>}</div>
+    <div hidden={step!=='conversion'}>{recoveryVerified&&task&&<DatabaseMigrationConversion key={task.id} preparationId={task.id} ownerId={ownerId} active={active&&visible&&step==='conversion'} onResume={resumeMigration}/>}</div>
 
     </>}
   </section>;
