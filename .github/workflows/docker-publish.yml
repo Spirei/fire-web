@@ -43,15 +43,15 @@ jobs:
     name: 源码与启动快检
     needs: scheduled-change-gate
     if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
       - name: Use Node.js 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -78,19 +78,19 @@ jobs:
     name: 完整平台检查 (${{ matrix.shard }})
     needs: [preflight, scheduled-change-gate]
     if: ${{ !cancelled() && needs.preflight.result == 'success' && (github.event_name == 'push' || github.event_name == 'pull_request' || needs.scheduled-change-gate.outputs.should_publish == 'true') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
       - name: Use Node.js 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -135,7 +135,7 @@ jobs:
   scheduled-change-gate:
     name: Check scheduled source changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -149,7 +149,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.request_id != ''
         run: echo 'Publication request receipt recorded.'
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Decide whether image should be built
@@ -168,7 +168,7 @@ jobs:
     needs: [test, scheduled-change-gate]
     # 提交/PR 只检查；定时和手动任务仅在当前 main 尚无镜像时发布。
     if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && !inputs.verify_only && needs.scheduled-change-gate.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -178,12 +178,12 @@ jobs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -191,7 +191,7 @@ jobs:
 
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
@@ -203,11 +203,11 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build and push
         id: image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -226,7 +226,7 @@ jobs:
     name: 发布不可变版本清单
     needs: [scheduled-change-gate, publish]
     if: github.ref == 'refs/heads/main' && needs.publish.result == 'success' && !inputs.verify_only
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
