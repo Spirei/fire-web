@@ -13,6 +13,7 @@ import PlatformBackups from "@/components/PlatformBackups";
 import BackupHistory, { type BackupHistoryItem } from "@/components/BackupHistory";
 import { platformRequest as request, PlatformRequestError } from "@/lib/platformRequest";
 import { useWorkspaceActive, useWorkspaceSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
+import { taskObservation } from "@/lib/taskObservation";
 import type { MigrationConnectionData, MigrationConnectionCheck, MigrationSourceConfig,MigrationPreparationTask } from "@/lib/databaseMigration";
 import { selectMigrationPreparation,verifiedMigrationPreparation } from "@/lib/databaseMigration";
 import type { WorkspaceInitial, WebSession } from "@/lib/workspaceInitial";
@@ -113,17 +114,15 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
   useEffect(()=>{
     if(!active||tab!=='migration'||!preparationRequest)return;
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;let checking=false;
+    const readTask=taskObservation<MigrationPreparationTask>(preparationRequest,item=>item.kind==='database.migration.prepare','迁移任务回执不匹配');
     async function poll(){
       if(checking||controller.signal.aborted)return;
       clearTimeout(timer);
       if(document.hidden||!identity.current?.csrf){timer=setTimeout(poll,2500);return;}
       checking=true;
       try{
-        const receipt=await request<MigrationPreparationTask>('/api/fire/tasks/receipts/'+preparationRequest,{signal:controller.signal,headers:{'x-csrf-token':identity.current.csrf}});
-        if(receipt.request_id!==preparationRequest||receipt.kind!=='database.migration.prepare')throw new Error('原请求不是数据库迁移准备任务');
-        const detail=await request<MigrationPreparationTask>('/api/fire/tasks/'+receipt.id,{signal:controller.signal,headers:{'x-csrf-token':identity.current.csrf}});
+        const detail=await readTask(controller.signal,{'x-csrf-token':identity.current.csrf});
         if(controller.signal.aborted)return;
-        if(detail.request_id!==preparationRequest||detail.kind!=='database.migration.prepare')throw new Error('迁移任务回执不匹配');
         setTask(value=>({...detail,source_revision:detail.result?.source_revision??value?.source_revision}));
         setPreparations(value=>value.map(item=>item.id===detail.id?{...item,...detail}:item));
         if(!['queued','running','cancel_requested'].includes(detail.status))return;

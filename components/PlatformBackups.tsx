@@ -4,7 +4,7 @@ import AppModal from "./AppModal";
 import BackupHistory, { type BackupHistoryItem } from "./BackupHistory";
 import { requestAdminProof } from "@/lib/adminProof";
 import { Capsule } from "@/components/Capsule";
-import { platformRequest as read } from "@/lib/platformRequest";
+import { PlatformRequestError, platformRequest as read } from "@/lib/platformRequest";
 import {
   useWorkspaceActive,
   useWorkspaceLocationGuard,
@@ -42,6 +42,8 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
   const [open, setOpen] = useState(()=>/^[a-f0-9-]{36}$/i.test(params.get('backupRequest')??'')),
     [data, setData] = useState<Listing | null>(null),
     [error, setError] = useState(""),
+    [readError, setReadError] = useState(""),
+    [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
     [saved, setSaved] = useState(false),
     [verify, setVerify] = useState(false),
@@ -60,12 +62,15 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     setRequestId("");
     setSaved(false);
     setVerify(false);
+    setReadError("");
+    setReady(false);
     csrf.current = "";
   }, []);
   useEffect(()=>{if(taskOwner.current!==ownerId){taskOwner.current=ownerId;reset();setOpen(false);}},[ownerId,reset]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
       const ticket = ++generation.current;
+      setReady(false);
       try {
         const identity = await read<{
           user: { id: string; role: string };
@@ -92,11 +97,17 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
         });
         if (signal?.aborted || ticket !== generation.current) return;
         setData(listing);
+        setReady(true);
+        setReadError("");
         setError("");
       } catch (e) {
         if (!signal?.aborted && ticket === generation.current) {
-          reset();
-          setError((e as Error).message);
+          const failure = e as PlatformRequestError;
+          if (failure.status === 401 || failure.status === 403) {
+            reset();
+            setOpen(false);
+          }
+          setReadError(failure.message);
         }
       }
     },
@@ -168,6 +179,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     }
   }, [active]);
   async function prepare() {
+    if (!ready || busy) return;
     const ticket = ++operation.current;
     setBusy(true);
     try {
@@ -184,7 +196,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
     }
   }
   async function start() {
-    if (!saved || busy || !data?.key_fingerprint) return;
+    if (!ready || !saved || busy || !data?.key_fingerprint) return;
     const ticket = ++operation.current;
     const id = crypto.randomUUID();
     setBusy(true);
@@ -247,7 +259,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
   function close() {
     generation.current++;
     operation.current++;
-    setBusy(false);setData(null);setSaved(false);setVerify(false);setError('');csrf.current='';
+    setBusy(false);setData(null);setSaved(false);setVerify(false);setError('');setReadError('');setReady(false);csrf.current='';
     setOpen(false);
     onClose?.();
   }
@@ -280,7 +292,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
           desc="包含所有用户和执行状态；恢复密钥须独立保存。"
           onClose={close}
         >
-          {!data && <p role="status">正在核对当前实例…</p>}
+          {!data && !readError && <p role="status">正在核对当前实例…</p>}
           {data && !data.configured && (
             <p>请先配置私有备份目录和独立恢复密钥目录。</p>
           )}
@@ -291,7 +303,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
               {!data.key_fingerprint ? (
                 <Capsule variant="secondary"
                   className="px-4 py-3"
-                  disabled={busy}
+                  disabled={busy || !ready}
                   onClick={() => void prepare()}
                 >
                   准备备份恢复密钥
@@ -315,6 +327,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
                     className="px-4 py-3"
                     disabled={
                       busy ||
+                      !ready ||
                       !saved ||
                       data.worker_available === false ||
                       (!!requestId && !task) ||
@@ -340,6 +353,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
             {task?.status==='failed'&&!!task.result?.message&&<p className="mt-3 text-sm text-red-500" role="alert">{String(task.result.message)}</p>}
           </div>}
           {data && (data.items.length>0||!pending) && <BackupHistory items={data.items} downloads />}
+          {readError && <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p role="alert" className="system-error">{readError}</p><Capsule variant="secondary" size="sm" disabled={busy} onClick={() => void load()}>重新读取</Capsule></div>}
           {verify && <div className="mt-4"><Capsule variant="secondary" busy={busy} onClick={async () => {
             if (busy) return;
             const ticket = ++operation.current;

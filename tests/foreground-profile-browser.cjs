@@ -9,6 +9,7 @@ import React,{useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
 import BackupRecoveryView from '@/components/views/BackupRecoveryView';
 import PersonalHome from '@/components/PersonalHome';
+import PlatformBackups from '@/components/PlatformBackups';
 import SafeAssetImage from '@/components/SafeAssetImage';
 import {useAssetIcons,ensureStockIcons,primeStockIconCache} from '@/lib/useAssetIcons';
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
@@ -19,6 +20,7 @@ const domains=[['identity','账号与安全',1],['accounts','券商账户',1],['
 const preparation={id:id(2),request_id:id(3),kind:'database.migration.prepare',status:'succeeded',source_revision:'source-one',has_imports:true,result:{phase:'awaiting_mapping',business_written:false,cutover_ready:false,source:{restore_verified:true,tables:1,rows:1},target:{restore_verified:true,tables:1,rows:1}}};
 const conversion={id:id(4),request_id:id(5),kind:'database.migration.convert',status:'succeeded',input:mapping,result:{preparation_id:id(2),phase:'converted',domains,issue_counts:{},plan_sha256:'a'.repeat(64),portfolio_ready:true}};
 const portfolio={id:id(6),request_id:id(7),kind:'database.migration.portfolio',status:'succeeded',conversion_id:id(4),result:{business_written:true}};
+const backup={id:id(11),request_id:id(12),kind:'backup.create',status:'running',result:{progress:{phase:'backup_tables',processed:17,total:100,unit:'tables'}}};
 const history={id:id(8),request_id:id(10),kind:'database.migration.complete',status:'running',result:{conversion_id:id(4),business_written:true,progress:{phase:'backup',processed:3,total:12}}};
 const conversionContext={preparation_id:id(2),users:[{id:id(9),username:'Source'}],accounts:[{id:'account',owner_id:id(9),name:'示例账户',kind:'real'}],broker_labels:[],orders:[],items:[conversion],imports:[portfolio],history_imports:[history]};
 const config={host:'db.invalid',port:5432,database:'synthetic',username:'fixture',schema_name:'public'};
@@ -38,9 +40,9 @@ window.fetch=async(input,init={})=>{
   return Response.json(conversionContext);
  }
  if(url.pathname==='/api/fire/database-migration/connections')return Response.json(connections);
- if(url.pathname==='/api/fire/backups')return Response.json({items:[],configured:true,key_fingerprint:'fixture'});
+ if(url.pathname==='/api/fire/backups')return state.backupListingFailure?Response.json({error:'synthetic backup list unavailable'},{status:503}):Response.json({items:[],configured:true,key_fingerprint:'fixture'});
  if(url.pathname==='/api/fire/database-migration/preparations')return Response.json({items:[preparation]});
- if(url.pathname.startsWith('/api/fire/tasks/')){const key=url.pathname.split('/').at(-1);if(state.taskAuthStatus&&key!==preparation.id&&key!==preparation.request_id)return Response.json({error:'synthetic revoked task access'},{status:403});const item=[preparation,conversion,portfolio,history].find(t=>t.id===key||t.request_id===key);return Response.json(item||{error:'unknown task'},{status:item?200:404});}
+ if(url.pathname.startsWith('/api/fire/tasks/')){const key=url.pathname.split('/').at(-1);if(state.taskAuthStatus&&key!==preparation.id&&key!==preparation.request_id)return Response.json({error:'synthetic revoked task access'},{status:403});const item=[preparation,conversion,portfolio,history,backup].find(t=>t.id===key||t.request_id===key);return Response.json(item||{error:'unknown task'},{status:item?200:404});}
  if(url.pathname==='/api/auth/personal-home')return Response.json({user,profile});
  if(url.pathname==='/api/auth/personal-activity')return Response.json(activity);
  if(url.pathname==='/api/assets'){
@@ -58,7 +60,7 @@ state.visibility=hidden=>{Object.defineProperty(document,'hidden',{configurable:
 function StockPreview(){primeStockIconCache({});const{stockIcons}=useAssetIcons(['stock']);(state.iconRenders??=[]).push(['US:ROBN','HK:700'].map(key=>stockIcons[key]||null));useEffect(()=>{void ensureStockIcons([{market:'US',code:'ROBN'},{market:'HK',code:'700'}]);},[]);return <div>{['US:ROBN','HK:700'].map(key=><div data-stock={key} key={key}><SafeAssetImage src={stockIcons[key]} fallback={<span>占位</span>}/></div>)}</div>;}
 const mode=new URLSearchParams(location.search).get('view');
 if(mode==='icons-seeded')primeStockIconCache({'US:HOOD':'/fixture-icon.svg?v=1','HK:00700':'/fixture-icon.svg?v=1'});
-createRoot(document.getElementById('root')).render(mode==='profile'?<PersonalHome user={user} initial={{profile,activity}}/>:(mode==='icons'||mode==='icons-seeded')?<StockPreview/>:<BackupRecoveryView ownerId={user.id} initial={{identity,connections,backups:{items:[],configured:true,key_fingerprint:'fixture'},preparations:[preparation],preparation}} initialNow={Date.now()}/>);
+createRoot(document.getElementById('root')).render(mode==='backup'?<PlatformBackups ownerId={user.id} buttonOnly/>:mode==='profile'?<PersonalHome user={user} initial={{profile,activity}}/>:(mode==='icons'||mode==='icons-seeded')?<StockPreview/>:<BackupRecoveryView ownerId={user.id} initial={{identity,connections,backups:{items:[],configured:true,key_fingerprint:'fixture'},preparations:[preparation],preparation}} initialNow={Date.now()}/>);
 `;
 const workspaceMock = `import {useCallback,useMemo} from 'react';export const useWorkspaceActive=()=>true;export const useWorkspaceLocationGuard=()=>useCallback(()=>true,[]);export const useWorkspaceSearchParams=()=>useMemo(()=>new URLSearchParams(window.location.search),[]);`;
 (async()=>{
@@ -80,7 +82,34 @@ const workspaceMock = `import {useCallback,useMemo} from 'react';export const us
   const base='http://127.0.0.1:'+server.address().port;
   const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
   const migrationUrl=base+'/?'+new URLSearchParams({tab:'migration',migrationStep:'conversion',migrationRequest:id(3),conversionRequest:id(5),portfolioRequest:id(7),historyRequest:id(10)});
+  await page.goto(base+'/?view=backup&backupRequest='+id(12));
+  await page.getByRole('progressbar',{name:'当前备份阶段'}).waitFor();
+  assert.equal(await page.getByRole('progressbar',{name:'当前备份阶段'}).getAttribute('aria-valuenow'),'17');
+  await page.evaluate(()=>{window.fixture.backupListingFailure=true;});
+  await page.getByRole('button',{name:'关闭',exact:true}).click();
+  await page.getByRole('button',{name:'查看备份进度',exact:true}).click();
+  await page.getByRole('alert').waitFor();
+  assert.equal(await page.getByRole('progressbar',{name:'当前备份阶段'}).getAttribute('aria-valuenow'),'17','temporary listing failure must retain the original backup progress');
+  assert(!(await page.evaluate(()=>window.fixture.calls)).some(c=>c.method!=='GET'),'recovering a backup never submits another task');
+  for(const width of [1280,390,320])for(const dark of [false,true]){
+   await page.setViewportSize({width,height:900});await page.evaluate(d=>document.documentElement.classList.toggle('dark',d),dark);
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'backup recovery must fit the viewport');
+   if(width!==320)await page.screenshot({path:path.join(output,'backup-retry-'+width+'-'+(dark?'dark':'light')+'.png'),fullPage:true});
+  }
+  await page.setViewportSize({width:1280,height:900});await page.evaluate(()=>document.documentElement.classList.remove('dark'));
+  await page.evaluate(()=>{window.fixture.backupListingFailure=false;});
+  await page.getByRole('button',{name:'重新读取',exact:true}).click();await page.getByRole('alert').waitFor({state:'hidden'});
+  assert.equal(await page.getByRole('progressbar',{name:'当前备份阶段'}).getAttribute('aria-valuenow'),'17');
+  console.log('PASS backup progress survives transient reads and recovers the same task without writes');
+  await page.goto(base+'/?view=backup&backupRequest='+id(12));await page.getByRole('progressbar',{name:'当前备份阶段'}).waitFor();
+  await page.evaluate(()=>{window.fixture.taskAuthStatus=403;});await page.getByRole('dialog',{name:'联合备份'}).waitFor({state:'hidden'});
+  assert.equal(await page.getByRole('progressbar',{name:'当前备份阶段'}).count(),0,'revoked backup access removes cached progress');
   await page.goto(migrationUrl);await page.waitForSelector('.migration-domain');assert.equal(await page.locator('.migration-domain').count(),7);
+  await page.waitForTimeout(2300);
+  const taskReads=await page.evaluate(()=>window.fixture.calls.filter(c=>c.path.startsWith('/api/fire/tasks/')));
+  assert.equal(taskReads.filter(c=>c.path==='/api/fire/tasks/receipts/'+id(10)).length,1,'the running completion resolves its receipt once');
+  assert(taskReads.filter(c=>c.path==='/api/fire/tasks/'+id(8)).length>=2,'later polls read the same task directly');
+
   await page.evaluate(()=>{window.fixture.holdContext=true;window.fixture.visibility(true);});await page.waitForTimeout(100);
   const hiddenReads=await page.evaluate(()=>window.fixture.calls.length);await page.waitForTimeout(2300);assert.equal(await page.evaluate(()=>window.fixture.calls.length),hiddenReads,'hidden document performs no task reads');
   await page.evaluate(()=>window.fixture.visibility(false));await page.waitForFunction(()=>window.fixture.contextReads>=2);

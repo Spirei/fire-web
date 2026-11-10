@@ -5,6 +5,7 @@ import { IconCheck, IconLoader2, IconAlertCircle, IconChevronDown, IconShieldLoc
 import AppSelect from '@/components/AppSelect';
 import { Capsule, CapsuleLink } from '@/components/Capsule';
 import { platformRequest as request, PlatformRequestError } from '@/lib/platformRequest';
+import { taskObservation } from "@/lib/taskObservation";
 import { requestAdminProof } from '@/lib/adminProof';
 import { useWorkspaceSearchParams, useWorkspaceLocationGuard } from '@/lib/workspacePanel';
 import type { WebSession } from '@/lib/workspaceInitial';
@@ -100,14 +101,14 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
       }catch(e){if(!controller.signal.aborted){const failure=e as PlatformRequestError;if(failure.status===401||failure.status===403)rejectSession();setError(failure.message);}}
       finally{if(!controller.signal.aborted)setRevalidating(!validated);}
     }
+    let observeConversion:ReturnType<typeof taskObservation<ConversionTask>>|undefined;
     async function poll(id:string){
       if(controller.signal.aborted||polling)return;
       if(document.hidden){timer=setTimeout(()=>void poll(id),2500);return;}
       polling=true;
       try{
-        const receipt=await request<ConversionTask>('/api/fire/tasks/receipts/'+id,{signal:controller.signal,headers:headers()});
-        const detail=await request<ConversionTask>('/api/fire/tasks/'+receipt.id,{signal:controller.signal,headers:headers()});
-        if(detail.kind!=='database.migration.convert'||detail.request_id!==id||detail.result?.preparation_id&&detail.result.preparation_id!==preparationId)throw Error('转换回执不匹配');
+        observeConversion??=taskObservation<ConversionTask>(id,value=>value.kind==='database.migration.convert'&&(!value.result?.preparation_id||value.result.preparation_id===preparationId),'转换回执不匹配');
+        const detail=await observeConversion(controller.signal,headers());
         if(controller.signal.aborted)return;setTask(before=>({...detail,input:before?.input??detail.input}));
         if(!running(detail)){unknown.current='';return;}
       }catch(e){if(controller.signal.aborted)return;const failure=e as PlatformRequestError;if(failure.status===401||failure.status===403){rejectSession();return;}if(failure.status!==404)setError(failure.message);}
@@ -128,13 +129,12 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   useEffect(()=>{
     if(!active||needLogin||!portfolioRequest)return;
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
+    const observe=taskObservation<PortfolioTask>(portfolioRequest,item=>item.kind==='database.migration.portfolio','持仓导入回执不匹配');
     async function poll(){
       if(controller.signal.aborted)return;
       if(document.hidden||!session.current){timer=setTimeout(()=>void poll(),2000);return;}
       try{
-        const receipt=await request<PortfolioTask>('/api/fire/tasks/receipts/'+portfolioRequest,{signal:controller.signal,headers:headers()});
-        const value=await request<PortfolioTask>('/api/fire/tasks/'+receipt.id,{signal:controller.signal,headers:headers()});
-        if(value.kind!=='database.migration.portfolio'||value.request_id!==portfolioRequest)throw Error('持仓导入回执不匹配');
+        const value=await observe(controller.signal,headers());
         if(controller.signal.aborted)return;setPortfolioTask(value);
         if(value.result?.business_written===true&&notified.current!==portfolioRequest){notified.current=portfolioRequest;window.dispatchEvent(new Event('fire:records-updated'));window.dispatchEvent(new Event('fire:settings-updated'));}
         if(!['queued','running','cancel_requested'].includes(value.status))return;
@@ -147,13 +147,12 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   useEffect(()=>{
     if(!active||needLogin||!historyRequest)return;
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
+    const observe=taskObservation<HistoryTask>(historyRequest,item=>['database.migration.history','database.migration.complete'].includes(item.kind)&&(!item.result?.conversion_id||item.result.conversion_id===task?.id),'历史导入回执不匹配');
     async function poll(){
       if(controller.signal.aborted)return;
       if(document.hidden||!session.current){timer=setTimeout(()=>void poll(),2000);return;}
       try{
-        const receipt=await request<HistoryTask>('/api/fire/tasks/receipts/'+historyRequest,{signal:controller.signal,headers:headers()});
-        const value=await request<HistoryTask>('/api/fire/tasks/'+receipt.id,{signal:controller.signal,headers:headers()});
-        if(!['database.migration.history','database.migration.complete'].includes(value.kind)||value.request_id!==historyRequest||value.result?.conversion_id&&value.result.conversion_id!==task?.id)throw Error('历史导入回执不匹配');
+        const value=await observe(controller.signal,headers());
         if(controller.signal.aborted)return;setHistoryTask(value);
         if(value.result?.history_imported&&notified.current!==historyRequest){notified.current=historyRequest;window.dispatchEvent(new Event('fire:records-updated'));}
         if((value.result?.migration_complete||value.result?.completed_domains?.includes('assets'))&&assetsNotified.current!==historyRequest){assetsNotified.current=historyRequest;window.dispatchEvent(new Event('fire:assets-updated'));}
