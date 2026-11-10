@@ -8162,7 +8162,7 @@ const V0_1_78_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_79_ENTRY: VersionEntry = {
   ...V0_1_78_ENTRY,
   version: "v0.1.79", date: "2026-11-10", summary: "修复备份流程、素材读取与接口检测",
   software: V0_1_78_ENTRY.software.map(item => ({...item,version:"v0.1.79"})),
@@ -8188,10 +8188,22 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_79_ENTRY,
+  version: "v0.1.80", date: "2026-11-11", summary: "修复切回浏览器后的迁移显示、个人主页和股票图标读取",
+  software: V0_1_79_ENTRY.software.map(item => ({ ...item, version: "v0.1.80" })),
+  changes: [
+    { kind: "fix", title: "切回浏览器保留迁移结果", desc: "同一会话、实例和来源下保留已显示的转换清单与进度，回到前台后静默重新核对；身份失效、实例或会话变化时清除旧内容，核对期间禁用写入，不重新提交迁移任务。" },
+    { kind: "fix", title: "个人主页封面与资料分区", desc: "背景独立展示，头像位于封面下沿左侧，编辑按钮位于右侧，昵称与 ID 放在下方；恢复与统计卡片的间距，封面裁剪以实际横幅比例为准，适配窄屏和深浅色。" },
+    { kind: "fix", title: "股票列表共用素材库图标", desc: "持仓、自选和分析页随首屏返回当前记录的素材库图标，优先加载首屏图片，刷新不先画首字母；页面补读改为只读批量查询；相关 ETF 同时读取正股图标，素材更新后重新核对已订阅图标。不新增素材、不等待另一套迁移，原件缺失和已移除状态继续保留。" },
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_79_ENTRY,
   V0_1_78_ENTRY,
   V0_1_77_ENTRY,
   V0_1_76_ENTRY,

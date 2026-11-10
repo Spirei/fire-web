@@ -35,7 +35,7 @@ export default function PersonalHome({
   onEdit?: () => void;
 }) {
   const imageCrop = useImageCrop();
-  const cover = useRef<HTMLElement>(null);
+  const cover = useRef<HTMLDivElement>(null);
   const tipId = useId();
   const [tip, setTip] = useState<{ day: string; count: number; known: boolean; left: number; top: number; below: boolean } | null>(null);
   function showDay(element: HTMLElement, cell: { day: string; count: number; known: boolean }) {
@@ -224,13 +224,14 @@ export default function PersonalHome({
     <section className="personal-home" aria-label="个人主页">
       {imageCrop.dialog}
       {tip && createPortal(<div id={tipId} role="tooltip" className="personal-day-tooltip" style={{ left: tip.left, top: tip.top, transform: `translate(-50%, ${tip.below ? "0" : "-100%"})` }}><span>{Number(tip.day.slice(5, 7))}月{Number(tip.day.slice(8))}日</span><strong>{tip.known ? `${tip.count.toLocaleString()} 次 API 请求` : "未采集"}</strong></div>, document.body)}
-      <header
+      <header className="personal-profile">
+        <div
         ref={cover}
         className="personal-cover"
         style={
           profile?.background
             ? {
-                backgroundImage: `linear-gradient(transparent,rgba(0,0,0,.45)),url('/api/auth/personal-home?kind=background&v=${profile.background.sha256}')`,
+                backgroundImage: `url('/api/auth/personal-home?kind=background&v=${profile.background.sha256}')`,
               }
             : undefined
         }
@@ -247,6 +248,9 @@ export default function PersonalHome({
             <IconPhotoPlus size={20} />
           </span>
         </button>
+        </div>
+        <div className="personal-profile-details">
+          <div className="personal-profile-toolbar">
         <button
           type="button"
           data-capsule="off"
@@ -264,6 +268,29 @@ export default function PersonalHome({
             <IconPencil size={17} />
           </span>
         </button>
+        <button
+          type="button"
+          className="personal-edit"
+          data-capsule="off"
+          disabled={!profile || busy}
+          onClick={() => {
+            if (!editing) {
+              setNickname(user.nickname || "");
+              setBio(profile?.bio || "");
+              setGender(profile?.gender || "unspecified");
+            }
+            setEditing((v) => !v);
+          }}
+        >
+          {editing ? "收起编辑" : "编辑资料"}
+        </button>
+          </div>
+        <h1>{name}</h1>
+        <p className="personal-profile-id">ID: {user.uid ?? "—"}</p>
+        {profile?.bio && !editing && (
+          <p className="personal-bio">{profile.bio}</p>
+        )}
+        </div>
         <input
           ref={avatar}
           type="file"
@@ -286,27 +313,6 @@ export default function PersonalHome({
             e.target.value = "";
           }}
         />
-        <h1>{name}</h1>
-        <p>@{user.username}</p>
-        {profile?.bio && !editing && (
-          <p className="personal-bio">{profile.bio}</p>
-        )}
-        <button
-          type="button"
-          className="personal-edit"
-          data-capsule="off"
-          disabled={!profile || busy}
-          onClick={() => {
-            if (!editing) {
-              setNickname(user.nickname || "");
-              setBio(profile?.bio || "");
-              setGender(profile?.gender || "unspecified");
-            }
-            setEditing((v) => !v);
-          }}
-        >
-          {editing ? "收起编辑" : "编辑资料"}
-        </button>
       </header>
       {error && (
         <p role="alert">

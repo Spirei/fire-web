@@ -98,7 +98,8 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
     setVisible(!document.hidden);
     const timer = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 15000);
     document.addEventListener("visibilitychange", hidden);
-    return () => { controller.abort(); generation.current++; reads.current++; pending.current = false; setBusy(""); setPassword(""); clearInterval(timer); document.removeEventListener("visibilitychange", hidden); };
+    window.addEventListener("pageshow", hidden);
+    return () => { controller.abort(); generation.current++; reads.current++; pending.current = false; setBusy(""); setPassword(""); clearInterval(timer); document.removeEventListener("visibilitychange", hidden); window.removeEventListener("pageshow", hidden); };
   // Tab changes retain the same live operation and never replay it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, ownerId, load]);
@@ -351,7 +352,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       {preparationRequest&&<><PreparationProgress task={task} moving={active&&visible} busy={!!busy} retryDisabled={anyPreparationActive} onRetry={()=>task&&void prepare(task)} onCancel={()=>void cancelPreparation()}/>
       {(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
     </div>
-    <div hidden={step!=='conversion'}>{recoveryVerified&&task&&<DatabaseMigrationConversion key={task.id} preparationId={task.id} ownerId={ownerId} active={active&&visible&&step==='conversion'} onResume={resumeMigration}/>}</div>
+    <div hidden={step!=='conversion'}>{recoveryVerified&&task&&<DatabaseMigrationConversion key={`${ownerId}:${task.id}`} preparationId={task.id} ownerId={ownerId} active={active&&visible&&step==='conversion'} onResume={resumeMigration}/>}</div>
 
     </>}
   </section>;

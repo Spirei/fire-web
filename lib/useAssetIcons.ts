@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { applyRelatedEtfMainStockIcons, pickStockIcon, stockIconLookupCodes } from "@/lib/stockIconKey";
 
+import { stockIconBatches } from '@/lib/stockIconRequests';
+
 export interface Asset {
   id: string;
   type: "stock" | "market" | "flag" | "broker" | "crypto" | "metal" | "group" | "card";
@@ -51,46 +53,66 @@ let cdnRequested = false;
  * at 保持 0，让完整素材库仍会在后台刷新；首帧则无需等待 /api/assets。
  */
 const iconInflight = new Map<string, Promise<void>>();
+const subscribedStockPairs = new Map<string, { market: string; code: string }>();
 
 function stockMapFromCache(): Record<string, string> {
   const map: Record<string, string> = {};
   (cache.get("stock")?.assets ?? []).forEach((asset) => {
     map[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.imageUrl || asset.url;
   });
-  return map;
+  return applyRelatedEtfMainStockIcons(map);
 }
 
-function applyStockIconPayload(data: { assets?: Array<{ type?: string; market?: string; code?: string; url?: string; imageUrl?: string }> } | null) {
+function applyStockIconPayload(data: { assets?: Array<{ type?: string; market?: string; code?: string; url?: string; imageUrl?: string }> } | null, keys: string[], force: boolean) {
+  if (!Array.isArray(data?.assets)) return;
   const icons: Record<string, string> = {};
   (Array.isArray(data?.assets) ? data.assets : []).forEach((asset) => {
     if (asset?.type === "stock" && asset.market && asset.code && (asset.imageUrl || asset.url)) {
       icons[`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`] = asset.imageUrl || asset.url || "";
     }
   });
-  if (Object.keys(icons).length) {
-    primeStockIconCache(icons);
+  if (force) {
+    const requested = new Set(keys.flatMap(key => {
+      const separator = key.indexOf(':');
+      const market = key.slice(0, separator);
+      return stockIconLookupCodes(market, key.slice(separator + 1)).map(code => `${market}:${code}`);
+    }));
+    const current = cache.get('stock');
+    if (current) cache.set('stock', { ...current, assets: current.assets.filter(asset => !requested.has(`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`) || !!pickStockIcon(icons, asset.market, asset.code)) });
+  }
+  if (Object.keys(icons).length) primeStockIconCache(icons);
+  if (force || Object.keys(icons).length) {
+    saveLocalType('stock', cache.get('stock')?.assets ?? []);
     notify();
   }
 }
 
 /** 财报日历等一次补多张素材库图标，不拉 3000+ 全量。 */
-export function ensureStockIcons(pairs: Array<{ market: string; code: string }>) {
+export function ensureStockIcons(pairs: Array<{ market: string; code: string }>, force = false): Promise<void> | undefined {
+  for (const pair of pairs) {
+    const market = pair.market.trim().toUpperCase(), code = pair.code.trim().toUpperCase();
+    if (market && market !== 'ASSET' && code) subscribedStockPairs.set(`${market}:${code}`, { market, code });
+  }
   const cached = stockMapFromCache();
-  const missing = pairs.filter((pair) => pair.market && pair.code && !pickStockIcon(cached, pair.market, pair.code));
-  if (!missing.length) return;
-  const keys = [...new Set(missing.map((pair) => `${pair.market.toUpperCase()}:${pair.code.toUpperCase()}`))];
-  const batchKey = `batch:${keys.slice().sort().join(",")}`;
-  const pending = iconInflight.get(batchKey);
-  if (pending) return pending;
-  const task = fetch(`/api/assets?type=stock&keys=${encodeURIComponent(keys.join(","))}`)
-    .then((response) => (response.ok ? response.json() : null))
-    .then((data) => applyStockIconPayload(data))
-    .catch(() => { /* 保留已有首字母兜底 */ })
-    .finally(() => {
-      if (iconInflight.get(batchKey) === task) iconInflight.delete(batchKey);
-    });
-  iconInflight.set(batchKey, task);
-  return task;
+  const missing = pairs.filter(pair => force || !pickStockIcon(cached, pair.market, pair.code));
+  const batches = stockIconBatches(missing);
+  if (!batches.length) return;
+  const tasks = batches.map(keys => {
+    const batchKey = keys.slice().sort().join(',');
+    const pending = iconInflight.get(batchKey);
+    if (pending) return force ? pending.then(() => ensureStockIcons(keys.map(key => {
+      const separator = key.indexOf(':');
+      return { market: key.slice(0, separator), code: key.slice(separator + 1) };
+    }), true)) : pending;
+    const task = fetch(`/api/assets?type=stock&keys=${encodeURIComponent(keys.join(','))}`, force ? { cache: 'no-store' } : undefined)
+      .then(response => response.ok ? response.json() : null)
+      .then(data => applyStockIconPayload(data, keys, force))
+      .catch(() => { /* 保留已有首字母兜底 */ })
+      .finally(() => { if (iconInflight.get(batchKey) === task) iconInflight.delete(batchKey); });
+    iconInflight.set(batchKey, task);
+    return task;
+  });
+  return Promise.all(tasks).then(() => undefined);
 }
 
 /** 个股详情 / 划过卡片按需补一张素材库图标，不拉 3000+ 全量。 */
@@ -99,6 +121,7 @@ export function ensureStockIcon(market: string, code: string) {
 }
 
 export function primeStockIconCache(icons: Record<string, string>) {
+  if (!Object.keys(icons).length) return;
   const current = cache.get("stock");
   const byKey = new Map<string, Asset>();
   (current?.assets ?? []).forEach((asset) => byKey.set(`${asset.market.toUpperCase()}:${asset.code.toUpperCase()}`, asset));
@@ -109,7 +132,7 @@ export function primeStockIconCache(icons: Record<string, string>) {
     const market = rawKey.slice(0, separator).toUpperCase();
     const code = rawKey.slice(separator + 1).toUpperCase();
     const key = `${market}:${code}`;
-    if (byKey.has(key)) return;
+    if ((byKey.get(key)?.imageUrl || byKey.get(key)?.url) === url) return;
     byKey.set(key, {
       id: `stock:${key}`,
       type: "stock",
@@ -131,6 +154,7 @@ export function primeStockIconCache(icons: Record<string, string>) {
 
 /** 服务端首屏注入的市场图标表：渲染期预热，市场下拉 / 筛选首帧就是素材库图标（at 保持 0 让完整列表后台刷新） */
 export function primeMarketIconCache(icons: Record<string, string>) {
+  if (!Object.keys(icons).length) return;
   const current = cache.get("market");
   const byKey = new Map<string, Asset>();
   (current?.assets ?? []).forEach((asset) => byKey.set(asset.market.toUpperCase(), asset));
@@ -326,7 +350,8 @@ function ensureCdnSetting() {
 
 if (typeof window !== "undefined") {
   window.addEventListener("fire:assets-updated", () => {
-    void refreshTypes([...subscribedTypes], true);
+    void refreshTypes([...subscribedTypes].filter(type => type !== 'stock' || fullStockCatalog), true);
+    void ensureStockIcons([...subscribedStockPairs.values()], true);
     void ensureFlagIcons([...subscribedFlagCodes], true);
   });
   window.addEventListener("fire:settings-updated", () => {
