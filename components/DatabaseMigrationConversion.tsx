@@ -45,14 +45,19 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   const requested=params.get('conversionRequest')||'';
   const [portfolioRequest,setPortfolioRequest]=useState(params.get('portfolioRequest')||''),[portfolioTask,setPortfolioTask]=useState<PortfolioTask|null>(null);
   const [historyRequest,setHistoryRequest]=useState(params.get('historyRequest')||''),[historyTask,setHistoryTask]=useState<HistoryTask|null>(null),[needLogin,setNeedLogin]=useState(false);
-  const notified=useRef('');
+  const notified=useRef(''),assetsNotified=useRef('');
   const [context,setContext]=useState<Context|null>(null),[task,setTask]=useState<ConversionTask|null>(null);
   const [sourceOwner,setSourceOwner]=useState(''),[kinds,setKinds]=useState<Record<string,string>>({}),[labels,setLabels]=useState<Record<string,string>>({});
   const [markets,setMarkets]=useState<Record<string,string>>({}),[orders,setOrders]=useState<Record<string,string>>({});
-  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[verify,setVerify]=useState(false),[revision,setRevision]=useState(0);
+  const [busy,setBusy]=useState(false),[revalidating,setRevalidating]=useState(true),[error,setError]=useState(''),[verify,setVerify]=useState(false),[revision,setRevision]=useState(0);
   const session=useRef<WebSession|null>(null),lifetime=useRef<AbortController|null>(null),pending=useRef(false),unknown=useRef('');
-  const draftReady=useRef(false);
-  const scope=useRef(ownerId+':'+preparationId);
+  const draftReady=useRef(false),observedSession=useRef<WebSession|null>(null);
+  function clearObservation(){
+    draftReady.current=false;unknown.current='';setContext(null);setTask(null);setPortfolioTask(null);setHistoryTask(null);
+    setSourceOwner('');setKinds({});setLabels({});setMarkets({});setOrders({});
+  }
+  function rejectSession(){lifetime.current?.abort();pending.current=false;setBusy(false);setVerify(false);session.current=null;observedSession.current=null;clearObservation();setRevalidating(false);setNeedLogin(true);setError('登录状态已变化，请重新登录');}
+
   const writePortfolioUrl=(value:string)=>{if(!canUseLocation())return;const url=new URL(window.location.href);if(value)url.searchParams.set('portfolioRequest',value);else url.searchParams.delete('portfolioRequest');window.history.replaceState(null,'',url);};
   const writeHistoryUrl=(value:string)=>{if(!canUseLocation())return;const url=new URL(window.location.href);if(value)url.searchParams.set('historyRequest',value);else url.searchParams.delete('historyRequest');window.history.replaceState(null,'',url);};
   const writeUrl=(value:string)=>{if(!canUseLocation())return;const url=new URL(window.location.href);if(value)url.searchParams.set('conversionRequest',value);else url.searchParams.delete('conversionRequest');window.history.replaceState(null,'',url);};
@@ -60,20 +65,20 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   useEffect(()=>{
     if(!active)return;
     const controller=new AbortController();lifetime.current=controller;let timer:ReturnType<typeof setTimeout>|undefined;let polling=false;
-    draftReady.current=false;setBusy(true);setError('');session.current=null;
-    if(scope.current!==ownerId+':'+preparationId){scope.current=ownerId+':'+preparationId;setContext(null);setTask(null);setPortfolioTask(null);setHistoryTask(null);}
+    draftReady.current=false;setError('');setRevalidating(true);session.current=null;
     async function load(){
+      let validated=false;
       try{
         const identity=await request<WebSession>('/api/fire/session',{signal:controller.signal});
-        if(identity.user.id!==ownerId||identity.user.role!=='admin')throw Error('管理员身份已变化，请重新登录');
-        session.current=identity;
+        if(controller.signal.aborted)return;
+        if(identity.user.id!==ownerId||identity.user.role!=='admin'){rejectSession();throw Error('管理员身份已变化，请重新登录');}
+        const before=observedSession.current;
+        if(before&&(before.instance_id!==identity.instance_id||before.csrf!==identity.csrf))clearObservation();
+        observedSession.current=identity;session.current=identity;setNeedLogin(false);
         const value=await request<Context>(`/api/fire/database-migration/preparations/${preparationId}/conversion`,{signal:controller.signal,headers:headers()});
         if(controller.signal.aborted)return;
-        if(value.preparation_id!==preparationId)throw Error('转换来源记录不匹配');
+        if(value.preparation_id!==preparationId){clearObservation();throw Error('转换来源记录不匹配');}
         if(value.resume&&value.resume.preparation.id!==preparationId){onResume(value.resume);return;}
-        setContext(value);setSourceOwner(value.users.length===1?value.users[0].id:'');
-        setKinds(Object.fromEntries(value.accounts.filter(item=>item.kind).map(item=>[item.id,item.kind!])));
-        setLabels({});setMarkets({});setOrders({});
         let current=value.items.find(item=>item.request_id===requested)??(!requested?value.items[0]:undefined);
         if(value.resume){
           current=value.items.find(item=>item.request_id===value.resume!.conversion_request_id);
@@ -86,14 +91,14 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
           current=receipt;
         }
         if(controller.signal.aborted)return;
-        setTask(current??null);const imported=(value.imports??[]).find(item=>value.resume?item.request_id===value.resume.portfolio_request_id:portfolioRequest?item.request_id===portfolioRequest:item.conversion_id===current?.id);if(imported){setPortfolioTask(imported);setPortfolioRequest(imported.request_id);}
+        setContext(value);setTask(current??null);const imported=(value.imports??[]).find(item=>value.resume?item.request_id===value.resume.portfolio_request_id:portfolioRequest?item.request_id===portfolioRequest:item.conversion_id===current?.id);if(imported){setPortfolioTask(imported);setPortfolioRequest(imported.request_id);}
         const history=(value.history_imports??[]).find(item=>value.resume?item.request_id===value.resume.history_request_id:historyRequest?item.request_id===historyRequest:item.conversion_id===current?.id);if(history){setHistoryTask(history);setHistoryRequest(history.request_id);}
         let choices:unknown=current?.input??value.previous_input;
         try{const draft=JSON.parse(localStorage.getItem(migrationStorageKey('draft',identity.instance_id,ownerId,preparationId))??'null');if(!imported&&draft&&draft.conversion===(current?.id??null))choices=draft.mapping;}catch{}
-        const restored=migrationMapping(choices,value);setSourceOwner(restored.source_owner);setKinds(restored.account_kinds);setLabels(restored.broker_labels);setMarkets(restored.market_accounts);setOrders(restored.order_accounts??{});draftReady.current=true;
+        const restored=migrationMapping(choices,value);setSourceOwner(restored.source_owner);setKinds(restored.account_kinds);setLabels(restored.broker_labels);setMarkets(restored.market_accounts);setOrders(restored.order_accounts??{});draftReady.current=true;validated=true;
         if(current){unknown.current=running(current)?current.request_id:'';if(running(current))void poll(current.request_id);}
-      }catch(e){if(!controller.signal.aborted)setError((e as Error).message);}
-      finally{if(!controller.signal.aborted)setBusy(false);}
+      }catch(e){if(!controller.signal.aborted){const failure=e as PlatformRequestError;if(failure.status===401||failure.status===403)rejectSession();setError(failure.message);}}
+      finally{if(!controller.signal.aborted)setRevalidating(!validated);}
     }
     async function poll(id:string){
       if(controller.signal.aborted||polling)return;
@@ -103,14 +108,14 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
         const receipt=await request<ConversionTask>('/api/fire/tasks/receipts/'+id,{signal:controller.signal,headers:headers()});
         const detail=await request<ConversionTask>('/api/fire/tasks/'+receipt.id,{signal:controller.signal,headers:headers()});
         if(detail.kind!=='database.migration.convert'||detail.request_id!==id||detail.result?.preparation_id&&detail.result.preparation_id!==preparationId)throw Error('转换回执不匹配');
-        if(controller.signal.aborted)return;setTask(before=>({...detail,input:before?.input}));
+        if(controller.signal.aborted)return;setTask(before=>({...detail,input:before?.input??detail.input}));
         if(!running(detail)){unknown.current='';return;}
-      }catch(e){if(controller.signal.aborted)return;const failure=e as PlatformRequestError;if(failure.status!==404)setError(failure.message);}
+      }catch(e){if(controller.signal.aborted)return;const failure=e as PlatformRequestError;if(failure.status===401||failure.status===403){rejectSession();return;}if(failure.status!==404)setError(failure.message);}
       finally{polling=false;}
       if(!controller.signal.aborted)timer=setTimeout(()=>void poll(id),2500);
     }
     void load();
-    return()=>{controller.abort();clearTimeout(timer);pending.current=false;session.current=null;};
+    return()=>{controller.abort();clearTimeout(timer);pending.current=false;setBusy(false);session.current=null;};
   // A task is selected by its durable URL, never submitted on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[active,ownerId,preparationId,revision]);
@@ -121,7 +126,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   },[context,ownerId,preparationId,task?.id,sourceOwner,kinds,labels,markets,orders]);
 
   useEffect(()=>{
-    if(!active||!portfolioRequest)return;
+    if(!active||needLogin||!portfolioRequest)return;
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
     async function poll(){
       if(controller.signal.aborted)return;
@@ -133,14 +138,14 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
         if(controller.signal.aborted)return;setPortfolioTask(value);
         if(value.result?.business_written===true&&notified.current!==portfolioRequest){notified.current=portfolioRequest;window.dispatchEvent(new Event('fire:records-updated'));window.dispatchEvent(new Event('fire:settings-updated'));}
         if(!['queued','running','cancel_requested'].includes(value.status))return;
-      }catch(e){if(controller.signal.aborted)return;const failure=e as PlatformRequestError;if(failure.status===401){setNeedLogin(true);return;}if(failure.status!==404)setError(failure.message);}
+      }catch(e){if(controller.signal.aborted)return;const failure=e as PlatformRequestError;if(failure.status===401||failure.status===403){rejectSession();return;}if(failure.status!==404)setError(failure.message);}
       timer=setTimeout(()=>void poll(),2000);
     }
     void poll();return()=>{controller.abort();clearTimeout(timer);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[active,portfolioRequest,ownerId,preparationId]);
+  },[active,needLogin,portfolioRequest,ownerId,preparationId]);
   useEffect(()=>{
-    if(!active||!historyRequest)return;
+    if(!active||needLogin||!historyRequest)return;
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
     async function poll(){
       if(controller.signal.aborted)return;
@@ -151,37 +156,38 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
         if(!['database.migration.history','database.migration.complete'].includes(value.kind)||value.request_id!==historyRequest||value.result?.conversion_id&&value.result.conversion_id!==task?.id)throw Error('历史导入回执不匹配');
         if(controller.signal.aborted)return;setHistoryTask(value);
         if(value.result?.history_imported&&notified.current!==historyRequest){notified.current=historyRequest;window.dispatchEvent(new Event('fire:records-updated'));}
+        if((value.result?.migration_complete||value.result?.completed_domains?.includes('assets'))&&assetsNotified.current!==historyRequest){assetsNotified.current=historyRequest;window.dispatchEvent(new Event('fire:assets-updated'));}
         if(!['queued','running','cancel_requested'].includes(value.status))return;
-      }catch(e){if(controller.signal.aborted)return;const failure=e as PlatformRequestError;if(failure.status===401){setNeedLogin(true);return;}if(failure.status!==404)setError(failure.message);}
+      }catch(e){if(controller.signal.aborted)return;const failure=e as PlatformRequestError;if(failure.status===401||failure.status===403){rejectSession();return;}if(failure.status!==404)setError(failure.message);}
       timer=setTimeout(()=>void poll(),2000);
     }
     if(task?.id)void poll();return()=>{controller.abort();clearTimeout(timer);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[active,historyRequest,ownerId,preparationId,task?.id]);
+  },[active,needLogin,historyRequest,ownerId,preparationId,task?.id]);
   async function importHistory(){
-    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||!task?.result?.plan_sha256||!unchanged)return;
+    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!task?.result?.plan_sha256||!unchanged)return;
     pending.current=true;setBusy(true);setError('');const id=crypto.randomUUID();setHistoryTask(null);setHistoryRequest(id);writeHistoryUrl(id);
     try{const accepted=await request<HistoryTask>('/api/fire/database-migration/conversions/'+task.id+'/complete',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id,plan_sha256:task.result.plan_sha256,confirmed_registered_values:true})});if(!signal.aborted){setHistoryTask(accepted);setHistoryRequest(accepted.request_id);writeHistoryUrl(accepted.request_id);}}
     catch(e){if(signal.aborted)return;const failure=e as PlatformRequestError;setError(failure.message);if(failure.reauthentication)setVerify(true);if(failure.status&&failure.status<500){setHistoryRequest('');writeHistoryUrl('');}}
     finally{if(!signal.aborted){pending.current=false;setBusy(false);}}
   }
   async function cancelHistory(){
-    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||!historyRequest)return;
+    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!historyRequest)return;
     pending.current=true;setBusy(true);try{const value=await request<HistoryTask>('/api/fire/database-migration/completion/cancel',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:historyRequest})});if(!signal.aborted)setHistoryTask(value);}catch(e){if(!signal.aborted)setError((e as Error).message);}finally{pending.current=false;setBusy(false);}
   }
   async function importPortfolio(){
-    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||!task?.result?.plan_sha256||!unchanged)return;
+    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!task?.result?.plan_sha256||!unchanged)return;
     pending.current=true;setBusy(true);setError('');setPortfolioTask(null);const id=crypto.randomUUID();setPortfolioRequest(id);writePortfolioUrl(id);
     try{const accepted=await request<PortfolioTask>('/api/fire/database-migration/conversions/'+task.id+'/portfolio',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id,plan_sha256:task.result.plan_sha256,confirmed_registered_values:true})});if(!signal.aborted)setPortfolioTask(accepted);}
     catch(e){if(signal.aborted)return;const failure=e as PlatformRequestError;setError(failure.message);if(failure.reauthentication)setVerify(true);if(failure.status&&failure.status<500){setPortfolioRequest('');writePortfolioUrl('');}}
     finally{if(!signal.aborted){pending.current=false;setBusy(false);}}
   }
   async function cancelPortfolio(){
-    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||!portfolioRequest)return;
+    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!portfolioRequest)return;
     pending.current=true;setBusy(true);try{const value=await request<PortfolioTask>('/api/fire/database-migration/portfolio/cancel',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:portfolioRequest})});if(!signal.aborted)setPortfolioTask(value);}catch(e){if(!signal.aborted)setError((e as Error).message);}finally{pending.current=false;setBusy(false);}
   }
   async function start(){
-    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||!sourceOwner)return;
+    const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!sourceOwner)return;
     pending.current=true;setBusy(true);setError('');const id=crypto.randomUUID();
     unknown.current=id;writeUrl(id);
     try{
@@ -195,13 +201,13 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
     }finally{if(!signal.aborted){pending.current=false;setBusy(false);}}
   }
   async function cancel(){
-    const signal=lifetime.current?.signal,id=unknown.current||task?.request_id;if(!signal||signal.aborted||pending.current||!id)return;
+    const signal=lifetime.current?.signal,id=unknown.current||task?.request_id;if(!signal||signal.aborted||pending.current||revalidating||!id)return;
     pending.current=true;setBusy(true);setError('');
     try{const result=await request<ConversionTask>('/api/fire/database-migration/conversions/cancel',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id})});if(!signal.aborted){setTask(result);unknown.current='';if(result.status==='cancelled')writeUrl('');}}
     catch(e){if(!signal.aborted)setError((e as Error).message);}finally{pending.current=false;setBusy(false);}
   }
   async function authorize(){
-    if(pending.current)return;pending.current=true;setBusy(true);
+    if(pending.current||revalidating)return;pending.current=true;setBusy(true);
     try{const proof=await requestAdminProof();if(!proof)return;await request('/api/fire/connections/reauthenticate',{method:'POST',headers:headers(),body:JSON.stringify(proof)});setVerify(false);setError('');}
     catch(e){setError((e as Error).message);}finally{pending.current=false;setBusy(false);}
   }
@@ -219,16 +225,16 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
     {label:'来源字段',items:issues.filter(([key])=>!issueGroups.some(group=>group.keys.includes(key)))}].filter(group=>group.items.length);
   const unchanged=task?.status==='succeeded'&&task.input&&sameMigrationMapping({source_owner:sourceOwner,account_kinds:kinds,broker_labels:labels,market_accounts:markets,order_accounts:orders},task.input);
   return <div className="migration-conversion mt-6">
-    <div className="migration-conversion-heading"><div className="flex flex-wrap items-center gap-3"><h2 className="text-lg font-semibold text-ink">数据转换</h2>{!!result?.domains?.length&&<span className="migration-conversion-count">已导入 {completedDomains} / {result.domains.length} 类</span>}</div><div className="flex flex-wrap items-center gap-3">{!imported&&(!result?.domains||!unchanged)&&<Capsule variant={imported?'secondary':'primary'} busy={busy||moving} disabled={!context||!sourceOwner||!!unknown.current&& !task||verify||!!unchanged||importing||historyImporting||needLogin} onClick={()=>void start()}>{moving?'转换中':'转换并校验'}</Capsule>}{imported&&!allImported&&!needLogin&&<>{historyImporting&&<Capsule variant="secondary" disabled={busy||historyTask?.status==='cancel_requested'} onClick={()=>void cancelHistory()}>停止迁移</Capsule>}<Capsule disabled={busy||moving||historyImporting||verify||!unchanged} busy={historyImporting} onClick={()=>void importHistory()}>{historyImporting?'迁移中':'继续迁移'}</Capsule></>}{allImported&&<span className="flex items-center gap-2 text-sm text-ink-2"><IconCheck size={17}/>迁移完成</span>}</div></div>
-    {(moving||!!unknown.current&&!task)&&<div className="mt-4 flex justify-end"><Capsule variant="secondary" disabled={busy||task?.status==='cancel_requested'} onClick={()=>void cancel()}>{task?.status==='cancel_requested'?'取消中':'取消转换'}</Capsule></div>}
-    {error&&<p className="mt-4 text-sm text-red-500" role="alert">{error}</p>}
+    <div className="migration-conversion-heading"><div className="flex flex-wrap items-center gap-3"><h2 className="text-lg font-semibold text-ink">数据转换</h2>{!!result?.domains?.length&&<span className="migration-conversion-count">已导入 {completedDomains} / {result.domains.length} 类</span>}</div><div className="flex flex-wrap items-center gap-3">{!imported&&(!result?.domains||!unchanged)&&<Capsule variant={imported?'secondary':'primary'} busy={busy||moving} disabled={revalidating||!context||!sourceOwner||!!unknown.current&& !task||verify||!!unchanged||importing||historyImporting||needLogin} onClick={()=>void start()}>{moving?'转换中':'转换并校验'}</Capsule>}{imported&&!allImported&&!needLogin&&<>{historyImporting&&<Capsule variant="secondary" disabled={revalidating||busy||historyTask?.status==='cancel_requested'} onClick={()=>void cancelHistory()}>停止迁移</Capsule>}<Capsule disabled={revalidating||busy||moving||historyImporting||verify||!unchanged} busy={historyImporting} onClick={()=>void importHistory()}>{historyImporting?'迁移中':'继续迁移'}</Capsule></>}{allImported&&<span className="flex items-center gap-2 text-sm text-ink-2"><IconCheck size={17}/>迁移完成</span>}</div></div>
+    {(moving||!!unknown.current&&!task)&&<div className="mt-4 flex justify-end"><Capsule variant="secondary" disabled={revalidating||busy||task?.status==='cancel_requested'} onClick={()=>void cancel()}>{task?.status==='cancel_requested'?'取消中':'取消转换'}</Capsule></div>}
+    {error&&<p className="mt-4 text-sm text-red-500" role="alert">{error}{!needLogin&&<Capsule className="ml-3" variant="secondary" size="sm" disabled={busy} onClick={()=>setRevision(value=>value+1)}>重新核对</Capsule>}</p>}
     {verify&&<div className="mt-4"><Capsule variant="secondary" busy={busy} onClick={()=>void authorize()}>验证身份</Capsule></div>}
     {context&&!moving&&<details className="mt-5" open={!result?.domains}><summary className="cursor-pointer text-sm text-ink-2">账户映射</summary>
-      {context.users.length>1&&<label className="mt-4 grid gap-2 text-sm text-ink-3">来源账号<AppSelect disabled={imported||importing||historyImporting||needLogin} ariaLabel="来源账号" value={sourceOwner} options={context.users.map(item=>({value:item.id,label:item.username}))} onChange={value=>{setSourceOwner(value);setLabels({});setMarkets({});setOrders({});}}/></label>}
-      <div className="migration-conversion-mappings mt-4">{accounts.map(item=><label key={item.id} className="grid gap-2 text-sm text-ink-3">{item.name}<AppSelect disabled={imported||importing||historyImporting||needLogin} ariaLabel={item.name+'分类'} value={kinds[item.id]??''} options={[{value:'',label:'待确认'},{value:'real',label:'真实'},{value:'simulated',label:'模拟'}]} onChange={value=>setKinds(before=>{const next={...before};if(value)next[item.id]=value;else delete next[item.id];return next;})}/></label>)}</div>
-      <div className="migration-conversion-mappings mt-4">{context.broker_labels.map(item=><label key={item.label} className="grid gap-2 text-sm text-ink-3">{item.label} · {item.rows} 笔<AppSelect disabled={imported||importing||historyImporting||needLogin} ariaLabel={item.label+'归属'} value={labels[item.label]??''} options={[{value:'',label:'沿用原记录'},...options]} onChange={value=>setLabels(before=>{const next={...before};if(value)next[item.label]=value;else delete next[item.label];return next;})}/></label>)}</div>
-      <div className="migration-conversion-mappings mt-4">{[['US','美股'],['HK','港股默认账户'],['CN','A 股']].map(([key,title])=><label key={key} className="grid gap-2 text-sm text-ink-3">{title}<AppSelect disabled={imported||importing||historyImporting||needLogin} ariaLabel={title+'账户归属'} value={markets[key]??''} options={[{value:'',label:'沿用原记录'},...options]} onChange={value=>setMarkets(before=>{const next={...before};if(value)next[key]=value;else delete next[key];return next;})}/></label>)}</div>
-      <div className="migration-conversion-mappings mt-4">{(context.orders??[]).filter(item=>item.owner_id===sourceOwner&&(orders[item.id]||labels[item.broker]&&markets[item.market]&&labels[item.broker]!==markets[item.market])).map(item=><label key={item.id} className="grid gap-2 text-sm text-ink-3">{item.code} · {item.name}<AppSelect disabled={imported||importing||historyImporting||needLogin} ariaLabel={item.id+'逐笔归属'} value={orders[item.id]??''} options={[{value:'',label:'逐笔待确认'},...options]} onChange={value=>setOrders(before=>{const next={...before};if(value)next[item.id]=value;else delete next[item.id];return next;})}/></label>)}</div>
+      {context.users.length>1&&<label className="mt-4 grid gap-2 text-sm text-ink-3">来源账号<AppSelect disabled={revalidating||imported||importing||historyImporting||needLogin} ariaLabel="来源账号" value={sourceOwner} options={context.users.map(item=>({value:item.id,label:item.username}))} onChange={value=>{setSourceOwner(value);setLabels({});setMarkets({});setOrders({});}}/></label>}
+      <div className="migration-conversion-mappings mt-4">{accounts.map(item=><label key={item.id} className="grid gap-2 text-sm text-ink-3">{item.name}<AppSelect disabled={revalidating||imported||importing||historyImporting||needLogin} ariaLabel={item.name+'分类'} value={kinds[item.id]??''} options={[{value:'',label:'待确认'},{value:'real',label:'真实'},{value:'simulated',label:'模拟'}]} onChange={value=>setKinds(before=>{const next={...before};if(value)next[item.id]=value;else delete next[item.id];return next;})}/></label>)}</div>
+      <div className="migration-conversion-mappings mt-4">{context.broker_labels.map(item=><label key={item.label} className="grid gap-2 text-sm text-ink-3">{item.label} · {item.rows} 笔<AppSelect disabled={revalidating||imported||importing||historyImporting||needLogin} ariaLabel={item.label+'归属'} value={labels[item.label]??''} options={[{value:'',label:'沿用原记录'},...options]} onChange={value=>setLabels(before=>{const next={...before};if(value)next[item.label]=value;else delete next[item.label];return next;})}/></label>)}</div>
+      <div className="migration-conversion-mappings mt-4">{[['US','美股'],['HK','港股默认账户'],['CN','A 股']].map(([key,title])=><label key={key} className="grid gap-2 text-sm text-ink-3">{title}<AppSelect disabled={revalidating||imported||importing||historyImporting||needLogin} ariaLabel={title+'账户归属'} value={markets[key]??''} options={[{value:'',label:'沿用原记录'},...options]} onChange={value=>setMarkets(before=>{const next={...before};if(value)next[key]=value;else delete next[key];return next;})}/></label>)}</div>
+      <div className="migration-conversion-mappings mt-4">{(context.orders??[]).filter(item=>item.owner_id===sourceOwner&&(orders[item.id]||labels[item.broker]&&markets[item.market]&&labels[item.broker]!==markets[item.market])).map(item=><label key={item.id} className="grid gap-2 text-sm text-ink-3">{item.code} · {item.name}<AppSelect disabled={revalidating||imported||importing||historyImporting||needLogin} ariaLabel={item.id+'逐笔归属'} value={orders[item.id]??''} options={[{value:'',label:'逐笔待确认'},...options]} onChange={value=>setOrders(before=>{const next={...before};if(value)next[item.id]=value;else delete next[item.id];return next;})}/></label>)}</div>
     </details>}
     {moving&&<div className="mt-5" role="status"><div className="flex items-center gap-2 text-sm text-ink-2"><IconLoader2 size={18} className="animate-spin motion-reduce:animate-none"/>{result?.phase==='conversion_financial'?'转换交易与资金':result?.phase==='conversion_domains'?'核对业务数据':'核对原归档'}{result?.progress?.total!=null&&<span className="ml-auto tabular-nums">{result.progress.processed} / {result.progress.total}</span>}</div>{result?.progress?.total!=null&&result.progress.total>0&&<div className="migration-stage-progress" role="progressbar" aria-label="数据转换进度" aria-valuemin={0} aria-valuemax={result.progress.total} aria-valuenow={result.progress.processed}><span style={{width:`${Math.min(100,result.progress.processed/result.progress.total*100)}%`}}/></div>}</div>}
     {result?.domains&&<><div className="migration-conversion-domains mt-5">{result.domains.map(domain=>{
@@ -242,16 +248,16 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
       </div>;
     })}</div>
       {!!issues.length&&<details className="migration-review"><summary><span className="migration-review-heading"><IconAlertCircle size={17}/><strong>待核对</strong><span>{issues.length} 类差异</span></span><IconChevronDown size={16}/></summary><div className="migration-review-groups">{groupedIssues.map(group=><div key={group.label}><h3>{group.label}</h3><dl className="migration-conversion-issues">{group.items.map(([key,count])=><div key={key}><dt>{issueLabels[key]??'来源结构或依据待核对'}</dt><dd className="tabular-nums">{count}</dd></div>)}</dl></div>)}</div></details>}
-      {!imported&&<div className="mt-4 flex flex-wrap items-center justify-end gap-3">{importing&&<Capsule variant="secondary" disabled={busy||portfolioTask?.status==='cancel_requested'} onClick={()=>void cancelPortfolio()}>取消导入</Capsule>}<Capsule disabled={busy||moving||importing||!result.portfolio_ready||verify||!unchanged} busy={importing} onClick={()=>void importPortfolio()}>{importing?'正在导入持仓与自选':'导入持仓与自选'}</Capsule></div>}
+      {!imported&&<div className="mt-4 flex flex-wrap items-center justify-end gap-3">{importing&&<Capsule variant="secondary" disabled={revalidating||busy||portfolioTask?.status==='cancel_requested'} onClick={()=>void cancelPortfolio()}>取消导入</Capsule>}<Capsule disabled={revalidating||busy||moving||importing||!result.portfolio_ready||verify||!unchanged} busy={importing} onClick={()=>void importPortfolio()}>{importing?'正在导入持仓与自选':'导入持仓与自选'}</Capsule></div>}
       {historyImporting&&!needLogin&&<div className="mt-4 flex items-center gap-2 text-sm text-ink-2" role="status"><IconLoader2 size={17} className="animate-spin motion-reduce:animate-none"/>{{completion_backup:'备份新库',history_import:'迁入交易与资金',completion_assets:'核对素材原件',completion_personal:'迁入个人数据',completion_identity:'切换旧账号身份'}[historyTask?.result?.phase??'']??'准备迁移'}{historyTask?.result?.progress?.total!=null&&<span className="ml-auto tabular-nums">{historyTask.result.progress.processed} / {historyTask.result.progress.total}</span>}</div>}
       {historyImporting&&historyTask?.result?.progress?.total!=null&&historyTask.result.progress.total>0&&<div className="migration-stage-progress" role="progressbar" aria-label="当前迁移步骤进度" aria-valuemin={0} aria-valuemax={historyTask.result.progress.total} aria-valuenow={historyTask.result.progress.processed}><span style={{width:`${Math.min(100,historyTask.result.progress.processed/historyTask.result.progress.total*100)}%`}}/></div>}
       {allImported&&historyTask?.result?.stages?.personal&&<div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm text-ink-3">{Object.entries({FIRE规划:historyTask.result.stages.personal.fire_plans,记账:historyTask.result.stages.personal.simple_ledgers,自定义卡片:historyTask.result.stages.personal.custom_cards,持有卡片:historyTask.result.stages.personal.card_holdings,动态:historyTask.result.stages.personal.feed_posts,提醒:historyTask.result.stages.personal.price_alert_rules}).map(([label,count])=><span key={label}>{label} · {count}</span>)}</div>}
       {!!historyTask?.result?.stages?.personal?.source_missing_card_images?.length&&<p className="mt-3 text-sm text-ink-3">{historyTask.result.stages.personal.source_missing_card_images.length} 张旧自定义卡片缺少图片原件</p>}
-      {needLogin&&<div className="mt-4 flex justify-end"><CapsuleLink href={"/login?next="+encodeURIComponent(window.location.pathname+window.location.search)}>使用旧账号重新登录</CapsuleLink></div>}
       {historyTask?.status==='failed'&&historyTask.result?.message&&<p className="mt-3 text-sm text-red-500" role="alert">{historyTask.result.message}</p>}
       {importing&&portfolioTask?.result?.progress?.total!=null&&<p className="mt-3 text-right text-sm text-ink-3 tabular-nums">{portfolioTask.result.progress.processed} / {portfolioTask.result.progress.total}</p>}
       {portfolioTask?.status==='failed'&&portfolioTask.result?.message&&<p className="mt-3 text-sm text-red-500" role="alert">{portfolioTask.result.message}</p>}
     </>}
+    {needLogin&&<div className="mt-4 flex justify-end"><CapsuleLink href={"/login?next="+encodeURIComponent(window.location.pathname+window.location.search)}>重新登录</CapsuleLink></div>}
     {task?.status==='failed'&&result?.message&&<p className="mt-4 text-sm text-red-500" role="alert">{result.message}</p>}
   </div>;
 }

@@ -16,6 +16,7 @@ import Toaster from '@/components/Toaster';
 import {CurrencyProvider,type CurrencyCode} from '@/lib/currencyPrefs';
 import {displayCurrencyFlagCode} from '@/lib/flagAssets';
 import {CURRENT_VERSION} from '@/lib/versions';
+import {readStockIcons,stockIconPreloads} from '@/lib/stockIconRequests';
 import {parsePrefsCookie} from '@/lib/prefsCookie';
 export const dynamic='force-dynamic';
 export default async function WorkspacePage({params,searchParams}:{params:Promise<{slug?:string[]}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){
@@ -56,8 +57,17 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const initialQuotePool=initialWorkspace.quotePool,initialAssetLibrary=null,initialCardLibrary=initialWorkspace.cards,initialCelebs=initialWorkspace.celebs,initialFeed=initialWorkspace.feed;
   const initialWatchGroups=initialWorkspace.watchGroups ?? [];
   const initialUserLogs=initialWorkspace.logs?.userLogs ?? [];
-  const initialStockIcons=initialCelebs?.stockIcons??{},initialMarketIcons={};
+  const iconRead=<T,>(path:string)=>platformJson<T>(path,cookieHeaders,{signal:AbortSignal.timeout(8000)});
+  const [recordIcons,marketAssets]=await Promise.all([
+    readStockIcons(initialRecords,iconRead),
+    initialRecords.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
+  ]);
+  const initialStockIcons={...recordIcons,...initialCelebs?.stockIcons};
+  const initialMarketIcons:Record<string,string>={};
+  for(const asset of marketAssets.assets||[])if(asset.market&&(asset.imageUrl||asset.url))initialMarketIcons[asset.market.toUpperCase()]=asset.imageUrl||asset.url!;
   const initialFlagIcons:Record<string,string>=initialWorkspace.global?.flagIcons??{};
+  const visibleIconRecords=['holdings','assets','pnl'].includes(tab.key)?initialRecords.filter(record=>Number(record.qty)>0):initialRecords;
+  const initialStockPreloads=stockIconPreloads(visibleIconRecords,initialStockIcons);
   const initialAvatar=user.avatar;
   const initialCardCovers:string[]=[];
   return (
@@ -71,6 +81,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
       {initialFlagIcons[currencyFlagCode] && !initialFlagIcons[currencyFlagCode].startsWith("data:") && <link rel="preload" as="image" href={initialFlagIcons[currencyFlagCode]} />}
       {Object.entries(initialFlagIcons).filter(([code,url])=>code!==currencyFlagCode&&url&&!url.startsWith('data:')).map(([code,url])=><link key={code} rel="preload" as="image" href={url} />)}
       {initialCardCovers.map((url) => <link key={url} rel="preload" as="image" href={url} />)}
+      {initialStockPreloads.map(url=><link key={url} rel="preload" as="image" href={url} />)}
       <Toaster />
       <header className="app-shell-header site-header sticky top-0 z-50 h-[72px] border-b border-edge/80">
         <div className="app-shell-header-inner mx-auto flex h-full max-w-[1140px] items-center gap-5 px-6">

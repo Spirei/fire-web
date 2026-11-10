@@ -5,6 +5,8 @@ import threading
 from uuid import UUID
 
 from psycopg.types.json import Jsonb
+from psycopg.errors import ConnectionException,DeadlockDetected,LockNotAvailable,QueryCanceled,SerializationFailure
+from psycopg_pool import PoolTimeout
 
 from .backups import BackupFailure,private_dir,private_read,write_private
 from .database_migration_capture import CaptureBudget,canonical,capture_database,file_sha,sha
@@ -114,6 +116,16 @@ async def verified_backup(settings,receipt):
 
 
 async def execute(db,task):
+    # Brief pool/lock pressure must not terminate an accepted long job. Each
+    # attempt rechecks authority and resumes durable domain/file checkpoints.
+    for attempt in range(3):
+        try:return await execute_attempt(db,task)
+        except (ConnectionException,DeadlockDetected,LockNotAvailable,QueryCanceled,SerializationFailure,PoolTimeout):
+            if attempt==2:raise BackupFailure('数据库暂时繁忙，已完成部分保留') from None
+            await asyncio.sleep(.5*(attempt+1))
+
+
+async def execute_attempt(db,task):
     if await committed(db,task):return
     source=await guard(db,task)
     async with db.connection() as conn:

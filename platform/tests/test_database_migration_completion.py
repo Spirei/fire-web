@@ -80,6 +80,14 @@ async def test_full_cutover_keeps_completed_domains_and_restores_original_creden
     (inputs/'media-manifest.json').write_bytes(canonical({'source_instance':plan['portfolio']['source_instance'],'source_owner':'source-owner','files':files}));(inputs/'media-manifest.json').chmod(0o600)
     command=body|{'request_id':str(uuid4())};admitted=await client.post(endpoint+'/complete',json=command);assert admitted.status_code==202,admitted.text
     full=await claim(db,uuid4())
+    import alcor_api.database_migration_completion as completion
+    from psycopg_pool import PoolTimeout
+    original_guard=completion.guard;pool_pressure=True
+    async def briefly_busy(*args):
+        nonlocal pool_pressure
+        if pool_pressure:pool_pressure=False;raise PoolTimeout('synthetic foreground load')
+        return await original_guard(*args)
+    monkeypatch.setattr(completion,'guard',briefly_busy)
     # Reopening/another tab attaches to the running job, even with a fresh
     # request UUID, and task reads do not acquire the worker's row lock.
     duplicate=await client.post(endpoint+'/complete',json=command|{'request_id':str(uuid4())})

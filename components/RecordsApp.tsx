@@ -33,8 +33,7 @@ import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import { applyQuoteBatches, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot } from "@/lib/quoteBatches";
 import SettingsWindow from "@/components/SettingsWindow";
-import { primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
-import { pickStockIcon } from "@/lib/stockIconKey";
+import { ensureStockIcons, primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import GlobalSectionNav from "@/components/GlobalSectionNav";
@@ -299,8 +298,7 @@ export default function RecordsApp({
   const [groups, setGroups] = useState<GroupConfig[]>(initialSettings.groups);
   const [markets, setMarkets] = useState<Market[]>(initialSettings.markets);
   const [marketLabels, setMarketLabels] = useState<{ key: string; label: string; flag: string }[]>(initialSettings.marketLabels);
-  const { stockIcons } = useAssetIcons(["stock"], { stockIconCdn: initialSettings.stockIconCdn });
-  const attemptedIconBackfillRef = useRef(new Set<string>());
+  useAssetIcons(["stock"], { stockIconCdn: initialSettings.stockIconCdn });
 
   // 市场色块是模块级 store（不是 React 状态）：必须在水合首帧之前按服务端设置初始化。
   // 只在 effect 里 apply 的话，SSR 会用默认值（默认显示）渲染出色块，浏览器先画出这版 HTML，
@@ -318,38 +316,11 @@ export default function RecordsApp({
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);
   }, [initialSettings.marketBadges, initialSettings.marketBadgesVisible]);
 
-  // 兼容升级前已经加入但仍为首字母占位的股票；每个标的本次会话只尝试一次，双 worker 后台补齐。
+  // Navigating to investment views reads existing artwork; it never creates material records.
   useEffect(() => {
     if (!["holdings", "watchlist", "assets", "pnl", "fire", "earnings"].includes(activeTab)) return;
-    const missing = records.filter((record) => {
-      const market = record.market.toUpperCase();
-      const key = `${market}:${record.code.toUpperCase()}`;
-      if (!["US", "HK", "CN", "JP", "KR"].includes(market) || attemptedIconBackfillRef.current.has(key)) return false;
-      return !pickStockIcon(stockIcons, market, record.code) && !pickStockIcon(initialStockIcons, market, record.code);
-    });
-    if (!missing.length) return;
-    let cursor = 0;
-    let cancelled = false;
-    const worker = async () => {
-      while (!cancelled && cursor < missing.length) {
-        const record = missing[cursor++];
-        attemptedIconBackfillRef.current.add(`${record.market.toUpperCase()}:${record.code.toUpperCase()}`);
-        try {
-          const response = await fetch("/api/assets/add-by-search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "stock", market: record.market, code: record.code, name: record.name, onlyIfMissing: true })
-          });
-          const data = response.ok ? await response.json() : null;
-          if (data?.asset?.url) window.dispatchEvent(new Event("fire:assets-updated"));
-        } catch {
-          /* 单个补图失败不影响其余标的 */
-        }
-      }
-    };
-    void Promise.all([worker(), worker()]);
-    return () => { cancelled = true; };
-  }, [activeTab, initialStockIcons, records, stockIcons]);
+    void ensureStockIcons(records);
+  }, [activeTab, records]);
 
   useLayoutEffect(() => {
     if (initialTab === "settings") {
