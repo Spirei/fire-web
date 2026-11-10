@@ -157,7 +157,8 @@ async def status(request: Request, who: Admin):
             )
         ).fetchall()
         active = await (await conn.execute(
-            "SELECT 1 FROM deployment_requests WHERE status IN ('queued','running','unknown') LIMIT 1",
+            "SELECT 1 FROM deployment_requests WHERE status IN ('queued','running','unknown') AND owner_id<>%s LIMIT 1",
+            (who.id,),
         )).fetchone()
         ready = await bridge.runtime_ready(conn, version=__version__)
     runner = await asyncio.to_thread(bridge.probe, settings)
@@ -240,10 +241,21 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
                 raise HTTPException(409, "此请求编号已用于不同版本")
             return public_receipt(old)
         active = await (
-            await conn.execute("SELECT 1 FROM deployment_requests WHERE status IN ('queued','running','unknown')")
-        ).fetchone()
-        if active:
-            raise HTTPException(409, "已有更新请求，请先核对回执")
+            await conn.execute("SELECT * FROM deployment_requests WHERE status IN ('queued','running','unknown') FOR UPDATE")
+        ).fetchall()
+        if any(row["owner_id"] != who.id for row in active):
+            raise HTTPException(409, "其他管理员已有更新请求，请先核对回执")
+        # A fresh UUID is an explicit manual retry. Keep prior observations and
+        # audits; a late Watchtower response cannot overwrite the new request.
+        for prior in active:
+            await conn.execute(
+                "UPDATE deployment_requests SET status='cancelled',finished_at=clock_timestamp() WHERE id=%s",
+                (prior["id"],),
+            )
+            await conn.execute(
+                "INSERT INTO audit_events(actor_id,action,target_id,request_id) VALUES(%s,'deployment.observation_closed',%s,%s)",
+                (who.id, str(prior["id"]), prior["request_id"]),
+            )
         row = await (
             await conn.execute(
                 "INSERT INTO deployment_requests (id,owner_id,request_id,image,version,revision,schema_hash,status) VALUES (%s,%s,%s,%s,%s,%s,%s,'queued') RETURNING *",

@@ -1,6 +1,9 @@
 import asyncio
 import io
+import threading
 import urllib.error
+
+import pytest
 from uuid import uuid4
 
 from alcor_api import __version__, deployments
@@ -76,7 +79,7 @@ async def test_request_uuid_concurrency_and_runtime_recovery_survive_github_fail
     assert all(r.status_code == 202 for r in responses), [r.text for r in responses]
     assert responses[0].json()["id"] == responses[1].json()["id"] and sent == [True]
     assert responses[0].json()["revision"] == release.revision
-    assert (await client.post(P + "/requests", json={**data, "request_id": str(uuid4())})).status_code == 409
+    assert (await client.get(P)).json()["can_update"]
 
     def offline(*_args, **_kwargs):
         raise OSError("synthetic network failure")
@@ -176,15 +179,14 @@ async def test_github_server_error_keeps_uncertainty_and_prevents_redispatch(cli
     assert sum(path.endswith("/dispatches") for path, _ in calls) == 1
 
 
-async def test_unknown_update_requires_explicit_target_bound_close_before_new_notification(client, admin, app, monkeypatch):
+async def test_unknown_update_still_supports_explicit_target_bound_close(client, admin, app, monkeypatch):
     release, _calls, _headers = configure(app, monkeypatch)
     sent = []
     monkeypatch.setattr(bridge, "notify", lambda _: sent.append(True) or {"status": "unknown", "message": "uncertain"})
     payload = {"request_id": str(uuid4()), "release": release.model_dump()}
     first = await client.post(P + "/requests", json=payload)
     assert first.status_code == 202 and first.json()["status"] == "unknown"
-    assert not (await client.get(P)).json()["can_update"]
-    assert (await client.post(P + "/requests", json={**payload, "request_id": str(uuid4())})).status_code == 409
+    assert (await client.get(P)).json()["can_update"]
     path = P + "/requests/" + payload["request_id"] + "/close"
     wrong = {"release": {**release.model_dump(), "revision": "f" * 40}}
     assert (await client.post(path, json=wrong)).status_code == 409
@@ -256,3 +258,90 @@ async def test_failed_clean_title_run_recovers_by_internal_receipt_without_redis
     result = await client.get(P + "/builds/" + str(identifier))
     assert result.status_code == 200 and result.json()["status"] == "failed"
     assert "未成功" in result.json()["message"]
+
+
+@pytest.mark.parametrize("prior_status", ["queued", "running", "unknown"])
+async def test_manual_retry_preserves_old_receipt_and_notifies_with_new_uuid(
+    client, admin, app, monkeypatch, prior_status
+):
+    release, _calls, _headers = configure(app, monkeypatch)
+    sent = []
+    monkeypatch.setattr(bridge, "notify", lambda _: sent.append(True) or {"status": "running", "message": "accepted"})
+    payload = {"request_id": str(uuid4()), "release": release.model_dump()}
+    first = await client.post(P + "/requests", json=payload)
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE deployment_requests SET status=%s WHERE request_id=%s",
+                           (prior_status, payload["request_id"]))
+    assert (await client.get(P)).json()["can_update"]
+    retry = {**payload, "request_id": str(uuid4())}
+    results = await asyncio.gather(*(client.post(P + "/requests", json=retry) for _ in range(2)))
+    assert all(r.status_code == 202 for r in results), [r.text for r in results]
+    assert results[0].json()["id"] == results[1].json()["id"] != first.json()["id"]
+    assert len(sent) == 2
+    original = await client.get(P + "/requests/" + payload["request_id"])
+    assert original.json()["status"] == "cancelled"
+    assert original.json()["image"] == release.image
+    assert (await client.post(P + "/requests", json=payload)).json()["status"] == "cancelled"
+    assert len(sent) == 2
+    async with app.state.db.connection() as conn:
+        audit = await (await conn.execute(
+            "SELECT count(*) AS n FROM audit_events WHERE action='deployment.observation_closed' AND request_id=%s",
+            (payload["request_id"],),
+        )).fetchone()
+    assert audit["n"] == 1
+
+
+async def test_manual_retry_can_replace_own_stale_target_but_not_another_admin_request(
+    client, admin, app, monkeypatch
+):
+    from alcor_api.cli import create_user
+
+    release, _calls, _headers = configure(app, monkeypatch)
+    first_payload = {"request_id": str(uuid4()), "release": release.model_dump()}
+    assert (await client.post(P + "/requests", json=first_payload)).status_code == 202
+    release.revision = "d" * 40
+    retry = {"request_id": str(uuid4()), "release": release.model_dump()}
+    # A stale preview does not close the old observation.
+    assert (await client.post(P + "/requests", json={**first_payload, "request_id": str(uuid4())})).status_code == 409
+    assert (await client.get(P + "/requests/" + first_payload["request_id"])).json()["status"] == "running"
+    assert (await client.post(P + "/requests", json=retry)).status_code == 202
+    assert (await client.get(P + "/requests/" + first_payload["request_id"])).json()["status"] == "cancelled"
+    other = await create_user(app.state.settings, "AdminTwo", "Synthetic9Pass", role="admin")
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE deployment_requests SET owner_id=%s WHERE request_id=%s", (other, retry["request_id"]))
+    assert not (await client.get(P)).json()["can_update"]
+    assert (await client.post(P + "/requests", json={**retry, "request_id": str(uuid4())})).status_code == 409
+    async with app.state.db.connection() as conn:
+        prior = await (await conn.execute("SELECT status FROM deployment_requests WHERE request_id=%s",
+                                         (retry["request_id"],))).fetchone()
+    assert prior["status"] == "running"
+
+
+async def test_manual_retry_is_not_overwritten_by_late_original_notification(
+    client, admin, app, monkeypatch
+):
+    release, _calls, _headers = configure(app, monkeypatch)
+    entered, resume = threading.Event(), threading.Event()
+    sent = []
+
+    def notify(_settings):
+        sent.append(True)
+        if len(sent) == 1:
+            entered.set()
+            assert resume.wait(10)
+        return {"status": "running", "message": "accepted"}
+
+    monkeypatch.setattr(bridge, "notify", notify)
+    payload = {"request_id": str(uuid4()), "release": release.model_dump()}
+    first = asyncio.create_task(client.post(P + "/requests", json=payload))
+    try:
+        assert await asyncio.to_thread(entered.wait, 10)
+        retry = {**payload, "request_id": str(uuid4())}
+        second = await client.post(P + "/requests", json=retry)
+        assert second.status_code == 202 and second.json()["status"] == "running"
+    finally:
+        resume.set()
+        original = await first
+    assert original.json()["status"] == "cancelled" and len(sent) == 2
+    assert (await client.get(P + "/requests/" + payload["request_id"])).json()["status"] == "cancelled"
+    assert (await client.get(P + "/requests/" + retry["request_id"])).json()["status"] == "running"

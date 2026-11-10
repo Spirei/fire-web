@@ -71,7 +71,7 @@ def notify(settings):
             return {"status": "failed", "message": "Watchtower 未接受更新通知（HTTP " + str(status) + "）"}
     except (OSError, ValueError):
         pass
-    return {"status": "unknown", "message": "更新通知结果待核对，请查询原请求，不要重复通知"}
+    return {"status": "unknown", "message": "更新通知结果待核对，请查询原请求；核对后可手动重试"}
 
 
 def runtime_matches(settings, approved, *, version, schema):

@@ -5,7 +5,7 @@ import { PlatformRequestError, platformRequest } from "@/lib/platformRequest";
 export class DeploymentCommand {
   private id?: string;
   private running?: Promise<Record<string, unknown>>;
-  constructor(private path: string, private method: string, private receipts: string) {}
+  constructor(private path: string, private method: string, private receipts: string, private retryAfterReceipt = false) {}
   get pending() { return Boolean(this.id); }
   execute<T extends Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {
     return (this.running ??= this.perform(body).finally(() => { this.running = undefined; })) as Promise<T>;
@@ -21,7 +21,9 @@ export class DeploymentCommand {
       if (this.path.endsWith('/config') ? typeof data.repository !== 'string' || typeof data.revision !== 'string' || typeof data.hasToken !== 'boolean' : typeof data.status !== 'string' || data.request_id !== id) {
         throw Error("操作结果尚未确认，请稍后核对");
       }
-      if (!["queued", "running", "unknown", "dispatching"].includes(String(data.status))) this.id = undefined;
+      // Explicit container retries may create a new request after a valid receipt.
+      // Lost responses still recover the original UUID before another notification.
+      if (this.retryAfterReceipt || !["queued", "running", "unknown", "dispatching"].includes(String(data.status))) this.id = undefined;
       return data;
     } catch (error) {
       if (!recovering && error instanceof PlatformRequestError && [400,401,403,409,422,429].includes(error.status ?? 0)) this.id = undefined;

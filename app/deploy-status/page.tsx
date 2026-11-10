@@ -222,7 +222,7 @@ export default function DeployStatusPage() {
     save: new DeploymentCommand("/api/deploy-status/config", "PUT", "/api/deploy-status/config/receipts"),
     disconnect: new DeploymentCommand("/api/deploy-status/config", "DELETE", "/api/deploy-status/config/receipts"),
     publish: new DeploymentCommand("/api/deploy-status", "POST", "/api/deploy-status/builds"),
-    update: new DeploymentCommand("/api/deploy-status/container-update", "POST", "/api/deploy-status/requests"),
+    update: new DeploymentCommand("/api/deploy-status/container-update", "POST", "/api/deploy-status/requests", true),
   }), []);
   const [release, setRelease] = useState<Record<string,string> | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
@@ -378,8 +378,8 @@ export default function DeployStatusPage() {
         }
       }
       setContainerUpdateState(sawRestart ? "failed" : "unchanged");
-      if (sawRestart) setError("容器恢复后版本仍未确认，请查看 fire 与 fire-updater 日志");
-      else setNotice("更新请求已完成，但运行版本尚未变更");
+      if (sawRestart) setError("目标版本尚未确认，可重试并查看 fire 与 fire-updater 日志");
+      else setNotice("运行版本尚未变更，可再次点击重试");
     } catch (err) {
       setContainerUpdateState("failed");
       setError(err instanceof Error ? err.message : "无法触发群晖更新");
