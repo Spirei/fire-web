@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+const exportsObject={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/orderTime.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exportsObject,Intl,Date});
+const {formatOrderTime,orderDateKey,isOrderToday}=exportsObject;
+assert.match(formatOrderTime('2025-01-02T10:00:00Z','US'),/05:00:00.*美东/);
+assert.match(formatOrderTime('2025-07-02T12:00:00Z','US'),/08:00:00.*美东/);
+assert.equal(orderDateKey('2026-11-08T04:30:00Z','US'),'2026-11-07');
+assert.equal(orderDateKey('2026-11-08T04:30:00Z','CN'),'2026-11-08');
+assert.equal(isOrderToday('2026-11-08T04:30:00Z','US',new Date('2026-11-08T12:00:00Z')),false);
+assert.equal(isOrderToday('2026-11-08T04:30:00Z','CN',new Date('2026-11-08T12:00:00Z')),true);
+assert.equal(orderDateKey('invalid','US'),'');
+console.log('PASS exchange-local order labels and day filters agree across midnight and daylight saving time');

@@ -1,6 +1,7 @@
 "use client";
 import { IconButton, Capsule } from "@/components/Capsule";
 
+import { formatOrderTime,isOrderToday,orderDateKey } from "@/lib/orderTime";
 import { holdingAccountMarket } from "@/lib/stockAccount";
 import StockConnectBadge from "@/components/StockConnectBadge";
 import MobileExplanation from "@/components/MobileExplanation";
@@ -30,13 +31,6 @@ const CURRENCY_BY_MARKET: Record<string, string> = {
   SG: "SGD",
   UK: "GBP"
 };
-const MARKET_ZONE: Record<string, string> = {
-  US: "美东",
-  HK: "北京时间",
-  CN: "北京时间",
-  JP: "东京时间",
-  KR: "首尔时间"
-};
 const ORDER_TYPE_LABEL: Record<string, string> = {
   market: "市价单",
   limit: "限价单",
@@ -46,7 +40,7 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
   rebound_sell: "回落卖出"
 };
 const VALIDITY_LABEL: Record<string, string> = { day: "当日有效", gtc: "撤单前有效", custom: "自定义有效期" };
-const STATUS_LABEL: Record<string, string> = { filled: "已成交", pending: "待成交", cancelled: "已撤销", expired: "已失效" };
+const STATUS_LABEL: Record<string, string> = { filled: "已成交", pending: "待成交", cancelled: "已撤销", expired: "已失效", imported_suspended: "已暂停", rejected: "已拒绝" };
 function orderTypeLabel(order: TradeOrder): string {
   if (order.side === "dividend") return "股息入账";
   return ORDER_TYPE_LABEL[order.orderType] ?? "限价单";
@@ -280,30 +274,6 @@ function normalizeOrderColumns(value: unknown): OrderColumnPref[] {
   return normalized;
 }
 
-function isToday(value: string) {
-  const traded = new Date(value);
-  const now = new Date();
-  return traded.getFullYear() === now.getFullYear()
-    && traded.getMonth() === now.getMonth()
-    && traded.getDate() === now.getDate();
-}
-
-function formatOrderTime(iso: string, market: string) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const text = date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  });
-  const zone = MARKET_ZONE[(market || "").toUpperCase()];
-  return zone ? `${text} ${zone}` : text;
-}
-
 function currencyCode(market: string) {
   return CURRENCY_BY_MARKET[(market || "").toUpperCase()] ?? (marketMeta(market).code.replace(/[$¥₩]$/, "") || "—");
 }
@@ -497,12 +467,12 @@ export default function TradeOrdersPanel({
   }, [orders]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
-    if (tab === "today" ? !isToday(order.tradedAt) : isToday(order.tradedAt)) return false;
+    if (tab === "today" ? !isOrderToday(order.tradedAt,order.market) : isOrderToday(order.tradedAt,order.market)) return false;
     if (marketFilter !== "ALL" && holdingAccountMarket(order).toUpperCase() !== marketFilter) return false;
     if (typeFilter !== "all" && orderTypeOf(order) !== typeFilter) return false;
     if (statusFilter !== "all" && order.status !== statusFilter) return false;
     if (timeFilter.mode !== "all" && timeFilter.start && timeFilter.end) {
-      const key = localIso(new Date(order.tradedAt));
+      const key = orderDateKey(order.tradedAt,order.market);
       if (key < timeFilter.start || key > timeFilter.end) return false;
     }
     return true;
@@ -929,22 +899,22 @@ export default function TradeOrdersPanel({
         return (
           <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
             order.status === "filled" ? "text-down dark:text-[#4fd6a8]" :
-            order.status === "pending" ? "text-[#3297f6] dark:text-[#6cb6ff]" :
+            order.status === "pending" ? "text-[#3297f6] dark:text-[#6cb6ff]" : order.status === "imported_suspended" ? "text-muted" :
             "text-up dark:text-[#ff8a8a]"
           }`}>
-            <span className={`flex h-4 w-4 flex-none items-center justify-center rounded-full text-white ${
+            <span className={`flex h-4 w-4 flex-none items-center justify-center rounded-full ${order.status === "imported_suspended" ? "text-muted" : "text-white"} ${
               order.status === "filled" ? "bg-down" :
-              order.status === "pending" ? "bg-[#3297f6]" : "bg-up"
+              order.status === "pending" ? "bg-[#3297f6]" : order.status === "imported_suspended" ? "bg-bg-gray" : "bg-up"
             }`}>
               <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
                 {order.status === "filled"
                   ? <path d="m2.5 6.4 2.4 2.4 4.7-5.4" />
                   : order.status === "pending"
                     ? <><path d="M6 3v3.4l2 1.4" /><circle cx="6" cy="6" r="3.4" strokeWidth="1.6" /></>
-                    : <path d="M3 3l6 6M9 3l-6 6" />}
+                    : order.status === "imported_suspended" ? <path d="M4 3v6M8 3v6" /> : <path d="M3 3l6 6M9 3l-6 6" />}
               </svg>
             </span>
-            {STATUS_LABEL[order.status] ?? "已撤销"}
+            {STATUS_LABEL[order.status] ?? "状态未知"}
           </span>
         );
       case "market":
@@ -982,14 +952,14 @@ export default function TradeOrdersPanel({
       case "triggerPrice": return <span className="tabular-nums text-faint">{order.triggerPrice != null ? fmtPrice(order.triggerPrice, currency, order.market) : "—"}</span>;
       case "currency": return <span className="font-mono text-muted">{currencyCode(order.market)}{order.settlementCurrency && <small className="block">结算 {order.settlementCurrency} {order.settlementAmount?.toFixed(2)}</small>}</span>;
       case "tradedAt": return <span className="block truncate tabular-nums text-muted" title={formatOrderTime(order.tradedAt, order.market)}>{formatOrderTime(order.tradedAt, order.market)}</span>;
-      case "avgPrice": return <span className="tabular-nums text-ink">{fmtPrice(order.price, currency, order.market)}</span>;
+      case "avgPrice": return <span className="tabular-nums text-ink">{order.status === "imported_suspended" ? "—" : fmtPrice(order.price, currency, order.market)}</span>;
       case "filledQty": return (
         <span className="inline-flex items-center justify-end gap-1.5 tabular-nums">
-          <span className={`h-1.5 w-1.5 flex-none rounded-full ${order.status === "filled" ? "bg-down" : order.status === "pending" ? "bg-[#3297f6]" : "bg-up"}`} />
-          <span className={order.status === "filled" ? "text-ink" : "text-muted"}>{order.status === "filled" ? fmtQty(order.qty) : "0"}</span>
+          <span className={`h-1.5 w-1.5 flex-none rounded-full ${order.status === "filled" ? "bg-down" : order.status === "pending" ? "bg-[#3297f6]" : order.status === "imported_suspended" ? "bg-bg-gray" : "bg-up"}`} />
+          <span className={order.status === "filled" ? "text-ink" : "text-muted"}>{order.status === "filled" ? fmtQty(order.qty) : order.status === "imported_suspended" ? "—" : "0"}</span>
         </span>
       );
-      case "amount": return <span className="font-semibold tabular-nums text-ink">{fmtMoney(order.amount, currency)}</span>;
+      case "amount": return <span className="font-semibold tabular-nums text-ink">{order.status === "imported_suspended" ? "—" : fmtMoney(order.amount, currency)}</span>;
       case "remainingQty": return <span className="tabular-nums text-muted">{order.status === "pending" ? fmtQty(order.qty) : "0"}</span>;
       case "cancelledQty": return <span className="tabular-nums text-muted">{order.status === "cancelled" || order.status === "expired" ? fmtQty(order.qty) : "0"}</span>;
       case "validity": return <span className="text-muted">{validityLabel(order)}</span>;
@@ -1027,7 +997,7 @@ export default function TradeOrdersPanel({
               </IconButton>
             </span>
             <span className="flex min-w-0 items-center gap-1 overflow-hidden pl-1">
-              {(order.apiManaged || order.historyLocked) && <span className="truncate text-[11px] text-muted" title={order.apiManaged ? "在 App 中管理此订单" : "此证券包含 App 成交回执，保留历史记录"}>{order.apiManaged ? "App 订单" : "只读"}</span>}
+              {(order.apiManaged || order.historyLocked) && <span className="truncate text-[11px] text-muted" title={order.executionModel === "source_registered_history" ? "原始迁入记录" : order.apiManaged ? "在 App 中管理此订单" : "此证券包含 App 成交回执，保留历史记录"}>{order.apiManaged ? "App 订单" : "只读"}</span>}
               {onEdit && !order.apiManaged && !order.historyLocked && <Capsule variant="ghost" size="sm" type="button" onClick={() => onEdit(order)} className="">编辑</Capsule>}
               {onDelete && !order.apiManaged && !order.historyLocked && (
                 <Capsule variant="ghost" size="sm" type="button" disabled={deletingId === order.id} onClick={() => onDelete(order)} className="text-down disabled:opacity-50">
@@ -1783,33 +1753,33 @@ export default function TradeOrdersPanel({
           )],
           ["委托价格", <span key="e" className="tabular-nums text-ink">{fmtPrice(detail.price, currency, detail.market)}</span>],
           ["委托数量", <span key="f" className="tabular-nums text-ink">{fmtQty(detail.qty)}</span>],
-          ["成交价格", <span key="g" className="tabular-nums text-ink">{fmtPrice(detail.price, currency, detail.market)}</span>],
+          ["成交价格", <span key="g" className="tabular-nums text-ink">{detail.status === "imported_suspended" ? "—" : fmtPrice(detail.price, currency, detail.market)}</span>],
           ["成交数量", (
             <span key="h" className="inline-flex items-center gap-1.5 tabular-nums text-ink">
-              <span className={`h-1.5 w-1.5 flex-none rounded-full ${detail.status === "filled" ? "bg-down" : detail.status === "pending" ? "bg-[#3297f6]" : "bg-up"}`} />
-              {detail.status === "filled" ? fmtQty(detail.qty) : "0"}
+              <span className={`h-1.5 w-1.5 flex-none rounded-full ${detail.status === "filled" ? "bg-down" : detail.status === "pending" ? "bg-[#3297f6]" : detail.status === "imported_suspended" ? "bg-bg-gray" : "bg-up"}`} />
+              {detail.status === "filled" ? fmtQty(detail.qty) : detail.status === "imported_suspended" ? "—" : "0"}
             </span>
           )],
-          ["成交金额", <span key="i" className="font-semibold tabular-nums text-ink">{fmtMoney(detail.amount, currency)}</span>],
+          ["成交金额", <span key="i" className="font-semibold tabular-nums text-ink">{detail.status === "imported_suspended" ? "—" : fmtMoney(detail.amount, currency)}</span>],
           ["有效期", <span key="l" className="text-ink">{validityLabel(detail)}</span>],
           ["时段", <span key="m" className="text-ink">{detail.session || "盘中+盘前盘后"}</span>],
           ["结算货币", <span key="o" className="font-mono text-ink">{currencyCode(detail.market)}</span>],
           ["订单状态", (
             <span key="p" className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
-              detail.status === "filled" ? "text-down" : detail.status === "pending" ? "text-[#3297f6] dark:text-[#6cb6ff]" : "text-up"
+              detail.status === "filled" ? "text-down" : detail.status === "pending" ? "text-[#3297f6] dark:text-[#6cb6ff]" : detail.status === "imported_suspended" ? "text-muted" : "text-up"
             }`}>
-              <span className={`flex h-4 w-4 flex-none items-center justify-center rounded-full text-white ${
-                detail.status === "filled" ? "bg-down" : detail.status === "pending" ? "bg-[#3297f6]" : "bg-up"
+              <span className={`flex h-4 w-4 flex-none items-center justify-center rounded-full ${detail.status === "imported_suspended" ? "text-muted" : "text-white"} ${
+                detail.status === "filled" ? "bg-down" : detail.status === "pending" ? "bg-[#3297f6]" : detail.status === "imported_suspended" ? "bg-bg-gray" : "bg-up"
               }`}>
                 <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
                   {detail.status === "filled"
                     ? <path d="m2.5 6.4 2.4 2.4 4.7-5.4" />
                     : detail.status === "pending"
                       ? <><path d="M6 3v3.4l2 1.4" /><circle cx="6" cy="6" r="3.4" strokeWidth="1.6" /></>
-                      : <path d="M3 3l6 6M9 3l-6 6" />}
+                      : detail.status === "imported_suspended" ? <path d="M4 3v6M8 3v6" /> : <path d="M3 3l6 6M9 3l-6 6" />}
                 </svg>
               </span>
-              {STATUS_LABEL[detail.status] ?? "已撤销"}
+              {STATUS_LABEL[detail.status] ?? "状态未知"}
             </span>
           )],
           ["触发状态", <span key="q" className="text-ink">{detail.triggerStatus || "—"}</span>],
@@ -1821,14 +1791,14 @@ export default function TradeOrdersPanel({
           )],
           ["成交后持仓", (
             <span key="k" className="tabular-nums text-ink">
-              {fmtQty(detail.positionQtyAfter)}
-              <span className="ml-1 text-[11px] text-faint">@ {detail.positionCostAfter == null ? "—" : fmtPrice(detail.positionCostAfter, currency)}</span>
+              {detail.status === "imported_suspended" || detail.positionQtyAfter == null ? "—" : fmtQty(detail.positionQtyAfter)}
+              {detail.status !== "imported_suspended" && <span className="ml-1 text-[11px] text-faint">@ {detail.positionCostAfter == null ? "—" : fmtPrice(detail.positionCostAfter, currency)}</span>}
             </span>
           )],
           ["驳回原因", <span key="r" className="text-ink">{detail.status === "cancelled" ? "订单已撤销" : "—"}</span>],
           ["备注", <span key="s" className="text-ink">{detail.note || "—"}</span>]
         ];
-        return (
+        return createPortal(
           <div className="fixed inset-0 z-[9999] flex items-start justify-center p-6 pt-[10vh]">
             <div className="absolute inset-0 bg-black/40" onClick={() => setDetailOrder(null)} />
             <div className="relative max-h-[80vh] w-full max-w-[440px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
@@ -1867,15 +1837,16 @@ export default function TradeOrdersPanel({
                   ))}
                 </div>
                 <div className="mt-5 border-t border-edge pt-4">
-                  <p className="text-xs font-bold text-ink">费用明细</p>
+                  <p className="text-xs font-bold text-ink">{detail.executionModel === "source_registered_history" ? "登记费用" : "费用明细"}</p>
+                  {detail.executionModel === "source_registered_history" ? <div className="mt-3 flex items-center justify-between gap-4 text-xs"><span className="text-muted">{detail.actualFeeKnown ? "已确认" : "未核对"}</span><span className="tabular-nums text-ink">{fmtMoney(detail.fees,currency)}</span></div> : <>
                   <div className="mt-3 space-y-3.5 text-xs">
                     <div className="flex items-center justify-between gap-4"><span className="flex-none text-muted">佣金</span><span className="tabular-nums text-ink">{fmtMoney(detail.fees, currency)}</span></div>
                     <div className="flex items-center justify-between gap-4"><span className="flex-none font-semibold text-ink">合计</span><span className="font-semibold tabular-nums text-ink">{fmtMoney(detail.fees, currency)}</span></div>
-                  </div>
+                  </div></>}
                 </div>
               </div>
             </div>
-          </div>
+          </div>,document.body
         );
       })()}
     </Wrapper>

@@ -56,7 +56,7 @@ async def test_original_history_is_visible_atomic_and_deduplicated(client,db,set
         assert fill['realizedPnl']==Decimal('23.000000000000000001')
         assert fill['positionCostAfter']==Decimal('100.000000000000000001')
         assert next(r for r in orders if r['id']=='original-pending')['status']=='imported_suspended'
-        assert all(r['cancellable'] is False for r in orders)
+        assert all(r['cancellable'] is False and r['historyLocked'] is True and r['apiManaged'] is False for r in orders)
         assert next(r for r in funds if r['id']=='fund-original-adjustment')['accountId'] is None
         assert len(await registered_orders(c,'different-owner'))==0
         for table in ('trade_ledger','cash_ledger_entries','internal_orders'):

@@ -44,7 +44,7 @@ export interface RecordInput {
 }
 
 export type OrderSide = "buy" | "sell" | "dividend";
-export type OrderStatus = "filled" | "cancelled" | "pending" | "expired";
+export type OrderStatus = "filled" | "cancelled" | "pending" | "expired" | "imported_suspended";
 export type OrderType = "limit" | "market" | "trigger_buy" | "trigger_sell" | "rebound_buy" | "rebound_sell";
 export type OrderValidity = "day" | "gtc" | "custom";
 
@@ -60,6 +60,7 @@ export interface TradeOrder {
   historyLocked?: boolean;
   executionModel?: string;
   historicalCoverageKnown?: boolean;
+  actualFeeKnown?: boolean;
   recordId: string;
   market: Market;
   code: string;

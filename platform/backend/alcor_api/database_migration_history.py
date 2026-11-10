@@ -172,7 +172,7 @@ async def registered_orders(conn,owner):
                 'tradedAt':normalized['occurredAt'],'createdAt':observed_time(row.get('created_at'),packet['timezone']),'broker':row.get('broker'),'brokerAccountId':maps['accounts'][normalized['sourceAccountId']],
                 'brokerAccountIdSource':'owner_confirmed_source_mapping','accountKind':normalized['accountKind'],'accountMarket':'CN' if normalized['settlementCurrency']=='CNY' and row['market']=='HK' else row['market'],
                 'note':row.get('note') or '', 'orderType':row.get('order_type'),'triggerPrice':numeric('trigger_price'),'tif':row.get('tif'),'expiresAt':row.get('expires_at'),'session':row.get('session'),
-                'registrationContextKnown':row.get('order_type') is not None,'executionModel':'source_registered_history','brokerExecution':False,'cancellable':False,'apiManaged':True,'historyLocked':True,'revision':int(normalized['version']) if normalized['version'].isdigit() else 1,
+                'registrationContextKnown':row.get('order_type') is not None,'executionModel':'source_registered_history','brokerExecution':False,'cancellable':False,'apiManaged':False,'historyLocked':True,'revision':int(normalized['version']) if normalized['version'].isdigit() else 1,
                 'sourceInstance':packet['source_instance'],'sourceOwner':packet['source_owner'],'historicalCoverageKnown':False})
     return output
 
