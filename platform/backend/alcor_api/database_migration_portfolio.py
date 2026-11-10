@@ -92,7 +92,7 @@ async def committed(db,task):
             return row['result']
 
 
-async def source_connection(db,task,source,portfolio):
+async def source_connection(db,task,source,portfolio,*,security_only=False):
     config=SourceConfig.model_validate(source['config']);settings=db.settings
     password=Vault(settings.connection_secret_dir,read_only=True).decrypt(source['password_ciphertext'],'database-migration-source',settings.instance_id)
     address=await Connections(settings,db,None).address(config)
@@ -101,9 +101,13 @@ async def source_connection(db,task,source,portfolio):
     connection=await psycopg.AsyncConnection.connect(make_conninfo(**values),row_factory=dict_row,connect_timeout=5,
         options='-c search_path=pg_catalog -c timezone=UTC -c extra_float_digits=3 -c bytea_output=hex -c statement_timeout=30000 -c lock_timeout=3000')
     try:
-        await connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+        await connection.execute('SET TRANSACTION ISOLATION LEVEL '+('READ COMMITTED' if security_only else 'REPEATABLE READ'))
         identity=await(await connection.execute("SELECT current_database() AS database,current_user AS role,inet_server_addr()::text AS address,inet_server_port() AS port,(SELECT oid::text FROM pg_database WHERE datname=current_database()) AS oid,system_identifier::text AS system_identifier FROM pg_control_system()")).fetchone()
         if sha(canonical(identity|{'schema':config.schema_name}))!=task['payload']['_archive']['identities']['source']:raise BackupFailure('来源数据库身份已变化')
+        # The original connection keeps business rows locked. Security cutover
+        # needs a separate READ COMMITTED connection: table locks must precede
+        # the snapshot used for TOTP counters and credential reads.
+        if security_only:return connection
         tables=portfolio['source_tables']
         await connection.execute(sql.SQL('LOCK TABLE {} IN SHARE MODE').format(sql.SQL(',').join(sql.Identifier(item['schema'],item['name']) for item in tables)))
         for table in tables:

@@ -134,5 +134,8 @@ async def execute(db,task):
         personal=await import_personal(db,task,who,plan,frozen)
         await guard(db,task,{'phase':'completion_identity','processed':0,'total':1,'unit':'accounts','business_written':True,'completed_domains':['accounts','positions','orders','cash','pnl','assets']})
         from .database_migration_identity import execute as import_identity
-        await import_identity(db,task,who,plan,frozen,old,{'history':history,'assets':assets,'personal':personal},backup)
+        security=await source_connection(db,task,source,guarded,security_only=True)
+        try:
+            await import_identity(db,task,who,plan,frozen,security,{'history':history,'assets':assets,'personal':personal},backup)
+        finally:await security.rollback();await security.close()
     finally:await old.rollback();await old.close()

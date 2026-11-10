@@ -105,15 +105,27 @@ async def test_full_cutover_keeps_completed_domains_and_restores_original_creden
     watermark=int(time.time())//30-2
     with psycopg.connect(dsn) as original:original.execute('UPDATE ledger.users SET totp_last_step=%s',(watermark,))
     retry=await client.post(endpoint+'/complete',json=command|{'request_id':str(uuid4())});assert retry.status_code==202,retry.text
+    original_cutover=identity.execute
+    async def advance_source_after_business_snapshot(*args):
+        # A credential can be used while the long business phase is running.
+        # This update occurs after both business and identity connections have
+        # verified their source, but before security table locks are acquired.
+        with psycopg.connect(dsn) as latest:
+            latest.execute('UPDATE ledger.users SET totp_last_step=%s',(watermark+1,))
+            latest.execute('UPDATE ledger.passkeys SET counter=counter+1,last_used_at=1700000000999')
+        return await original_cutover(*args)
+    monkeypatch.setattr(identity,'execute',advance_source_after_business_snapshot)
     resumed=await claim(db,uuid4());await complete(db,resumed)
     async with db.connection() as conn:
         current=await(await conn.execute('SELECT u.*,s.totp_last_step,s.totp_secret_ciphertext FROM users u JOIN identity_security s ON s.user_id=u.id WHERE u.id=%s',(resumed['owner_id'],))).fetchone()
         assert current['username']=='RetainedOwner' and current['password_hash']==old_hash and verify_password('Retained9Pass',current['password_hash'])
-        assert current['totp_last_step']==watermark
+        assert current['totp_last_step']==watermark+1
         profile=await(await conn.execute('SELECT bio,background_sha256 FROM user_profiles WHERE user_id=%s',(resumed['owner_id'],))).fetchone()
         assert profile['bio']=='Original bio' and profile['background_sha256']==sha(background)
         assert Vault(settings.connection_secret_dir).decrypt(current['totp_secret_ciphertext'],'totp:'+resumed['owner_id'],settings.instance_id)==secret
-        assert bytes((await(await conn.execute('SELECT public_key FROM identity_passkeys WHERE id=%s',(passkey_id,))).fetchone())['public_key'])==cose
+        key=await(await conn.execute('SELECT public_key,counter,last_used_at FROM identity_passkeys WHERE id=%s',(passkey_id,))).fetchone()
+        assert bytes(key['public_key'])==cose and key['counter']==8
+        assert round(key['last_used_at'].timestamp()*1000)==1700000000999
         assert (await(await conn.execute('SELECT count(*) n FROM card_custom_records WHERE owner_id=%s AND id=%s',(resumed['owner_id'],card))).fetchone())['n']==1
         assert (await(await conn.execute('SELECT count(*) n FROM database_migration_asset_imports')).fetchone())['n']==1
         assert (await(await conn.execute('SELECT count(*) n FROM portfolio_records')).fetchone())['n']==2
