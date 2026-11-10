@@ -286,7 +286,7 @@ export default function PersonalHome({
         </button>
           </div>
         <h1>{name}</h1>
-        <p className="personal-profile-id">ID: {user.uid ?? "—"}</p>
+        <p className="personal-profile-handle">@{user.username}</p>
         {profile?.bio && !editing && (
           <p className="personal-bio">{profile.bio}</p>
         )}
