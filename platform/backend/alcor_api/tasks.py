@@ -118,7 +118,9 @@ async def list_tasks(db, who, limit: int, cursor: str | None, status: str | None
 async def detail(db, who, task_id):
     async with db.connection() as conn, conn.transaction():
         row = await (
-            await conn.execute("SELECT * FROM tasks WHERE id=%s AND owner_id=%s FOR SHARE", (task_id, who.id))
+            # A status read uses MVCC; it must never wait on a long domain commit
+            # or hold a row lock that competes with the worker checkpoint.
+            await conn.execute("SELECT * FROM tasks WHERE id=%s AND owner_id=%s", (task_id, who.id))
         ).fetchone()
         if not row:
             raise HTTPException(404, "任务不存在或无权查看")

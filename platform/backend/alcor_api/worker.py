@@ -254,12 +254,12 @@ async def run(settings=None, stop=None):
                                 await finish(db,task,result)
                             except BackupFailure as exc:
                                 await finish(db,task,{'scope':'backup','message':str(exc)},error_code='backup_failed')
-                    except Exception:
+                    except Exception as exc:
                         if task['kind']=='database.migration.complete':
                             from .database_migration_completion import committed as completed_migration,incomplete as incomplete_migration
                             result=await completed_migration(db,task)
                             await finish(db,task,result or await incomplete_migration(db,task,'迁移中断，已完成部分保留'),error_code=None if result else 'database_migration_completion_unknown')
-                            log.warning('database_migration_completion_interrupted')
+                            log.warning('database_migration_completion_interrupted type=%s sqlstate=%s',type(exc).__name__,getattr(exc,'sqlstate',None))
                         elif task['kind'] in ('database.migration.portfolio','database.migration.history'):
                             if task['kind']=='database.migration.history':
                                 from .database_migration_history import committed as imported_portfolio

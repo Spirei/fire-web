@@ -8162,7 +8162,7 @@ const V0_1_78_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_79_ENTRY: VersionEntry = {
   ...V0_1_78_ENTRY,
   version: "v0.1.79", date: "2026-11-10", summary: "修复备份流程、素材读取与接口检测",
   software: V0_1_78_ENTRY.software.map(item => ({...item,version:"v0.1.79"})),
@@ -8188,10 +8188,21 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_79_ENTRY,
+  version: "v0.1.80", date: "2026-11-11", summary: "迁移断点续接与素材处理优化",
+  software: V0_1_79_ENTRY.software.map(item => ({...item,version:"v0.1.80"})),
+  changes: [
+    {kind:"fix",title:"迁移续接保留已完成阶段",desc:"切换页面后重新读取正在执行的原任务，重复提交返回原任务。失败后沿用同一转换下已校验的新库备份，核对归档和密钥后继续剩余部分；导入状态从已提交记录恢复，交易、资金与盈亏不退回待迁入。"},
+    {kind:"fix",title:"素材小批量提交与断点恢复",desc:"素材以最多四项并行读取和图片校验，再按小批量可靠落盘和提交；已提交原件按来源摘要复用，中断仅重试未完成批次。短暂数据库锁冲突在批次内重试；任务状态读取不再与迁移写入竞争行锁，保留原文件、逐项校验和已完成进度。"},
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_79_ENTRY,
   V0_1_78_ENTRY,
   V0_1_77_ENTRY,
   V0_1_76_ENTRY,

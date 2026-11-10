@@ -1,9 +1,11 @@
 """Real one-command cutover with backup, original files, rollback and old TOTP login."""
 import base64
+import asyncio
 import hashlib
 import json
 import os
 import time
+import threading
 from io import BytesIO
 from datetime import UTC,datetime
 from uuid import uuid4
@@ -48,6 +50,8 @@ async def test_full_cutover_keeps_completed_domains_and_restores_original_creden
         c.execute('CREATE TABLE ledger.personal_profiles(user_id text,bio text,gender text,background bytea,initialized text)')
         c.execute("INSERT INTO ledger.personal_profiles VALUES('source-owner','Original bio','unspecified',%s,'[\"bio\",\"background\"]')",(background,))
         c.execute("INSERT INTO ledger.assets VALUES('stock:US:TEST','stock','US','TEST','Original security','/uploads/asset/stock/US/TEST.svg','')")
+        for number in range(1,10):
+            c.execute("INSERT INTO ledger.assets VALUES(%s,'stock','US',%s,'Original security','/uploads/asset/stock/US/TEST.svg','')",('stock:US:TEST'+str(number),'TEST'+str(number)))
         c.execute('CREATE TABLE ledger.user_settings(user_id text,fire text,simple text)')
         from alcor_api.simple_ledger import defaults
         simple=defaults();simple['cash']=[{'id':'source-cash','name':'Original cash','amount':123.125,'currency':'CNY','member':'me'}]
@@ -76,6 +80,14 @@ async def test_full_cutover_keeps_completed_domains_and_restores_original_creden
     (inputs/'media-manifest.json').write_bytes(canonical({'source_instance':plan['portfolio']['source_instance'],'source_owner':'source-owner','files':files}));(inputs/'media-manifest.json').chmod(0o600)
     command=body|{'request_id':str(uuid4())};admitted=await client.post(endpoint+'/complete',json=command);assert admitted.status_code==202,admitted.text
     full=await claim(db,uuid4())
+    # Reopening/another tab attaches to the running job, even with a fresh
+    # request UUID, and task reads do not acquire the worker's row lock.
+    duplicate=await client.post(endpoint+'/complete',json=command|{'request_id':str(uuid4())})
+    assert duplicate.status_code==202 and duplicate.json()['id']==str(full['id'])
+    async with db.connection() as locked,locked.transaction():
+        await locked.execute('SELECT id FROM tasks WHERE id=%s FOR UPDATE',(full['id'],))
+        read=await asyncio.wait_for(client.get('/api/fire/tasks/'+str(full['id'])),1)
+        assert read.status_code==200,read.text
     (inputs/'source-data.key').write_bytes(os.urandom(32))
     with pytest.raises(BackupFailure,match='原账号'):await complete(db,full)
     async with db.connection() as conn:
@@ -86,14 +98,42 @@ async def test_full_cutover_keeps_completed_domains_and_restores_original_creden
     async with db.connection() as conn:before=(await(await conn.execute('SELECT password_hash FROM users WHERE id=%s',(full['owner_id'],))).fetchone())['password_hash']
     import alcor_api.database_migration_identity as identity
     commit=identity.complete_on_connection
+    import alcor_api.database_migration_assets as asset_import
+    from psycopg.errors import LockNotAvailable
+    import_one=asset_import.import_one;calls=[];interrupt_asset=True
+    prepare_variants=asset_import.prepare_variants;readers=0;peak=0;reader_lock=threading.Lock()
+    def concurrent_originals(*args):
+        nonlocal readers,peak
+        with reader_lock:readers+=1;peak=max(peak,readers)
+        try:
+            time.sleep(.02)
+            return prepare_variants(*args)
+        finally:
+            with reader_lock:readers-=1
+    monkeypatch.setattr(asset_import,'prepare_variants',concurrent_originals)
+    async def transient_lock(*args):
+        nonlocal interrupt_asset
+        identifier=args[5]['id'];calls.append(identifier)
+        if identifier=='stock:US:TEST1' and calls.count(identifier)==1:raise LockNotAvailable('synthetic concurrent page read')
+        if identifier=='stock:US:TEST9' and interrupt_asset:
+            interrupt_asset=False;raise BackupFailure('synthetic unfinished asset chunk')
+        return await import_one(*args)
+    monkeypatch.setattr(asset_import,'import_one',transient_lock)
     async def fail_final(*args):raise BackupFailure('synthetic identity commit interruption')
     monkeypatch.setattr(identity,'complete_on_connection',fail_final)
+    with pytest.raises(BackupFailure,match='synthetic unfinished asset chunk'):await complete(db,full)
+    async with db.connection() as conn:
+        assert (await(await conn.execute('SELECT count(*) n FROM database_migration_asset_imports')).fetchone())['n']==8
+    imported_chunk_calls=calls.count('stock:US:TEST1')
     with pytest.raises(BackupFailure,match='synthetic identity'):await complete(db,full)
+    assert calls.count('stock:US:TEST1')==imported_chunk_calls
     async with db.connection() as conn:
         assert (await(await conn.execute('SELECT password_hash FROM users WHERE id=%s',(full['owner_id'],))).fetchone())['password_hash']==before
         assert (await(await conn.execute('SELECT count(*) n FROM database_migration_completion_imports')).fetchone())['n']==0
         assert (await(await conn.execute('SELECT count(*) n FROM database_migration_history_imports')).fetchone())['n']==1
-        assert (await(await conn.execute('SELECT count(*) n FROM database_migration_asset_imports')).fetchone())['n']==1
+        assert (await(await conn.execute('SELECT count(*) n FROM database_migration_asset_imports')).fetchone())['n']==10
+    assert calls.count('stock:US:TEST1')==2
+    assert peak==4 and readers==0
     from alcor_api.database_migration_completion import incomplete
     interrupted=await incomplete(db,full,'synthetic interruption')
     assert interrupted['business_written'] and interrupted['history_imported']
@@ -105,6 +145,10 @@ async def test_full_cutover_keeps_completed_domains_and_restores_original_creden
     watermark=int(time.time())//30-2
     with psycopg.connect(dsn) as original:original.execute('UPDATE ledger.users SET totp_last_step=%s',(watermark,))
     retry=await client.post(endpoint+'/complete',json=command|{'request_id':str(uuid4())});assert retry.status_code==202,retry.text
+    context=(await client.get('/api/fire/database-migration/preparations/'+str(t['id'])+'/conversion')).json()
+    assert {'accounts','positions','orders','cash','pnl','assets'}<=set(context['committed_domains'][str(cv['id'])])
+    assert len(list((settings.backup_dir/'database-migration-cutovers').glob('*/backup-receipt.json')))==1
+    calls_before=list(calls)
     original_cutover=identity.execute
     async def advance_source_after_business_snapshot(*args):
         # A credential can be used while the long business phase is running.
@@ -127,11 +171,31 @@ async def test_full_cutover_keeps_completed_domains_and_restores_original_creden
         assert bytes(key['public_key'])==cose and key['counter']==8
         assert round(key['last_used_at'].timestamp()*1000)==1700000000999
         assert (await(await conn.execute('SELECT count(*) n FROM card_custom_records WHERE owner_id=%s AND id=%s',(resumed['owner_id'],card))).fetchone())['n']==1
-        assert (await(await conn.execute('SELECT count(*) n FROM database_migration_asset_imports')).fetchone())['n']==1
+        assert (await(await conn.execute('SELECT count(*) n FROM database_migration_asset_imports')).fetchone())['n']==10
         assert (await(await conn.execute('SELECT count(*) n FROM portfolio_records')).fetchone())['n']==2
         result=(await(await conn.execute('SELECT result FROM database_migration_completion_imports')).fetchone())['result'];assert result['migration_complete'] and result['identity_switched']
         assert (await(await conn.execute('SELECT status FROM tasks WHERE id=%s',(resumed['id'],))).fetchone())['status']=='succeeded'
+    assert calls==calls_before
+    assert len(list((settings.backup_dir/'database-migration-cutovers').glob('*/backup-receipt.json')))==1
     assert (await client.get('/api/fire/session')).status_code==401
     login=await client.post('/api/session/login',json={'login':'RetainedOwner','password':'Retained9Pass'});assert login.status_code==200,login.text
     assert login.json()['status']=='requires_2fa'
     second=await client.post('/api/session/login/totp',json={'challenge_token':login.json()['challenge_token'],'code':totp_code(secret,int(time.time()))});assert second.status_code==200,second.text
+    from alcor_api.database_migration_completion import verified_backup
+    receipt=next((settings.backup_dir/'database-migration-cutovers').glob('*/backup-receipt.json'))
+    assert (await verified_backup(settings,receipt))['archive_integrity_verified']
+    (receipt.parent/'target/database.dump').write_bytes(b'corrupted archived bytes')
+    with pytest.raises(BackupFailure,match='备份已变化'):await verified_backup(settings,receipt)
+
+
+async def test_parallel_prepared_image_is_bound_to_original_bytes():
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from alcor_api.system_assets import SystemAssets,prepare_original
+    raw=b'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>'
+    prepared=prepare_original(raw,'source.svg')
+    service=SystemAssets(SimpleNamespace())
+    for changed,legacy in ((raw+b' ',True),(raw,False)):
+        with pytest.raises(HTTPException) as failure:
+            await service.apply(None,'test-owner',{'kind':'asset','folder':'stock'},'source.svg',changed,source_original=legacy,prepared_original=prepared)
+        assert failure.value.status_code==400

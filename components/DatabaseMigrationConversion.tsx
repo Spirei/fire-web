@@ -16,7 +16,7 @@ type ConversionTask={id:string;request_id:string;kind:'database.migration.conver
 type PortfolioTask={id:string;request_id:string;kind:'database.migration.portfolio';status:string;conversion_id?:string;result?:{phase:string;business_written:boolean|null;counts?:{records:number;holdings:number;accounts:number;groups:number};message?:string;progress?:{processed:number;total:number|null}}};
 type HistoryTask={id:string;request_id:string;kind:'database.migration.history'|'database.migration.complete';status:string;conversion_id?:string;result?:{phase:string;conversion_id?:string;business_written:boolean|null;history_imported?:boolean;migration_complete?:boolean;stages?:{personal?:{fire_plans:number;simple_ledgers:number;custom_cards:number;card_holdings:number;feed_posts:number;price_alert_rules:number;source_missing_card_images?:string[]}};completed_domains?:string[];counts?:{orders:number;funds:number;independent_funds:number;recorded_pnl:number};message?:string;progress?:{processed:number;total:number|null}}};
 export type MigrationResume={preparation:MigrationPreparationTask;conversion_request_id:string;portfolio_request_id:string;history_request_id:string|null};
-type Context={resume?:MigrationResume|null;previous_input?:MigrationMapping|null;history_imports?:HistoryTask[];imports:PortfolioTask[];orders:{id:string;owner_id:string;market:string;code:string;name:string;broker:string}[];preparation_id:string;users:{id:string;username:string}[];accounts:{id:string;owner_id:string;name:string;kind:string|null}[];broker_labels:{label:string;rows:number}[];items:ConversionTask[]};
+type Context={resume?:MigrationResume|null;committed_domains?:Record<string,string[]>;previous_input?:MigrationMapping|null;history_imports?:HistoryTask[];imports:PortfolioTask[];orders:{id:string;owner_id:string;market:string;code:string;name:string;broker:string}[];preparation_id:string;users:{id:string;username:string}[];accounts:{id:string;owner_id:string;name:string;kind:string|null}[];broker_labels:{label:string;rows:number}[];items:ConversionTask[]};
 const issueLabels:Record<string,string>={
   account_mapping_conflict:'原账户与市场默认规则冲突',
   original_registered_position_projection_differs:'原成本与新算法结果不同',original_position_prefix_inconsistent:'历史持仓前后不衔接',
@@ -52,6 +52,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[verify,setVerify]=useState(false),[revision,setRevision]=useState(0);
   const session=useRef<WebSession|null>(null),lifetime=useRef<AbortController|null>(null),pending=useRef(false),unknown=useRef('');
   const draftReady=useRef(false);
+  const scope=useRef(ownerId+':'+preparationId);
   const writePortfolioUrl=(value:string)=>{if(!canUseLocation())return;const url=new URL(window.location.href);if(value)url.searchParams.set('portfolioRequest',value);else url.searchParams.delete('portfolioRequest');window.history.replaceState(null,'',url);};
   const writeHistoryUrl=(value:string)=>{if(!canUseLocation())return;const url=new URL(window.location.href);if(value)url.searchParams.set('historyRequest',value);else url.searchParams.delete('historyRequest');window.history.replaceState(null,'',url);};
   const writeUrl=(value:string)=>{if(!canUseLocation())return;const url=new URL(window.location.href);if(value)url.searchParams.set('conversionRequest',value);else url.searchParams.delete('conversionRequest');window.history.replaceState(null,'',url);};
@@ -59,7 +60,8 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   useEffect(()=>{
     if(!active)return;
     const controller=new AbortController();lifetime.current=controller;let timer:ReturnType<typeof setTimeout>|undefined;let polling=false;
-    draftReady.current=false;setContext(null);setTask(null);setError('');session.current=null;
+    draftReady.current=false;setBusy(true);setError('');session.current=null;
+    if(scope.current!==ownerId+':'+preparationId){scope.current=ownerId+':'+preparationId;setContext(null);setTask(null);setPortfolioTask(null);setHistoryTask(null);}
     async function load(){
       try{
         const identity=await request<WebSession>('/api/fire/session',{signal:controller.signal});
@@ -75,7 +77,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
         let current=value.items.find(item=>item.request_id===requested)??(!requested?value.items[0]:undefined);
         if(value.resume){
           current=value.items.find(item=>item.request_id===value.resume!.conversion_request_id);
-          if(requested!==value.resume.conversion_request_id||portfolioRequest!==value.resume.portfolio_request_id)onResume(value.resume);
+          if(requested!==value.resume.conversion_request_id||portfolioRequest!==value.resume.portfolio_request_id||historyRequest!==(value.resume.history_request_id??''))onResume(value.resume);
           setPortfolioRequest(value.resume.portfolio_request_id);setHistoryRequest(value.resume.history_request_id??'');
         }
         if(requested&&uuid(requested)&&!current){
@@ -91,6 +93,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
         const restored=migrationMapping(choices,value);setSourceOwner(restored.source_owner);setKinds(restored.account_kinds);setLabels(restored.broker_labels);setMarkets(restored.market_accounts);setOrders(restored.order_accounts??{});draftReady.current=true;
         if(current){unknown.current=running(current)?current.request_id:'';if(running(current))void poll(current.request_id);}
       }catch(e){if(!controller.signal.aborted)setError((e as Error).message);}
+      finally{if(!controller.signal.aborted)setBusy(false);}
     }
     async function poll(id:string){
       if(controller.signal.aborted||polling)return;
@@ -158,7 +161,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   async function importHistory(){
     const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||!task?.result?.plan_sha256||!unchanged)return;
     pending.current=true;setBusy(true);setError('');const id=crypto.randomUUID();setHistoryTask(null);setHistoryRequest(id);writeHistoryUrl(id);
-    try{const accepted=await request<HistoryTask>('/api/fire/database-migration/conversions/'+task.id+'/complete',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id,plan_sha256:task.result.plan_sha256,confirmed_registered_values:true})});if(!signal.aborted)setHistoryTask(accepted);}
+    try{const accepted=await request<HistoryTask>('/api/fire/database-migration/conversions/'+task.id+'/complete',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id,plan_sha256:task.result.plan_sha256,confirmed_registered_values:true})});if(!signal.aborted){setHistoryTask(accepted);setHistoryRequest(accepted.request_id);writeHistoryUrl(accepted.request_id);}}
     catch(e){if(signal.aborted)return;const failure=e as PlatformRequestError;setError(failure.message);if(failure.reauthentication)setVerify(true);if(failure.status&&failure.status<500){setHistoryRequest('');writeHistoryUrl('');}}
     finally{if(!signal.aborted){pending.current=false;setBusy(false);}}
   }
@@ -209,7 +212,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   const historyImporting=!!historyRequest&&(!historyTask||['queued','running','cancel_requested'].includes(historyTask.status));
   const historyImported=historyTask?.result?.history_imported===true;
   const allImported=historyTask?.result?.migration_complete===true;
-  const completedKeys=Array.from(new Set([...(imported?['accounts','positions']:[]),...(historyTask?.result?.completed_domains??[]),...(historyImported?['orders','cash','pnl']:[]),...(allImported?['identity','assets']:[])]));
+  const completedKeys=Array.from(new Set([...(context?.committed_domains?.[task?.id??'']??[]),...(imported?['accounts','positions']:[]),...(historyTask?.result?.completed_domains??[]),...(historyImported?['orders','cash','pnl']:[]),...(allImported?['identity','assets']:[])]));
   const completedDomains=result?.domains?.filter(domain=>completedKeys.includes(domain.key)).length??0;
   const issues=Object.entries(result?.issue_counts??{}).filter(([,count])=>count>0);
   const groupedIssues=[...issueGroups.map(group=>({...group,items:issues.filter(([key])=>group.keys.includes(key))})),

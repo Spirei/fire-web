@@ -48,12 +48,27 @@ async def incomplete(db,task,message):
 
 async def backup_target(db,task):
     settings=db.settings
-    root=private_dir(private_dir(private_dir(settings.backup_dir)/'database-migration-cutovers')/str(task['id']))
+    base=private_dir(private_dir(settings.backup_dir)/'database-migration-cutovers')
+    # A retry belongs to the same conversion, not to a new migration. Retain its
+    # verified rollback baseline even after some domains have committed.
+    async with db.connection() as conn:
+        previous=await(await conn.execute("""SELECT id,payload FROM tasks WHERE owner_id=%s
+            AND kind='database.migration.complete' AND payload->>'conversion_id'=%s
+            AND id<>%s AND created_at<(SELECT created_at FROM tasks WHERE id=%s)
+            ORDER BY created_at,id""",(task['owner_id'],task['payload']['conversion_id'],task['id'],task['id']))).fetchall()
+    for candidate in previous:
+        payload=candidate['payload']
+        if any(payload.get(key)!=task['payload'].get(key) for key in ('plan_sha256','portfolio_task_id','_archive','_vault_fingerprint')):continue
+        folder=base/str(candidate['id'])
+        if not folder.exists():continue
+        private_dir(folder)
+        receipts=[folder/'backup-receipt.json',*sorted(folder.glob('attempt-*/backup-receipt.json'))]
+        for receipt in receipts:
+            if receipt.exists():return await verified_backup(settings,receipt)
+    root=private_dir(base/str(task['id']))
     receipt=root/'backup-receipt.json'
     if receipt.exists():
-        value=json.loads(private_read(receipt,1024**2))
-        if value.get('instance_id')!=str(settings.instance_id) or value.get('archive_sha256')!=await asyncio.to_thread(file_sha,root/'target/database.dump',threading.Event()):raise BackupFailure('迁移前的新库备份已变化')
-        return value
+        return await verified_backup(settings,receipt)
     if (root/'target').exists():
         # Never overwrite a partially written archive. Keep it and make a new,
         # explicit worker attempt folder without repeating completed imports.
@@ -61,9 +76,7 @@ async def backup_target(db,task):
         # backup finished. A partial attempt is never overwritten.
         candidate=private_dir(root/('attempt-'+str(task['attempts'])))
         if (candidate/'backup-receipt.json').exists():
-            value=json.loads(private_read(candidate/'backup-receipt.json',1024**2))
-            if value.get('instance_id')!=str(settings.instance_id) or value.get('archive_sha256')!=await asyncio.to_thread(file_sha,candidate/'target/database.dump',threading.Event()):raise BackupFailure('迁移前的新库备份已变化')
-            return value
+            return await verified_backup(settings,candidate/'backup-receipt.json')
         root=candidate
         receipt=root/'backup-receipt.json'
     budget=CaptureBudget(settings.backup_stream_max_bytes,settings.backup_stream_disk_reserve_bytes,settings.backup_stream_seconds,settings.backup_stream_max_objects)
@@ -85,6 +98,19 @@ async def backup_target(db,task):
     write_private(root/'target-vault.key',Vault(settings.connection_secret_dir,read_only=True).key())
     value.update(instance_id=str(settings.instance_id),scope='before_identity_cutover',private_files_retained=True,vault_key_retained=True)
     write_private(receipt,canonical(value));return value
+
+
+async def verified_backup(settings,receipt):
+    from .connections import Vault
+    root=private_dir(receipt.parent)
+    private_dir(root/'target')
+    value=json.loads(private_read(receipt,1024**2))
+    if (value.get('instance_id')!=str(settings.instance_id)
+        or value.get('scope')!='before_identity_cutover'
+        or value.get('archive_sha256')!=await asyncio.to_thread(file_sha,root/'target/database.dump',threading.Event())
+        or private_read(root/'target-vault.key',128)!=Vault(settings.connection_secret_dir,read_only=True).key()):
+        raise BackupFailure('迁移前的新库备份已变化')
+    return value
 
 
 async def execute(db,task):

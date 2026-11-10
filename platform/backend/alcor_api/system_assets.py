@@ -7,6 +7,7 @@ import re
 import secrets
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -16,6 +17,25 @@ from .resource_media import LIFECYCLE
 from .security import lock_mutation_identity
 from .shared_attachment_media import open_original, stage
 from .system_asset_codec import FOLDERS, KINDS, asset_name, image_bytes
+
+
+@dataclass(frozen=True)
+class PreparedOriginal:
+    sha256: str
+    extension: str
+    output: bytes
+    media: str
+
+
+def prepare_original(raw, file_name):
+    """CPU/file preparation may run concurrently; publication remains atomic."""
+    from .legacy_asset_codec import display_bytes
+    extension=file_name.rsplit('.',1)[-1].lower()
+    if not raw or len(raw)>20971520 or extension not in KINDS['asset'][0]:
+        raise HTTPException(400,'原图片格式或大小不正确')
+    output,media=display_bytes(raw,extension)
+    if not output or len(output)>20971520+65536:raise HTTPException(400,'安全素材超过大小上限')
+    return PreparedOriginal(hashlib.sha256(raw).hexdigest(),extension,output,media)
 
 
 class SystemAssets:
@@ -172,7 +192,7 @@ class SystemAssets:
             )
             return payload
 
-    async def apply(self, conn, actor, fields, file_name, raw, *, source_original=False):
+    async def apply(self, conn, actor, fields, file_name, raw, *, source_original=False, prepared_original=None):
         kind = fields.get("kind", "")
         folder = fields.get("folder", "").strip() if kind == "asset" else ""
         if kind not in KINDS:
@@ -190,7 +210,12 @@ class SystemAssets:
             raise HTTPException(400, "该素材类型不支持此图片格式")
         from .legacy_asset_codec import display_bytes
         codec = display_bytes if source_original or fields.get("catalogBinding", {}).get("restoreOriginal") else image_bytes
-        output, media = await asyncio.to_thread(codec, raw, ext)
+        if prepared_original is not None:
+            if (not source_original or not isinstance(prepared_original,PreparedOriginal)
+                or prepared_original.sha256!=hashlib.sha256(raw).hexdigest() or prepared_original.extension!=ext):
+                raise HTTPException(400,'原图片校验结果不匹配')
+            output,media=prepared_original.output,prepared_original.media
+        else:output, media = await asyncio.to_thread(codec, raw, ext)
         if not output or len(output) > 20971520 + 65536:
             raise HTTPException(400, "安全素材超过大小上限")
         name = fields.get("name", "").strip()

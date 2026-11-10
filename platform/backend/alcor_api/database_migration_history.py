@@ -72,6 +72,15 @@ async def submit(db,who,conversion_id,data:PortfolioImportInput,*,kind='database
         if not conversion or conversion['status']!='succeeded' or (conversion['result'] or {}).get('plan_sha256')!=data.plan_sha256:raise HTTPException(409,'原转换计划未核对')
         imported=await(await conn.execute('SELECT * FROM database_migration_portfolio_imports WHERE owner_id=%s AND conversion_id=%s',(who.id,conversion_id))).fetchone()
         if not imported:raise HTTPException(409,'请先导入本次持仓与自选')
+        if kind=='database.migration.complete':
+            # Reopening the page or a second tab attaches to the accepted job.
+            # Only a terminal, incomplete job admits a new continuation.
+            active=await(await conn.execute("""SELECT * FROM tasks WHERE owner_id=%s AND kind=%s
+                AND payload->>'conversion_id'=%s AND status IN ('queued','running','cancel_requested')
+                ORDER BY created_at DESC,id DESC LIMIT 1""",(who.id,kind,str(conversion_id)))).fetchone()
+            if active:return public_task(active)
+            completed=await(await conn.execute('SELECT t.* FROM database_migration_completion_imports i JOIN tasks t ON t.id=i.task_id WHERE i.owner_id=%s AND i.conversion_id=%s',(who.id,conversion_id))).fetchone()
+            if completed:return public_task(completed)
         receipt_table='database_migration_completion_imports' if kind=='database.migration.complete' else 'database_migration_history_imports'
         if await(await conn.execute('SELECT 1 FROM '+receipt_table+' WHERE owner_id=%s AND source_instance=%s AND source_owner=%s',(who.id,imported['source_instance'],imported['source_owner']))).fetchone():raise HTTPException(409,'此来源已经导入，请读取原记录')
         if await(await conn.execute("SELECT 1 FROM tasks WHERE kind LIKE 'database.migration.%' AND status IN ('queued','running','cancel_requested') LIMIT 1")).fetchone():raise HTTPException(409,'已有迁移任务正在执行')

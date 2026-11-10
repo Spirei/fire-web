@@ -86,6 +86,12 @@ async def context(db,who,parent_id):
         conversions=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind='database.migration.convert' AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 10",(who.id,str(parent_id)))).fetchall()
         imports=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind='database.migration.portfolio' AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 20",(who.id,str(parent_id)))).fetchall()
         history=await(await conn.execute("SELECT * FROM tasks WHERE owner_id=%s AND kind IN ('database.migration.history','database.migration.complete') AND payload->>'preparation_id'=%s ORDER BY created_at DESC,id DESC LIMIT 20",(who.id,str(parent_id)))).fetchall()
+        checkpoints=await(await conn.execute('''SELECT i.conversion_id,
+            EXISTS(SELECT 1 FROM database_migration_history_imports h WHERE h.owner_id=i.owner_id AND h.conversion_id=i.conversion_id) AS history,
+            EXISTS(SELECT 1 FROM database_migration_personal_imports d WHERE d.owner_id=i.owner_id AND d.source_instance=i.source_instance AND d.source_owner=i.source_owner) AS personal,
+            EXISTS(SELECT 1 FROM database_migration_completion_imports f WHERE f.owner_id=i.owner_id AND f.conversion_id=i.conversion_id) AS complete
+            FROM database_migration_portfolio_imports i WHERE i.owner_id=%s''',(who.id,))).fetchall()
+        committed_domains={str(row['conversion_id']):['accounts','positions',*(['orders','cash','pnl'] if row['history'] else []),*(['assets'] if row['personal'] or row['complete'] else []),*(['identity'] if row['complete'] else [])] for row in checkpoints}
         previous=await(await conn.execute("""SELECT payload FROM tasks WHERE owner_id=%s AND kind='database.migration.convert'
             AND payload->>'source_revision'=%s AND status='succeeded' ORDER BY created_at DESC,id DESC LIMIT 1""",
             (who.id,parent['payload']['source_revision']))).fetchone()
@@ -100,7 +106,7 @@ async def context(db,who,parent_id):
             (who.id,bound['identities']['source']))).fetchone()
         resume={'preparation':public_task(existing)|{'has_imports':True},'conversion_request_id':str(existing['conversion_request']),'portfolio_request_id':str(existing['portfolio_request']),
                 'history_request_id':str(existing['history_request']) if existing['history_request'] else None} if existing else None
-        return {'resume':resume,'previous_input':previous_input,'history_imports':[public_task(row) for row in history],'imports':[public_task(row) for row in imports],'preparation_id':str(parent_id),'users':users,'accounts':accounts,'broker_labels':[{'label':key,'rows':value} for key,value in sorted(labels.items())],
+        return {'resume':resume,'committed_domains':committed_domains,'previous_input':previous_input,'history_imports':[public_task(row) for row in history],'imports':[public_task(row) for row in imports],'preparation_id':str(parent_id),'users':users,'accounts':accounts,'broker_labels':[{'label':key,'rows':value} for key,value in sorted(labels.items())],
             'orders':[{'id':str(row['id']),'owner_id':str(row['user_id']),'market':row['market'],'code':row['code'],'name':row['name'],'broker':row.get('broker') or ''} for row in tables.rows(schema,'trade_orders')],
             'items':[public_task(row)|{'input':{key:row['payload'].get(key) for key in ('source_owner','account_kinds','broker_labels','market_accounts','order_accounts','timezone')}} for row in conversions]}
 

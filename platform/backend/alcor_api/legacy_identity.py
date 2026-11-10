@@ -642,14 +642,20 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
         response.headers['Vary']='Cookie, Authorization'
         async with db.connection() as conn, conn.transaction():
             from .security import lock_mutation_identity
-            if posting:
+            needs_renewal=False
+            if posting and 'authorization' not in request.headers:
+                expiry=await(await conn.execute("SELECT expires_at<=clock_timestamp()+interval '6 days' AS due FROM sessions WHERE token_hash=%s AND client_id='legacy-web'",(digest(token),))).fetchone()
+                needs_renewal=bool(expiry and expiry['due'])
+            if needs_renewal:
                 # Serialize renewals before taking the session read lock; two
                 # concurrent renewals must not upgrade shared locks together.
+                # A fresh session only needs shared reads and must not block
+                # navigation behind a migration's authorized domain commit.
                 await conn.execute('SELECT id FROM users WHERE id=%s FOR UPDATE',(who.id,))
             await lock_mutation_identity(conn,who,require_admin=False)
             value=await public_profile(conn,who.id)
             # Bearer is explicit and must not extend or rewrite the browser cookie.
-            if posting and 'authorization' not in request.headers:
+            if needs_renewal:
                 renewed=await (await conn.execute("UPDATE sessions SET expires_at=clock_timestamp()+interval '7 days' WHERE token_hash=%s AND client_id='legacy-web' AND expires_at>clock_timestamp() AND expires_at<=clock_timestamp()+interval '6 days' RETURNING expires_at",(digest(token),))).fetchone()
                 if renewed:
                     response.set_cookie(WEB_COOKIE,token,httponly=True,secure=settings.secure_cookie,samesite='lax',max_age=604800,path='/')

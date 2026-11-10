@@ -98,3 +98,13 @@ async def test_concurrent_renewals_have_one_cookie_extension(client, db, setting
     responses=await asyncio.wait_for(asyncio.gather(client.post('/api/auth/me'),client.post('/api/auth/me')),timeout=10)
     assert [r.status_code for r in responses]==[200,200]
     assert sum('set-cookie' in r.headers for r in responses)==1
+
+
+async def test_fresh_session_navigation_does_not_compete_with_migration_read_authority(client,db,settings):
+    import asyncio
+    token=await login(client,db,settings)
+    async with db.connection() as conn,conn.transaction():
+        await conn.execute('SELECT u.id FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token_hash=%s FOR SHARE OF u,s',(token,))
+        response=await asyncio.wait_for(client.post('/api/auth/me'),1)
+        assert response.status_code==200,response.text
+        assert 'set-cookie' not in response.headers
