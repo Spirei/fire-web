@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IconDatabase, IconEdit, IconRefresh,IconCheck,IconCircle,IconLoader2,IconAlertCircle,IconChevronLeft,IconChevronRight } from "@tabler/icons-react";
+import { IconDatabase, IconEdit, IconRefresh,IconCheck,IconCircle,IconLoader2,IconAlertCircle } from "@tabler/icons-react";
 import { Capsule, IconButton } from "@/components/Capsule";
 import AppSelect from "@/components/AppSelect";
 import DatabaseMigrationConversion from '@/components/DatabaseMigrationConversion';
@@ -241,7 +241,6 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
   const defaultStep=params.get('conversionRequest')||recoveryVerified?'conversion':preparationRequest?'preparation':'connections';
   const selectedStep=steps.some(([key])=>key===requestedStep)?requestedStep:defaultStep;
   const step=selectedStep==='conversion'&&!recoveryVerified&&task?preparationRequest?'preparation':'connections':selectedStep==='preparation'&&!preparationRequest?'connections':selectedStep;
-  const stepIndex=steps.findIndex(([key])=>key===step);
   const showStep=(key:string)=>url('migrationStep',key);
   const checking = active && (busy === "source" || busy === "target");
   function status(scope: 'source' | 'target', check: MigrationConnectionCheck | null | undefined, connected: boolean) {
@@ -313,7 +312,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       {(task?.source_revision??task?.result?.source_revision)&&data?.source?.revision!==(task?.source_revision??task?.result?.source_revision)&&<p className="mt-3 text-sm text-ink-3">此记录对应旧版本连接配置</p>}</>}
     </div>
     <div hidden={step!=='conversion'}>{recoveryVerified&&task&&<DatabaseMigrationConversion key={task.id} preparationId={task.id} ownerId={ownerId} active={active&&visible}/>}</div>
-    <div className="migration-step-actions mt-4"><Capsule variant="secondary" disabled={stepIndex===0} onClick={()=>showStep(steps[stepIndex-1][0])}><IconChevronLeft size={17}/>上一步</Capsule><span className="text-sm text-ink-3 tabular-nums">{stepIndex+1} / {steps.length}</span>{stepIndex<steps.length-1?<Capsule disabled={stepIndex===0?!preparationRequest:!recoveryVerified} onClick={()=>showStep(steps[stepIndex+1][0])}>下一步<IconChevronRight size={17}/></Capsule>:<span/>}</div>
+
     </>}
   </section>;
 }
