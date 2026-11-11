@@ -1,6 +1,7 @@
 """Fixed approved target only; no port scan, arbitrary URL, subscription or trading mutation."""
 
 import json
+import math
 import re
 import time
 from datetime import UTC, datetime
@@ -246,6 +247,11 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                 if action == "futu.test":
                     logged = observed.get("qotLogined")
                     known = type(logged) is bool and observed.get("responded") is True
+                    quote = observed.get("quote")
+                    price = quote.get("price") if isinstance(quote, dict) and quote.get("code") == "US.AAPL" else None
+                    verified = ("latest" in policy.purposes and "US" in policy.markets
+                                and observed.get("quotePermissionVerified") is True
+                                and type(price) in (int, float) and math.isfinite(price) and price > 0)
                     result.update(
                         {
                             "ok": known and logged,
@@ -254,7 +260,7 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                             else "unavailable"
                             if known
                             else "unknown",
-                            "message": "OpenD已响应且行情已登录"
+                            "message": (f"连接成功，AAPL 报价 {price}" if verified else "OpenD已响应且行情已登录，AAPL 报价暂不可用")
                             if known and logged
                             else "OpenD已响应，行情未登录"
                             if known
@@ -262,8 +268,9 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
                             if observed.get("errorCode") == "diagnostic_timeout"
                             else "SDK/OpenD状态未知或不可用",
                             "qotLogined": logged if known else None,
-                            "quotePermissionVerified": False,
-                            "testKind": "quote_context_status",
+                            "quotePermissionVerified": bool(known and logged and verified),
+                            "quote": {"code": "US.AAPL", "price": price} if known and logged and verified else None,
+                            "testKind": "quote_snapshot" if known and logged and verified else "quote_context_status",
                         }
                     )
                 else:
@@ -298,6 +305,29 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
             return JSONResponse(
                 {"error": "固定来源配置不可用", "state": "unknown"}, status_code=503, headers=headers
             )
+
+    @app.get("/api/futu/test")
+    async def last_test(request: Request):
+        # Opening settings reads the retained result; it never probes OpenD.
+        assert_native_origin(request, settings)
+        who = await member(request)
+        async with db.connection() as conn, conn.transaction():
+            revision, _, target = await select(conn, who, "futu.test", None)
+            await lock_mutation_identity(conn, who, require_admin=True)
+            row = await (await conn.execute(
+                "SELECT coalesce(o.result,a.result) AS result,a.created_at FROM market_diagnostic_admissions a "
+                "LEFT JOIN market_data_operations o ON o.owner_id=a.owner_id AND o.request_id=a.request_id "
+                "WHERE a.owner_id=%s AND a.source_revision=%s AND a.action='futu.test' "
+                "ORDER BY a.created_at DESC,a.request_id DESC LIMIT 1", (who.id, revision),
+            )).fetchone()
+            checked = await (await conn.execute(
+                "SELECT result,created_at FROM market_source_tests WHERE owner_id=%s AND provider='futu' AND source_revision=%s ORDER BY created_at DESC,request_id DESC LIMIT 1", (who.id, revision),
+            )).fetchone()
+            if checked and checked["result"] and (not row or checked["created_at"] > row["created_at"]):
+                value = checked["result"]
+                row = {"result": {**value, "ok": value["state"] in ("available", "connected")}}
+        return JSONResponse({"host": target.host, "port": target.port, "lastTest": row["result"] if row else None},
+                            headers={"Cache-Control": "private, no-store", "Vary": "Cookie, Authorization"})
 
     @app.post("/api/futu/test")
     async def test(request: Request):

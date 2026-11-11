@@ -50,6 +50,8 @@ export type OrderValidity = "day" | "gtc" | "custom";
 
 /** 成交订单账本；持仓是订单执行后的汇总快照，订单是不可丢失的历史依据。 */
 export interface TradeOrder {
+  currency?: string;
+  realizedPnlCurrency?: string;
   id: string;
   /** 唯一订单号（10 位数字），每笔成交生成一次且不可变更 */
   orderNo: string;
@@ -266,6 +268,7 @@ export interface SiteSettings {
   logoFont: "diatype" | "diatype-regular" | "system";
   /** 行情源：auto = 富途优先 + 腾讯/Yahoo 自动回退；futu = 仅富途；tencent = 腾讯 + Yahoo */
   quoteSource: "auto" | "futu" | "tencent";
+  quoteSourceOrder?: string[];
   /** 富途 OpenD 网关地址（支持远程部署，默认本机） */
   futuHost: string;
   /** 富途 OpenD 网关端口 */

@@ -25,6 +25,7 @@ import AppSelect from "@/components/AppSelect";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import MiniTrendChart from "@/components/MiniTrendChart";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 
 const WATCH_GROUP_CACHE_KEY = "fire:watch-groups";
 
@@ -454,6 +455,10 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   }
   const refreshAllRef = useRef<(force?: boolean) => void>(() => {});
   const chartFetchingRef = useRef(false);
+  const chartRequest = useRef<AbortController | null>(null);
+  const foreground = useWorkspaceForeground();
+  const foregroundRef = useRef(foreground);
+  foregroundRef.current = foreground;
 
   useEffect(() => {
     try {
@@ -465,22 +470,28 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   }, []);
 
   const fetchCharts = useCallback(async () => {
-    if (chartFetchingRef.current || pageRows.length === 0) return;
+    if (!foregroundRef.current || document.hidden || chartFetchingRef.current || pageRows.length === 0) return;
     chartFetchingRef.current = true;
+    const controller = new AbortController();
+    chartRequest.current = controller;
+    const deadline = setTimeout(() => controller.abort(), 20000);
     try {
       const res = await fetch("/api/charts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           items: pageRows.map((r) => ({ id: r.id, market: r.market, code: r.code })),
           sample: true
         })
       });
+      if (controller.signal.aborted || !foregroundRef.current) return;
       if (!res.ok) {
         setCharts((prev) => Object.fromEntries(Object.entries(prev).map(([id, chart]) => [id, pageRows.some((row) => row.id === id) ? { ...chart, stale: true } : chart])));
         return;
       }
       const data = await res.json();
+      if (controller.signal.aborted || !foregroundRef.current) return;
       if (data.charts) setCharts((prev) => {
         const next = { ...prev };
         pageRows.forEach((row) => {
@@ -492,9 +503,10 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
         return next;
       });
     } catch {
-      setCharts((prev) => Object.fromEntries(Object.entries(prev).map(([id, chart]) => [id, pageRows.some((row) => row.id === id) ? { ...chart, stale: true } : chart])));
+      if (!controller.signal.aborted && foregroundRef.current) setCharts((prev) => Object.fromEntries(Object.entries(prev).map(([id, chart]) => [id, pageRows.some((row) => row.id === id) ? { ...chart, stale: true } : chart])));
     } finally {
-      chartFetchingRef.current = false;
+      clearTimeout(deadline);
+      if (chartRequest.current === controller) { chartRequest.current = null; chartFetchingRef.current = false; }
     }
   }, [pageRows]);
 
@@ -506,17 +518,19 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   refreshAllRef.current = refreshAll;
 
   useEffect(() => {
-    const schedule = createQuoteSchedule({ interval: intervalMs, hidden: () => document.hidden, refresh: force => refreshAllRef.current(force) });
+    if (!foreground) return;
+    const schedule = createQuoteSchedule({ interval: intervalMs, hidden: () => document.hidden || !foregroundRef.current, refresh: force => refreshAllRef.current(force) });
     scheduleRef.current = schedule;
     const onVisible = () => schedule.foreground();
     document.addEventListener("visibilitychange", onVisible);
     return () => { schedule.stop(); scheduleRef.current = null; document.removeEventListener("visibilitychange", onVisible); };
-  }, [intervalMs]);
+  }, [intervalMs,foreground]);
 
   // 挂载 / pageRows 变化时立即拉当日走势（不依赖定时器，保证一进页面就有图）
   useEffect(() => {
-    fetchCharts();
-  }, [fetchCharts]);
+    if (foreground) void fetchCharts();
+    return () => { chartRequest.current?.abort(); chartRequest.current = null; chartFetchingRef.current = false; };
+  }, [fetchCharts,foreground]);
 
   async function handleSelect(m: SearchMatch) {
     const ok = await onAddMatch(m);
@@ -895,7 +909,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right font-semibold tabular-nums">
-                        {fmtPrice(q ? q.price : r.price, marketMeta(r.market).currency, r.market)}
+                        {fmtPrice(Number(q?.price ?? r.price) > 0 ? q?.price ?? r.price : Number.NaN, marketMeta(r.market).currency, r.market)}
                       </td>
                       <td className={`px-4 py-3.5 text-right font-semibold tabular-nums ${q && q.changePct >= 0 ? "text-up" : q ? "text-down" : "text-faint"}`}>
                         {q ? `${q.changePct >= 0 ? "+" : ""}${fmtPct(q.changePct / 100)}` : "—"}

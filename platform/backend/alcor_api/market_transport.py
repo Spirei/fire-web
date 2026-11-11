@@ -168,7 +168,8 @@ class Transport:
         try:
             async with asyncio.timeout(30):
                 process.stdin.write(
-                    canonical({"action": action, "host": pins[0], "port": target.port}).encode()
+                    canonical({"action": action, "host": pins[0], "port": target.port,
+                               "quoteProbe": action == "futu.test" and "latest" in policy.purposes and "US" in policy.markets}).encode()
                 )
                 await process.stdin.drain()
                 process.stdin.close()

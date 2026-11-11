@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { startVisiblePolling } from "@/lib/visiblePolling";
+import { readWorkspaceTicker } from "@/lib/workspaceTicker";
+import { PlatformRequestError } from "@/lib/platformRequest";
 import MarketIcon from "@/components/MarketIcon";
 import { marketMeta, type TickerConfig } from "@/lib/types";
 
@@ -101,11 +103,11 @@ function Sparkline({ points, up, baseline }: { points: number[]; up: boolean; ba
 
 function TickerChip({ item }: { item: TickerItem }) {
   const up = (item.change ?? 0) >= 0;
-  const color = up ? "text-[#e23d3d]" : "text-[#0fa07b]";
+  const color = item.change === null ? "text-faint" : up ? "text-[#e23d3d]" : "text-[#0fa07b]";
   // 昨收 = 现价 − 涨跌额（接口给的是今日涨跌额）；拿不到就不画基准线
   const baseline = item.price != null && item.change != null ? item.price - item.change : null;
   return (
-    <div className="ticker-item flex max-w-full items-center gap-2.5 rounded-2xl px-3 py-2 transition-colors duration-200 hover:bg-brand-hover">
+    <div className="ticker-item flex max-w-full items-center gap-2.5 rounded-2xl px-3 py-2" title={item.price === null ? `${item.label}：当前来源暂无可用报价` : item.label}>
       <span className="group/icon relative flex-none">
         <MarketIcon market={item.market} size={22} title="" />
         <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-edge bg-white px-2 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-[0_6px_18px_rgba(10,14,25,.14)] transition-all duration-150 group-hover/icon:opacity-100 dark:bg-[#1c2433] dark:text-[#e7ebf1]">
@@ -130,9 +132,9 @@ function unquoted(item: Pick<TickerItem,"key"|"label"|"market">):TickerItem {
   return {key:item.key,label:item.label,market:typeof item.market === "string" ? item.market : "",price:null,change:null,changePct:null,points:[]};
 }
 
-function readTickerCache(): { items: TickerItem[]; interval?: number; pollSec?: number } | null {
+function readTickerCache(key: string): { items: TickerItem[]; interval?: number; pollSec?: number } | null {
   try {
-    const raw = JSON.parse(sessionStorage.getItem(TICKER_CACHE_KEY) || "null") as { items?: TickerItem[]; interval?: number; pollSec?: number } | null;
+    const raw = JSON.parse(sessionStorage.getItem(key) || "null") as { items?: TickerItem[]; interval?: number; pollSec?: number } | null;
     if (Array.isArray(raw?.items) && raw.items.length) return { items: raw.items, interval: raw.interval, pollSec: raw.pollSec };
   } catch {
     /* ignore */
@@ -140,7 +142,8 @@ function readTickerCache(): { items: TickerItem[]; interval?: number; pollSec?: 
   return null;
 }
 
-export default function IndexTicker({configuration}:{configuration?:TickerConfig}) {
+export default function IndexTicker({configuration,ownerId=""}:{configuration?:TickerConfig;ownerId?:string}) {
+  const cacheKey = `${TICKER_CACHE_KEY}:${ownerId}:${JSON.stringify(configuration?.items.map(item => [item.key,item.market,item.secid]) ?? [])}`;
   const [items, setItems] = useState<TickerItem[]>(()=>configuration?.items.map(unquoted) ?? []);
   const [intervalSec, setIntervalSec] = useState(5);
   // 轮询间隔由服务端按「是否有市场在交易」给出：开市 60 秒，全部收市 5 分钟兜底
@@ -148,34 +151,40 @@ export default function IndexTicker({configuration}:{configuration?:TickerConfig
   const [idx, setIdx] = useState(0);
 
   useLayoutEffect(() => {
-    const cached = readTickerCache();
+    setItems(configuration?.items.map(unquoted) ?? []);
+    const cached = readTickerCache(cacheKey);
     if (!cached) return;
     setItems(cached.items);
     if (typeof cached.interval === "number" && cached.interval >= 3) setIntervalSec(cached.interval);
     if (typeof cached.pollSec === "number" && cached.pollSec >= 30) pollSec.current = cached.pollSec;
-  }, []);
+  }, [cacheKey]);
 
   useEffect(() => {
     async function load(signal: AbortSignal) {
       try {
-        const res = await fetch("/api/ticker", { cache: "no-store", signal });
-        const data = await res.json().catch(() => null);
+        const res = configuration ? null : await fetch("/api/ticker", { cache: "no-store", signal });
+        const data = configuration ? await readWorkspaceTicker(configuration, signal) : await res!.json().catch(() => null);
         if (signal.aborted) return;
-        if (!res.ok) {
+        if (res && !res.ok) {
           // Unavailable public facts must not erase the configured index names
           // or keep revoked prices in the browser cache.
           setItems(current => (Array.isArray(data?.items) && data.items.length ? data.items : current).map(unquoted));
-          try { sessionStorage.removeItem(TICKER_CACHE_KEY); } catch { /* optional cache */ }
+          pollSec.current = 300;
+          try { sessionStorage.removeItem(cacheKey); } catch { /* optional cache */ }
           return;
         }
         if (!signal.aborted && Array.isArray(data?.items) && data.items.length > 0) {
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);
           if (typeof data.pollSec === "number" && data.pollSec >= 30) pollSec.current = data.pollSec;
-          try { sessionStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ items: data.items, interval: data.interval, pollSec: data.pollSec })); } catch { /* quota */ }
+          try { sessionStorage.setItem(cacheKey, JSON.stringify({ items: data.items, interval: data.interval, pollSec: data.pollSec })); } catch { /* quota */ }
         }
-      } catch {
-        /* 静默失败，下轮重试 */
+      } catch (error) {
+        pollSec.current = Math.min(300, pollSec.current * 2);
+        if (!signal.aborted && error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
+          setItems(current => current.map(unquoted));
+          try { sessionStorage.removeItem(cacheKey); } catch { /* optional cache */ }
+        }
       }
     }
     const polling = startVisiblePolling({ read: load, interval: () => pollSec.current * 1000 });
@@ -185,7 +194,7 @@ export default function IndexTicker({configuration}:{configuration?:TickerConfig
       polling.stop();
       window.removeEventListener("fire:settings-updated", onSettings);
     };
-  }, []);
+  }, [configuration,cacheKey]);
 
   // 按设置的时间轮换一个指数
   useEffect(() => {

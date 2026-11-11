@@ -56,7 +56,7 @@ class SystemAssets:
         async with self.connection(connection) as conn, conn.transaction():
             if who:
                 await conn.execute(
-                    "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("identity-management:" + who.id,)
+                    "SELECT pg_advisory_xact_lock" + ("" if write else "_shared") + "(hashtextextended(%s,0))", ("identity-management:" + who.id,)
                 )
             await conn.execute(
                 "SELECT pg_advisory_xact_lock"

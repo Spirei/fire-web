@@ -18,6 +18,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
   { sub: "stocks", anchor: "market-badges", label: "市场色块", groupLabel: "股票", keywords: "市场 色块 徽标 颜色 显示 US HK A股 上证 深证 加密" },
   { sub: "stocks", anchor: "translation", label: "模型服务", groupLabel: "智能服务", keywords: "模型服务 AI 大模型 账户助手 翻译 DeepSeek OpenAI API" },
   { sub: "stocks", anchor: "trade", label: "交易 · 富途", groupLabel: "股票", keywords: "富途 futu opend 交易 行情源 主机 端口 腾讯 yahoo 备用" },
+  { sub: "stocks", anchor: "quote-sources", label: "行情源", groupLabel: "股票", keywords: "行情源 优先级 拖动 检测 富途 腾讯 东方财富 yahoo" },
   { sub: "stocks", anchor: "currency-display", label: "货币金额显示", groupLabel: "股票", keywords: "货币 单位 金额 万 百万 千万 亿 缩写" },
   { sub: "stocks", anchor: "sources", label: "行情与汇率接口", groupLabel: "股票", keywords: "股票来源 接口 行情 搜索 分时 汇率 url 数据源" },
   { sub: "stocks", anchor: "source-reports", label: "财报接口", groupLabel: "股票", keywords: "美股 A股 港股 财报 日历 接口 数据源" },

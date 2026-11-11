@@ -41,7 +41,7 @@ import Pagination from "@/components/Pagination";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import PnlCalendar from "@/components/PnlCalendar";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
-import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { registeredPnlCalendar, buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
@@ -608,8 +608,9 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     () => buildDailyAssetSeries({ positions: calendarRows, closesMap: recordCloses, orders, rates }),
     [calendarRows, recordCloses, orders, rates]
   );
-  const calendarDays = useMemo(() => buildMonthCells(calendarSeries, calMonth.y, calMonth.m), [calendarSeries, calMonth]);
-  const calendarYear = useMemo(() => buildYearSummary(calendarSeries, calMonth.y, calMonth.m), [calendarSeries, calMonth]);
+  const registeredCalendar = useMemo(() => orders.some(order => order.executionModel === "source_registered_history") ? registeredPnlCalendar(orders, rates, calMonth.y, calMonth.m, calMarket) : null, [orders, rates, calMonth, calMarket]);
+  const calendarDays = useMemo(() => registeredCalendar?.days ?? buildMonthCells(calendarSeries, calMonth.y, calMonth.m), [registeredCalendar, calendarSeries, calMonth]);
+  const calendarYear = useMemo(() => registeredCalendar?.months ?? buildYearSummary(calendarSeries, calMonth.y, calMonth.m), [registeredCalendar, calendarSeries, calMonth]);
   const calendarAmount = (usd: number) => {
     const value = usd * currencyFactor;
     const body = fmtMoneyCalendarCompact(Math.abs(value), symbol, 1e4);
@@ -751,7 +752,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       const fetchedOrdersAll: TradeOrder[] = bundle?.orders ?? [];
       if (fetchedOrdersAll.some(order => order.executionModel === "source_registered_history" && order.historicalCoverageKnown !== true)) {
         setOrders(fetchedOrdersAll);
-        trendRef.current=[];setTrend([]);setRecordCloses({});setTrendLoading(false);
+        trendRef.current=[];setTrend([]);setRecordCloses(Object.fromEntries(positionRows.map(row => [row.record.id, row.items])));setTrendLoading(false);
         try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* storage unavailable */ }
         return;
       }
@@ -1089,7 +1090,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
       return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
     }
-    if (key === "marketValue") return compactMoney(displayMarketValue);
+    if (key === "marketValue") return Number.isFinite(displayMarketValue) ? compactMoney(displayMarketValue) : Number.isFinite(price * qty) ? <>{fmtMoney(price * qty, marketMeta(record.market).currency)}</> : "—";
     if (key === "cost") return <>{fmtNumMarket(cost, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
     if (key === "price") return <>{fmtNumMarket(price, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
     if (key === "qty") return fmtQty(qty);
@@ -1144,7 +1145,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
               </button>
               <div><div className="flex items-center gap-1"><span className="text-xs text-muted"><span className="md:hidden">可用现金</span><span className="hidden md:inline">现金</span></span><span className="md:hidden"><CashBalanceEditor preferredCurrency={displayCurrency} frozenByCurrency={frozenByCurrency} onSaved={handleFundBalances} /></span></div><strong className="mt-1 block text-sm tabular-nums"><span className="md:hidden"><AccountOverviewValue value={Math.max(0, cashTotal - frozenCashTotal)} hidden={!assetsVisible} pending={!effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></span><span className="hidden md:inline"><AccountOverviewValue value={cashTotal} hidden={!assetsVisible} pending={!effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></span></strong></div>
             </div>
-            <div className="mt-6"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资产分布</span><span className="text-[11px] text-muted">按市场</span></div><div className="flex h-2 overflow-hidden rounded-full bg-bg-gray">{marketEntries.map(([key, value], index) => <span key={key} style={{ width: `${summary.asset ? value.asset / summary.asset * 100 : 0}%`, background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />)}</div><div className="mt-3 grid grid-cols-2 gap-2">{marketEntries.map(([key, value], index) => <div key={key} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-muted"><i className="h-2 w-2 rounded-full" style={{ background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />{marketMeta(key).label}</span><b>{summary.asset ? (value.asset / summary.asset * 100).toFixed(1) : "0.0"}%</b></div>)}</div></div>
+            <div className="mt-6"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold">资产分布</span><span className="text-[11px] text-muted">按市场</span></div><div className="flex h-2 overflow-hidden rounded-full bg-bg-gray">{marketEntries.map(([key, value], index) => <span key={key} style={{ width: `${Number.isFinite(summary.asset) && summary.asset > 0 && Number.isFinite(value.asset) ? value.asset / summary.asset * 100 : 0}%`, background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />)}</div><div className="mt-3 grid grid-cols-2 gap-2">{marketEntries.map(([key, value], index) => <div key={key} className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-muted"><i className="h-2 w-2 rounded-full" style={{ background: ["#f071b8", "#5579ed", "#31c2ad", "#f3b94f"][index % 4] }} />{marketMeta(key).label}</span><b>{Number.isFinite(summary.asset) && summary.asset > 0 && Number.isFinite(value.asset) ? `${(value.asset / summary.asset * 100).toFixed(1)}%` : "—"}</b></div>)}</div></div>
           </section>
           {renderModuleHandle("left", "account")}
         </div>
@@ -1270,6 +1271,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
         </div>
         <div id="asset-calendar" {...moduleDragProps("right", "calendar")} className={moduleWrapperClass("right", "calendar")} style={{ order: moduleOrderIndex("right", "calendar") }}>
           <PnlCalendar
+            title={registeredCalendar ? "已登记盈亏日历" : "收益日历"}
             className="card p-5"
             days={calendarDays}
             yearSummary={calendarYear}
@@ -1299,7 +1301,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
             formatNarrow={calendarNarrow}
             stockIcons={stockIcons}
             onDayClick={(date) => {
-              const rows = buildDayDetailRows({ date, positions: calendarRows, closesMap: recordCloses, rates });
+              const rows = registeredCalendar?.details[date] ?? buildDayDetailRows({ date, positions: calendarRows, closesMap: recordCloses, rates });
               if (rows.length > 0) setDayDetail({ date, rows });
             }}
             dayDetail={dayDetail}

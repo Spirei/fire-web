@@ -34,11 +34,22 @@ def diagnostic_collect(factory, ret_ok, payload):
         if action == "futu.test":
             ret, data = context.get_global_state()
             logged = data.get("qot_logined") if ret == ret_ok and isinstance(data, dict) else None
-            return {
+            result = {
                 "qotLogined": logged if type(logged) is bool else None,
                 "responded": ret == ret_ok,
                 "quotePermissionVerified": False,
             }
+            if logged is True and payload.get("quoteProbe") is True:
+                try:
+                    ret, frame = context.get_market_snapshot(["US.AAPL"])
+                    rows = records(frame, limit=1) if ret == ret_ok else []
+                    row = rows[0] if len(rows) == 1 else {}
+                    price = row.get("last_price")
+                    if row.get("code") == "US.AAPL" and type(price) in (int, float) and math.isfinite(price) and price > 0:
+                        result.update(quotePermissionVerified=True, quote={"code": "US.AAPL", "price": price})
+                except Exception:  # noqa: BLE001 -- SDK text may contain private target details.
+                    pass
+            return result
         subscription, historical = {}, {}
         try:
             ret, data = context.query_subscription(is_all_conn=False)

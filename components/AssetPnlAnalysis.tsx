@@ -19,7 +19,7 @@ import { showToast } from "@/lib/toast";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
 import { CURRENCIES, CURRENCY_SYMBOLS, useDisplayCurrency } from "@/lib/currencyPrefs";
 import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompact, localDateKey } from "@/lib/format";
-import { buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
+import { registeredPnlCalendar, buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses, peekPortfolioBundle } from "@/lib/portfolioSeries";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { useMobileHorizontalSwipe } from "@/lib/useMobileHorizontalSwipe";
@@ -529,12 +529,13 @@ export default function AssetPnlAnalysis({
   const periodPnl = periodMetrics.pnl;
   const periodRate = periodMetrics.rate;
 
-  const calDays = useMemo(() => buildMonthCells(calDailyAsset, calMonth.y, calMonth.m), [calMonth, calDailyAsset]);
+  const registeredCalendar = useMemo(() => hasRegisteredHistory ? registeredPnlCalendar(orders, rates, calMonth.y, calMonth.m, calMarket) : null, [hasRegisteredHistory, orders, rates, calMonth, calMarket]);
+  const calDays = useMemo(() => registeredCalendar?.days ?? buildMonthCells(calDailyAsset, calMonth.y, calMonth.m), [registeredCalendar, calMonth, calDailyAsset]);
 
   // 年视图：展示所选年份每个月的收益 / 收益率（收益=当月日盈亏合计，收益率=相对上月月末资产）
   const yearSummary = useMemo(
-    () => buildYearSummary(calDailyAsset, calMonth.y, calMonth.m),
-    [calMonth, calDailyAsset]
+    () => registeredCalendar?.months ?? buildYearSummary(calDailyAsset, calMonth.y, calMonth.m),
+    [registeredCalendar, calMonth, calDailyAsset]
   );
 
   // 收益日历某天 → 每只股票的当日盈亏（当日收盘 − 前一日收盘）× 数量，按日历市场筛选，USD
@@ -911,6 +912,7 @@ export default function AssetPnlAnalysis({
             </section>
 
             <PnlCalendar
+              title={registeredCalendar ? "已登记盈亏日历" : "收益日历"}
               className="mt-5 card p-5"
               days={calDays}
               yearSummary={yearSummary}
@@ -939,7 +941,7 @@ export default function AssetPnlAnalysis({
               formatCompact={compactDisp}
               formatNarrow={narrowDisp}
               stockIcons={stockIcons}
-              onDayClick={openDayDetail}
+              onDayClick={date => registeredCalendar ? setDayDetail({date, rows: registeredCalendar.details[date] ?? []}) : openDayDetail(date)}
               dayDetail={dayDetail}
               onDayDetailClose={() => setDayDetail(null)}
               renderMarketBadge={(row) => <MarketBadge market={row.market as PnlRow["market"]} code={row.code} />}

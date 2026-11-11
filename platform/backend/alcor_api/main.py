@@ -449,6 +449,9 @@ def create_app(settings: Settings | None = None):
     mount_legacy_history_bars(app, settings, app.state.market_authority)
     from .legacy_futu_diagnostics import mount_legacy_futu_diagnostics
     mount_legacy_futu_diagnostics(app, settings, app.state.market_authority, _market_transport)
+    from .market_source_tests import mount as mount_market_source_tests
+    from .fire_current_web import member as fire_web_member
+    mount_market_source_tests(app, settings, app.state.market_authority, _market_transport, fire_web_member)
     # Fixed cash collection routes precede the broker account-id route.
     from .legacy_cash_assets import mount_legacy_cash_assets
     mount_legacy_cash_assets(app, rate_limit)

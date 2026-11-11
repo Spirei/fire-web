@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
+const cache=new Map();let network=async()=>{throw Error('Unexpected network')};
+function load(name){if(cache.has(name))return cache.get(name);const exports={};cache.set(name,exports);vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.resolve('lib',name+'.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:id=>load(id.replace('./','')),fetch:(...args)=>network(...args),Headers,Response,AbortController,DOMException,setTimeout,clearTimeout,Error,TypeError,Number,Date,Intl,Map,Set,URLSearchParams});return exports;}
+(async()=>{
+ const {readMaterialResponse}=load('materialRead');let calls=0;
+ network=async()=>++calls===1?new Response('<!DOCTYPE html>gateway',{status:502}):Response.json({assets:[],total:0,page:1});
+ assert.equal((await readMaterialResponse('/api/assets/catalog',new AbortController().signal)).total,0);assert.equal(calls,2);
+ calls=0;network=async()=>{calls++;return new Response('<!DOCTYPE html>gateway')};
+ await assert.rejects(()=>readMaterialResponse('/api/assets/catalog',new AbortController().signal),/素材暂时无法读取/);assert.equal(calls,2);
+ calls=0;network=async()=>{calls++;return Response.json({error:'private error'},{status:403})};
+ await assert.rejects(()=>readMaterialResponse('/api/assets/catalog',new AbortController().signal),/权限/);assert.equal(calls,1);
+ const {readQuoteBatches}=load('quoteBatches');let sent;
+ network=async(url,init)=>{sent=JSON.parse(init.body);return Response.json({quotes:{one:{price:100,marketCap:100000}}})};
+ let result=await readQuoteBatches([{id:'one',market:'US',code:'AAPL'}],undefined,{includeMarketCap:true});assert.equal(sent.includeMarketCap,true);assert.equal(result.quotes.one.marketCap,100000);
+ await readQuoteBatches([{id:'one',market:'US',code:'AAPL'}]);assert.equal(sent.includeMarketCap,false);
+ const ids=['42','4ee10d72-9e5a-430c-92cb-593c08835e4f','stock:HK:00700'];
+ network=async(url,init)=>{const body=JSON.parse(init.body);assert.deepEqual(Array.from(body.items.map(i=>i.id)),ids);return Response.json({quotes:Object.fromEntries(ids.map((id,i)=>[id,{price:100+i}]))})};
+ const mixed=await readQuoteBatches(ids.map(id=>({id,market:'US',code:'AAPL'})));for(let i=0;i<ids.length;i++)assert.equal(mixed.quotes[ids[i]].price,100+i,'opaque legacy and UUID IDs must round-trip without numeric coercion');
+ const {registeredPnlCalendar,buildDailyAssetSeries}=load('pnlCalendar');
+ const base={id:'sale',recordId:'one',name:'Synthetic',code:'AAPL',market:'US',currency:'USD',side:'sell',status:'filled',realizedPnl:123.45,tradedAt:'2026-10-02T16:00:00Z',executionModel:'source_registered_history',historicalCoverageKnown:false};
+ const calendar=registeredPnlCalendar([base],{USD:1},2026,10);assert.equal(calendar.days.find(c=>c?.day===2).pnl,123.45);assert.equal(calendar.days.find(c=>c?.day===2).pct,null);assert.equal(calendar.days.find(c=>c?.day===1).available,false);
+ assert.equal(buildDailyAssetSeries({positions:[],closesMap:{},orders:[base],rates:{USD:1}}).length,0,'a registered realized amount does not establish an asset curve');
+ const hk=registeredPnlCalendar([{...base,market:'HK',currency:'HKD'}],{USD:1},2026,10);assert.equal(hk.days.find(c=>c?.day===3)?.available,false);assert.equal(hk.days.find(c=>c?.day===2).available,false,'missing FX remains unknown');
+ const {readWorkspaceTicker}=load('workspaceTicker');network=async(url,init)=>{assert.equal(url,'/api/fire/ticker');assert(!init.method||init.method==='GET','index reads must not implicitly register equity subscriptions');return Response.json({items:[{key:'index',market:'US',secid:'100.DJIA',price:123,change:-2,changePct:-1}]})};
+ const ticker=await readWorkspaceTicker({items:[{key:'index',label:'Synthetic index',market:'US',secid:'100.DJIA'}],interval:5},new AbortController().signal);assert.equal(ticker.items[0].price,123);assert.equal(ticker.items[0].change,-2);
+ const changed=await readWorkspaceTicker({items:[{key:'index',label:'Different security',market:'US',secid:'100.SPX'}],interval:5},new AbortController().signal);assert.equal(changed.items[0].price,null,'same presentation key must not borrow a different security');
+ const connect=registeredPnlCalendar([{...base,market:'HK',currency:'HKD',settlementCurrency:'CNY'}],{USD:1,HKD:8},2026,10);assert.equal(connect.days.find(c=>c?.day===3).pnl,123.45/8,'original realized currency is not the cash settlement currency');
+ let batchMarkets=[];network=async(url,init)=>{const b=JSON.parse(init.body);batchMarkets.push([...new Set(b.items.map(r=>r.market))]);return Response.json({quotes:{}})};await readQuoteBatches([{id:'us',market:'US',code:'AAPL'},{id:'hk',market:'HK',code:'00700'},{id:'cn',market:'CN',code:'600019'}]);assert.equal(batchMarkets.length,3);assert(batchMarkets.every(markets=>markets.length===1));
+ console.log('PASS migration reads: HTML recovery, permission/no replay, market cap, registered realized calendar, missing FX and private ticker');
+})().catch(error=>{console.error(error);process.exitCode=1});

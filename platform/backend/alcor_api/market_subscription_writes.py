@@ -47,9 +47,12 @@ class Subscriptions:
                 if source_preference in ("futu","tencent")and any(item["market"]!="ASSET"for item in items)and policy.source!=source_preference:continue
                 approved.append(row["revision"]);families[row["revision"]]=policy.source
         if source_preference=="auto"and approved:
-            preferred="futu"if all(item["market"]=="US"for item in items)else"tencent"
-            prioritized=[r for r in approved if families[r]==preferred]
-            if prioritized:approved=prioritized
+            order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
+            for provider in order:
+                prioritized = [r for r in approved if families[r] == provider]
+                if prioritized:
+                    approved = prioritized
+                    break
         if not approved:raise HTTPException(503,"本人行情来源尚未配置或未获当前许可")
         if len(approved)!=1:raise HTTPException(409,"存在多个行情来源，请明确选择当前来源版本")
         return approved[0]

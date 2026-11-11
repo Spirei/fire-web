@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-type Result = { endpoint: string; busy: boolean; ok?: boolean; msg?: string; failed?: boolean };
+type Result = { endpoint: string; busy: boolean; ok?: boolean; msg?: string; failed?: boolean; retained?: boolean; observedAt?: string };
 type Health = { endpoint: string; available: boolean; skipped: boolean };
 const endpointKey = (host: string, port: string | number) => JSON.stringify([host.trim().toLowerCase() || "127.0.0.1", Number(port) || 11111]);
 
 /** The latest explicit test belongs to its endpoint and takes precedence over the initial health read. */
-export function useFutuConnectionStatus(host: string, port: string) {
+export function useFutuConnectionStatus(host: string, port: string, enabled = true) {
   const endpoint = endpointKey(host, port);
   const [health, setHealth] = useState<Health | null>(null), [healthFailed, setHealthFailed] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -14,26 +14,33 @@ export function useFutuConnectionStatus(host: string, port: string) {
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const currentEndpoint = useRef(endpoint); currentEndpoint.current = endpoint;
   useEffect(() => {
-    alive.current = true;
+    alive.current = enabled;
+    if (!enabled) return;
     let disposed = false;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8_000);
     void (async () => {
       try {
-        const response = await fetch("/api/health", { cache: "no-store", signal: controller.signal });
-        const status = (await response.json())?.data?.futuOpenD;
-        if (!response.ok || !status || typeof status.host !== "string" || typeof status.port !== "number" || typeof status.available !== "boolean" || typeof status.skipped !== "boolean") throw Error("Invalid OpenD status");
-        if (!disposed && alive.current && !controller.signal.aborted) setHealth({ endpoint: endpointKey(status.host, status.port), available: status.available, skipped: status.skipped });
+        const response = await fetch("/api/futu/test", { cache: "no-store", signal: controller.signal });
+        const status = await response.json();
+        if (!response.ok || !status || typeof status.host !== "string" || typeof status.port !== "number") throw Error("Invalid OpenD status");
+        if (!disposed && alive.current && !controller.signal.aborted) {
+          const checkedEndpoint = endpointKey(status.host, status.port);
+          setHealth({ endpoint: checkedEndpoint, available: false, skipped: false });
+          const last = status.lastTest;
+          // The latest explicit test wins if this slower retained read arrives afterwards.
+          if (last && typeof last.ok === "boolean") setResult(current => current?.endpoint === checkedEndpoint ? current : ({endpoint: checkedEndpoint, busy: false, ok: last.ok, msg: last.message, retained: true, observedAt: last.observedAt}));
+        }
       } catch {
         if (!disposed && alive.current) setHealthFailed(true);
       } finally { clearTimeout(timer); }
     })();
     return () => { disposed = true; alive.current = false; controller.abort(); clearTimeout(timer); };
-  }, []);
+  }, [endpoint, enabled]);
   useEffect(() => {
     ++sequence.current; clearTimeout(pendingTimer.current); pending.current?.abort(); pending.current = null; setResult(null);
     return () => { ++sequence.current; clearTimeout(pendingTimer.current); pending.current?.abort(); pending.current = null; };
-  }, [endpoint]);
+  }, [endpoint, enabled]);
 
   async function test() {
     if (pending.current || !alive.current) return;
@@ -56,8 +63,8 @@ export function useFutuConnectionStatus(host: string, port: string) {
   }
   const testResult = result?.endpoint === endpoint ? result : null;
   const status = testResult ? testResult.busy ? "testing" : testResult.failed ? "failed" : testResult.ok ? "connected" : "disconnected"
-    : health?.endpoint === endpoint ? health.available ? "connected" : health.skipped ? "skipped" : "disconnected"
-    : health ? "untested" : healthFailed ? "failed" : "checking";
-  const label = { testing: "测试中…", failed: "检测失败", connected: "已连接", disconnected: "未连接", skipped: "本地跳过", untested: "未测试", checking: "检测中…" }[status];
+    : health?.endpoint === endpoint ? "untested"
+    : health ? "untested" : healthFailed ? "untested" : "checking";
+  const label = testResult?.retained ? testResult.ok ? "上次已连接" : "上次未连接" : { testing: "测试中…", failed: "检测失败", connected: "已连接", disconnected: "未连接", untested: "未测试", checking: "读取中…" }[status];
   return { label, online: status === "connected", checking: status === "checking" || status === "testing", skipped: health?.skipped ?? false, result: testResult, test };
 }

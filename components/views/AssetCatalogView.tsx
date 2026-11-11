@@ -25,6 +25,7 @@ import CollectionSkeleton from "@/components/CollectionSkeleton";
 import Pagination from "@/components/Pagination";
 import AppSelect from "@/components/AppSelect";
 import { materialMarketSlots } from "@/lib/materialMarkets";
+import { readMaterialResponse } from "@/lib/materialRead";
 import { Capsule } from "@/components/Capsule";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { appConfirm } from "@/lib/appDialog";
@@ -197,16 +198,11 @@ export default function AssetCatalogView({
       page: String(page),
       removed: removed ? "1" : "0",
     });
-    fetch(
+    readMaterialResponse(
       type === "group" ? "/api/v1/watch-groups" : `/api/assets/catalog?${p}`,
-      {
-        signal: controller.signal,
-        cache: "no-store",
-      },
+      controller.signal,
     )
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw Error(d.error || "素材读取失败");
+      .then((d) => {
         if (type === "group") {
           const groups = (d.data?.groups || []).filter(
             (g: { kind: string; name: string }) =>
@@ -236,7 +232,8 @@ export default function AssetCatalogView({
             marketCounts: {},
           };
         }
-        return d;
+        if (!Array.isArray(d.assets) || !Number.isFinite(d.total) || !Number.isFinite(d.page)) throw Error("素材响应不完整，请重试");
+        return d as Listing;
       })
       .then((d) => {
         if (
@@ -262,10 +259,10 @@ export default function AssetCatalogView({
         setLoadedKey(readKey);
       })
       .catch((e) => {
-        if (!controller.signal.aborted) setError(e.message);
+        if (!controller.signal.aborted && current.current === readKey && foregroundRef.current) setError(e.message);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && current.current === readKey) setLoading(false);
       });
     return () => controller.abort();
   }, [readKey, tick, foreground]);

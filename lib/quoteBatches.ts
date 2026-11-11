@@ -19,14 +19,21 @@ export function restoreQuoteSnapshot(quotes: Record<string, Quote>, instruments:
 }
 
 /** 两个滚动批次；失败只影响本批，不能抹掉其他批次或失败批的旧行情。 */
-export async function readQuoteBatches(items: Item[], signal?: AbortSignal): Promise<QuoteBatchResult> {
+export async function readQuoteBatches(items: Item[], signal?: AbortSignal, options: { includeMarketCap?: boolean } = {}): Promise<QuoteBatchResult> {
   const result: QuoteBatchResult = { quotes: Object.create(null), completed: new Set() };
+  // Select a source per market; a mixed batch must not force US and HK/CN
+  // securities onto one provider. Keep at most two requests in flight.
+  const markets = new Map<string, Item[]>();
+  for (const item of items) {
+    const rows = markets.get(item.market) ?? [];
+    rows.push(item); markets.set(item.market, rows);
+  }
+  const batches = [...markets.values()].flatMap(rows => Array.from({length: Math.ceil(rows.length / 100)}, (_, index) => rows.slice(index * 100, index * 100 + 100)));
   let next = 0;
   const worker = async () => {
-    while (next < items.length) {
+    while (next < batches.length) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const batch = items.slice(next, next + 100);
-      next += 100;
+      const batch = batches[next++];
       const controller = new AbortController();
       const cancel = () => controller.abort();
       signal?.addEventListener("abort", cancel, { once: true });
@@ -34,7 +41,7 @@ export async function readQuoteBatches(items: Item[], signal?: AbortSignal): Pro
       try {
         const response = await fetch("/api/quotes", {
           method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: controller.signal,
-          body: JSON.stringify({ items: batch, includeMarketCap: false })
+          body: JSON.stringify({ items: batch, includeMarketCap: options.includeMarketCap === true })
         });
         if (!response.ok) continue;
         const data = await response.json();
@@ -52,7 +59,7 @@ export async function readQuoteBatches(items: Item[], signal?: AbortSignal): Pro
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(2, Math.ceil(items.length / 100)) }, worker));
+  await Promise.all(Array.from({ length: Math.min(2, batches.length) }, worker));
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   return result;
 }

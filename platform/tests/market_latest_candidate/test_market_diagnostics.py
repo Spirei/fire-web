@@ -43,6 +43,23 @@ def test_connection_check_does_not_fetch_quotes_or_claim_quote_permission():
     assert result == {'qotLogined': True, 'responded': True, 'quotePermissionVerified': False}
 
 
+def test_explicit_authorized_snapshot_verifies_aapl_without_subscribing():
+    context = DiagnosticContext()
+    class Frame:
+        def to_dict(self, mode):
+            return [{'code': 'US.AAPL', 'last_price': 123.45, 'private': 'discarded'}]
+    def snapshot(symbols):
+        assert symbols == ['US.AAPL']
+        context.calls.append('snapshot')
+        return 0, Frame()
+    context.get_market_snapshot = snapshot
+    result = diagnostic_collect(lambda **_: context, 0, {'action':'futu.test','host':'controlled','port':1234,'quoteProbe':True})
+    assert context.calls == ['state', 'snapshot', 'close']
+    assert result['quotePermissionVerified'] is True
+    assert result['quote'] == {'code':'US.AAPL','price':123.45}
+    assert 'private' not in repr(result)
+
+
 def test_quota_keeps_actual_zero_and_discards_security_lists_and_credentials():
     context = DiagnosticContext()
     result = execute(context, 'futu.quota')

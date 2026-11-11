@@ -268,7 +268,9 @@ class BatchQuotes:
     def __init__(self, authority):
         self.authority, self.db = authority, authority.db
 
-    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None):
+    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None):
+        if instrument not in (None, "equity", "index", "asset"):
+            raise HTTPException(400, "证券类型无效")
         if session not in (None, "REGULAR", "PRE", "AFTER", "OVERNIGHT"):
             raise HTTPException(400, "最新报价时段无效")
         if source_revision is not None:
@@ -350,14 +352,17 @@ class BatchQuotes:
                             raise HTTPException(403, "当前来源许可未覆盖所请求的行情")
                     streams = await (
                         await conn.execute(
-                            "SELECT s.*,c.policy_id FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision WHERE s.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND (%s::uuid IS NULL OR s.source_revision=%s) AND (%s::text IS NULL OR s.query->>'session'=%s) ORDER BY s.source_revision,s.id",
-                            (who.id, market, symbol, source_revision, source_revision, session, session),
+                            "SELECT s.*,c.policy_id FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision WHERE s.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND (%s::uuid IS NULL OR s.source_revision=%s) AND (%s::text IS NULL OR s.query->>'session'=%s) AND (%s::text IS NULL OR s.query->>'instrument'=%s) ORDER BY s.source_revision,s.id",
+                            (who.id, market, symbol, source_revision, source_revision, session, session, instrument, instrument),
                         )
                     ).fetchall()
                     candidates = []
                     integrity_failure = False
                     sources = set()
                     instruments = set()
+                    source_families = {}
+                    source_instruments = {}
+                    failed_sources = set()
                     retained_source = False
                     retained_policy_ids = set()
                     current_policy_ids = set()
@@ -374,6 +379,8 @@ class BatchQuotes:
                         query = query_from(stream["query"])
                         self.authority.validate_query(approved, query)
                         sources.add(stream["source_revision"])
+                        source_families[stream["source_revision"]] = approved.source
+                        source_instruments.setdefault(stream["source_revision"], set()).add(query.instrument)
                         current_policy_ids.add(approved.id)
                         instruments.add(query.instrument)
                         fact = await (
@@ -389,6 +396,7 @@ class BatchQuotes:
                                 )
                             except SnapshotMetricMismatch:
                                 integrity_failure = True
+                                failed_sources.add(stream["source_revision"])
                                 continue
                             dto, state = project(fact, approved, market, now, include_market_cap=include_market_cap)
                             if dto:
@@ -399,6 +407,16 @@ class BatchQuotes:
                     # may replace/block the currently authorized source.
                     if strict_sources and retained_source and not retained_policy_ids <= current_policy_ids:
                         raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
+                    if source_revision is None and source_preference == "auto" and market != "ASSET":
+                        order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
+                        for provider in order:
+                            prioritized = [c for c in candidates if c[1].source == provider]
+                            if prioritized:
+                                candidates = prioritized
+                                sources = {revision for revision in sources if source_families[revision] == provider}
+                                instruments = set().union(*(source_instruments[revision] for revision in sources))
+                                integrity_failure = bool(failed_sources & sources)
+                                break
                     if integrity_failure:
                         resolved[cache_key] = (None, {"state": "unverified_source_page"})
                     elif len(sources) > 1:
@@ -408,10 +426,6 @@ class BatchQuotes:
                     elif not candidates:
                         resolved[cache_key] = (None, {"state": "retained_source_unavailable" if retained_source else "missing"})
                     else:
-                        if source_revision is None and source_preference=="auto"and market!="ASSET":
-                            preferred="futu"if market=="US"else"tencent"
-                            prioritized=[c for c in candidates if c[1].source==preferred]
-                            if prioritized:candidates=prioritized
                         latest = max(fact["source_time"] for fact, _, _, _ in candidates)
                         same = [item for item in candidates if item[0]["source_time"] == latest]
                         selected_session_facts = [item for item in same if item[2]["session"] in ("PRE", "AFTER", "OVERNIGHT")

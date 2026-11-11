@@ -266,3 +266,54 @@ async def test_price_only_Futu_record_stays_unknown_for_OHLC_volume_and_actual_i
     parsed=json.loads(await asyncio.to_thread(subprocess.check_output,[str(ios_decoder)],input=json.dumps(quoted.json()['data']),text=True))
     assert parsed=={'price':120,'openUnknown':True,'highUnknown':True,'lowUnknown':True,'volumeUnknown':True,'changeUnknown':True,'session':'UNKNOWN','stale':True}
     assert await hashes(app)==before and transport.calls==1
+
+
+async def test_auto_source_priority_precedes_ambiguity_and_preserves_explicit_reads(quoted):
+    from alcor_api.market_contract import Query
+    client,app,authority,transport,_revision,headers,_source=quoted
+    original=authority.policies[0]
+    authority.policies+=(replace(original,id='hk-backup',markets=('HK',)),
+                         replace(original,id='hk-tencent',source='tencent',source_version='tencent-quotes-v1',markets=('HK',),timestamp_zones=(('HK','Asia/Hong_Kong'),)))
+    async def collect(policy,query,cursor):
+        transport.calls+=1
+        if policy.source == 'tencent':
+            fields=['']*68
+            for index,value in {1:'Synthetic HK',3:'160',4:'150',5:'151',30:'20261020220000',31:'10',32:'6.6667',33:'162',34:'149'}.items():fields[index]=value
+            return ('v_hk00700="'+'~'.join(fields)+'";').encode('gbk'),'http_response_body_gbk'
+        return canonical({'query':asdict(query),'licenseRevision':policy.license_revision,
+            'facts':[{**_source,'currency':'HKD','price':'140'}],'nextCursor':None}).encode(),'controlled_http_response_body'
+    transport.read=collect
+    for name in ('hk-backup','hk-tencent'):
+        response=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':name})
+        assert response.status_code==200,response.text
+        await demand(client,response.json()['revision'],Query('latest','HK','00700'))
+    await schedule(authority)
+    for _ in range(2):
+        task=await claim(app.state.db,uuid4());assert task is not None
+        assert await execute(authority,task,transport)=='observed'
+    await old_login(client)
+    app.state.db.settings._legacy_quote_source='auto'
+    response=await client.post('/api/quotes',json=body({'id':'42','market':'HK','code':'00700'}))
+    assert response.status_code==200,response.text
+    assert response.json()['quotes']['42']['price']==160
+    explicit=await client.post('/api/market/quotes/read',json=body({'id':'42','market':'HK','code':'00700'}),headers=headers)
+    assert explicit.json()['quoteStates']['42']['state']=='ambiguous_source','no preference must retain the ambiguity guard'
+
+
+async def test_private_ticker_binds_security_kind_owner_and_does_not_collect(quoted):
+    from alcor_api.market_contract import Query
+    client,app,authority,transport,revision,_headers,_source=quoted
+    await demand(client,revision,Query('latest','US','DJI',instrument='index'))
+    await schedule(authority)
+    task=await claim(app.state.db,uuid4());assert await execute(authority,task,transport)=='observed'
+    app.state.db.settings.public_ticker={'legacyPresentation':{'items':[
+        {'key':'dji','market':'US','label':'Synthetic index','secid':'100.DJIA'},
+        {'key':'equity','market':'US','label':'Must not borrow equity','secid':'200.AAPL'}],'interval':5}}
+    await old_login(client)
+    before=await hashes(app);calls=transport.calls
+    response=await client.get('/api/fire/ticker');assert response.status_code==200,response.text
+    items=response.json()['items'];assert items[0]['price']==120 and items[0]['secid']=='100.DJIA'
+    assert items[1]['price'] is None and response.json()['collectionOnRead'] is False
+    assert await hashes(app)==before and transport.calls==calls
+    client.cookies.clear()
+    assert (await client.get('/api/fire/ticker')).status_code==401

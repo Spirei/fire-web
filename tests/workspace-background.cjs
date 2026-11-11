@@ -93,12 +93,13 @@ module.exports = async function workspaceBackground() {
   console.log('PASS activity reads await the parent, share manual clicks, pause, preserve freshness and load unseeded system logs');
 
   const assetNet=network(),assetCommits=[],assetCleanups=[];
-  const assets={exports:{},...assetNet,AbortController,URLSearchParams,Date,document:{hidden:false},foreground:true,foregroundRef:ref(true),readKey:'stock|US',current:ref('stock|US'),type:'stock',market:'US',query:'',page:1,removed:false,tick:0,seenTick:ref(0),pageCache:ref(new Map()),ownerId:'fixture-owner',marketCountCache:ref(new Map()),setListing:data=>assetCommits.push(data),setLoadedKey(){},setLoading(){},setError(){},setSelection(){},useEffect:fn=>assetCleanups.push(fn())};
+  const materialExports={}; vm.runInNewContext(ts.transpileModule(source('lib/materialRead.ts'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:materialExports,fetch:assetNet.fetch,AbortController,DOMException,setTimeout,clearTimeout,Error,TypeError});
+  const assets={exports:{},...assetNet,readMaterialResponse:materialExports.readMaterialResponse,AbortController,URLSearchParams,Date,document:{hidden:false},foreground:true,foregroundRef:ref(true),readKey:'stock|US',current:ref('stock|US'),type:'stock',market:'US',query:'',page:1,removed:false,tick:0,seenTick:ref(0),pageCache:ref(new Map()),ownerId:'fixture-owner',marketCountCache:ref(new Map()),setListing:data=>assetCommits.push(data),setLoadedKey(){},setLoading(){},setError(){},setSelection(){},useEffect:fn=>assetCleanups.push(fn())};
   const effect=slice(library,'  useEffect(() => {\n    if (!foreground) return;','  useEffect(() => {\n    const controller = new AbortController();');
   vm.runInNewContext(effect,assets);assert.equal(assetNet.requests.length,1);
   assetCleanups.pop()();assets.readKey='stock|HK';assets.current.current=assets.readKey;assets.market='HK';vm.runInNewContext(effect,assets);assert(assetNet.requests[0].signal.aborted);
   assetNet.requests[0].resolve({assets:[{id:'wrong'}]});await settle();assert.equal(assetCommits.length,0);
-  assetNet.requests[1].resolve({assets:[{id:'hk'}]});await settle();assert.equal(assetCommits.at(-1).assets[0].id,'hk');
+  assetNet.requests[1].resolve({assets:[{id:'hk'}],total:1,page:1});await settle();assert.equal(assetCommits.at(-1).assets[0].id,'hk');
   assetCleanups.pop()();vm.runInNewContext(effect,assets);assert.equal(assetNet.requests.length,2,'fresh category cache avoids another transport');assert.equal(assetCommits.at(-1).assets[0].id,'hk');
   assets.tick++;vm.runInNewContext(effect,assets);assert.equal(assetNet.requests.length,3,'manual refresh still fetches');
   assets.document.hidden=true;assetNet.requests[2].resolve({assets:[{id:'hidden'}]});await settle();assert.equal(assetCommits.at(-1).assets[0].id,'hk');assetCleanups.pop()();

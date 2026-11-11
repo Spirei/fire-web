@@ -35,6 +35,7 @@ export interface CalendarDayCell {
   day: number;
   pnl: number;
   pct: number | null;
+  available?: boolean;
 }
 
 export interface CalendarYearCell {
@@ -247,13 +248,43 @@ export function buildMonthCells(
     const asset = byDate.get(date);
     const prev = prevAsset.get(date);
     if (asset == null || prev == null) {
-      cells.push({ day, pnl: 0, pct: null });
+      cells.push({ day, pnl: 0, pct: null, available: false });
     } else {
       const pnl = asset - prev;
       cells.push({ day, pnl, pct: prev ? (pnl / prev) * 100 : null });
     }
   }
   return cells;
+}
+
+/** Original realized amounts can be displayed without inventing an opening NAV
+ * or a daily asset curve. Missing original amounts/FX remain unavailable. */
+export function registeredPnlCalendar(orders: TradeOrder[], rates: Record<string, number>, year: number, month: number, market = "全部") {
+  const selected = market === "美股" ? "US" : market === "港股" ? "HK" : market === "A股" ? "CN" : "";
+  const amounts = new Map<string, number>();
+  const details: Record<string, CalendarDayRow[]> = {};
+  for (const order of orders) {
+    if (order.status !== "filled" || !["sell", "dividend"].includes(order.side)) continue;
+    if (selected && (order.accountMarket || order.market) !== selected) continue;
+    const date = calendarMarketDate(order.tradedAt, order.market);
+    if (!date.startsWith(`${year}-`)) continue;
+    const iso = order.realizedPnlCurrency || order.currency || MARKET_CURRENCY[order.market];
+    const rate = iso === "USD" ? 1 : rates[iso];
+    const value = typeof order.realizedPnl === "number" && Number.isFinite(order.realizedPnl) && rate > 0 ? order.realizedPnl / rate : Number.NaN;
+    amounts.set(date, (amounts.get(date) ?? 0) + value);
+    if (Number.isFinite(value)) (details[date] ??= []).push({ id: order.id, name: order.name, code: order.code, market: order.market, pnl: value });
+  }
+  const prefix = `${year}-${String(month).padStart(2,"0")}`;
+  const days: (CalendarDayCell | null)[] = Array.from({length:new Date(year,month-1,1).getDay()},()=>null);
+  for (let day=1;day<=new Date(year,month,0).getDate();day++) {
+    const value = amounts.get(`${prefix}-${String(day).padStart(2,"0")}`);
+    days.push({day,pnl:value ?? 0,pct:null,available:value !== undefined && Number.isFinite(value)});
+  }
+  const months: CalendarYearCell[] = Array.from({length:12},(_,index)=>{
+    const m=index+1, values=[...amounts].filter(([date])=>date.startsWith(`${year}-${String(m).padStart(2,"0")}-`)).map(([,value])=>value);
+    return {m,pnl:values.length ? values.reduce((a,b)=>a+b,0) : Number.NaN,pct:null,active:m===month};
+  });
+  return {days,months,details};
 }
 
 /** 年视图：每月盈亏（当月日盈亏合计）与收益率（相对上月月末资产） */

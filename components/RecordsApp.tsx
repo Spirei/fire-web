@@ -434,9 +434,9 @@ export default function RecordsApp({
     quoteRequestRef.current = controller;
     setRefreshing(true);
     try {
-      const result = await readQuoteBatches(quoteRecords.map(r => ({ id: r.id, market: r.market, code: r.code })), controller.signal);
+      const result = await readQuoteBatches(quoteRecords.map(r => ({ id: r.id, market: r.market, code: r.code })), controller.signal, { includeMarketCap: activeTabRef.current === "watchlist" });
       // 无有效返回不刷新时间，也不把旧值当作本次新行情。
-      if (!Object.keys(result.quotes).length) return;
+      if (!result.completed.size) return;
       const currentRecords = recordsRef.current;
       const merged = applyQuoteBatches(quotesRef.current, result, quoteRecords, currentRecords);
       const positionIds = currentRecords.filter((record) => Number(record.qty) > 0 && record.code.trim()).map((record) => record.id);
@@ -458,14 +458,16 @@ export default function RecordsApp({
       currentRecords.forEach(record => {
         if (merged[record.id] === result.quotes[record.id] && result.quotes[record.id]) loadedQuoteKeysRef.current.add(quoteInstrumentKey(record));
       });
-      setQuoteAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
-      quoteFetchedAtRef.current = Date.now();
-      try {
-        const refreshedAt = new Date();
-        localStorage.setItem("fire:last-quotes-refresh", refreshedAt.toLocaleTimeString("zh-CN", { hour12: false }));
-        localStorage.setItem("fire:last-quotes-refresh-at", String(refreshedAt.getTime()));
-      } catch {
-        /* 忽略存储不可用 */
+      if (Object.keys(result.quotes).length) {
+        setQuoteAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
+        quoteFetchedAtRef.current = Date.now();
+        try {
+          const refreshedAt = new Date();
+          localStorage.setItem("fire:last-quotes-refresh", refreshedAt.toLocaleTimeString("zh-CN", { hour12: false }));
+          localStorage.setItem("fire:last-quotes-refresh-at", String(refreshedAt.getTime()));
+        } catch {
+          /* 忽略存储不可用 */
+        }
       }
       initialQuoteLoadRef.current = true;
     } catch {

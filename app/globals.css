@@ -884,7 +884,10 @@
 }
 .ticker-item {
   animation: ticker-in 0.45s ease both;
+  transition: opacity 180ms ease;
 }
+.ticker-item:hover { opacity:.88; }
+@media(prefers-reduced-motion:reduce) { .ticker-item { animation:none; transition:none; } }
 
 /* 全站宽数据区域：嵌套卡片/分栏中仍由当前区域接管横向手势。 */
 .data-table-scroll { display:block; width:100%; min-width:0; max-width:100%; overflow-x:auto; overflow-y:hidden; contain:inline-size; overscroll-behavior-inline:contain; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; scrollbar-gutter:stable; }
@@ -7372,3 +7375,56 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 
 .backup-operation-progress { border:1px solid rgb(var(--site-edge)); border-radius:16px; padding:16px; color:rgb(var(--site-ink)); }
 .dark .backup-operation-progress { border-color:rgb(var(--site-edge)); color:rgb(var(--site-ink)); }
+.market-source-settings { padding: 4px 0; }
+.market-source-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; color:#7b8491; font-size:12px; }
+.market-source-list { display:flex; flex-direction:column; gap:10px; list-style:none; padding:0; margin:0; }
+.market-source-row { display:flex; align-items:center; gap:13px; min-width:0; padding:16px 14px; border:1px solid #e6e9ee; border-radius:18px; background:#fff; transition:background .18s,border-color .18s,opacity .18s; }
+.market-source-row.is-drop-target { background:color-mix(in srgb,var(--brand,#0866ff) 6%,white); border-color:var(--brand,#0866ff); }
+.market-source-row.is-dragging { opacity:.48; }
+.market-source-grip { display:flex; flex:none; padding:6px 2px; color:#9aa2ad; cursor:grab; }
+.market-source-grip:active { cursor:grabbing; }
+.market-source-mark { display:grid; place-items:center; flex:none; width:42px; height:42px; border-radius:13px; font-size:20px; font-weight:750; }
+.market-source-mark.provider-futu { background:#fff3e4; color:#c77614; }
+.market-source-mark.provider-tencent { background:#eaf5ff; color:#2673a9; }
+.market-source-mark.provider-eastmoney { background:#fff0ed; color:#be593f; }
+.market-source-mark.provider-yahoo { background:#f3edff; color:#7950bd; }
+.market-source-copy { min-width:0; flex:1; }
+.market-source-copy>div { display:flex; align-items:center; gap:8px; }
+.market-source-copy strong { color:#242a33; font-size:14px; font-weight:650; }
+.market-source-copy small { display:block; margin-top:5px; color:#7b8491; font-size:11px; font-variant-numeric:tabular-nums; }
+.market-source-rank { color:#929aa5; background:#f4f5f7; border-radius:6px; padding:2px 6px; font-size:9px; white-space:nowrap; }
+.market-source-health { min-width:76px; text-align:right; font-size:11px; color:#8a939f; }
+.market-source-health>span { display:inline-flex; gap:5px; align-items:center; }
+.market-source-health i { width:5px; height:5px; border-radius:50%; background:currentColor; }
+.market-source-health [data-state=available] { color:#16836b; }
+.market-source-health [data-state=connected] { color:#3684a9; }
+.market-source-health [data-state=unavailable],.market-source-health [data-state=unknown] { color:#b37e2d; }
+.market-source-health small { display:block; margin-top:5px; font-size:10px; font-variant-numeric:tabular-nums; }
+.market-source-actions { display:flex; align-items:center; gap:10px; }
+.market-source-moves { display:flex; flex-direction:column; gap:3px; }
+.market-source-moves button { width:20px; height:20px; border-radius:5px; color:#77818e; transition:background .15s; }
+.market-source-moves button:hover:not(:disabled) { background:#edf0f4; }
+.market-source-moves button:disabled { opacity:.25; }
+.dark .market-source-row { background:#22262d; border-color:#343a44; }
+.dark .market-source-row.is-drop-target { background:#282f3c; border-color:var(--brand,#0866ff); }
+.dark .market-source-copy strong { color:#e5e8ee; }
+.dark .market-source-copy small,.dark .market-source-toolbar { color:#9aa3af; }
+.dark .market-source-rank { background:#2e343e; color:#a7afbb; }
+.dark .market-source-mark.provider-futu { background:#3c3023; color:#eeb467; }
+.dark .market-source-mark.provider-tencent { background:#233344; color:#8dbce7; }
+.dark .market-source-mark.provider-eastmoney { background:#402c29; color:#e7a18d; }
+.dark .market-source-mark.provider-yahoo { background:#342a46; color:#bea0e8; }
+.dark .market-source-health [data-state=available] { color:#5cc6a8; }
+.dark .market-source-health [data-state=connected] { color:#79bce0; }
+.dark .market-source-health [data-state=unavailable],.dark .market-source-health [data-state=unknown] { color:#d3ad69; }
+.dark .market-source-moves button:hover:not(:disabled) { background:#343c48; }
+@media(max-width:480px) {
+ .market-source-row { padding:12px 9px; gap:8px; border-radius:15px; flex-wrap:wrap; }
+ .market-source-mark { width:34px; height:34px; border-radius:10px; font-size:17px; }
+ .market-source-copy strong { font-size:13px; }
+ .market-source-rank { font-size:8px; }
+ .market-source-health { min-width:60px; font-size:10px; }
+ .market-source-actions { width:100%; justify-content:flex-end; padding-top:4px; }
+ .market-source-moves { flex-direction:row; gap:8px; }
+}
+@media(prefers-reduced-motion:reduce) { .market-source-row,.market-source-moves button { transition:none; } }

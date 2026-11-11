@@ -21,7 +21,7 @@ from .security import lock_mutation_identity
 SOURCE_FIELDS=('public_market_data_policies','public_market_source_targets','public_discovery_policies','public_discovery_targets','public_earnings_targets','public_reference_policies','public_sec_targets','market_data_policies','dividend_source_targets','fx_provider_targets','market_discovery_targets','earnings_targets','sec_company_targets','sec_financial_targets','broker_statement_targets','record_ocr_targets','card_ocr_targets','feed_targets','feed_model_targets','celeb_source_targets','asset_source_targets','public_ticker')
 SMTP_FIELDS=('smtpEnabled','smtpHost','smtpPort','smtpSecure','smtpFromName','smtpFromEmail','emailLinkOrigin','smtpApproval','mailTimeout','smtpUser','smtpPassword')
 MODEL_FIELDS=('modelServices','activeModelServiceId')
-GROUP_FIELDS={'smtp':SMTP_FIELDS,'models':MODEL_FIELDS,'sources':SOURCE_FIELDS+('quoteSource','peopleRefreshIntervals','translationEnabled','translationProvider','translationApiUrl','translationApproval'),
+GROUP_FIELDS={'smtp':SMTP_FIELDS,'models':MODEL_FIELDS,'sources':SOURCE_FIELDS+('quoteSource','quoteSourceOrder','peopleRefreshIntervals','translationEnabled','translationProvider','translationApiUrl','translationApproval'),
               'notifications':('business_notification_targets','legacyChannelSettings'),'scheduling':('worker_poll_seconds','lease_seconds'),
               'cookies':('xueqiuCookieTargetId','xueqiuCookie','_xueqiuCredentialCiphertext')}
 SECRET_WORDS=re.compile(r'password|secret|token|credential|cookie|api_?key|aeskey|encryptkey|webhook',re.IGNORECASE)
@@ -174,7 +174,7 @@ def validate_group(group,values,who,settings):
             if key=='legacyChannelSettings':
                 from .legacy_notification_settings import validate
                 validate(values[key]);continue
-            if key in ('quoteSource','peopleRefreshIntervals','translationEnabled','translationProvider','translationApiUrl','translationApproval','public_ticker'):continue
+            if key in ('quoteSource','quoteSourceOrder','peopleRefreshIntervals','translationEnabled','translationProvider','translationApiUrl','translationApproval','public_ticker'):continue
             if not isinstance(rows,list) or len(rows)>100:raise HTTPException(422,'安装目标列表无效或过多')
             seen=set()
             for target in rows:
@@ -203,6 +203,7 @@ def validate_group(group,values,who,settings):
         if group=='sources'and intervals:
             for target in values.get('feed_targets',[]):
                 if target.get('ownerId')==who.id and target.get('personId')in intervals:target['refreshMinutes']=intervals[target['personId']]
+        if 'quoteSourceOrder' in values and (not isinstance(values['quoteSourceOrder'],list) or len(values['quoteSourceOrder'])!=4 or any(not isinstance(item,str) for item in values['quoteSourceOrder']) or set(values['quoteSourceOrder'])!={'futu','tencent','eastmoney','yahoo'}):raise HTTPException(422,'行情源顺序须完整包含四个不同来源')
         if values.get('quoteSource')not in (None,'auto','futu','tencent'):raise HTTPException(422,'行情提供商选择无效')
         if values.get('quoteSource')in ('futu','tencent')and not any(p.get('source')==values['quoteSource']and p.get('owner_id')==who.id and 'latest'in p.get('purposes',[])for p in values.get('market_data_policies',[])):raise HTTPException(409,'行情选择须有本人明确已许可的提供商策略')
         if values.get('translationEnabled'):
@@ -595,7 +596,9 @@ def apply_group(settings,group,values):
     elif group in ('sources','notifications','scheduling'):
         for key,value in values.items():
             if key in SOURCE_FIELDS or key in ('business_notification_targets','worker_poll_seconds','lease_seconds'):assign(settings,key,copy.deepcopy(value))
-        if group=='sources':assign(settings,'_legacy_quote_source',values.get('quoteSource'))
+        if group=='sources':
+            assign(settings,'_legacy_quote_source',values.get('quoteSource'))
+            assign(settings,'_legacy_quote_order',values.get('quoteSourceOrder'))
         if group=='sources' and 'translationEnabled' in values:
             current=[target for target in settings.feed_model_targets if target.get('purpose')!='feed.translate']
             if values['translationEnabled'] and values.get('translationProvider')in {'deepseek','openai','custom'}:

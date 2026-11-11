@@ -16,7 +16,7 @@ function harness(){
  const drain=async()=>{for(let i=0;i<20;i++)await Promise.resolve();return render();};
  return {render,drain,requests,timers,get value(){return value;},host(next){host=next;return render();},port(next){port=next;return render();},
   reply(i,data,status=200){requests[i].resolve({ok:status===200,json:async()=>data});},
-  health(i=0,extra={}){this.reply(i,{data:{futuOpenD:{host:'192.168.28.41',port:11111,available:false,skipped:false,...extra}}});},
+  health(i=0,extra={}){this.reply(i,{host:'192.168.28.41',port:11111,lastTest:null,...extra});},
   tick(ms){time+=ms;for(const[id,t]of[...timers])if(t.at<=time){timers.delete(id);t.fn();}},close(){for(const e of effects)e?.cleanup?.();assert.equal(timers.size,0);}};
 }
 let passed=0;async function test(name,fn){await fn();passed++;console.log('PASS '+name);}
@@ -30,13 +30,13 @@ let passed=0;async function test(name,fn){await fn();passed++;console.log('PASS 
  });
  await test('changing the host/port cancels tests, hides old results and rejects late replies',async()=>{
   const h=harness();h.render();h.health();await h.drain();const p=h.value.test();h.host('192.168.28.42');assert(h.requests[1].init.signal.aborted);assert.equal(h.value.label,'未测试');h.reply(1,{ok:true});await p;await h.drain();assert.equal(h.value.result,null);assert.equal(h.value.label,'未测试');
-  h.host('192.168.28.41');assert.equal(h.value.label,'未连接');h.port('22222');assert.equal(h.value.label,'未测试');h.close();
+  h.host('192.168.28.41');assert.equal(h.value.label,'未测试');h.port('22222');assert.equal(h.value.label,'未测试');h.close();
  });
- await test('local automatic skipping does not contradict a successful explicit OpenD test',async()=>{
-  const h=harness();h.render();h.health(0,{skipped:true});await h.drain();assert.equal(h.value.label,'本地跳过');const p=h.value.test();h.reply(1,{ok:true});await p;h.render();assert.equal(h.value.label,'已连接');assert.equal(h.value.skipped,true);h.close();
+ await test('settings restores the latest retained endpoint result without probing OpenD',async()=>{
+  const h=harness();h.render();h.health(0,{lastTest:{ok:true,message:'连接成功，AAPL 报价 100',observedAt:'2026-11-12T00:00:00Z'}});await h.drain();assert.equal(h.value.label,'上次已连接');assert.equal(h.value.result.retained,true);assert(h.requests.every(request=>!request.init.method));assert.equal(h.requests[0].url,'/api/futu/test');const p=h.value.test();h.reply(1,{ok:true});await p;h.render();assert.equal(h.value.label,'已连接');h.close();
  });
  await test('malformed and forbidden responses cannot display connection success',async()=>{
-  const h=harness();h.render();h.reply(0,{data:{futuOpenD:{}}});await h.drain();assert.equal(h.value.label,'检测失败');let p=h.value.test();h.reply(1,{});await p;h.render();assert.equal(h.value.online,false);assert.equal(h.value.result.msg,'连接测试响应无效');
+  const h=harness();h.render();h.reply(0,{data:{futuOpenD:{}}});await h.drain();assert.equal(h.value.label,'未测试');let p=h.value.test();h.reply(1,{});await p;h.render();assert.equal(h.value.online,false);assert.equal(h.value.result.msg,'连接测试响应无效');
   p=h.value.test();h.reply(2,{ok:true,error:'需要管理员权限'},403);await p;h.render();assert.equal(h.value.label,'检测失败');assert.equal(h.value.result.msg,'需要管理员权限');h.close();
  });
  await test('double clicks share one test; a timeout aborts once and permits an explicit retry',async()=>{

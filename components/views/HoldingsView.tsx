@@ -22,7 +22,7 @@ import {
   type TradeOrder,
   type OrderSide
 } from "@/lib/types";
-import { normalizeCachedRates, readCachedRates, writeCachedRates } from "@/lib/ratesCache";
+import { useRates, readObservedRates } from "@/lib/useRates";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
 import GroupSelect from "@/components/GroupSelect";
@@ -255,51 +255,18 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [tradeSide, setTradeSide] = useState<OrderSide>("buy");
   const [tradeSaving, setTradeSaving] = useState(false);
   const [tradeForm, setTradeForm] = useState({ qty: "", price: "", fees: "0", settlementAmount: "", tradedAt: "", note: "" });
-  // 汇率：初始用兜底值（避免刷新瞬间非美元市场被按 1:1 误算）。
-  // ⚠️ 缓存必须在挂载后才读：首帧读 localStorage 会让服务端与客户端渲染出不同金额（hydration 报错）。
-  const [rates, setRates] = useState<Record<string, number>>(() => ({ ...FALLBACK_RATES }));
-  // 是否有「上一次成功」的汇率：有则秒开真实值；没有则不展示猜测值，等服务端返回
-  const [ratesReady, setRatesReady] = useState(false);
+  const rates = useRates();
   const [fundBalances, setFundBalances] = useState<Record<string, number|null>>(() => ({ ...initialFundBalances }));
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   // 市场盈亏卡片拖动顺序（本地记忆）
   const [savedPnlOrder, setPnlOrder] = usePersistedState<string[]>("fire:holdings:pnl-order", []);
   const pnlOrder = Array.isArray(savedPnlOrder) ? savedPnlOrder.filter(item => typeof item === "string") : [];
-  // 浏览器缓存（汇率 + 市场盈亏卡片顺序）统一在挂载后、绘制前恢复，避免水合不一致与闪烁
-  useLayoutEffect(() => {
-    const cachedRates = readCachedRates();
-    if (cachedRates) {
-      setRates((prev) => ({ ...prev, ...cachedRates }));
-      setRatesReady(true);
-    }
-  }, []);
   const pnlDragIndex = useRef<number | null>(null);
-
-  // 加载实时汇率（总资产跨市场换算用）；抽成函数供手动刷新复用
-  const ratesGeneration = useRef(0);
   const loadRates = useCallback(async () => {
-    const generation = ++ratesGeneration.current;
-    try {
-      const res = await sharedRead("/api/rates");
-      const data = res.ok ? await res.json() : null;
-      const next = normalizeCachedRates(data?.rates);
-      if (next && generation === ratesGeneration.current) {
-        // A successful empty/partial observation also withdraws missing rates.
-        setRates(next);
-        setRatesReady(true);
-        writeCachedRates(next);
-      }
-    } catch {
-      /* 汇率失败保留上次值 */
-    }
+    await readObservedRates(true);
+    window.dispatchEvent(new Event("fire:rates-updated"));
   }, []);
-
-  useEffect(() => {
-    void loadRates();
-    window.addEventListener("fire:rates-updated", loadRates);
-    return () => { ++ratesGeneration.current; window.removeEventListener("fire:rates-updated", loadRates); };
-  }, [loadRates]);
 
   const loadFundBalances = useCallback(async () => {
     try {
@@ -401,7 +368,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     return { mv, cost, pnl, day, rate: cost ? pnl / Math.abs(cost) : null };
   }, [filtered, livePrice, quotes, active, rates]);
   // Loading ends after the read; each missing financial input remains unavailable.
-  const metricsReady = valuationReady;
+  const metricsReady = valuationReady || filtered.every(record => Number.isFinite(positionFigures(record, quotes).marketValue));
   // 总资产视图：市场盈亏汇总
   const marketPnl = useMemo(() => {
     const map = new Map<string, { mv: number; cost: number; pnl: number; day: number }>();
@@ -480,7 +447,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const totalCur = active === "TOTAL" ? displayCur : cur;
   // 总资产货币符号（ISO 码 → 符号；市场盈亏卡片仍用 USD$/HKD$/CNY¥ 规范标识）
   const totalCurLabel = CURRENCY_SYMBOLS[totalCur as keyof typeof CURRENCY_SYMBOLS] || totalCur;
-  const cashInUsd = useMemo(() => Object.keys(fundBalances).length && Object.values(fundBalances).every(value=>typeof value==='number'&&Number.isFinite(value)) ? (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => Number.isFinite(rates[iso])&&rates[iso]>0 ? sum+value/rates[iso] : NaN,0) : NaN, [fundBalances, rates]);
+  const cashInUsd = useMemo(() => Object.keys(fundBalances).length && Object.values(fundBalances).every(value=>typeof value==='number'&&Number.isFinite(value)) ? (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => value === 0 ? sum : Number.isFinite(rates[iso])&&rates[iso]>0 ? sum+value/rates[iso] : NaN,0) : NaN, [fundBalances, rates]);
   const allMarketsNetAsset = useMemo(() => (positions.reduce((sum, r) => sum + toUsd(r.market, livePrice(r) * (Number(r.qty) || 0)), 0) + cashInUsd) * (rates[displayCur] ?? Number.NaN), [positions, livePrice, rates, cashInUsd, displayCur]);
   const displayedNetAsset = active === "TOTAL"
     ? (metrics.mv + cashInUsd) * totalFactor
@@ -554,8 +521,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const dayPnl = qty > 0 && quote ? quote.change * qty : null;
     const dayPnlRate = quote ? quote.changePct / 100 : null;
     const factor = active === "TOTAL" ? toUsd(record.market, 1) : holdingMoneyFactor(record, rates, holdingAccountCurrency(record));
-    const displayMoneyFactor = active === "TOTAL" ? factor * (rates[displayCur] ?? Number.NaN) : factor;
-    const displayMoneyCurrency = active === "TOTAL" ? totalCurLabel : marketMeta(holdingAccountMarket(record)).currency;
+    const convertedFactor = active === "TOTAL" ? factor * (rates[displayCur] ?? Number.NaN) : factor;
+    // Keep a known native amount readable when a cross-currency rate is missing.
+    // Aggregates remain incomplete; only this row falls back with its own symbol.
+    const displayMoneyFactor = Number.isFinite(convertedFactor) ? convertedFactor : 1;
+    const displayMoneyCurrency = Number.isFinite(convertedFactor) ? active === "TOTAL" ? totalCurLabel : marketMeta(holdingAccountMarket(record)).currency : meta.currency;
     const weight = marketValue !== null && filteredMarketValue ? marketValue * factor / filteredMarketValue : null;
 
     if (key === "identity") {

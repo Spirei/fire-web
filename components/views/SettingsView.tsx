@@ -1,4 +1,5 @@
 "use client";
+import MarketSourceSettings from "@/components/MarketSourceSettings";
 import Avatar from "@/components/Avatar";
 import { SESSION_PROOF, requestAdminProof } from "@/lib/adminProof";
 import { Capsule, IconButton, IconLink } from "@/components/Capsule";
@@ -83,7 +84,7 @@ interface Props {
   initialSettingsVersion?: import("@/lib/siteSettingsCommand").SettingsVersion;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   /** 服务端首帧设置快照，避免刷新时先渲染默认开关再回落到真实值 */
-  initialSettings?: Pick<SiteSettings, "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
+  initialSettings?: Pick<SiteSettings, "quoteSourceOrder" | "allowRegister" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "translationEnabled" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
 }
 
 function SettingsDetailShell({ title, category, detailKey, showBack = false, closeDisabled = false, editable = false, editing = false, onBack, onEdit, onSave, onCancel, onClose, children }: { title: string; category: string; detailKey?: string; showBack?: boolean; closeDisabled?: boolean; editable?: boolean; editing?: boolean; onBack?: () => void; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; onClose: () => void; children: React.ReactNode }) {
@@ -164,7 +165,7 @@ function defaultAnchorFor(sub: SubKey): string {
 const SETTINGS_CATEGORIES = [
   { key: "account", label: "账号与安全", icon: "account", desc: "管理个人资料、密码和登录方式。", anchors: ["profile", "password", "totp", "passkeys", "authorizations", "passkey-config"] },
   { key: "website", label: "外观与网站", icon: "website", desc: "设置网站形象、配色与首页内容。", anchors: ["palette", "info", "appearance", "ticker", "nav", "app-nav", "mobile-nav"] },
-  { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "sources", "source-reports", "source-icons", "source-content"] },
+  { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "quote-sources", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
   { key: "social", label: "通知与配置", icon: "social", desc: "配置企业微信、Telegram、飞书、QQ、Discord、WebPush 和邮件。", anchors: ["wechat", "telegram", "feishu", "qq", "discord", "webpush", "mail", "mail-templates"] },
   { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "cron", "backups", "danger", "delete-account"] },
@@ -1505,7 +1506,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [groupsLoaded, setGroupsLoaded] = useState(!!initialSettingsVersion);
   const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [srcSaving, setSrcSaving] = useState(false);
-  const { label: futuStatusLabel, online: futuOnline, checking: futuChecking, skipped: futuSkipped, result: futuTest, test: testFutu } = useFutuConnectionStatus(site.futuHost, site.futuPort);
+  const { label: futuStatusLabel, online: futuOnline, checking: futuChecking, skipped: futuSkipped, result: futuTest, test: testFutu } = useFutuConnectionStatus(site.futuHost, site.futuPort, isAdminUser && activeAnchor === "trade");
   const [futuQuota, setFutuQuota] = useState<{
     loading: boolean;
     data?: {
@@ -2968,7 +2969,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <div className="sw-row settings-inline-row">
                       <div className="sw-row-label"><b>连接状态</b>{futuSkipped && <span title="本地开发服务默认不连接 OpenD；如需启用，设置 STOCKLOG_FUTU=on 后重启。">本地默认跳过，测试仍会连接</span>}</div>
                       <div className="ctrl">
-                        <span className={`inline-flex items-center gap-1.5 text-[11.5px] ${futuChecking ? "text-faint" : futuOnline ? "text-[#0fa07b]" : "text-[#e5a13b]"}`} role="status" aria-live="polite">
+                        <span title={futuTest?.observedAt ? `上次检测：${new Date(futuTest.observedAt).toLocaleString("zh-CN", {hour12:false})}` : undefined} className={`inline-flex items-center gap-1.5 text-[11.5px] ${futuChecking ? "text-faint" : futuOnline ? "text-[#0fa07b]" : "text-[#e5a13b]"}`} role="status" aria-live="polite">
                           <i className={`h-1.5 w-1.5 rounded-full ${futuChecking ? "bg-[#d1d5db]" : futuOnline ? "bg-[#0fa07b]" : "bg-[#e5a13b]"}`} />
                           {futuStatusLabel}
                         </span>
@@ -3005,13 +3006,16 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       </div>
                     </div>
                     </SettingsManagedPane>
-                    <SettingsManagedPane name="source" title="行情来源" heading={false} summary={site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}>
+                    <SettingsManagedPane name="source" title="行情来源" heading={false} summary={site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "仅腾讯" : "自动（按优先顺序）"}>
                     <div className="sw-row settings-inline-row">
                       <div className="sw-row-label"><b>行情来源</b><span>自动模式失败时使用备用源</span></div>
-                      {editingFutu ? <AppSelect value={site.quoteSource} onChange={value => setSite(s => ({ ...s, quoteSource:value as SiteSettings["quoteSource"] }))} options={[{value:"auto",label:"自动（富途优先）"},{value:"futu",label:"仅富途"},{value:"tencent",label:"腾讯 + Yahoo"}]} className="settings-clean-select" ariaLabel="行情来源" /> : <span className="settings-detail-value">{site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "腾讯 + Yahoo" : "自动（富途优先）"}</span>}
+                      {editingFutu ? <AppSelect value={site.quoteSource} onChange={value => setSite(s => ({ ...s, quoteSource:value as SiteSettings["quoteSource"] }))} options={[{value:"auto",label:"自动（按优先顺序）"},{value:"futu",label:"仅富途"},{value:"tencent",label:"仅腾讯"}]} className="settings-clean-select" ariaLabel="行情来源" /> : <span className="settings-detail-value">{site.quoteSource === "futu" ? "仅富途" : site.quoteSource === "tencent" ? "仅腾讯" : "自动（按优先顺序）"}</span>}
                     </div>
                     </SettingsManagedPane>
                   </SettingsManagedGroup>
+                </SettingsSection>
+                <SettingsSection id="quote-sources" icon="quote-sources" title="行情源">
+                  <MarketSourceSettings enabled={isAdminUser && activeAnchor === "quote-sources"} order={site.quoteSourceOrder} onSave={order => saveBlock("quote-source-order", {quoteSourceOrder:order}, "行情源顺序已保存")} />
                 </SettingsSection>
                 <SettingsSection id="currency-display" icon="stocks" title="货币金额显示" desc="大额金额显示方式">
                   <div className="sw-row">

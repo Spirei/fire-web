@@ -1,6 +1,7 @@
 """Partial private settings aggregate: real isolated authorities, no provider access."""
 
 from uuid import uuid4
+import asyncio
 
 import httpx
 import pytest_asyncio
@@ -68,8 +69,38 @@ async def test_opend_settings_install_own_fixed_source_without_manual_env(legacy
     assert tested.status_code == 200, tested.text
     assert tested.json()['ok'] is True
     assert len(calls) == 1 and calls[0][1] == 'futu.test'
+    retained = await legacy.get('/api/futu/test')
+    assert retained.status_code == 200, retained.text
+    assert retained.json()['lastTest']['requestId'] == tested.json()['requestId']
+    assert retained.json()['lastTest']['observedAt'] == tested.json()['observedAt']
+    assert len(calls) == 1, 'reopening settings must not probe OpenD again'
     denied = await legacy.post('/api/futu/test',json={'host':'192.0.2.42','port':'11111'})
     assert denied.status_code == 403 and len(calls) == 1
+
+
+async def test_web_fx_refresh_and_original_receipt_share_the_legacy_web_identity(legacy):
+    identifier = str(uuid4())
+    refreshed = await legacy.post('/api/rates/refresh', json={'requestId':identifier})
+    assert refreshed.status_code == 202, refreshed.text
+    receipt = await legacy.get('/api/rates/operations/'+identifier)
+    assert receipt.status_code == 200, receipt.text
+    assert receipt.json()['id'] == refreshed.json()['id']
+    replay = await legacy.post('/api/rates/refresh', json={'requestId':identifier})
+    assert replay.json()['id'] == receipt.json()['id']
+
+
+async def test_parallel_catalog_readers_keep_identity_protection_without_exclusive_owner_lock(legacy, app, db):
+    import asyncio
+    from alcor_api.legacy_identity import web_identity
+    from starlette.requests import Request
+    cookie = '; '.join(f'{name}={value}' for name,value in legacy.cookies.items())
+    request = Request({'type':'http','method':'GET','path':'/api/assets/catalog',
+                       'headers':[(b'cookie',cookie.encode())]})
+    who, _, _ = await web_identity(request, db)
+    catalog = app.state.asset_catalog_management.catalog
+    async with catalog.context(who):
+        response = await asyncio.wait_for(legacy.get('/api/assets/catalog?type=stock'), timeout=3)
+        assert response.status_code == 200, response.text
 
 
 @pytest_asyncio.fixture
@@ -429,3 +460,47 @@ async def test_saved_global_fx_schedule_reads_real_revision_without_unsealing_or
     assert "currencyApiUrl" not in value["settings"] and "provider.example.invalid" not in result.text
     async with db.connection() as conn, conn.transaction():
         assert await tables_and_hashes(conn) == before
+
+
+async def test_source_order_and_explicit_quote_tests_persist_without_automatic_probe(legacy, app, monkeypatch):
+    from alcor_api.market_transport import Transport
+    calls=[]
+    async def diagnostic(self,policy,action):
+        calls.append(action)
+        return {'responded':True,'qotLogined':True,'quotePermissionVerified':True,'quote':{'code':'US.AAPL','price':210.25}}
+    monkeypatch.setattr(Transport,'diagnostic',diagnostic)
+    state=(await legacy.get(P)).json()
+    order=['yahoo','futu','tencent','eastmoney']
+    command={'requestId':str(uuid4()),'revision':state['revision'],'privateRevision':state['privateRevision'],'currentPassword':'Synthetic9Pass',
+             'futuHost':'192.0.2.41','futuPort':'11111','futuApproved':True,'quoteSource':'auto','quoteSourceOrder':order}
+    response=await legacy.put(P,json=command);assert response.status_code==200,response.text
+    assert (await legacy.get(P)).json()['settings']['quoteSourceOrder']==order
+    assert app.state.db.settings._legacy_quote_order==order
+    url='/api/fire/market-sources/tests'
+    first=await legacy.get(url);assert first.status_code==200,first.text
+    assert first.json()['results']['futu']['state']=='untested' and not calls
+    request={'provider':'futu','requestId':str(uuid4())}
+    tested=await legacy.post(url,json=request);assert tested.status_code==200,tested.text
+    assert tested.json()['state']=='available' and tested.json()['price']==210.25
+    assert (await legacy.post(url,json=request)).json()==tested.json() and len(calls)==1
+    assert (await legacy.get('/api/futu/test')).json()['lastTest']['ok'] is True
+    assert (await legacy.post(url,json={**request,'provider':'tencent'})).status_code==409
+    assert (await legacy.get(url)).json()['results']['futu']==tested.json() and len(calls)==1
+    missing=await legacy.post(url,json={'provider':'eastmoney','requestId':str(uuid4())})
+    assert missing.status_code==200 and missing.json()['state']=='unconfigured' and len(calls)==1
+    entered=asyncio.Event()
+    async def interrupted(self,policy,action):
+        calls.append(action);entered.set();await asyncio.Event().wait()
+    monkeypatch.setattr(Transport,'diagnostic',interrupted)
+    pending={'provider':'futu','requestId':str(uuid4())}
+    task=asyncio.create_task(legacy.post(url,json=pending))
+    await asyncio.wait_for(entered.wait(),3)
+    task.cancel()
+    try:await task
+    except asyncio.CancelledError:pass
+    unknown=await legacy.post(url,json=pending)
+    assert unknown.status_code==200 and unknown.json()['state']=='unknown' and len(calls)==2
+    assert (await legacy.get(url)).json()['results']['futu']['state']=='unknown'
+    state=(await legacy.get(P)).json()
+    rejected=await legacy.put(P,json={'requestId':str(uuid4()),'revision':state['revision'],'privateRevision':state['privateRevision'],'currentPassword':'Synthetic9Pass','quoteSourceOrder':['futu']*4})
+    assert rejected.status_code==422 and (await legacy.get(P)).json()['settings']['quoteSourceOrder']==order

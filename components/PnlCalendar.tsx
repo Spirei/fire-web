@@ -243,7 +243,7 @@ export default function PnlCalendar({
               <b className="text-sm text-ink">{m}月</b>
               {pnl !== 0 && (
                 <span className="mt-2 text-xs font-semibold sm:text-sm">
-                  {mode === "收益" ? formatCompact(pnl) : pct != null ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "—"}
+                  {!Number.isFinite(pnl) ? "—" : mode === "收益" ? formatCompact(pnl) : pct != null ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "—"}
                 </span>
               )}
             </button>
@@ -259,12 +259,12 @@ export default function PnlCalendar({
                   key={index}
                   type="button"
                   data-capsule="off"
-                  onClick={() => onDayClick(`${month.y}-${String(month.m).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`)}
-                  title="点击查看当日每只股票盈亏"
+                  onClick={() => cell.available !== false && onDayClick(`${month.y}-${String(month.m).padStart(2, "0")}-${String(cell.day).padStart(2, "0")}`)}
+                  title={cell.available === false ? "当日盈亏依据不足" : "点击查看当日每只股票盈亏"}
                   className={`flex min-h-[52px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-lg px-0.5 transition hover:ring-1 hover:ring-edge-strong sm:min-h-20 sm:rounded-xl ${cell.pnl > 0 ? "bg-up-bg text-up" : cell.pnl < 0 ? "bg-down-bg text-down" : "text-muted hover:bg-bg-gray"}`}
                 >
                   <b className="text-sm text-ink">{String(cell.day).padStart(2, "0")}</b>
-                  {mode === "收益" ? (
+                  {cell.available === false || (mode === "收益率" && cell.pct == null) ? <span className="mt-2 text-xs text-faint">—</span> : mode === "收益" ? (
                     cell.pnl !== 0 && <><span className="mt-1.5 max-w-full whitespace-nowrap text-[9px] font-semibold leading-none tracking-[-.03em] min-[390px]:text-[10px] sm:hidden">{formatNarrow(cell.pnl)}</span><span className="mt-2 hidden whitespace-nowrap text-sm font-semibold sm:inline">{formatCompact(cell.pnl)}</span></>
                   ) : (
                     cell.pct != null && cell.pnl !== 0 && <><span className="mt-1.5 whitespace-nowrap text-[9px] font-semibold leading-none tracking-[-.03em] min-[390px]:text-[10px] sm:hidden">{cell.pct >= 0 ? "+" : ""}{cell.pct.toFixed(Math.abs(cell.pct) >= 100 ? 0 : Math.abs(cell.pct) >= 10 ? 1 : 2)}%</span><span className="mt-2 hidden whitespace-nowrap text-sm font-semibold sm:inline">{cell.pct >= 0 ? "+" : ""}{cell.pct.toFixed(2)}%</span></>

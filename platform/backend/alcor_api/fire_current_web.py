@@ -39,6 +39,41 @@ async def member(request: Request):
 Member = Annotated[Identity, Depends(member)]
 
 
+@router.get("/api/fire/ticker")
+async def workspace_ticker(request: Request, who: Member):
+    """The private workspace is not an anonymous public redistribution client."""
+    from .market_quote_reads import BatchQuotes
+    await budget(request, who, "workspace-ticker", 60)
+    db = request.app.state.db
+    config = getattr(db.settings, "public_ticker", {})
+    presentation = config.get("legacyPresentation", {})
+    configured = presentation.get("items") or config.get("items", [])
+    # Bind presentation to an exact security. A key or a label is not an
+    # instrument identity, and a numeric exchange prefix is not a PG identifier.
+    installed = {item.get("key"): item for item in config.get("items", []) if isinstance(item, dict)}
+    aliases = {("US", "100.DJIA"): "DJI", ("US", "100.SPX"): "SPX"}
+    items = []
+    for item in configured[:20]:
+        retained = installed.get(item["key"], {})
+        same = retained.get("market") == item.get("market") and retained.get("legacySecid", retained.get("secid")) == item.get("secid")
+        code = retained.get("code") if same and retained.get("instrument", "index") == "index" else None
+        code = code or aliases.get((item.get("market"), item.get("secid"))) or re.sub(r"^\d+\.", "", item.get("secid", ""))
+        if isinstance(code, str) and isinstance(item.get("market"), str):
+            items.append({"id": item["key"], "market": item["market"], "code": code})
+    result = await BatchQuotes(request.app.state.market_authority).read(
+        who, items, include_market_cap=False, strict_sources=False, instrument="index",
+        source_preference=getattr(db.settings, "_legacy_quote_source", None),
+    ) if items else {"quotes": {}}
+    output = []
+    for item in configured[:20]:
+        quote = result["quotes"].get(item["key"], {})
+        output.append({"key": item["key"], "label": item.get("label", item["key"]), "market": item.get("market", ""), "secid": item.get("secid", item.get("legacySecid")),
+                       "price": quote.get("price"), "change": quote.get("change"), "changePct": quote.get("changePct"),
+                       "points": [], "observedAt": quote.get("time"), "source": quote.get("source")})
+    return JSONResponse({"items": output, "interval": presentation.get("interval", 5), "pollSec": 60,
+                         "collectionOnRead": False}, headers=PRIVATE)
+
+
 def parameters(request, allowed=()):
     if set(request.query_params) - set(allowed) or any(len(request.query_params.getlist(k)) != 1 for k in request.query_params):
         raise HTTPException(400, "查询参数无效")

@@ -30,7 +30,7 @@ class CardCatalog:
     @asynccontextmanager
     async def context(self, who, *, write=False, admin=False):
         async with self.db.connection() as conn, conn.transaction():
-            await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('identity-management:' + who.id,))
+            await conn.execute('SELECT pg_advisory_xact_lock' + ('' if write else '_shared') + '(hashtextextended(%s,0))', ('identity-management:' + who.id,))
             await lock_mutation_identity(conn, who, require_admin=admin)
             if admin and not await can_publish_cards(conn,who):
                 raise HTTPException(403,'当前连接没有卡面管理权限')
