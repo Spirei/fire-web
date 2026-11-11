@@ -90,7 +90,7 @@ export default function MarketSourceSettings({ order, onSave, enabled = true }: 
     await Promise.all([run(),run()]);
   }
   return <div className="market-source-settings">
-    <div className="market-source-toolbar"><span>{saving ? "正在保存顺序…" : "按顺序选择可用来源"}</span><Capsule size="sm" variant="secondary" type="button" disabled={Object.values(results).some(result => result.state === "testing")} onClick={() => void testAll()}>检测全部</Capsule></div>
+    <div className="market-source-toolbar"><span>{saving ? "正在保存顺序…" : "自动模式按顺序选择可用来源"}</span><Capsule size="sm" variant="secondary" type="button" disabled={Object.values(results).some(result => result.state === "testing")} onClick={() => void testAll()}>检测全部</Capsule></div>
     <ol className="market-source-list" aria-label="行情源优先顺序" aria-busy={saving}>
       {items.map((key,index) => {
         const source = SOURCES[key], result = results[key];

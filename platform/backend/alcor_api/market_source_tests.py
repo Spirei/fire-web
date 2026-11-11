@@ -18,7 +18,13 @@ PROVIDERS = ("futu", "tencent", "eastmoney", "yahoo")
 
 
 async def selection(authority, conn, who, provider):
-    rows = await (await conn.execute("SELECT revision FROM market_source_configs WHERE owner_id=%s ORDER BY revision", (who.id,))).fetchall()
+    installed = tuple(authority.policy_provider()) if authority.policy_provider else authority.policies
+    fingerprints = [policy.fingerprint for policy in installed if policy.owner_id == who.id and policy.source == provider]
+    if not fingerprints:
+        return None
+    rows = await (await conn.execute("SELECT revision FROM market_source_configs WHERE owner_id=%s AND policy_fingerprint=ANY(%s) ORDER BY revision LIMIT 1001", (who.id, fingerprints))).fetchall()
+    if len(rows) > 1000:
+        raise HTTPException(503, "当前来源版本超过核对范围")
     choices = []
     for row in rows:
         try:
