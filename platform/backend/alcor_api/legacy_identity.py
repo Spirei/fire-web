@@ -12,6 +12,7 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
 from .models import LoginInput
+from .fx_provider_parser import unique
 from .passwords import DUMMY_HASH, verify_password
 from .security import COOKIE, Identity, digest, trusted_origin, identity, csrf_token
 from .identity_service import FACTOR_COOKIE
@@ -35,8 +36,8 @@ LEGACY_WEB_PATHS = {
 
 
 class LegacyError(HTTPException):
-    def __init__(self,status,code,message):
-        super().__init__(status,message)
+    def __init__(self,status,code,message,headers=None):
+        super().__init__(status,message,headers=headers)
         self.business_code=code
 
 
@@ -80,7 +81,7 @@ async def body(request,fields,limit=16384):
     raw=await request.body()
     try:
         if len(raw)>limit:raise ValueError()
-        data=json.loads(raw)
+        data=json.loads(raw,object_pairs_hook=unique)
         if not isinstance(data,dict) or set(data)-set(fields):raise ValueError()
         for value in data.values():
             if isinstance(value,str):value.encode('utf-8')
@@ -250,7 +251,7 @@ def canonical_native_discovery(value):
 def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit):
     async def budget(request,category,limit=40):
         address=request.client.host if request.client else 'unknown'
-        if not await rate_limit(db,digest(category+':'+address),limit):raise LegacyError(429,42901,'尝试过于频繁，请稍后再试')
+        if not await rate_limit(db,digest(category+':'+address),limit):raise LegacyError(429,42901,'尝试过于频繁，请稍后再试',headers={'Retry-After':'900'})
 
     async def password_user(conn,username,password):
         rows=await (await conn.execute("SELECT * FROM users WHERE lower(username)=lower(%s) OR (email<>'' AND lower(email)=lower(%s)) LIMIT 2",(username.strip(),username.strip()))).fetchall()
@@ -318,7 +319,7 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
         if not isinstance(device, str) or len(device.encode('utf-16-le')) // 2 > 64 or any((ord(c) < 32 or ord(c) == 127 for c in device)):
             raise LegacyError(400, 40002, '设备名称无效')
         if not await rate_limit(db, digest('native-login-account:' + username.strip().lower()), 20):
-            raise LegacyError(429, 42901, '尝试过于频繁，请稍后再试')
+            raise LegacyError(429, 42901, '尝试过于频繁，请稍后再试',headers={'Retry-After':'900'})
         async with db.connection() as conn, conn.transaction():
             user = await password_user(conn, username, password)
             context = {'scope': BASE_SCOPE, 'device_name': device.strip() or 'Alcor iOS', 'api_version': version}
@@ -384,15 +385,15 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
         if version == 1 and (not authorization.startswith('Bearer fat_')):
             who, user, token = await web_identity(request, db, allow_v1_bearer=True)
             async with db.connection() as conn, conn.transaction():
-                from .security import lock_mutation_identity
-                await lock_mutation_identity(conn, who, require_admin=False)
+                from .security import lock_read_identity
+                await lock_read_identity(conn, who, require_admin=False)
                 value = await public_profile(conn, who.id)
         else:
             who, grant = await native_identity(request, db)
             async with db.connection() as conn, conn.transaction():
-                from .security import lock_mutation_identity
-                await lock_mutation_identity(conn, who, require_admin=False)
-                value = await public_profile(conn, who.id, scope=grant['scope'], settings=settings)
+                from .security import lock_read_identity
+                current = await lock_read_identity(conn, who, require_admin=False)
+                value = await public_profile(conn, who.id, scope=current['scope'], settings=settings)
         return value
 
     @app.get('/api/v{version}/auth/me', tags=['legacy-native-identity'])
@@ -411,10 +412,17 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
             raw = await request.body()
             if len(raw) > 8192:
                 raise LegacyError(400, 40002, '无效的令牌请求')
-            parsed = parse_qs(raw.decode())
-            data = {k: v[0] for k, v in parsed.items() if len(v) == 1}
+            try:
+                parsed = parse_qs(raw.decode('utf-8'),keep_blank_values=True,strict_parsing=True,errors='strict',max_num_fields=8)
+                if set(parsed)-{'grant_type','client_id','refresh_token','redirect_uri','code','code_verifier'} or any(len(value)!=1 for value in parsed.values()):
+                    raise ValueError()
+                data = {key:value[0] for key,value in parsed.items()}
+            except (UnicodeError,ValueError):
+                raise LegacyError(400,40002,'无效的令牌请求') from None
         else:
             data = await body(request, ('grant_type', 'client_id', 'refresh_token', 'redirect_uri', 'code', 'code_verifier'), 8192)
+        if any(not isinstance(value,str) for value in data.values()):
+            raise LegacyError(400,40002,'无效的令牌请求')
         async with db.connection() as conn, conn.transaction():
             if data.get('grant_type') == 'refresh_token':
                 result = await rotate(conn, data.get('client_id', ''), data.get('refresh_token', ''))

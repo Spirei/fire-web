@@ -50,10 +50,10 @@ async def issue_grant(conn,user,scope,device_name,passkey_id=None,preserve_grant
     return {**await token_pair(conn,grant_id),'scope':scope}
 
 
-async def active_grant(conn,grant_id,*,lock=False):
+async def active_grant(conn,grant_id,*,lock=False,shared=False):
     row=await (await conn.execute('''SELECT g.*,u.username,u.email,u.password_hash,u.role,u.active,u.session_version AS current_version,
         g.expires_at>clock_timestamp() AND g.created_at+interval '90 days'>clock_timestamp() AS valid
-        FROM identity_app_grants g JOIN users u ON u.id=g.user_id WHERE g.id=%s'''+(' FOR UPDATE OF g,u' if lock else ''),(grant_id,))).fetchone()
+        FROM identity_app_grants g JOIN users u ON u.id=g.user_id WHERE g.id=%s'''+(' FOR SHARE OF g,u' if shared else ' FOR UPDATE OF g,u' if lock else ''),(grant_id,))).fetchone()
     if not row or not row['valid'] or row['revoked_at'] or not row['active'] or row['session_version']!=row['current_version']:return None
     user={**row,'id':row['user_id']}
     if row['security_stamp']!=await security_stamp(conn,user):return None
@@ -61,10 +61,10 @@ async def active_grant(conn,grant_id,*,lock=False):
     return row
 
 
-async def authenticate(conn,token,scope=None,*,lock=False):
+async def authenticate(conn,token,scope=None,*,lock=False,shared=False):
     if not re.fullmatch(r'fat_[A-Za-z0-9_-]{43}',token):raise HTTPException(401,'需要有效的 App 连接')
     row=await (await conn.execute("SELECT grant_id FROM identity_app_access_tokens WHERE token_hash=%s AND expires_at>clock_timestamp()",(digest(token),))).fetchone()
-    grant=await active_grant(conn,row['grant_id'],lock=lock) if row else None
+    grant=await active_grant(conn,row['grant_id'],lock=lock,shared=shared) if row else None
     if not grant:raise HTTPException(401,'连接已失效，请重新连接')
     if scope and scope not in grant['scope'].split():raise HTTPException(403,'连接缺少此操作的授权范围')
     from .request_activity import bind_account
@@ -86,9 +86,16 @@ async def rotate(conn,client_id,refresh):
 
 
 async def lock_native_mutation(conn,who):
-    grant=await authenticate(conn,who.native_access_token,lock=True)
+    return await lock_native_identity(conn,who)
+
+
+async def lock_native_identity(conn,who,*,shared=False):
+    # Reads hold the same current credential proof through commit, but do not
+    # serialize independent reads. Rotation/revocation still requires UPDATE.
+    grant=await authenticate(conn,who.native_access_token,lock=not shared,shared=shared)
     if grant['id']!=who.grant_id or grant['user_id']!=who.id:raise HTTPException(401,'操作授权已变化，请重新登录核对')
     if getattr(who,'required_scope',None) and who.required_scope not in grant['scope'].split():raise HTTPException(403,'连接缺少此操作的授权范围')
+    return grant
 
 
 def identity_from_grant(grant,token,scope=None):

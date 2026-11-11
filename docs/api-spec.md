@@ -2,6 +2,8 @@
 
 # Alcor · API 规范（v1）
 
+当前平台的连接、并发、标识、错误与恢复规则见 [App API 连接与请求规范](app-api-connection.md)。
+
 ## App 资产快照与证券资料声明
 
 匿名 auth/config 的 account_assets 声明能力；精确字段、类型和缺失语义见 [冻结合约](native-account-assets-contract.md)。新接口只接受 App Bearer，后台读取不结算挂单。

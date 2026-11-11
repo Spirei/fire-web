@@ -4,7 +4,7 @@ from fastapi import HTTPException
 
 from .market_authority import active_demands
 from .market_contract import MARKETS
-from .security import lock_mutation_identity
+from .security import lock_read_identity
 
 
 def milliseconds(value):
@@ -25,7 +25,7 @@ class PoolReads:
     async def on_connection(self,conn,who,*,market=None,shared=False,pool=False,strict_sources=False):
         # Reuse the existing credential authority. Locks do not initialize data,
         # and legacy Web reads must not be reinterpreted as new-Web sessions.
-        await lock_mutation_identity(conn,who,require_admin=shared)
+        await lock_read_identity(conn,who,require_admin=shared)
         user=await (await conn.execute("SELECT role FROM users WHERE id=%s",(who.id,))).fetchone()
         if not user or user["role"]!=who.role:
             raise HTTPException(403,"读取权限已变化")

@@ -67,6 +67,7 @@ def mount_legacy_portfolio(app, settings, db):
     async def snapshot(who, expected=None):
         owner=who.id
         async with db.connection() as conn, conn.transaction():
+            await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             from .legacy_record_writes import ReadOnlyRecords
             revision = await ReadOnlyRecords(db,who).lock(conn,owner)
             from .scope_coverage import require_global
@@ -139,6 +140,7 @@ def mount_legacy_portfolio(app, settings, db):
         response.headers.update({'Cache-Control':'no-store, private','Vary':'Cookie, Authorization'})
         who = await portfolio_member(request, settings, db)
         async with db.connection() as conn, conn.transaction():
+            await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             from .legacy_record_writes import ReadOnlyRecords
             revision = await ReadOnlyRecords(db,who).lock(conn,who.id)
             row = await service.get(conn, who.id, record_id)

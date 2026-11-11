@@ -110,3 +110,11 @@ async def lock_mutation_identity(conn, who: Identity, *, require_admin=True):
     ).fetchone()
     if not row:
         raise HTTPException(401, "操作授权已变化，请重新登录核对")
+
+
+async def lock_read_identity(conn, who: Identity, *, require_admin=False):
+    """Hold current read authorization through commit without exclusive App locks."""
+    if getattr(who, "native_client", False) and not require_admin:
+        from .native_app_auth import lock_native_identity
+        return await lock_native_identity(conn, who, shared=True)
+    return await lock_mutation_identity(conn, who, require_admin=require_admin)

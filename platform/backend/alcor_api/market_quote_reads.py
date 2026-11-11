@@ -14,7 +14,7 @@ from .market_authority import query_from
 from .market_contract import CURRENCIES, code, number
 from .market_snapshot_metrics import SnapshotMetricMismatch, with_snapshot_metrics
 from .native_app_auth import CLIENT
-from .security import lock_mutation_identity
+from .security import lock_read_identity
 
 
 def items_from(body):
@@ -281,7 +281,7 @@ class BatchQuotes:
         quotes, states = {}, {}
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            await lock_mutation_identity(conn, who, require_admin=False)
+            await lock_read_identity(conn, who, require_admin=False)
             if getattr(who, "native_client", False):
                 grant = await (
                     await conn.execute(

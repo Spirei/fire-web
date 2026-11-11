@@ -156,6 +156,7 @@ def create_app(settings: Settings | None = None):
     app = FastAPI(
         title="Alcor Platform",
         version=__version__,
+        redirect_slashes=False,
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -193,6 +194,12 @@ def create_app(settings: Settings | None = None):
             response=Response(status_code=204)
         else:
             response = await call_next(request)
+        native = re.match(r"^/api/v([12])/", request.url.path)
+        if native:
+            response.headers["X-Alcor-API-Version"] = native[1]
+            vary = [value.strip() for value in response.headers.get("Vary", "").split(",") if value.strip()]
+            if not any(value.lower() in {"authorization", "*"} for value in vary):
+                response.headers["Vary"] = ", ".join([*vary, "Authorization"])
         if cors_origin:
             response.headers.update({'Access-Control-Allow-Origin':cors_origin,'Vary':'Origin','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Max-Age':'300'})
         response.headers.update(
@@ -222,7 +229,11 @@ def create_app(settings: Settings | None = None):
 
     def error(request, status, code, message):
         if re.match(r'^/api/v[12]/',request.url.path):
-            return JSONResponse(status_code=status,content={'code':50001 if status>=500 else 40002,'message':message},headers={'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6]})
+            return JSONResponse(status_code=status,content={'code':50001 if status>=500 else 40002,'message':message},headers={
+                'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6],
+                'Vary':'Authorization','X-Content-Type-Options':'nosniff',
+                'X-Request-ID':getattr(request.state,'request_id',''),
+                **({'Retry-After':'3'} if status==503 else {})})
         if request.url.path in LEGACY_WEB_PATHS:
             return JSONResponse(status_code=status,content={'error':message},headers={'Cache-Control':'no-store'})
         return JSONResponse(
@@ -237,7 +248,7 @@ def create_app(settings: Settings | None = None):
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request, exc):
         if re.match(r'^/api/v[12]/',request.url.path):
-            code=getattr(exc,'business_code',{400:40002,401:40101 if '需要有效的 App 连接' in str(exc.detail) else 40102,403:40301,404:40401,409:40901,422:40003,429:42901}.get(exc.status_code,50001))
+            code=getattr(exc,'business_code',{400:40002,401:40101 if '需要有效的 App 连接' in str(exc.detail) else 40102,403:40301,404:40401,405:40501,408:40801,409:40901,413:41301,415:41501,422:40003,429:42901}.get(exc.status_code,50001))
             return JSONResponse(status_code=exc.status_code,content={'code':code,'message':str(exc.detail)},headers={**(exc.headers or {}),'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6]})
         if request.url.path in LEGACY_WEB_PATHS:
             payload = {'error': str(exc.detail)}
@@ -844,7 +855,19 @@ def create_app(settings: Settings | None = None):
     @app.api_route(
         "/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False
     )
-    async def unknown_api(path: str):
+    async def unknown_api(path: str, request: Request):
+        # The API catch-all must not turn a known path's wrong method into 404.
+        # Reuse the router's own path matching, including parameter semantics.
+        from starlette.routing import Match
+        allowed = set()
+        for route in app.router.routes:
+            if getattr(route, "endpoint", None) is unknown_api:
+                break
+            match, _ = route.matches(request.scope)
+            if match is Match.PARTIAL:
+                allowed.update(getattr(route, "methods", ()) or ())
+        if allowed:
+            raise HTTPException(405, "请求方法不支持", headers={"Allow": ", ".join(sorted(allowed))})
         raise HTTPException(404, "接口尚未提供")
 
     if (settings.web_dist / "assets").is_dir():

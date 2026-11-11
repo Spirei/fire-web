@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
-from .security import digest, lock_mutation_identity
+from .security import digest, lock_mutation_identity, lock_read_identity
 
 TEXT_LIMITS = {"name": 100, "code": 40, "market": 40, "group": 100, "note": 500, "source": 50,
                "watchGroupId": 100, "brokerAccountId": 100, "accountMarket": 40}
@@ -128,7 +128,7 @@ class PortfolioRecords:
         if authorization is not None:
             if authorization.id != owner:
                 fail("账号不匹配",403)
-            await lock_mutation_identity(conn,authorization,require_admin=False)
+            await lock_read_identity(conn,authorization,require_admin=False)
         else:
             user=await(await conn.execute('SELECT active FROM users WHERE id=%s FOR SHARE',(owner,))).fetchone()
             if not user or not user['active']:

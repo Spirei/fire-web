@@ -52,7 +52,7 @@ def mount_legacy_quote_reads(app,settings,authority):
             assert_native_origin(request,settings)
             if request.query_params:raise HTTPException(400,"不支持查询参数")
             caller=request.client.host if request.client else "unknown"
-            if not await app.state.read_rate_limit(authority.db,digest("quotes:"+caller),120,window_seconds=60) or not await app.state.read_rate_limit(authority.db,"quotes-global",600,window_seconds=60):raise HTTPException(429,"请求过于频繁，请稍后再试")
+            if not await app.state.read_rate_limit(authority.db,digest("quotes:"+caller),120,window_seconds=60) or not await app.state.read_rate_limit(authority.db,"quotes-global",600,window_seconds=60):raise HTTPException(429,"请求过于频繁，请稍后再试",headers={"Retry-After":"60"})
             who=None
             auth_cookie=any(name in request.cookies for name in (COOKIE,WEB_COOKIE,OLD_COOKIE)) or any(
                 re.search(r'(?:^|;)[ \t]*'+re.escape(name)+r'[ \t]*(?:=|;|$)',request.headers.get('cookie',''))
@@ -127,6 +127,7 @@ def mount_legacy_quote_reads(app,settings,authority):
                 if len(packed)<len(raw):raw=packed;headers["Content-Encoding"]="gzip"
             return Response(raw,media_type="application/json",headers=headers)
         except HTTPException as exc:
+            if exc.headers:headers.update(exc.headers)
             if exc.status_code in (401,403):headers["X-Alcor-Retire-Context"]="true"
             if version:payload={"code":50001 if exc.status_code>=500 else exc.status_code*100+1,"message":str(exc.detail)}
             elif canonical:payload={"error":{"code":exc.status_code,"message":str(exc.detail)}}
