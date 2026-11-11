@@ -2,7 +2,7 @@
 import asyncio
 import math
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -15,6 +15,106 @@ from .market_worker import decode
 from .security import lock_mutation_identity
 
 PROVIDERS = ("futu", "tencent", "eastmoney", "yahoo")
+SAMPLES = (("US", "AAPL"), ("HK", "00700"), ("CN", "600519"), ("JP", "7203"), ("KR", "005930"))
+
+
+def market_queries(authority, policy):
+    queries = []
+    for market, code in SAMPLES:
+        if market not in policy.markets:
+            continue
+        query = Query("latest", market, code)
+        try:
+            authority.validate_query(policy, query)
+        except HTTPException:
+            continue
+        queries.append(query)
+    return queries
+
+
+async def probe_markets(authority, transport, policy):
+    queries = market_queries(authority, policy)
+    markets = {query.market: {"market": query.market, "code": query.code, "state": "unknown", "message": "未完成检测"} for query in queries}
+    result = {"state": "unavailable", "message": "未取得有效报价", "markets": markets}
+    private_transport = None
+    try:
+        async with asyncio.timeout(18):
+            known = None
+            reader = transport
+            if policy.source == "futu":
+                observed = await transport.diagnostic(policy, "futu.test")
+                connected = observed.get("responded") is True and observed.get("qotLogined") is True
+                result["connectionState"] = "connected" if connected else "unavailable"
+                if not connected:
+                    for row in markets.values(): row.update(state="unavailable", message="OpenD 未连接")
+                    return result
+                result.update(state="connected", message="OpenD 已连接，报价暂不可用")
+                candidate = observed.get("quote") or {}
+                if observed.get("quotePermissionVerified") is True and candidate.get("code") == "US.AAPL":
+                    known = candidate.get("price")
+                # This probe owns its import process and always releases it.
+                # Ordinary API/public transports keep their original lifecycle.
+                from .market_transport import Transport
+                private_transport = Transport(authority.db, tuple(transport.targets.values()), target_provider=transport.target_provider,
+                                              controlled_http=transport.controlled_http, reuse_latest=True)
+                reader = private_transport
+            for query in queries:
+                row = markets[query.market]
+                started = time.perf_counter()
+                try:
+                    if query.market == "US" and known is not None:
+                        price = known
+                    else:
+                        original, _ = await reader.read(policy, query, None)
+                        facts, _, _ = decode(policy, query, original)
+                        fact = facts[-1] if facts else {}
+                        price = float(fact["price"]) if fact.get("price") is not None else None
+                        stamp = datetime.fromisoformat(fact["at"]) if fact.get("at") else None
+                        if stamp is not None and (stamp.tzinfo is None or stamp > datetime.now(UTC)+timedelta(seconds=5)):
+                            price = None
+                        row["sourceTime"] = fact.get("at")
+                    if type(price) not in (int, float) or not math.isfinite(price) or price <= 0:
+                        raise ValueError("quote_not_observed")
+                    row.update(state="available", price=price, message="报价可用")
+                except Exception:  # noqa: BLE001 -- Never expose SDK errors or private target details.
+                    row.update(state="unavailable", message="未取得该市场报价")
+                row.update(elapsedMs=round((time.perf_counter()-started)*1000), observedAt=datetime.now(UTC).isoformat())
+    except TimeoutError:
+        for row in markets.values():
+            if row["state"] == "unknown": row["message"] = "检测超时，结果未确认"
+    except Exception:  # noqa: BLE001 -- Preserve completed market results only.
+        result["message"] = "连接或报价不可用"
+    finally:
+        if private_transport is not None:
+            await private_transport.close()
+    available = [row for row in markets.values() if row["state"] == "available"]
+    if available:
+        first = available[0]
+        result.update(state="available" if len(available) == len(markets) else "partial",
+                      message="报价可用" if len(available) == len(markets) else f"{len(available)}/{len(markets)} 个市场报价可用",
+                      price=first["price"],code=first["code"],market=first["market"])
+    return result
+
+
+def retained_futu(authority, policy, value, previous=None):
+    """An AAPL-only connection check cannot erase another market's observation."""
+    previous = previous or {}
+    markets = {query.market: {"market":query.market,"code":query.code,"state":"unknown","message":"尚未检测"}
+               for query in market_queries(authority, policy)}
+    for market, row in (previous.get("markets") or {}).items():
+        if market in markets:
+            markets[market] = row
+    verified = value.get("quotePermissionVerified") is True
+    quote = value.get("quote") or {}
+    price = quote.get("price")
+    verified = verified and quote.get("code") == "US.AAPL" and type(price) in (int,float) and math.isfinite(price) and price > 0
+    if "US" in markets:
+        markets["US"] = {"market":"US","code":"AAPL","state":"available" if verified else "unavailable",
+                         "observedAt":value.get("observedAt"), **({"price":price} if verified else {"message":"未取得该市场报价"})}
+    available = [row for row in markets.values() if row["state"] == "available"]
+    state = ("available" if len(available) == len(markets) else "partial") if available else "connected" if value.get("ok") else "unknown" if value.get("state") == "unknown" else "unavailable"
+    return {**value,"state":state,"markets":markets,
+            **({"price":price,"code":"AAPL","market":"US"} if verified else {})}
 
 
 async def selection(authority, conn, who, provider):
@@ -31,14 +131,8 @@ async def selection(authority, conn, who, provider):
             _, policy = await authority.config(conn, who.id, row["revision"])
             if policy.source != provider:
                 continue
-            for market, code in (("US", "AAPL"), ("HK", "00700"), ("CN", "600519")):
-                query = Query("latest", market, code)
-                try:
-                    authority.validate_query(policy, query)
-                except HTTPException:
-                    continue
-                choices.append((row["revision"], policy, query))
-                break
+            queries = market_queries(authority, policy)
+            if queries: choices.append((row["revision"], policy, queries[0]))
         except HTTPException:
             continue
     return choices[0] if len(choices) == 1 else None
@@ -63,14 +157,12 @@ def mount(app, settings, authority, transport, member):
             for provider in PROVIDERS:
                 selected = await selection(authority, conn, who, provider)
                 row = await (await conn.execute("SELECT * FROM market_source_tests WHERE owner_id=%s AND provider=%s ORDER BY created_at DESC,request_id DESC LIMIT 1", (who.id, provider))).fetchone()
+                matches = selected and row and row["source_revision"] == selected[0] and row["policy_fingerprint"] == selected[1].fingerprint
                 if provider == "futu" and selected:
                     legacy = await (await conn.execute("SELECT coalesce(o.result,a.result) AS result,a.created_at FROM market_diagnostic_admissions a LEFT JOIN market_data_operations o ON o.owner_id=a.owner_id AND o.request_id=a.request_id WHERE a.owner_id=%s AND a.source_revision=%s AND a.action='futu.test' ORDER BY a.created_at DESC,a.request_id DESC LIMIT 1", (who.id, selected[0]))).fetchone()
                     if legacy and (not row or legacy["created_at"] > row["created_at"]):
-                        value = legacy["result"]
-                        verified = value.get("quotePermissionVerified") is True
-                        results[provider] = {**value, "state": "available" if verified else "connected" if value.get("ok") else "unknown" if value.get("state") == "unknown" else "unavailable", **({"price":value["quote"]["price"],"code":"AAPL","market":"US"} if verified and value.get("quote") else {})}
+                        results[provider] = retained_futu(authority,selected[1],legacy["result"],row["result"] if matches else None)
                         continue
-                matches = selected and row and row["source_revision"] == selected[0] and row["policy_fingerprint"] == selected[1].fingerprint
                 results[provider] = (row["result"] or {"state": "unknown", "requestId": str(row["request_id"]), "message": "上次检测结果尚未确认"}) if matches else {"state": "untested" if selected else "unconfigured"}
         from fastapi.responses import JSONResponse
         return JSONResponse({"results": results}, headers={"Cache-Control": "private, no-store"})
@@ -107,28 +199,7 @@ def mount(app, settings, authority, transport, member):
                 return final
         revision, policy, query = selected
         start = time.perf_counter()
-        result = {"requestId": str(identifier), "state": "unavailable", "message": "未取得有效报价"}
-        try:
-            async with asyncio.timeout(18):
-                if provider == "futu":
-                    observed = await transport.diagnostic(policy, "futu.test")
-                    quote = observed.get("quote") or {}
-                    price = quote.get("price") if quote.get("code") == "US.AAPL" and observed.get("quotePermissionVerified") is True else None
-                    query = Query("latest", "US", "AAPL")
-                    if price is None and observed.get("responded") is True and observed.get("qotLogined") is True:
-                        result.update(state="connected", message="OpenD 已连接，报价暂不可用")
-                else:
-                    original, _ = await transport.read(policy, query, None)
-                    facts, _, _ = decode(policy, query, original)
-                    fact = facts[-1] if facts else {}
-                    price = float(fact["price"]) if fact.get("price") is not None else None
-                    result["sourceTime"] = fact.get("at")
-                if type(price) in (int, float) and math.isfinite(price) and price > 0:
-                    result.update(state="available", message="报价可用", price=price, code=query.code, market=query.market)
-        except TimeoutError:
-            result["message"] = "检测超时"
-        except Exception:  # noqa: BLE001 -- Provider details may contain private connection data.
-            result["message"] = "连接或报价不可用"
+        result = {"requestId": str(identifier), **await probe_markets(authority, transport, policy)}
         result.update(elapsedMs=round((time.perf_counter() - start) * 1000), observedAt=datetime.now(UTC).isoformat())
         async with db.connection() as conn, conn.transaction():
             await lock_mutation_identity(conn, who)

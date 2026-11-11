@@ -325,7 +325,13 @@ def mount_legacy_futu_diagnostics(app, settings, authority, transport):
             )).fetchone()
             if checked and checked["result"] and (not row or checked["created_at"] > row["created_at"]):
                 value = checked["result"]
-                row = {"result": {**value, "ok": value["state"] in ("available", "connected")}}
+                known = (value.get("markets") or {}).get("US") or {}
+                if not known and value.get("market") == "US" and value.get("code") == "AAPL":
+                    known = value
+                price = known.get("price")
+                quoted = known.get("state") in ("available","partial") and known.get("code") == "AAPL" and type(price) in (int,float) and math.isfinite(price) and price > 0
+                row = {"result": {**value, "ok": value.get("connectionState") == "connected" or value["state"] in ("available", "partial", "connected"),
+                                  **({"quotePermissionVerified":True,"quote":{"code":"US.AAPL","price":known["price"]}} if quoted else {})}}
         return JSONResponse({"host": target.host, "port": target.port, "lastTest": row["result"] if row else None},
                             headers={"Cache-Control": "private, no-store", "Vary": "Cookie, Authorization"})
 

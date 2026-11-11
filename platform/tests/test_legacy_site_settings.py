@@ -462,13 +462,38 @@ async def test_saved_global_fx_schedule_reads_real_revision_without_unsealing_or
         assert await tables_and_hashes(conn) == before
 
 
+async def test_source_probe_reuses_the_same_fixed_targets(monkeypatch):
+    from types import SimpleNamespace
+    from alcor_api.market_source_tests import probe_markets
+    from alcor_api.market_transport import Transport
+    target=SimpleNamespace(id='fixed')
+    async def diagnostic(policy, action):
+        return {'responded':True,'qotLogined':True,'quotePermissionVerified':True,'quote':{'code':'US.AAPL','price':210.25}}
+    async def read(self,policy,query,cursor):
+        assert self.targets=={'fixed':target} and self.target_provider is None
+        assert self.reuse_latest is True
+        return b'{"records":[{"code":"HK.00700","last_price":409.6,"update_time":"2026-01-02 15:59:00"}]}','sdk_json_representation_not_wire_bytes'
+    monkeypatch.setattr(Transport,'read',read)
+    authority=SimpleNamespace(db=object(),validate_query=lambda policy,query:None)
+    transport=SimpleNamespace(targets={'fixed':target},target_provider=None,controlled_http={},diagnostic=diagnostic)
+    result=await probe_markets(authority,transport,SimpleNamespace(markets=('US','HK'),source='futu',fixture=False))
+    assert result['state']=='available' and result['markets']['HK']['price']==409.6
+
+
 async def test_source_order_and_explicit_quote_tests_persist_without_automatic_probe(legacy, app, monkeypatch):
+    import json
     from alcor_api.market_transport import Transport
     calls=[]
+    reads=[]
     async def diagnostic(self,policy,action):
         calls.append(action)
         return {'responded':True,'qotLogined':True,'quotePermissionVerified':True,'quote':{'code':'US.AAPL','price':210.25}}
     monkeypatch.setattr(Transport,'diagnostic',diagnostic)
+    async def quote_read(self,policy,query,cursor):
+        reads.append(query.market)
+        if query.market=='CN': raise ValueError('synthetic_market_permission_refused')
+        return json.dumps({'records':[{'code':'HK.00700','last_price':409.6,'update_time':'2026-01-02 15:59:00'}]}).encode(),'sdk_json_representation_not_wire_bytes'
+    monkeypatch.setattr(Transport,'read',quote_read)
     state=(await legacy.get(P)).json()
     order=['yahoo','futu','tencent','eastmoney']
     command={'requestId':str(uuid4()),'revision':state['revision'],'privateRevision':state['privateRevision'],'currentPassword':'Synthetic9Pass',
@@ -481,13 +506,32 @@ async def test_source_order_and_explicit_quote_tests_persist_without_automatic_p
     assert first.json()['results']['futu']['state']=='untested' and not calls
     request={'provider':'futu','requestId':str(uuid4())}
     tested=await legacy.post(url,json=request);assert tested.status_code==200,tested.text
-    assert tested.json()['state']=='available' and tested.json()['price']==210.25
+    assert tested.json()['state']=='partial' and tested.json()['price']==210.25
+    assert reads==['HK','CN']
+    assert tested.json()['markets']['HK']['price']==409.6
+    assert tested.json()['markets']['CN']['state']=='unavailable'
+    assert all(value.get('observedAt') for value in tested.json()['markets'].values())
     assert (await legacy.post(url,json=request)).json()==tested.json() and len(calls)==1
-    assert (await legacy.get('/api/futu/test')).json()['lastTest']['ok'] is True
+    retained_futu=(await legacy.get('/api/futu/test')).json()['lastTest']
+    assert retained_futu['ok'] is True and retained_futu['quote']['price']==210.25
+    # Older retained source tests had one flat AAPL price, without a market map.
+    flat={key:value for key,value in tested.json().items() if key not in ('markets','connectionState')}
+    flat['state']='available'
+    async with app.state.db.connection() as conn,conn.transaction():
+        await conn.execute('UPDATE market_source_tests SET result=%s WHERE request_id=%s',(Jsonb(flat),request['requestId']))
+    assert (await legacy.get('/api/futu/test')).json()['lastTest']['quote']['price']==210.25
+    async with app.state.db.connection() as conn,conn.transaction():
+        await conn.execute('UPDATE market_source_tests SET result=%s WHERE request_id=%s',(Jsonb(tested.json()),request['requestId']))
     assert (await legacy.post(url,json={**request,'provider':'tencent'})).status_code==409
     assert (await legacy.get(url)).json()['results']['futu']==tested.json() and len(calls)==1
+    # A newer connection-only probe preserves independently checked markets.
+    checked=await legacy.post('/api/futu/test',json={'host':'192.0.2.41','port':'11111','requestId':str(uuid4())})
+    assert checked.status_code==200,checked.text
+    merged=(await legacy.get(url)).json()['results']['futu']
+    assert merged['state']=='partial' and merged['markets']['HK']==tested.json()['markets']['HK']
+    assert merged['markets']['CN']==tested.json()['markets']['CN'] and reads==['HK','CN']
     missing=await legacy.post(url,json={'provider':'eastmoney','requestId':str(uuid4())})
-    assert missing.status_code==200 and missing.json()['state']=='unconfigured' and len(calls)==1
+    assert missing.status_code==200 and missing.json()['state']=='unconfigured' and len(calls)==2
     entered=asyncio.Event()
     async def interrupted(self,policy,action):
         calls.append(action);entered.set();await asyncio.Event().wait()
@@ -499,7 +543,7 @@ async def test_source_order_and_explicit_quote_tests_persist_without_automatic_p
     try:await task
     except asyncio.CancelledError:pass
     unknown=await legacy.post(url,json=pending)
-    assert unknown.status_code==200 and unknown.json()['state']=='unknown' and len(calls)==2
+    assert unknown.status_code==200 and unknown.json()['state']=='unknown' and len(calls)==3
     assert (await legacy.get(url)).json()['results']['futu']['state']=='unknown'
     state=(await legacy.get(P)).json()
     rejected=await legacy.put(P,json={'requestId':str(uuid4()),'revision':state['revision'],'privateRevision':state['privateRevision'],'currentPassword':'Synthetic9Pass','quoteSourceOrder':['futu']*4})

@@ -3020,7 +3020,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </SettingsManagedGroup>
                 </SettingsSection>
                 <SettingsSection id="quote-sources" icon="quote-sources" title="行情源">
-                  <MarketSourceSettings enabled={isAdminUser && foreground && activeAnchor === "quote-sources"} order={site.quoteSourceOrder} onSave={order => saveBlock("quote-source-order", {quoteSourceOrder:order}, "行情源顺序已保存")} />
+                  <MarketSourceSettings ownerId={user.id} enabled={isAdminUser && foreground && activeAnchor === "quote-sources"} order={site.quoteSourceOrder} onSave={order => saveBlock("quote-source-order", {quoteSourceOrder:order}, "行情源顺序已保存")} />
                 </SettingsSection>
                 <SettingsSection id="currency-display" icon="stocks" title="货币金额显示" desc="大额金额显示方式">
                   <div className="sw-row">

@@ -7377,6 +7377,7 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 .dark .backup-operation-progress { border-color:rgb(var(--site-edge)); color:rgb(var(--site-ink)); }
 .market-source-settings { padding: 4px 0; }
 .market-source-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; color:#7b8491; font-size:12px; }
+.market-source-toolbar-actions { display:flex; flex-shrink:0; gap:8px; }
 .market-source-list { display:flex; flex-direction:column; gap:10px; list-style:none; padding:0; margin:0; }
 .market-source-row { display:flex; align-items:center; gap:13px; min-width:0; padding:16px 14px; border:1px solid #e6e9ee; border-radius:18px; background:#fff; transition:background .18s,border-color .18s,opacity .18s; }
 .market-source-row.is-drop-target { background:color-mix(in srgb,var(--site-action,#0866ff) 6%,white); border-color:var(--site-action,#0866ff); }
@@ -7392,13 +7393,18 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 .market-source-copy>div { display:flex; align-items:center; gap:8px; }
 .market-source-copy strong { color:#242a33; font-size:14px; font-weight:650; }
 .market-source-copy small { display:block; margin-top:5px; color:#7b8491; font-size:11px; font-variant-numeric:tabular-nums; }
+.market-source-copy .market-source-markets { flex-wrap:wrap; gap:5px; margin-top:8px; }
+.market-source-markets>span { display:inline-flex; align-items:center; gap:4px; padding:3px 6px; border-radius:6px; font-size:10px; background:#f3f5f7; color:#7b8491; white-space:nowrap; }
+.market-source-markets i { width:4px; height:4px; border-radius:50%; background:currentColor; }
+.market-source-markets [data-state=available] { color:#16836b; }
+.market-source-markets [data-state=unavailable] { color:#a47631; }
 .market-source-rank { color:#929aa5; background:#f4f5f7; border-radius:6px; padding:2px 6px; font-size:9px; white-space:nowrap; }
 .market-source-health { min-width:76px; text-align:right; font-size:11px; color:#8a939f; }
 .market-source-health>span { display:inline-flex; gap:5px; align-items:center; }
 .market-source-health i { width:5px; height:5px; border-radius:50%; background:currentColor; }
 .market-source-health [data-state=available] { color:#16836b; }
 .market-source-health [data-state=connected] { color:#3684a9; }
-.market-source-health [data-state=unavailable],.market-source-health [data-state=unknown] { color:#b37e2d; }
+.market-source-health [data-state=unavailable],.market-source-health [data-state=unknown],.market-source-health [data-state=partial] { color:#b37e2d; }
 .market-source-health small { display:block; margin-top:5px; font-size:10px; font-variant-numeric:tabular-nums; }
 .market-source-actions { display:flex; align-items:center; gap:10px; }
 .market-source-moves { display:flex; flex-direction:column; gap:3px; }
@@ -7409,6 +7415,9 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 .dark .market-source-row.is-drop-target { background:#282f3c; border-color:var(--site-action,#0866ff); }
 .dark .market-source-copy strong { color:#e5e8ee; }
 .dark .market-source-copy small,.dark .market-source-toolbar { color:#9aa3af; }
+.dark .market-source-markets>span { background:#2e343e; color:#a7afbb; }
+.dark .market-source-markets [data-state=available] { color:#5cc6a8; }
+.dark .market-source-markets [data-state=unavailable] { color:#d3ad69; }
 .dark .market-source-rank { background:#2e343e; color:#a7afbb; }
 .dark .market-source-mark.provider-futu { background:#3c3023; color:#eeb467; }
 .dark .market-source-mark.provider-tencent { background:#233344; color:#8dbce7; }
@@ -7416,7 +7425,7 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 .dark .market-source-mark.provider-yahoo { background:#342a46; color:#bea0e8; }
 .dark .market-source-health [data-state=available] { color:#5cc6a8; }
 .dark .market-source-health [data-state=connected] { color:#79bce0; }
-.dark .market-source-health [data-state=unavailable],.dark .market-source-health [data-state=unknown] { color:#d3ad69; }
+.dark .market-source-health [data-state=unavailable],.dark .market-source-health [data-state=unknown],.dark .market-source-health [data-state=partial] { color:#d3ad69; }
 .dark .market-source-moves button:hover:not(:disabled) { background:#343c48; }
 @media(max-width:480px) {
  .market-source-row { padding:12px 9px; gap:8px; border-radius:15px; flex-wrap:wrap; }

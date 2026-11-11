@@ -1,6 +1,7 @@
 import type { Intraday } from "./quotes";
 import type { StockRecord } from "./types";
 import { quoteInstrumentKey } from "./quoteBatches";
+import { validObservedDate } from "./observedDate";
 
 type Instrument = Pick<StockRecord,"id"|"market"|"code">;
 export type BoundIntraday = { instrument: string; chart: Intraday; readAt: number };
@@ -11,7 +12,7 @@ export const intradayCacheKey = (ownerId: string) => `fire:watchlist:charts:v2:$
 export function validIntraday(value: unknown): value is Intraday {
   if (!value || typeof value !== "object") return false;
   const chart = value as Intraday;
-  return typeof chart.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(chart.date) && Array.isArray(chart.points) && chart.points.length > 1 && chart.points.length <= 128
+  return validObservedDate(chart.date) && Array.isArray(chart.points) && chart.points.length > 1 && chart.points.length <= 128
     && chart.points.every(point => typeof point?.time === "string" && Number.isFinite(point.price) && point.price > 0);
 }
 export function intradayFor(entries: IntradayEntries, record: Instrument): Intraday | undefined {
