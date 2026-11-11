@@ -49,7 +49,7 @@ class AssetSourceTransport:
         try:
             if old and action == 'search':
                 ip = request.client.host if request.client else 'unknown'
-                if not await request.app.state.rate_limit(self.db, digest('asset-source-search:' + ip), 60, window_seconds=60) or not await request.app.state.rate_limit(self.db, 'asset-source-search-global', 300, window_seconds=60):
+                if not await request.app.state.read_rate_limit(self.db, digest('asset-source-search:' + ip), 60, window_seconds=60) or not await request.app.state.read_rate_limit(self.db, 'asset-source-search-global', 300, window_seconds=60):
                     raise HTTPException(429, '搜索请求过于频繁')
             if old and request.method=='GET' and action in ('search','status'):
                 supplied='authorization' in request.headers or any(key in request.cookies for key in (COOKIE,WEB_COOKIE,OLD_COOKIE))

@@ -25,7 +25,7 @@ def mount_portfolio_series(app,db,authority):
             allowed={'days','accountKind','brokerAccountId','recordId','sourceRevision','adjust','start','through','before','expectedRevision','orderOffset','orderLimit'}
             params=request.query_params
             if set(params)-allowed or any(len(params.getlist(key))!=1 for key in params):raise HTTPException(400,'期间素材查询参数无效')
-            if not await app.state.rate_limit(db,'portfolio-series:'+who.id,40,window_seconds=60):raise HTTPException(429,'请求过于频繁')
+            if not await app.state.read_rate_limit(db,'portfolio-series:'+who.id,40,window_seconds=60):raise HTTPException(429,'请求过于频繁')
             values={}
             for key,target,default in (('days','days',330),('orderOffset','order_offset',0),('orderLimit','order_limit',500)):
                 raw=params.get(key,str(default))

@@ -50,3 +50,50 @@ async def test_failed_cache_backs_off_and_connection_replacement_rechecks():
     assert handle.client.calls == 1 and len(fallback_calls) == 2
     handle.client = Ready()
     assert await limits.allow('read', 2, 60, fallback)
+
+
+async def test_chart_pool_portfolio_and_asset_reads_share_redis_but_login_keeps_pg(client, admin, app, private_redis):
+    cache = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
+    database = app.state.db
+
+    async def attempts():
+        async with database.connection() as conn:
+            return (await (await conn.execute('SELECT coalesce(sum(attempts),0) AS n FROM auth_rate_limits')).fetchone())['n']
+
+    app.state.cache.client = cache
+    try:
+        before = await attempts()
+        # Real route authentication, source lookup and catalogue reads still run.
+        # A missing historical licence is expected in this empty isolated account.
+        requests = [
+            ('/api/kline/full?market=US&code=AAPL', 503),
+            ('/api/market/pool', 200),
+            ('/api/market/subscriptions', 200),
+            ('/api/portfolio/series', 200),
+            ('/api/asset-catalog/lookup?keys=%5B%5D', 200),
+            ('/api/assets/search?type=metal&q=gold', 200),
+        ]
+        for path, status in requests:
+            response = await client.get(path)
+            assert response.status_code == status, (path, response.text)
+        assert await attempts() == before
+        assert len(await cache.keys('alcor:*:read-budget:*')) == 10
+        # The same counter is enforced at the HTTP boundary, across readers.
+        for _ in range(39):
+            assert await app.state.read_rate_limit(database, 'portfolio-series:'+admin, 40, window_seconds=60)
+        assert (await client.get('/api/portfolio/series')).status_code == 429
+        assert await attempts() == before
+        denied = await client.post('/api/session/login', json={'login':'SyntheticMissing','password':'Synthetic9Pass'})
+        assert denied.status_code == 401 and await attempts() == before+2
+        # Redis absence preserves the original database budget and its denial.
+        app.state.cache.client = None
+        denied_fallback = []
+        async def unavailable(*args, **kwargs):
+            denied_fallback.append(True)
+            return False
+        app.state.rate_limit = unavailable
+        assert (await client.get('/api/portfolio/series')).status_code == 429
+        assert denied_fallback == [True]
+    finally:
+        app.state.cache.client = None
+        await cache.aclose()

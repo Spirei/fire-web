@@ -45,7 +45,7 @@ def mount_legacy_market_reads(app,settings,authority):
                 raise HTTPException(403,"没有访问权限")
             market=params.get("market") if not pool else None
             if market is not None and market not in MARKETS:raise HTTPException(400,"不支持的市场")
-            if not await app.state.rate_limit(authority.db,digest(("quote-pool:" if pool else "quote-subscriptions:read:")+who.id),60 if pool else 120,window_seconds=60):raise HTTPException(429,"请求过于频繁")
+            if not await app.state.read_rate_limit(authority.db,digest(("quote-pool:" if pool else "quote-subscriptions:read:")+who.id),60 if pool else 120,window_seconds=60):raise HTTPException(429,"请求过于频繁")
             result=await sources.read(who,shared=scope=="shared") if pool and not legacy else await service.read(who,market=market,shared=scope=="shared",pool=pool,strict_sources=legacy)
             return JSONResponse({"code":0,"message":"ok","data":result} if legacy else result,headers=headers)
         except HTTPException as exc:

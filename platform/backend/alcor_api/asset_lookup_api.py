@@ -74,9 +74,9 @@ def mount_asset_catalog(app, settings, db):
         try:
             await assert_material_read(request, db)
             ip = request.client.host if request.client else "unknown"
-            if not await app.state.rate_limit(
+            if not await app.state.read_rate_limit(
                 db, digest("asset-lookup:" + ip), 120, window_seconds=60
-            ) or not await app.state.rate_limit(db, "asset-lookup-global", 1200, window_seconds=60):
+            ) or not await app.state.read_rate_limit(db, "asset-lookup-global", 1200, window_seconds=60):
                 raise HTTPException(429, "请求过于频繁")
             keys = parse_lookup(
                 request.query_params.getlist("keys")[0] if request.query_params.getlist("keys") else None
