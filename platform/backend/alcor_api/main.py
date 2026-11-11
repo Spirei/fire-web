@@ -860,12 +860,13 @@ def create_app(settings: Settings | None = None):
         # Reuse the router's own path matching, including parameter semantics.
         from starlette.routing import Match
         allowed = set()
-        for route in app.router.routes:
-            if getattr(route, "endpoint", None) is unknown_api:
-                break
-            match, _ = route.matches(request.scope)
-            if match is Match.PARTIAL:
-                allowed.update(getattr(route, "methods", ()) or ())
+        if re.match(r"^/api/v[12]/", request.url.path):
+            for route in app.router.routes:
+                if getattr(route, "endpoint", None) is unknown_api:
+                    break
+                match, _ = route.matches(request.scope)
+                if match is Match.PARTIAL:
+                    allowed.update(getattr(route, "methods", ()) or ())
         if allowed:
             raise HTTPException(405, "请求方法不支持", headers={"Allow": ", ".join(sorted(allowed))})
         raise HTTPException(404, "接口尚未提供")

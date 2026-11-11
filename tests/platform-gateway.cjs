@@ -117,6 +117,20 @@ const server = http.createServer(async (req, res) => {
       404,
     );
     assert.equal(seen.length, count + 2);
+    for (const prefix of ["/api/v1", "/api/v2", "/api/client"]) {
+      for (const endpoint of ["login", "token", "revoke"]) {
+        const pathname = prefix + (prefix === "/api/client" ? "/" : "/auth/") + endpoint;
+        const native = await proxy.POST(new Request("https://fire.example.invalid" + pathname, {
+          method: "POST", headers: { "content-type": "application/json" }, body: '{"client_id":"fire-ios"}',
+        }));
+        assert.equal(native.status, 200, "native credential requests without Origin reach the same authority");
+        await native.text();
+        assert.equal(seen.at(-1).url, pathname);
+        assert.equal(seen.at(-1).headers.origin, undefined);
+        assert.equal(seen.at(-1).headers.authorization, undefined);
+        assert.equal(seen.at(-1).headers["x-forwarded-proto"], "https");
+      }
+    }
     const routed = await proxy.GET(
       new Request(
         "https://fire.example.invalid/api/fire/tasks/receipts/123?limit=1",
@@ -179,6 +193,19 @@ const server = http.createServer(async (req, res) => {
     await assert.rejects(() => platformRequest("/\\attacker.invalid/api"));
     process.env.FIRE_PUBLIC_ORIGIN = "https://name:secret@fire.example.invalid";
     assert.throws(platformConfig);
+    for (const version of [1,2]) {
+      const failed = await proxy.POST(new Request(`https://fire.example.invalid/api/v${version}/auth/token`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: '{}',
+      }));
+      assert.equal(failed.status,503);
+      assert.equal(failed.headers.get("x-alcor-api-version"),String(version));
+      assert.equal(failed.headers.get("retry-after"),"3");
+      assert(failed.headers.get("x-request-id"));
+      assert.equal(failed.headers.get("vary"),"Authorization");
+      assert.deepEqual(await failed.json(),{code:50001,message:"平台服务暂不可用，请稍后核对结果",data:null});
+    }
+    const head = await proxy.HEAD(new Request("https://fire.example.invalid/api/v2/auth/config",{method:"HEAD"}));
+    assert.equal(head.status,503);assert.equal(await head.text(),"");
     process.env.FIRE_PUBLIC_ORIGIN = "https://fire.example.invalid";
     assert(
       !Object.hasOwn(require("../package.json").dependencies, "better-sqlite3"),

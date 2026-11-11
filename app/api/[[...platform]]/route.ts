@@ -1,13 +1,17 @@
 import { platformConfig, platformRequest } from "@/lib/platformTransport";
+import { randomUUID } from "node:crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /** 固定转交给 Fire 内置服务；业务路由、授权和请求预算由同一服务核验。 */
 async function route(request: Request) {
   const url = new URL(request.url);
+  const version = /^\/api\/v([12])\//.exec(url.pathname)?.[1];
+  const native = Boolean(version) || url.pathname.startsWith("/api/client/");
   try {
     const { publicOrigin } = platformConfig();
     if (
       !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+      !native &&
       !request.headers.has("authorization") &&
       request.headers.get("origin") !== publicOrigin.origin
     )
@@ -48,6 +52,23 @@ async function route(request: Request) {
     }
     return response;
   } catch {
+    if (version) {
+      const headers = {
+        "cache-control": "private, no-store",
+        "x-alcor-api-version": version,
+        "x-request-id": randomUUID(),
+        "x-content-type-options": "nosniff",
+        "retry-after": "3",
+        vary: "Authorization",
+        "content-type": "application/json",
+      };
+      return request.method === "HEAD"
+        ? new Response(null, { status: 503, headers })
+        : Response.json(
+            { code: 50001, message: "平台服务暂不可用，请稍后核对结果", data: null },
+            { status: 503, headers },
+          );
+    }
     return Response.json(
       { error: "平台服务暂不可用" },
       { status: 503, headers: { "cache-control": "no-store" } },
