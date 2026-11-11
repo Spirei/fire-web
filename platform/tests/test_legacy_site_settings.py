@@ -85,6 +85,57 @@ async def legacy(app, admin):
         yield client
 
 
+async def test_explicit_fx_url_save_seals_credentials_and_registers_current_provider(legacy, db, monkeypatch):
+    from alcor_api import fx_provider_transport
+    calls=[]
+    async def resolve(host,port):
+        calls.append((host,port))
+        return ['8.8.8.8']
+    monkeypatch.setattr(fx_provider_transport,'resolve',resolve)
+    current=(await legacy.get(P)).json()
+    payload={'requestId':str(uuid4()),'revision':current['revision'],'privateRevision':current['privateRevision'],
+             'currentPassword':'Synthetic9Pass','currencyApiUrl':'https://rates.example.invalid/latest?app_id=synthetic-key',
+             'currencyApproved':True,'currencyRevision':1}
+    denied=await legacy.put(P,json={**payload,'currentPassword':'incorrect'})
+    assert denied.status_code==403 and not calls
+    saved=await legacy.put(P,json=payload)
+    assert saved.status_code==200,saved.text
+    assert 'synthetic-key' not in saved.text
+    repeated=await legacy.put(P,json=payload)
+    assert repeated.status_code==200,repeated.text
+    assert repeated.json()==saved.json()
+    assert len(calls)==1,'same UUID reuses the original configuration, without another DNS read'
+    async with db.connection() as conn:
+        current=await(await conn.execute('SELECT * FROM fx_config WHERE singleton')).fetchone()
+        assert current['enabled'] and current['provider_revision']
+        provider=await(await conn.execute('SELECT * FROM fx_provider_revisions WHERE id=%s',(current['provider_revision'],))).fetchone()
+        assert provider['config']['url']=='https://rates.example.invalid/[redacted]'
+        assert 'synthetic-key' not in str(provider['config']) and 'synthetic-key' not in provider['secret_cipher']
+        assert not await(await conn.execute('SELECT 1 FROM fx_refresh_tasks')).fetchone(),'saving does not fetch or start an automatic job'
+    read=await legacy.get(P)
+    assert 'synthetic-key' not in read.text
+    state=read.json()
+    stale=await legacy.put(P,json={**payload,'requestId':str(uuid4()),'revision':state['revision'],
+        'privateRevision':state['privateRevision'],'currencyRevision':1})
+    assert stale.status_code==409,stale.text
+    async with db.connection() as conn:
+        assert (await(await conn.execute('SELECT count(*) n FROM fx_provider_revisions')).fetchone())['n']==1
+
+
+async def test_fx_url_save_rejects_private_dns_without_changing_provider(legacy,db,monkeypatch):
+    from alcor_api import fx_provider_transport
+    async def resolve(host,port):return ['127.0.0.1']
+    monkeypatch.setattr(fx_provider_transport,'resolve',resolve)
+    current=(await legacy.get(P)).json()
+    result=await legacy.put(P,json={'requestId':str(uuid4()),'revision':current['revision'],
+        'privateRevision':current['privateRevision'],'currentPassword':'Synthetic9Pass',
+        'currencyApiUrl':'https://rates.example.invalid/latest','currencyApproved':True,'currencyRevision':1})
+    assert result.status_code==422,result.text
+    async with db.connection() as conn:
+        assert not (await(await conn.execute('SELECT enabled FROM fx_config WHERE singleton')).fetchone())['enabled']
+        assert not await(await conn.execute('SELECT 1 FROM fx_provider_revisions')).fetchone()
+
+
 async def test_partial_unconfigured_get_does_not_publish_bootstrap_or_fake_secret_defaults(
     legacy, client, db
 ):

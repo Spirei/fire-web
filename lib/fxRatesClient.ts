@@ -1,3 +1,5 @@
+import { refreshFxObservation } from "./fxRefreshCommand";
+
 export interface FxRatesSnapshot {
   rates: Record<string, number>;
   quoted: Set<string>;
@@ -46,7 +48,8 @@ export async function readFxRates(force = false, signal?: AbortSignal, timeoutMs
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   try {
     if (controller.signal.aborted) throw controller.signal.reason;
-    const response = await fetch(force ? "/api/rates?refresh=1" : "/api/rates", {
+    if (force) await refreshFxObservation(controller.signal);
+    const response = await fetch("/api/rates", {
       credentials: "same-origin", cache: "no-store", signal: controller.signal
     });
     if (controller.signal.aborted) throw controller.signal.reason;

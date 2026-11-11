@@ -7258,12 +7258,13 @@ html:root[data-palette] body .app-modal-form .capsule-control { min-height:34px;
 .api-retirement-replacement>span { display:flex; align-items:center; gap:6px; margin-bottom:10px; color:rgb(var(--site-muted)); font-size:11px; }
 @media(max-width:600px) { .api-retirement-body { grid-template-columns:1fr; } .api-retirement-replacement { border-left:0; border-top:1px solid rgb(var(--site-edge)); } .api-retirement-group>header { flex-wrap:wrap; } .api-retirement-group>header>p { flex-basis:calc(100% - 30px); } .api-retirement-group>header>small { margin:0 0 0 27px; } }
 
-/* The index is centered in the content column for either sidebar width. */
+/* The index follows the content's left edge for either sidebar width. */
 .app-shell-ticker { min-width:0; max-width:100%; }
 .app-shell-ticker .ticker-item { width:max-content; max-width:100%; }
 @media(min-width:1024px) {
-  body:has(.records-app) .app-shell-header-inner { max-width:none; justify-content:center; }
-  body:has(.records-app) .app-shell-ticker { width:100%; display:flex; justify-content:center; container-type:inline-size; }
+  body:has(.records-app) .app-shell-header-inner { max-width:none; justify-content:flex-start; padding-left:28px; }
+  body:has(.records-app) .app-shell-ticker { width:100%; display:flex; justify-content:flex-start; container-type:inline-size; }
+  body:has(.records-app) .app-shell-ticker .ticker-item { padding-left:0; }
 }
 @container (max-width:420px) {
   .app-shell-ticker .ticker-item { gap:6px; padding-inline:6px; }

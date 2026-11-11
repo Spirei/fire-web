@@ -106,8 +106,8 @@ export function buildPortfolioLedger(
   const result = new Map<string, LedgerPnlRow>();
   for (const record of records) {
     const currentQty = Math.max(0, Number(record.qty) || 0);
-    const currentCost = Number(record.cost) || 0;
-    const price = Number(livePrice(record)) || Number(record.price) || 0;
+    const currentCost = record.cost === "" || record.cost == null ? Number.NaN : Number(record.cost);
+    const price = livePrice(record);
     const recordOrders = grouped.get(record.id) || [];
 
     if (recordOrders.some(order => order.executionModel === "source_registered_history")) {

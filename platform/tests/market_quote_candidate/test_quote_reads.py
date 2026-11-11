@@ -179,6 +179,34 @@ async def test_multiple_licensed_sources_require_selection_not_timestamp_guess(q
     assert selected.status_code==200 and selected.json()['data']['quotes']['known']['price']==120
 
 
+async def test_reconfirmed_same_policy_after_identity_change_uses_only_new_facts(quoted):
+    client,app,authority,transport,old_revision,_headers,_source=quoted
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE users SET session_version=session_version+1 WHERE username='MarketReader'")
+    login=await client.post('/api/session/login',json={'login':'MarketReader','password':'Synthetic9Pass'})
+    assert login.status_code==200,login.text
+    client.headers['x-csrf-token']=login.json()['csrf']
+    configured=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':'fixture'})
+    assert configured.status_code==200,configured.text
+    revision=configured.json()['revision']
+    await demand(client,revision)
+    await old_login(client)
+    pending=await client.post('/api/quotes',json=body())
+    assert pending.status_code==200,pending.text
+    assert pending.json()['quotes']=={},'old-session facts cannot fill the new authorization'
+    _source['price']='125'
+    _source['price']='125'
+    await schedule(authority)
+    task=await claim(app.state.db,uuid4())
+    assert task is not None
+    assert await execute(authority,task,transport)=='observed'
+    observed=await client.post('/api/quotes',json=body())
+    assert observed.status_code==200,observed.text
+    assert observed.json()['quotes']['known']['price']==125
+    explicit_old=await client.post('/api/quotes',json=body(),headers={'x-alcor-market-source':old_revision})
+    assert explicit_old.status_code==403
+
+
 async def test_ambiguous_request_ids_and_missing_securities_do_not_borrow_other_quotes(quoted):
     client,_app,_authority,transport,_revision,headers,_source=quoted
     requested=body({'id':'same','market':'US','code':'AAPL'},{'id':'same','market':'US','code':'MSFT'},{'id':'missing','market':'US','code':'MSFT'})

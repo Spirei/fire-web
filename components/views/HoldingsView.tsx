@@ -45,6 +45,7 @@ import RefreshButton from "@/components/RefreshButton";
 import DeleteIcon from "@/components/DeleteIcon";
 import ImportSnapshotModal from "@/components/ImportSnapshotModal";
 import { holdingAccountMarket, holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "@/lib/stockAccount";
+import { convertAccountAmount, positionFigures } from "@/lib/accountCash";
 import StockConnectBadge from "@/components/StockConnectBadge";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
@@ -284,8 +285,8 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       const data = res.ok ? await res.json() : null;
       const next = normalizeCachedRates(data?.rates);
       if (next && generation === ratesGeneration.current) {
-        // 以当前（上一次成功）汇率为底，覆盖上游返回的币种，缺失币种保留上次值
-        setRates((prev) => ({ ...prev, ...next, USD: 1 }));
+        // A successful empty/partial observation also withdraws missing rates.
+        setRates(next);
         setRatesReady(true);
         writeCachedRates(next);
       }
@@ -329,8 +330,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const toUsd = (m: string, value: number) => {
     // 市场 → ISO 货币代码（marketMeta.currency 是符号，不能直接查汇率）
     const iso: Record<string, string> = { HK: "HKD", US: "USD", CN: "CNY", JP: "JPY", KR: "KRW" };
-    const r = rates[iso[m] ?? "USD"] ?? 1;
-    return r > 0 ? value / r : value;
+    return convertAccountAmount(value, iso[m] ?? "USD", rates, "USD");
   };
 
   // 列表显示该市场全部记录（含未填数量的待持仓股票）；总资产视图显示全部持仓
@@ -392,18 +392,15 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       const qty = Number(r.qty);
       const price = livePrice(r);
       const factor = active === "TOTAL" ? toUsd(r.market, 1) : holdingMoneyFactor(r, rates, holdingAccountCurrency(r));
-      mv += price * qty * factor;
-      const c = Number(r.cost);
-      if (c) {
-        cost += c * qty * factor;
-        pnl += (price - c) * qty * factor;
-      }
-      const q = quotes[r.id];
-      if (q) day += q.change * qty * factor;
+      const figure = positionFigures(r, quotes);
+      mv += figure.marketValue * factor;
+      cost += figure.costValue * factor;
+      pnl += figure.holdingPnl * factor;
+      day += figure.dayPnl * factor;
     });
     return { mv, cost, pnl, day, rate: cost ? pnl / Math.abs(cost) : null };
   }, [filtered, livePrice, quotes, active, rates]);
-  // 只有完整持仓行情快照恢复后才展示估值，禁止首屏把“仅现金”或数据库旧价当成总资产。
+  // Loading ends after the read; each missing financial input remains unavailable.
   const metricsReady = valuationReady;
   // 总资产视图：市场盈亏汇总
   const marketPnl = useMemo(() => {
@@ -415,14 +412,11 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       const factor = holdingMoneyFactor(r, rates, holdingAccountCurrency(r));
       const e = map.get(account) ?? { mv: 0, cost: 0, pnl: 0, day: 0 };
       // 各市场按本币统计（汇总换算在总资产指标卡中统一处理）
-      e.mv += price * qty * factor;
-      const c = Number(r.cost);
-      if (c) {
-        e.cost += c * qty * factor;
-        e.pnl += (price - c) * qty * factor;
-      }
-      const q = quotes[r.id];
-      if (q) e.day += q.change * qty * factor;
+      const figure = positionFigures(r, quotes);
+      e.mv += figure.marketValue * factor;
+      e.cost += figure.costValue * factor;
+      e.pnl += figure.holdingPnl * factor;
+      e.day += figure.dayPnl * factor;
       map.set(account, e);
     });
     return [...map.entries()];
@@ -442,6 +436,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
       .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
       .slice(0, 6);
     return {
+      complete: positions.every(r => Number.isFinite(toUsd(r.market, positionFigures(r, quotes).holdingPnl))),
       profit: top("profit"),
       loss: top("loss"),
       profitTotal: rows.reduce((sum, item) => sum + (item.pnl > 0 ? item.pnl : 0), 0),
@@ -481,12 +476,12 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
 
   const cur = active === "TOTAL" ? "USD" : marketMeta(active).currency || "USD";
   // 总资产视图：显示货币换算系数（1 USD = rates[displayCur]）
-  const totalFactor = active === "TOTAL" ? (rates[displayCur] ?? 1) : 1;
+  const totalFactor = active === "TOTAL" ? (rates[displayCur] ?? Number.NaN) : 1;
   const totalCur = active === "TOTAL" ? displayCur : cur;
   // 总资产货币符号（ISO 码 → 符号；市场盈亏卡片仍用 USD$/HKD$/CNY¥ 规范标识）
   const totalCurLabel = CURRENCY_SYMBOLS[totalCur as keyof typeof CURRENCY_SYMBOLS] || totalCur;
   const cashInUsd = useMemo(() => Object.keys(fundBalances).length && Object.values(fundBalances).every(value=>typeof value==='number'&&Number.isFinite(value)) ? (Object.entries(fundBalances) as [string, number][]).reduce((sum, [iso, value]) => Number.isFinite(rates[iso])&&rates[iso]>0 ? sum+value/rates[iso] : NaN,0) : NaN, [fundBalances, rates]);
-  const allMarketsNetAsset = useMemo(() => (positions.reduce((sum, r) => sum + toUsd(r.market, livePrice(r) * (Number(r.qty) || 0)), 0) + cashInUsd) * (rates[displayCur] ?? 1), [positions, livePrice, rates, cashInUsd, displayCur]);
+  const allMarketsNetAsset = useMemo(() => (positions.reduce((sum, r) => sum + toUsd(r.market, livePrice(r) * (Number(r.qty) || 0)), 0) + cashInUsd) * (rates[displayCur] ?? Number.NaN), [positions, livePrice, rates, cashInUsd, displayCur]);
   const displayedNetAsset = active === "TOTAL"
     ? (metrics.mv + cashInUsd) * totalFactor
     : metrics.mv + (fundBalances[(Object.entries({ US: "USD", HK: "HKD", CN: "CNY", JP: "JPY", KR: "KRW", SG: "SGD" }).find(([market]) => market === active)?.[1] || "USD")] ?? NaN);
@@ -501,6 +496,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     return currencyDisplayUnit === "compact" || (currencyDisplayUnit === "auto" && max >= 1e7);
   }, [displayedNetAsset, metrics, totalFactor, currencyDisplayUnit]);
   const compactMoney = useCallback((value: number, currency: string) => pageUsesCompactMoney ? fmtMoneyCompact(value, currency) : fmtMoney(value, currency), [pageUsesCompactMoney]);
+  const signedMoney = (value: number, currency: string) => Number.isFinite(value) ? `${value >= 0 ? "+" : "−"}${compactMoney(Math.abs(value), currency)}` : "—";
 
   const recordMarketOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -549,7 +545,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const qty = Number(record.qty) || 0;
     const price = livePrice(record);
     const marketValue = qty > 0 ? price * qty : null;
-    const cost = Number(record.cost);
+    const cost = record.cost === "" || record.cost == null ? Number.NaN : Number(record.cost);
     const hasCost = Number.isFinite(cost);
     const costValue = hasCost ? cost * qty : null;
     const pnl = marketValue !== null && costValue !== null ? marketValue - costValue : null;
@@ -558,7 +554,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const dayPnl = qty > 0 && quote ? quote.change * qty : null;
     const dayPnlRate = quote ? quote.changePct / 100 : null;
     const factor = active === "TOTAL" ? toUsd(record.market, 1) : holdingMoneyFactor(record, rates, holdingAccountCurrency(record));
-    const displayMoneyFactor = active === "TOTAL" ? factor * (rates[displayCur] ?? 1) : factor;
+    const displayMoneyFactor = active === "TOTAL" ? factor * (rates[displayCur] ?? Number.NaN) : factor;
     const displayMoneyCurrency = active === "TOTAL" ? totalCurLabel : marketMeta(holdingAccountMarket(record)).currency;
     const weight = marketValue !== null && filteredMarketValue ? marketValue * factor / filteredMarketValue : null;
 
@@ -578,7 +574,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     if (key === "qty") return qty > 0 ? fmtQty(qty) : <button type="button" onClick={() => openEdit(record)} className="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand-deep transition-colors hover:bg-brand-hover">待填数量</button>;
     if (key === "dayPnl") return dayPnl !== null ? <span className={`font-semibold ${dayPnl >= 0 ? "text-up" : "text-down"}`}>{dayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(dayPnl * displayMoneyFactor), displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
     if (key === "dayPnlRate") return dayPnlRate !== null ? <span className={`font-semibold ${dayPnlRate >= 0 ? "text-up" : "text-down"}`}>{dayPnlRate >= 0 ? "+" : ""}{fmtPct(dayPnlRate)}</span> : <span className="text-faint">—</span>;
-    if (key === "pnl") return pnl !== null ? <span className={`font-semibold ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl * displayMoneyFactor), displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
+    if (key === "pnl") return pnl !== null ? <span className={`font-semibold ${pnl >= 0 ? "text-up" : "text-down"}`}>{signedMoney(pnl * displayMoneyFactor, displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
     if (key === "pnlRate") return pnlRate !== null ? <span className={`font-semibold ${pnlRate >= 0 ? "text-up" : "text-down"}`}>{pnlRate >= 0 ? "+" : ""}{fmtPct(pnlRate)}</span> : <span className="text-faint">—</span>;
     return weight !== null ? <span className="font-semibold">{fmtPct(weight)}</span> : <span className="text-faint">—</span>;
   }
@@ -902,7 +898,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const detailPnlRate = detailPnl == null || !detailCostValue ? null : detailPnl / Math.abs(detailCostValue);
     const detailDayPnl = detailQuote ? detailQuote.change * detailQty : null;
     const detailDisplayFactor = active === "TOTAL"
-      ? toUsd(selectedHolding.market, 1) * (rates[displayCur] ?? 1)
+      ? toUsd(selectedHolding.market, 1) * (rates[displayCur] ?? Number.NaN)
       : holdingMoneyFactor(selectedHolding, rates, holdingAccountCurrency(selectedHolding));
     const detailDisplayCurrency = active === "TOTAL" ? totalCurLabel : marketMeta(holdingAccountMarket(selectedHolding)).currency;
     const detailSession = marketSessionState(selectedHolding.market, sessionNow);
@@ -1134,7 +1130,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">当日盈亏</span>
           <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${metrics.day >= 0 ? "text-up" : "text-down"}`}>
-            {metricsReady ? `${metrics.day >= 0 ? "+" : "-"}${compactMoney(Math.abs(metrics.day * totalFactor), totalCurLabel)}` : "…"}
+            {metricsReady ? signedMoney(metrics.day * totalFactor, totalCurLabel) : "…"}
           </strong>
         </div>
         <div className="card p-4">
@@ -1144,13 +1140,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">持仓盈亏</span>
           <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${metrics.pnl >= 0 ? "text-up" : "text-down"}`}>
-            {metricsReady ? `${metrics.pnl >= 0 ? "+" : "-"}${compactMoney(Math.abs(metrics.pnl * totalFactor), totalCurLabel)}` : "…"}
+            {metricsReady ? signedMoney(metrics.pnl * totalFactor, totalCurLabel) : "…"}
           </strong>
         </div>
         <div className="card p-4">
           <span className="block text-xs font-semibold text-[#73777f] dark:text-[#a3a8b2]">持仓盈亏率</span>
           <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${metrics.rate !== null && metrics.rate >= 0 ? "text-up" : metrics.rate !== null ? "text-down" : "text-ink"}`}>
-            {metricsReady ? (metrics.rate !== null ? `${metrics.rate >= 0 ? "+" : ""}${fmtPct(metrics.rate)}` : "—") : "…"}
+            {metricsReady ? (metrics.rate !== null && Number.isFinite(metrics.rate) ? `${metrics.rate >= 0 ? "+" : ""}${fmtPct(metrics.rate)}` : "—") : "…"}
           </strong>
         </div>
       </div>
@@ -1164,7 +1160,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {orderedPnl.map(([m, e], i) => {
               const marketFactor = toUsd(m, 1) * totalFactor;
-              const rate = e.cost ? e.pnl / e.cost : null;
+              const rate = e.cost ? e.pnl / Math.abs(e.cost) : null;
               return (
                 <div
                   key={m}
@@ -1197,13 +1193,13 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓盈利</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${e.pnl >= 0 ? "text-up" : "text-down"}`}>
-                        {metricsReady ? `${e.pnl >= 0 ? "+" : "-"}${compactMoney(Math.abs(e.pnl * marketFactor), totalCurLabel)}` : "…"}
+                        {metricsReady ? signedMoney(e.pnl * marketFactor, totalCurLabel) : "…"}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">盈亏率</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${rate !== null && rate >= 0 ? "text-up" : rate !== null ? "text-down" : "text-faint"}`}>
-                        {metricsReady ? (rate !== null ? `${rate >= 0 ? "+" : ""}${fmtPct(rate)}` : "—") : "…"}
+                        {metricsReady ? (rate !== null && Number.isFinite(rate) ? `${rate >= 0 ? "+" : ""}${fmtPct(rate)}` : "—") : "…"}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between border-t border-edge pt-2.5">
@@ -1286,7 +1282,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
         )}
       </div>
 
-      {active === "TOTAL" && positions.length > 0 && (
+      {active === "TOTAL" && positions.length > 0 && pnlSankey.complete && (
         <div className="holdings-sankey-module mt-6">
           <HoldingsPnlSankey
             profit={pnlSankey.profit}

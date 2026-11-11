@@ -31,9 +31,21 @@ export function investmentEquities(raw: unknown): { equities: InvestmentEquity[]
 
 export function accountHoldingPrice(record: StockRecord, quotes: Record<string, Quote>) {
   const quote = quotes[record.id]?.price;
-  if (Number.isFinite(quote)) return quote;
-  const stored = Number(record.price);
-  return Number.isFinite(stored) ? stored : 0;
+  if (Number.isFinite(quote) && quote > 0) return quote;
+  const stored = record.price === "" || record.price == null ? Number.NaN : Number(record.price);
+  return Number.isFinite(stored) && stored > 0 ? stored : Number.NaN;
+}
+
+/** Missing observations stay unavailable independently of known position values. */
+export function positionFigures(record: StockRecord, quotes: Record<string, Quote>) {
+  const qty = record.qty === "" || record.qty == null ? Number.NaN : Number(record.qty);
+  const cost = record.cost === "" || record.cost == null ? Number.NaN : Number(record.cost);
+  const price = accountHoldingPrice(record, quotes);
+  const marketValue = qty === 0 ? 0 : qty > 0 ? qty * price : Number.NaN;
+  const costValue = qty === 0 ? 0 : qty > 0 ? qty * cost : Number.NaN;
+  const change = quotes[record.id]?.change;
+  const dayPnl = qty === 0 ? 0 : qty > 0 && Number.isFinite(change) ? qty * change : Number.NaN;
+  return { marketValue, costValue, holdingPnl: marketValue - costValue, dayPnl };
 }
 
 /** Cash is independent of valuation. Legacy arguments remain compatible but never infer cash from equity. */
@@ -43,6 +55,7 @@ export function reconcileAccountCash<T extends Record<string, number>>(balances:
 
 /** NaN is an unavailable value for the UI, not a fictitious 1:1 conversion. */
 export function convertAccountAmount(value: number, source: string, rates: Record<string, number>, currency: string) {
+  if (source === currency) return Number.isFinite(value) ? value : Number.NaN;
   const from = rates[source], to = rates[currency];
   return Number.isFinite(value) && Number.isFinite(from) && from > 0 && Number.isFinite(to) && to > 0 ? value / from * to : Number.NaN;
 }

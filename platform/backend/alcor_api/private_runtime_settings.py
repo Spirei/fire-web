@@ -476,6 +476,21 @@ class PrivateRuntimeSettings:
                 groups.setdefault('models',{})['modelServices']=services
                 groups['models']['activeModelServiceId']=selected['id']
                 unhandled=[key for key in unhandled if key not in alias_keys and key!='llmProvider']
+            fx_setup = None
+            if 'currencyApproved' in raw:
+                if raw.pop('currencyApproved') is not True or not raw.get('currencyApiUrl'):
+                    raise HTTPException(422,'请明确确认本次汇率来源及用途')
+                from .fx_settings_bridge import prepare
+                fx_revision=raw.pop('currencyRevision',None)
+                if type(fx_revision) is not int or fx_revision < 1:
+                    raise HTTPException(422,'请先读取当前汇率配置')
+                entry,custom,checked = await prepare(self.db,conn,who,raw.pop('currencyApiUrl'),password,code,verifier)
+                verified_factor=(conn,who.id,who.token_hash,checked)
+                targets=copy.deepcopy(private.get('fx_provider_targets',[]))
+                targets=[target for target in targets if target.get('id')!=entry['id']]+[entry]
+                groups.setdefault('sources',{})['fx_provider_targets']=targets
+                fx_setup=(custom,targets,fx_revision)
+                unhandled=[key for key in unhandled if key not in {'currencyApproved','currencyApiUrl','currencyRevision'}]
             futu_keys=set(raw)&{'futuHost','futuPort'}
             opend_policy = None
             approved_opend = raw.get('futuApproved') is True
@@ -547,6 +562,9 @@ class PrivateRuntimeSettings:
                 if not current:
                     configured = await Authority(Bound(conn,self.db.settings), (policy,)).configure(who,uuid5(UUID(str(request_id)),'opend-source'),policy.id)
                     outputs.append({'authority':'opend-source',**configured})
+            if fx_setup:
+                from .fx_settings_bridge import apply
+                outputs.append(await apply(self.db,conn,who,*fx_setup))
             enrollment=[]
             if interval_changes:
                 from .feed_refresh_policy import enroll_changed

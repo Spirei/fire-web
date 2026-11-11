@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { startVisiblePolling } from "@/lib/visiblePolling";
 import MarketIcon from "@/components/MarketIcon";
-import { marketMeta } from "@/lib/types";
+import { marketMeta, type TickerConfig } from "@/lib/types";
 
 interface TickerItem {
   key: string;
@@ -125,7 +125,10 @@ function TickerChip({ item }: { item: TickerItem }) {
   );
 }
 
-const TICKER_CACHE_KEY = "fire:ticker";
+const TICKER_CACHE_KEY = "fire:ticker:observations:v2";
+function unquoted(item: Pick<TickerItem,"key"|"label"|"market">):TickerItem {
+  return {key:item.key,label:item.label,market:typeof item.market === "string" ? item.market : "",price:null,change:null,changePct:null,points:[]};
+}
 
 function readTickerCache(): { items: TickerItem[]; interval?: number; pollSec?: number } | null {
   try {
@@ -137,8 +140,8 @@ function readTickerCache(): { items: TickerItem[]; interval?: number; pollSec?: 
   return null;
 }
 
-export default function IndexTicker() {
-  const [items, setItems] = useState<TickerItem[]>([]);
+export default function IndexTicker({configuration}:{configuration?:TickerConfig}) {
+  const [items, setItems] = useState<TickerItem[]>(()=>configuration?.items.map(unquoted) ?? []);
   const [intervalSec, setIntervalSec] = useState(5);
   // 轮询间隔由服务端按「是否有市场在交易」给出：开市 60 秒，全部收市 5 分钟兜底
   const pollSec = useRef(60);
@@ -156,8 +159,15 @@ export default function IndexTicker() {
     async function load(signal: AbortSignal) {
       try {
         const res = await fetch("/api/ticker", { cache: "no-store", signal });
-        if (!res.ok) return;
         const data = await res.json().catch(() => null);
+        if (signal.aborted) return;
+        if (!res.ok) {
+          // Unavailable public facts must not erase the configured index names
+          // or keep revoked prices in the browser cache.
+          setItems(current => (Array.isArray(data?.items) && data.items.length ? data.items : current).map(unquoted));
+          try { sessionStorage.removeItem(TICKER_CACHE_KEY); } catch { /* optional cache */ }
+          return;
+        }
         if (!signal.aborted && Array.isArray(data?.items) && data.items.length > 0) {
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);

@@ -125,26 +125,10 @@ export interface MarketBadgeStyle {
 }
 
 /**
- * 汇率兜底值：服务端汇率尚未返回时用于跨市场换算，
- * 避免港股 / A股 / 日股 / 韩股被按 1:1 误算成美元（导致总资产刷新闪变）。
- * 服务端 fetch 成功后会用真实汇率覆盖。
+ * USD identity only. Other currencies require observed rates from the server.
  */
 export const FALLBACK_RATES: Record<string, number> = {
-  USD: 1,
-  CNY: 7.2,
-  HKD: 7.85,
-  JPY: 155,
-  KRW: 1350,
-  SGD: 1.35,
-  GBP: 1.28,
-  EUR: 1.08,
-  AUD: 0.66,
-  CAD: 0.73,
-  INR: 0.012,
-  TWD: 0.031,
-  BRL: 0.18,
-  // 澳门元与港币挂钩（1 HKD ≈ 1.03 MOP），ECB 不发布 MOP，用锚定汇率兜底
-  MOP: 8.08
+  USD: 1
 };
 
 export interface MarketOption {

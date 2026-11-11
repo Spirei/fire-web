@@ -31,7 +31,7 @@ const PnlTrendChart = dynamic(() => import("@/components/PnlTrendChart"), {
 import QuickTradeDialog from "@/components/QuickTradeDialog";
 import HoldingDividendDialog from "@/components/HoldingDividendDialog";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
-import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, reconcileAccountCash } from "@/lib/accountCash";
+import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, reconcileAccountCash, positionFigures } from "@/lib/accountCash";
 import FundsPanel from "@/components/FundsPanel";
 import CashBalanceEditor from "@/components/CashBalanceEditor";
 import { holdingAccountMarket, holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "@/lib/stockAccount";
@@ -580,7 +580,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       </svg>
     </span>
   );
-  const currencyFactor = rates[displayCurrency] || 1;
+  const currencyFactor = rates[displayCurrency] ?? Number.NaN;
   const symbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
   const toDisplay = (record: StockRecord, value: number) => {
     return convertAccountAmount(value, ISO_BY_MARKET[record.market], rates, displayCurrency);
@@ -625,33 +625,29 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   };
 
   const summary = useMemo(() => positions.reduce((acc, record) => {
-    const qty = Number(record.qty) || 0;
-    const price = livePrice(record);
-    const cost = Number(record.cost) || 0;
-    acc.asset += toDisplay(record, price * qty);
-    acc.cost += toDisplay(record, cost * qty);
-    acc.pnl += toDisplay(record, (price - cost) * qty);
-    acc.day += toDisplay(record, (quotes[record.id]?.change || 0) * qty);
+    const figure = positionFigures(record, quotes);
+    acc.asset += toDisplay(record, figure.marketValue);
+    acc.cost += toDisplay(record, figure.costValue);
+    acc.pnl += toDisplay(record, figure.holdingPnl);
+    acc.day += toDisplay(record, figure.dayPnl);
     const key = holdingAccountMarket(record).toUpperCase();
     const marketSummary = acc.markets[key] || { asset: 0, cost: 0, pnl: 0, day: 0 };
-    marketSummary.asset += toDisplay(record, price * qty);
-    marketSummary.cost += toDisplay(record, cost * qty);
-    marketSummary.pnl += toDisplay(record, (price - cost) * qty);
-    marketSummary.day += toDisplay(record, (quotes[record.id]?.change || 0) * qty);
+    marketSummary.asset += toDisplay(record, figure.marketValue);
+    marketSummary.cost += toDisplay(record, figure.costValue);
+    marketSummary.pnl += toDisplay(record, figure.holdingPnl);
+    marketSummary.day += toDisplay(record, figure.dayPnl);
     acc.markets[key] = marketSummary;
     return acc;
   }, { asset: 0, cost: 0, pnl: 0, day: 0, markets: {} as Record<string, { asset: number; cost: number; pnl: number; day: number }> }), [positions, quotes, rates, displayCurrency, livePrice]);
   const nativeSummary = useMemo(() => positions.reduce((acc, record) => {
-    const qty = Number(record.qty) || 0;
-    const price = livePrice(record);
-    const cost = Number(record.cost) || 0;
+    const figure = positionFigures(record, quotes);
     const key = holdingAccountMarket(record).toUpperCase();
     const marketSummary = acc[key] || { asset: 0, cost: 0, pnl: 0, day: 0 };
     const factor = holdingMoneyFactor(record, rates, holdingAccountCurrency(record));
-    marketSummary.asset += price * qty * factor;
-    marketSummary.cost += cost * qty * factor;
-    marketSummary.pnl += (price - cost) * qty * factor;
-    marketSummary.day += (quotes[record.id]?.change || 0) * qty * factor;
+    marketSummary.asset += figure.marketValue * factor;
+    marketSummary.cost += figure.costValue * factor;
+    marketSummary.pnl += figure.holdingPnl * factor;
+    marketSummary.day += figure.dayPnl * factor;
     acc[key] = marketSummary;
     return acc;
   }, {} as Record<string, { asset: number; cost: number; pnl: number; day: number }>), [positions, quotes, livePrice, rates]);
@@ -703,7 +699,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       name: record.name,
       code: record.code,
       market: record.market,
-      dayPnl: toDisplay(record, (quotes[record.id]?.change || 0) * qty),
+      dayPnl: toDisplay(record, positionFigures(record, quotes).dayPnl),
       marketValue: toDisplay(record, livePrice(record) * qty),
       cost: Number(record.cost) || 0,
       price: livePrice(record),
@@ -1035,7 +1031,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     return pageUsesCompactMoney ? fmtMoneyCompact(value, prefix) : fmtMoney(value, prefix);
   }, [pageUsesCompactMoney, symbol]);
   // 各市场持仓按结算币种归类（资金系统的币种清单，其余币种留 0）
-  const holdingAssetsByCurrency = useMemo<Record<FundCurrency, number>>(() => ({ ...emptyFundBalances(), USD: nativeSummary.US?.asset || 0, HKD: nativeSummary.HK?.asset || 0, CNY: nativeSummary.CN?.asset || 0, JPY: nativeSummary.JP?.asset || 0, KRW: nativeSummary.KR?.asset || 0, SGD: nativeSummary.SG?.asset || 0 }), [nativeSummary]);
+  const holdingAssetsByCurrency = useMemo<Record<FundCurrency, number>>(() => ({ ...emptyFundBalances(), USD: nativeSummary.US?.asset ?? 0, HKD: nativeSummary.HK?.asset ?? 0, CNY: nativeSummary.CN?.asset ?? 0, JPY: nativeSummary.JP?.asset ?? 0, KRW: nativeSummary.KR?.asset ?? 0, SGD: nativeSummary.SG?.asset ?? 0 }), [nativeSummary]);
   const summaryMarketKeys = Object.keys(summary.markets);
   const marketKeys = ["US", "HK", "CN", ...summaryMarketKeys.filter((key) => !["US", "HK", "CN"].includes(key))]
     .filter((key, index, keys) => summary.markets[key] && keys.indexOf(key) === index);
@@ -1056,7 +1052,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     return rows;
   }, [positions, pnlMarket, recordCloses, activeRange, period, rates, displayCurrency, livePrice]);
   const shownPnlPositions = pnlExpanded ? pnlPositions : pnlPositions.slice(0, 10);
-  const maskMoney = (value: number, signed = false, withSymbol = false) => assetsVisible ? `${signed ? (value >= 0 ? "+" : "−") : ""}${compactMoney(Math.abs(value), withSymbol)}` : "******";
+  const maskMoney = (value: number, signed = false, withSymbol = false) => !assetsVisible ? "******" : !Number.isFinite(value) ? "—" : `${signed ? (value >= 0 ? "+" : "−") : ""}${compactMoney(Math.abs(value), withSymbol)}`;
   const MarketPills = ({ value, onChange, includeAll = true }: { value: string; onChange: (key: string) => void; includeAll?: boolean }) => <div className="flex gap-2 overflow-x-auto px-0.5 pb-1 pt-1.5">
     {(includeAll ? ["ALL", ...marketKeys] : marketKeys).map((key) => <Capsule variant="secondary" aria-pressed={value === key} key={key} type="button" onClick={() => onChange(key)} className={`flex-none rounded-full border px-4 py-1.5 text-xs font-bold transition-colors ${value === key ? "border-[#3297f6] bg-[#3297f6]/15 text-[#3297f6] shadow-sm" : "border-edge-strong bg-bg-gray text-muted hover:bg-brand-hover hover:text-ink"}`}>{key === "ALL" ? "全部" : marketMeta(key).label}</Capsule>)}
   </div>;
@@ -1079,12 +1075,12 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const holdingCell = (record: StockRecord, key: HoldingColumnKey) => {
     const price = livePrice(record);
     const qty = Number(record.qty) || 0;
-    const cost = Number(record.cost) || 0;
-    const pnl = (price - cost) * qty;
+    const cost = record.cost === "" || record.cost == null ? Number.NaN : Number(record.cost);
+    const pnl = positionFigures(record, quotes).holdingPnl;
     const pnlRate = cost ? (price - cost) / Math.abs(cost) : 0;
     const quote = quotes[record.id];
-    const dayPnl = (quote?.change || 0) * qty;
-    const dayPnlRate = (quote?.changePct || 0) / 100;
+    const dayPnl = positionFigures(record, quotes).dayPnl;
+    const dayPnlRate = quote && Number.isFinite(quote.changePct) ? quote.changePct / 100 : Number.NaN;
     const weight = holdingAssetTotal ? toDisplay(record, price * qty) / holdingAssetTotal : 0;
     const displayMarketValue = toDisplay(record, price * qty);
     const displayDayPnl = toDisplay(record, dayPnl);
@@ -1097,9 +1093,9 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     if (key === "cost") return <>{fmtNumMarket(cost, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
     if (key === "price") return <>{fmtNumMarket(price, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
     if (key === "qty") return fmtQty(qty);
-    if (key === "dayPnl") return <span className={displayDayPnl >= 0 ? "text-up" : "text-down"}>{displayDayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(displayDayPnl))}</span>;
+    if (key === "dayPnl") return Number.isFinite(displayDayPnl) ? <span className={displayDayPnl >= 0 ? "text-up" : "text-down"}>{displayDayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(displayDayPnl))}</span> : "—";
     if (key === "dayPnlRate") return <span className={dayPnlRate >= 0 ? "text-up" : "text-down"}>{dayPnlRate >= 0 ? "+" : ""}{fmtPct(dayPnlRate)}</span>;
-    if (key === "pnl") return <span className={displayPnl >= 0 ? "text-up" : "text-down"}>{displayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(displayPnl))}</span>;
+    if (key === "pnl") return Number.isFinite(displayPnl) ? <span className={displayPnl >= 0 ? "text-up" : "text-down"}>{displayPnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(displayPnl))}</span> : "—";
     if (key === "pnlRate") return <span className={pnlRate >= 0 ? "text-up" : "text-down"}>{pnlRate >= 0 ? "+" : ""}{fmtPct(pnlRate)}</span>;
     return <span className="font-semibold">{fmtPct(weight)}</span>;
   };

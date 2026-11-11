@@ -88,7 +88,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
           <Link href="/" className="inline-flex flex-none items-center gap-2.5 hover:opacity-90">
             <SiteLogo initialLogo={settings.siteLogo} initialText={settings.logoText} initialFont={settings.logoFont} />
           </Link>
-          <WorkspaceTicker />
+          <WorkspaceTicker configuration={settings.ticker} />
           <div className="workspace-header-account ml-auto flex flex-none items-center gap-2.5">
             <GlobalSearchTrigger />
             <UserMenu initialUser={user} initialAvatar={initialAvatar} />

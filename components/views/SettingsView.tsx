@@ -308,16 +308,16 @@ function CronRefreshButton() {
   async function refreshRates() {
     setBusy(true);
     try {
-      const res = await fetch("/api/rates?refresh=1");
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.rates) {
+      const { readFxRates } = await import("@/lib/fxRatesClient");
+      const data = await readFxRates(true);
+      if (data.quoted.size > 1) {
         showToast("汇率已立即刷新");
         window.dispatchEvent(new Event("fire:rates-updated"));
       } else {
-        showToast(data?.error || "刷新失败", "err");
+        showToast("暂无可用汇率", "err");
       }
-    } catch {
-      showToast("刷新失败", "err");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "刷新失败", "err");
     } finally {
       setBusy(false);
     }
@@ -690,6 +690,9 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings, initialPasskeys, initialSettingsVersion }: Props) {
   const avatarCrop = useImageCrop();
   const futuSave = useMemo(() => new SiteSettingsCommand(), []);
+  const sourcesSave = useMemo(() => new SiteSettingsCommand(), []);
+  const [fxSourceHost, setFxSourceHost] = useState("");
+  const [fxConfigRevision, setFxConfigRevision] = useState<number | null>(null);
   const settingCommands = useRef(new Map<string, SiteSettingsCommand>());
   const passkeyData = useMemo(() => createPasskeySettingsData(initialPasskeys), [user.username, user.uid, initialPasskeys]);
   useEffect(() => () => passkeyData.invalidate(), [passkeyData]);
@@ -1348,6 +1351,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingFutu, setEditingFutu] = useState(false);
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
+  useEffect(() => {
+    if (activeAnchor !== "sources" || editingSources) return;
+    const controller = new AbortController();
+    void platformRequest<{revision:number;custom?:{url?:string}|null}>("/api/reference/rates/provider", {signal:controller.signal})
+      .then(value => { if (!controller.signal.aborted) { setFxSourceHost(value.custom?.url ? new URL(value.custom.url).hostname : ""); setFxConfigRevision(value.revision); } })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [activeAnchor, editingSources]);
   const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
     : activeAnchor === "info" ? editingSiteInfo
     : activeAnchor === "appearance" ? editingAppearance
@@ -1559,34 +1570,30 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     setSrcSaving(true);
     setSrcMsg(null);
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          quoteApiUrl: site.quoteApiUrl,
-          searchApiUrl: site.searchApiUrl,
-          chartApiUrl: site.chartApiUrl,
-          currencyApiUrl: site.currencyApiUrl,
-          currencyRefreshPattern: site.currencyRefreshPattern,
-          earningsApiUrl: site.earningsApiUrl,
-          cnEarningsApiUrl: site.cnEarningsApiUrl,
-          hkEarningsApiUrl: site.hkEarningsApiUrl,
-          usLogoApiUrl: site.usLogoApiUrl,
-          cnLogoApiUrl: site.cnLogoApiUrl,
-          translationProvider: site.translationProvider,
-          trumpArchiveApiUrl: site.trumpArchiveApiUrl,
-          translationApiUrl: site.translationApiUrl,
-          deepseekApiUrl: site.deepseekApiUrl,
-          deepseekModel: site.deepseekModel
-        })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "保存失败");
-      setSite((s) => ({ ...s, ...data.settings }));
-      captureSaved(data.settings);
+      const keys = SOURCE_SECTIONS.find(section => section.id === activeAnchor)?.keys ?? [];
+      const previous = lastSavedRef.current?.site;
+      if (!previous && !sourcesSave.pending) throw new Error("配置尚未读完，请稍后保存");
+      const patch: Record<string, unknown> = {};
+      for (const key of keys) {
+        if (site[key] !== previous?.[key]) patch[key] = site[key];
+      }
+      if (!Object.keys(patch).length && !sourcesSave.pending) return true;
+      if (patch.currencyApiUrl && !sourcesSave.pending) {
+        if (!Number.isSafeInteger(fxConfigRevision)) throw new Error("请先读取当前汇率配置");
+        if (!await appConfirm("允许此接口提供汇率数据？", { title: "保存汇率来源" })) return false;
+        patch.currencyApproved = true;
+        patch.currencyRevision = fxConfigRevision;
+      }
+      const proof = sourcesSave.pending ? { password: "", code: "" } : await requestAdminProof();
+      if (!proof) return false;
+      await sourcesSave.save(patch, proof.password, proof.code);
+      const data = await platformRequest<{settings:SiteSettings}>("/api/settings");
+      const saved = { ...site, ...data.settings, currencyApiUrl: "" };
+      setSite(saved);
+      captureSaved(saved);
       window.dispatchEvent(new Event("fire:settings-updated"));
-      setSrcMsg({ type: "ok", text: "股票来源接口已保存，行情 / 财报 / 图标即时生效" });
-      showToast("股票来源接口已保存");
+      setSrcMsg(null);
+      showToast("已保存");
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "行情与汇率接口保存失败";
@@ -3037,7 +3044,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       return (
                         <Fragment key={id}>
                           {fields.map((f) => {
-                            const value = (site as unknown as Record<string, string>)[f.key] || f.placeholder;
+                            const value = (site as unknown as Record<string, string>)[f.key] || "";
                             return (
                               <div key={f.key} className="sw-row">
                                 <div className="sw-row-label"><b>{f.name}</b><span>{f.desc}</span></div>
@@ -3045,20 +3052,23 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                   {editingSources ? (
                                     <input
                                       className="sw-row-input"
+                                      type={f.key === "currencyApiUrl" ? "password" : "text"}
+                                      autoComplete="off"
                                       value={value}
-                                      title={value}
+                                      title={f.key === "currencyApiUrl" ? undefined : value}
                                       onChange={(e) => setSite((s) => ({ ...s, [f.key]: e.target.value }))}
-                                      placeholder={f.placeholder}
+                                      placeholder={f.key === "currencyApiUrl" ? "输入汇率接口地址" : f.placeholder}
                                     />
                                   ) : (
                                     <span
                                       className="min-w-0 flex-1 truncate text-[12.5px] text-muted"
-                                      title={value || f.placeholder}
+                                      title={f.key === "currencyApiUrl" ? fxSourceHost : value || f.placeholder}
                                     >
-                                      {value || f.placeholder}
+                                      {f.key === "currencyApiUrl" ? fxSourceHost || "未配置" : value || f.placeholder}
                                     </span>
                                   )}
-                                  {/^https?:\/\//i.test(value) && (
+                                  {f.key === "currencyApiUrl" && !editingSources && <CronRefreshButton />}
+                                  {f.key !== "currencyApiUrl" && /^https?:\/\//i.test(value) && (
                                     <span className="settings-source-actions">
                                       <IconButton size="sm" framed
                                         type="button"

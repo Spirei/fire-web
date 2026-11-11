@@ -292,12 +292,16 @@ class BatchQuotes:
             if not user or user["role"] != who.role:
                 raise HTTPException(403, "账号权限已变化")
             policies = {}
+            unavailable_policies = set()
 
             async def policy(revision):
+                if revision in unavailable_policies:
+                    raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
                 if revision not in policies:
                     try:
                         _, policies[revision] = await self.authority.config(conn, who.id, revision)
                     except HTTPException:
+                        unavailable_policies.add(revision)
                         raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价") from None
                 return policies[revision]
 
@@ -346,7 +350,7 @@ class BatchQuotes:
                             raise HTTPException(403, "当前来源许可未覆盖所请求的行情")
                     streams = await (
                         await conn.execute(
-                            "SELECT * FROM market_streams WHERE owner_id=%s AND query->>'kind'='latest' AND query->>'market'=%s AND query->>'code'=%s AND (%s::uuid IS NULL OR source_revision=%s) AND (%s::text IS NULL OR query->>'session'=%s) ORDER BY source_revision,id",
+                            "SELECT s.*,c.policy_id FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision WHERE s.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND (%s::uuid IS NULL OR s.source_revision=%s) AND (%s::text IS NULL OR s.query->>'session'=%s) ORDER BY s.source_revision,s.id",
                             (who.id, market, symbol, source_revision, source_revision, session, session),
                         )
                     ).fetchall()
@@ -355,18 +359,22 @@ class BatchQuotes:
                     sources = set()
                     instruments = set()
                     retained_source = False
+                    retained_policy_ids = set()
+                    current_policy_ids = set()
                     for stream in streams:
                         try:
                             approved = await policy(stream["source_revision"])
                         except HTTPException:
-                            if source_revision is not None or strict_sources:
+                            if source_revision is not None:
                                 raise
                             retained_source = True
+                            retained_policy_ids.add(stream["policy_id"])
                             continue
                         if source_revision is None and source_preference in ("futu","tencent")and market!="ASSET"and approved.source!=source_preference:continue
                         query = query_from(stream["query"])
                         self.authority.validate_query(approved, query)
                         sources.add(stream["source_revision"])
+                        current_policy_ids.add(approved.id)
                         instruments.add(query.instrument)
                         fact = await (
                             await conn.execute(
@@ -385,6 +393,12 @@ class BatchQuotes:
                             dto, state = project(fact, approved, market, now, include_market_cap=include_market_cap)
                             if dto:
                                 candidates.append((fact, approved, dto, state))
+                    # A new explicit authorization must remain usable after an
+                    # identity/security change. Old stream rows are retained as
+                    # evidence, but neither their quotes nor their failed grant
+                    # may replace/block the currently authorized source.
+                    if strict_sources and retained_source and not retained_policy_ids <= current_policy_ids:
+                        raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
                     if integrity_failure:
                         resolved[cache_key] = (None, {"state": "unverified_source_page"})
                     elif len(sources) > 1:

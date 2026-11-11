@@ -471,6 +471,9 @@ export default function RecordsApp({
     } catch {
       /* 行情失败时保留原价 */
     } finally {
+      // Completion and quote coverage are different states. An unavailable
+      // security must not leave every account card loading indefinitely.
+      if (!controller.signal.aborted) setValuationReady(true);
       if (quoteRequestRef.current === controller) quoteRequestRef.current = null;
       refreshingRef.current = false;
       setRefreshing(false);
