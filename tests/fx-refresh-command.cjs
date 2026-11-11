@@ -18,7 +18,7 @@ function harness(){
  await Promise.resolve();await Promise.resolve();controller.abort(Error('leave'));await observed;
  assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1);
  assert.equal(h.storage.size,1,'leaving retains the original request');
- h.setReply({id:task,state:'succeeded',observation_id:'observed'});
+ h.setReply({id:task,state:'completed',observation_id:'observed'});
  await h.api.refreshFxObservation(new AbortController().signal);
  assert.equal(h.calls.filter(c=>c.init.method==='POST').length,1,'returning only reads the existing operation');
  assert(h.calls[1].path.endsWith(id)); assert.equal(h.storage.size,0);
@@ -27,7 +27,7 @@ function harness(){
  await assert.rejects(other.api.refreshFxObservation(new AbortController().signal),/来源读取失败/);
  assert.equal(other.storage.size,0);
  other.storage.set('fire:fx-refresh:pending:v1',JSON.stringify({requestId:id,taskId:task}));
- other.setReply({id:'33333333-3333-4333-8333-333333333333',state:'succeeded',observation_id:'wrong'});
+ other.setReply({id:'33333333-3333-4333-8333-333333333333',state:'completed',observation_id:'wrong'});
  await assert.rejects(other.api.refreshFxObservation(new AbortController().signal),/尚未确认/);
  assert.equal(other.calls.filter(c=>c.init.method==='POST').length,1,'a mismatched receipt does not enqueue another call');
  console.log('PASS failed and mismatched FX receipts cannot report success or silently replay');

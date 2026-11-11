@@ -12,6 +12,40 @@ from .legacy_identity import assert_native_origin, body, native_identity, web_id
 def mount_rates(app, settings, db, *, worker=None, wait_timeout=15):
     service = worker or ManagedFx(db)
 
+    async def current_web(request, *, admin=False):
+        from .legacy_identity import WEB_COOKIE, OLD_COOKIE
+        from .security import identity
+        assert_native_origin(request, settings)
+        if request.headers.get('authorization'):
+            raise HTTPException(403, "请使用网页登录会话")
+        if request.cookies.get(WEB_COOKIE) or request.cookies.get(OLD_COOKIE):
+            who = (await web_identity(request, db))[0]
+        else:
+            who = await identity(request)
+        if admin and who.role != 'admin':
+            raise HTTPException(403, "需要管理员权限")
+        return who
+
+    async def provider_config():
+        async with db.connection() as conn:
+            return await (await conn.execute(
+                "SELECT c.enabled,c.daily_budget,c.revision,p.config AS custom FROM fx_config c LEFT JOIN fx_provider_revisions p ON p.id=c.provider_revision WHERE singleton=true"
+            )).fetchone()
+
+    @app.get("/api/rates/provider")
+    async def web_provider(request: Request):
+        await current_web(request, admin=True)
+        return JSONResponse(await provider_config(), headers={"Cache-Control":"private, no-store","Vary":"Cookie"})
+
+    @app.get("/api/rates/operations/{request_id}")
+    async def web_receipt(request_id: str, request: Request):
+        who = await current_web(request)
+        return await service.receipt("user:" + who.id, request_id)
+
+    @app.post("/api/rates/refresh", status_code=202)
+    async def web_refresh(request: Request):
+        return await submit_refresh(request, await current_web(request))
+
     async def authorize(request, version):
         assert_native_origin(request, settings)
         if version is None:
@@ -63,12 +97,7 @@ def mount_rates(app, settings, db, *, worker=None, wait_timeout=15):
         from .security import administrator
 
         await administrator(request)
-        async with db.connection() as conn:
-            return await (
-                await conn.execute(
-                    "SELECT c.enabled,c.daily_budget,c.revision,p.config AS custom FROM fx_config c LEFT JOIN fx_provider_revisions p ON p.id=c.provider_revision WHERE singleton=true"
-                )
-            ).fetchone()
+        return await provider_config()
 
     @app.put("/api/reference/rates/provider")
     async def configure(request: Request):
@@ -125,7 +154,9 @@ def mount_rates(app, settings, db, *, worker=None, wait_timeout=15):
     async def canonical_refresh(request: Request):
         from .security import identity
 
-        who = await identity(request)
+        return await submit_refresh(request, await identity(request))
+
+    async def submit_refresh(request, who):
         data = await body(request, ("requestId",))
         if set(data) != {"requestId"}:
             raise HTTPException(400, "刷新参数无效")

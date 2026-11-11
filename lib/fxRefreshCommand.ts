@@ -22,20 +22,20 @@ async function run(signal: AbortSignal) {
       pending = { requestId: clientRequestId() };
       try { sessionStorage.setItem(KEY, JSON.stringify(pending)); }
       catch { throw new Error("无法保存刷新请求，请检查浏览器存储"); }
-      receipt = await read<Receipt>("/api/reference/rates/refresh", {
+      receipt = await read<Receipt>("/api/rates/refresh", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId: pending.requestId })
       });
       if (receipt.requestId !== pending.requestId) throw new Error("汇率刷新结果尚未确认");
-    } else receipt = await read<Receipt>(`/api/reference/rates/operations/${pending.requestId}`);
+    } else receipt = await read<Receipt>(`/api/rates/operations/${pending.requestId}`);
     for (;;) {
       if (!receipt?.id || pending.taskId && receipt.id !== pending.taskId) throw new Error("汇率刷新结果尚未确认");
       pending.taskId = receipt.id;
       try { sessionStorage.setItem(KEY, JSON.stringify(pending)); } catch { /* optional persistence */ }
-      if (receipt.state === "succeeded" && receipt.observation_id) {
+      if (receipt.state === "completed" && receipt.observation_id) {
         try { sessionStorage.removeItem(KEY); } catch { /* optional persistence */ }
         return;
       }
-      if (receipt.state === "failed") {
+      if (["failed", "interrupted"].includes(receipt.state)) {
         try { sessionStorage.removeItem(KEY); } catch { /* optional persistence */ }
         throw new Error("汇率来源读取失败，请检查接口配置");
       }
@@ -45,7 +45,7 @@ async function run(signal: AbortSignal) {
         function stop() { clearTimeout(timer); signal.removeEventListener("abort", stop); reject(signal.reason); }
         if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
       });
-      receipt = await read<Receipt>(`/api/reference/rates/operations/${pending.requestId}`);
+      receipt = await read<Receipt>(`/api/rates/operations/${pending.requestId}`);
     }
   } catch (error) {
     if (error instanceof PlatformRequestError && [400, 401, 403, 404, 422, 429].includes(error.status ?? 0)) {

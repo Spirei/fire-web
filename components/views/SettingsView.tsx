@@ -1354,7 +1354,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   useEffect(() => {
     if (activeAnchor !== "sources" || editingSources) return;
     const controller = new AbortController();
-    void platformRequest<{revision:number;custom?:{url?:string}|null}>("/api/reference/rates/provider", {signal:controller.signal})
+    void platformRequest<{revision:number;custom?:{url?:string}|null}>("/api/rates/provider", {signal:controller.signal})
       .then(value => { if (!controller.signal.aborted) { setFxSourceHost(value.custom?.url ? new URL(value.custom.url).hostname : ""); setFxConfigRevision(value.revision); } })
       .catch(() => {});
     return () => controller.abort();

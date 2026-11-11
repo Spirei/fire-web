@@ -8188,7 +8188,7 @@ export const V0_1_79_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_80_ENTRY: VersionEntry = {
   ...V0_1_79_ENTRY,
   version: "v0.1.80", date: "2026-11-11", summary: "迁移续接、素材并行与页面显示修复",
   software: V0_1_79_ENTRY.software.map(item => ({ ...item, version: "v0.1.80" })),
@@ -8207,10 +8207,18 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_80_ENTRY,
+  version: "v0.1.81", date: "2026-11-12", summary: "汇率配置与刷新会话衔接修复",
+  software: V0_1_80_ENTRY.software.map(item => ({...item,version:"v0.1.81"})),
+  changes: [{kind:"fix",title:"汇率管理沿用当前网页登录",desc:"配置读取、刷新及原任务回执共用当前有效网页登录，不再要求第二套会话；保留管理员权限、来源校验及会话失效检查。刷新以服务端实际完成状态和汇率记录为准，切页继续读取原任务，不重复请求供应商。"}],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_80_ENTRY,
   V0_1_79_ENTRY,
   V0_1_78_ENTRY,
   V0_1_77_ENTRY,

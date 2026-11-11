@@ -85,13 +85,16 @@ async def legacy(app, admin):
         yield client
 
 
-async def test_explicit_fx_url_save_seals_credentials_and_registers_current_provider(legacy, db, monkeypatch):
+async def test_explicit_fx_url_save_seals_credentials_and_registers_current_provider(legacy, db, monkeypatch, app):
     from alcor_api import fx_provider_transport
     calls=[]
     async def resolve(host,port):
         calls.append((host,port))
         return ['8.8.8.8']
     monkeypatch.setattr(fx_provider_transport,'resolve',resolve)
+    metadata=await legacy.get('/api/rates/provider')
+    assert metadata.status_code==200,metadata.text
+    assert metadata.json()['revision']==1
     current=(await legacy.get(P)).json()
     payload={'requestId':str(uuid4()),'revision':current['revision'],'privateRevision':current['privateRevision'],
              'currentPassword':'Synthetic9Pass','currencyApiUrl':'https://rates.example.invalid/latest?app_id=synthetic-key',
@@ -120,6 +123,38 @@ async def test_explicit_fx_url_save_seals_credentials_and_registers_current_prov
     assert stale.status_code==409,stale.text
     async with db.connection() as conn:
         assert (await(await conn.execute('SELECT count(*) n FROM fx_provider_revisions')).fetchone())['n']==1
+    metadata=await legacy.get('/api/rates/provider')
+    assert metadata.status_code==200 and metadata.json()['revision']==2
+    assert 'synthetic-key' not in metadata.text
+    fetches=[]
+    async def requester(url,approval,headers):
+        fetches.append(url)
+        return b'{"base":"USD","rates":{"HKD":7.8,"CNY":7.2}}'
+    worker=app.state.reference_rates
+    worker.custom_requester=requester
+    request_id=str(uuid4())
+    queued=await legacy.post('/api/rates/refresh',json={'requestId':request_id})
+    assert queued.status_code==202,queued.text
+    assert queued.json()['requestId']==request_id
+    task=queued.json()['id']
+    assert await worker.once()=='completed'
+    receipt=await legacy.get('/api/rates/operations/'+request_id)
+    assert receipt.status_code==200,receipt.text
+    assert receipt.json()['state']=='completed' and receipt.json()['id']==task and receipt.json()['observation_id']
+    repeat=await legacy.post('/api/rates/refresh',json={'requestId':request_id})
+    assert repeat.json()['id']==task and repeat.json()['state']=='completed'
+    assert len(fetches)==1
+    snapshot=await legacy.get('/api/rates')
+    assert snapshot.status_code==200 and snapshot.json()['rates']['CNY']==7.2
+    for path in ('/api/rates/provider','/api/rates/operations/'+request_id):
+        assert (await legacy.get(path,headers={'sec-fetch-site':'cross-site'})).status_code==403
+        assert (await legacy.get(path,headers={'authorization':'Bearer invalid'})).status_code==403
+    denied=await legacy.post('/api/rates/refresh',json={'requestId':str(uuid4())},headers={'origin':'https://other.example.invalid'})
+    assert denied.status_code==403 and len(fetches)==1
+    async with db.connection() as conn:
+        await conn.execute('UPDATE users SET session_version=session_version+1 WHERE username=%s',('AdminOne',))
+    assert (await legacy.get('/api/rates/provider')).status_code==401
+    assert (await legacy.get('/api/rates/operations/'+request_id)).status_code==401
 
 
 async def test_fx_url_save_rejects_private_dns_without_changing_provider(legacy,db,monkeypatch):
