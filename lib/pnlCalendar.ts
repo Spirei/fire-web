@@ -311,7 +311,8 @@ export function buildDayDetailRows({
     }
     if (close == null || prevClose == null) return;
     const iso = MARKET_CURRENCY[p.market] || "USD";
-    const rate = rates[iso] || 1;
+    const rate = iso === "USD" ? 1 : rates[iso];
+    if (!Number.isFinite(rate) || rate <= 0) return;
     rows.push({ id: p.id, name: p.name, code: p.code, market: p.market, pnl: ((close - prevClose) * p.qty) / rate });
   });
   rows.sort((a, b) => b.pnl - a.pnl);

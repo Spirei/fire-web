@@ -408,26 +408,30 @@ export default function AssetPnlAnalysis({
   const returnPct = hasRegisteredHistory ? null : costBasis ? (totalPnl / costBasis) * 100 : 0;
 
   // 盈亏总额卡片：货币换算 + 基准（多市场）
-  const currencyFactor = rates[displayCurrency] || 1;
+  const currencyFactor = displayCurrency === "USD" ? 1 : rates[displayCurrency] > 0 ? rates[displayCurrency] : Number.NaN;
   const curSymbol = CURRENCY_SYMBOLS[displayCurrency] || displayCurrency;
   const curOption = CURRENCIES.find((o) => o.code === displayCurrency) || CURRENCIES[0];
   const moneyDisp = (value: number) => {
     const converted = value * currencyFactor;
+    if (!Number.isFinite(converted)) return "—";
     const body = Math.abs(converted) >= 1e7 ? fmtMoneyCompact(Math.abs(converted), curSymbol) : fmtMoney(Math.abs(converted), curSymbol);
     return `${converted >= 0 ? "+" : "−"}${body}`;
   };
   const compactDisp = (value: number) => {
     const converted = value * currencyFactor;
+    if (!Number.isFinite(converted)) return "—";
     const abs = Math.abs(converted);
     const sign = converted < 0 ? "−" : "+";
     return `${sign}${fmtMoneyCalendarCompact(abs, curSymbol)}`;
   };
   const calendarAmount = (value: number) => {
     const converted = value * currencyFactor;
+    if (!Number.isFinite(converted)) return "—";
     return `${converted < 0 ? "−" : "+"}${fmtMoneyCalendarCompact(Math.abs(converted), curSymbol, 1e4)}`;
   };
   const narrowDisp = (value: number) => {
     const converted = value * currencyFactor;
+    if (!Number.isFinite(converted)) return "—";
     return `${converted < 0 ? "−" : "+"}${fmtMoneyCalendarCell(Math.abs(converted), curSymbol)}`;
   };
   const benchLabel = BENCHMARKS.find((b) => b.key === benchKey)?.label ?? "标普 500";

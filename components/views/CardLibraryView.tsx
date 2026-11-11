@@ -1202,7 +1202,7 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       other: { converted: 0, filled: 0, missing: [] }
     };
     let filled = 0;
-    const displayRate = rates[displayCurrency] || 1;
+    const displayRate = displayCurrency === "USD" ? 1 : rates[displayCurrency];
     heldEntries.forEach(({ card }) => {
       const item = amounts[card.file];
       if (!item) return;
@@ -1216,7 +1216,8 @@ export default function CardLibraryView({ initial = null }: { initial?: CardLibr
       const bucket = groups[amountGroupOf(card.type || "")];
       bucket.filled += 1;
       const usdRate = rates[code];
-      if (usdRate && usdRate > 0) bucket.converted += (item.amount / usdRate) * displayRate;
+      if (code === displayCurrency) bucket.converted += item.amount;
+      else if (usdRate > 0 && Number.isFinite(displayRate) && displayRate > 0) bucket.converted += (item.amount / usdRate) * displayRate;
       else if (!bucket.missing.includes(code)) bucket.missing.push(code);
     });
     return {

@@ -4,7 +4,8 @@ import { IconButton, Capsule } from "@/components/Capsule";
 import { sharedRead } from "@/lib/sharedRead";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_RATES, type StockRecord, type Quote } from "@/lib/types";
-import { usdCap } from "@/lib/currency";
+import { MARKET_CURRENCY } from "@/lib/currency";
+import { convertAccountAmount, positionFigures } from "@/lib/accountCash";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { CURRENCIES, type CurrencyCode } from "@/lib/currencyPrefs";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -30,8 +31,11 @@ type FireViewProps = {
 };
 
 function fmtPct2(n: number, digits = 1) {
+  if (!Number.isFinite(n)) return "—";
   return `${n > 0 ? "+" : ""}${n.toFixed(digits)}%`;
 }
+
+function inputAmount(n: number) { return Number.isFinite(n) ? String(Math.round(n)) : ""; }
 
 function round2(n: number) {
   return Number(n.toFixed(2));
@@ -465,14 +469,14 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
     let market = 0;
     let cost = 0;
     for (const r of records) {
-      const qty = Number(r.qty) || 0;
-      const localValue = qty * (livePrice(r) || 0);
-      const localCost = qty * (Number(r.cost) || 0);
-      market += usdCap(r.market, localValue, rates);
-      cost += usdCap(r.market, localCost, rates);
+      if (!(Number(r.qty) > 0)) continue;
+      const figures = positionFigures(r, quotes);
+      const currency = MARKET_CURRENCY[r.market] || (r.market === "ASSET" ? "USD" : "");
+      market += convertAccountAmount(figures.marketValue, currency, rates, "USD");
+      cost += convertAccountAmount(figures.costValue, currency, rates, "USD");
     }
     return { currentAssets: market, costAssets: cost };
-  }, [records, livePrice, rates]);
+  }, [records, quotes, rates]);
 
   // —— 货币：真实净资产 & FIRE 计划值统一到「显示币种」，进度比率保持稳定 ——
   // 默认/主货币：FIRE 计划数值以它录入，显示时再从它换算到「显示币种」
@@ -483,9 +487,9 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState(false);
   const [bubbleHover, setBubbleHover] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { lsSet("fire:fire-ocean-scene", oceanSceneEnabled ? "1" : "0"); }, [oceanSceneEnabled]);
-  const curRate = rates[displayCurrency] || 1;
-  const baseRate = rates[baseCurrency] || 1;
-  const k = curRate / baseRate; // 主货币 → 显示币种的换算系数
+  const curRate = convertAccountAmount(1, "USD", rates, displayCurrency);
+  const baseRate = convertAccountAmount(1, "USD", rates, baseCurrency);
+  const k = convertAccountAmount(1, baseCurrency, rates, displayCurrency);
   const curSymbol = CURRENCY_SYMBOLS[displayCurrency] || "$";
   const curOption = CURRENCY_OPTIONS.find((c) => c.value === displayCurrency) ?? CURRENCY_OPTIONS[0];
   const compactForViewport = (value: number) => fmtMoneyAdaptive(value, curSymbol);
@@ -493,51 +497,56 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   const fmtPlan = (n: number) => compactForViewport(n);
   // 当前资产可手动覆盖：默认取真实净资产（按默认/主货币），用户改了则以其为准
   const savedCurrent = lsGet("fire:fire-current-ovr", "");
-  const [currentInput, setCurrentInput] = useState(() => savedCurrent || String(Math.round(currentAssets * baseRate)));
+  const [currentInput, setCurrentInput] = useState(() => savedCurrent || inputAmount(currentAssets * baseRate));
   const currentDirty = useRef(Boolean(savedCurrent && Number(savedCurrent) !== 0));
   const currentInputEdited = useRef(false);
-  const effCurUsd = currentDirty.current && Number(currentInput) > 0 ? Number(currentInput) / (baseRate || 1) : currentAssets;
+  const effCurUsd = currentDirty.current && Number(currentInput) > 0 ? Number(currentInput) / baseRate : currentAssets;
   const curAssets = effCurUsd * curRate;
   const curCost = costAssets * baseRate; // 主货币：总成本/原始资产
   // 未手改时把「当前资产」同步为默认/主货币值（显示换算由 curAssets 承担）
-  useEffect(() => { if (!currentDirty.current) setCurrentInput(String(Math.round(currentAssets * baseRate))); }, [currentAssets, baseRate]);
+  useEffect(() => { if (!currentDirty.current) setCurrentInput(inputAmount(currentAssets * baseRate)); }, [currentAssets, baseRate]);
   useEffect(() => { if (currentDirty.current) lsSet("fire:fire-current-ovr", currentInput); }, [currentInput]);
   // FIRE 目标按「默认/主货币」原值保存，避免先换成 USD 后因汇率更新产生 3000000 → 3000937 漂移。
   const defaultTargetBase = annualExpense > 0 ? annualExpense / (withdrawalRate / 100) : 0;
   const savedTargetBase = Number(lsGet("fire:fire-target-base", ""));
   const savedTargetUsd = Number(lsGet("fire:fire-target-usd", ""));
+  const [legacyTargetUsd, setLegacyTargetUsd] = useState<number | null>(() => savedTargetBase > 0 || !(savedTargetUsd > 0) ? null : savedTargetUsd);
   const [fireTargetBase, setFireTargetBase] = useState<number>(() => savedTargetBase > 0
     ? savedTargetBase
-    : savedTargetUsd > 0
-      ? normalizeLegacyFireTarget(savedTargetUsd * (baseRate || 1))
-      : defaultTargetBase);
+    : defaultTargetBase);
   const fireTargetTouched = useRef(savedTargetBase > 0 || savedTargetUsd > 0);
   useEffect(() => {
     if (!fireTargetTouched.current) setFireTargetBase(defaultTargetBase);
   }, [defaultTargetBase]);
-  useEffect(() => { lsSet("fire:fire-target-base", String(fireTargetBase)); }, [fireTargetBase]);
-  const fireTargetUsd = fireTargetBase / (baseRate || 1);
-  const effTargetDisplay = fireTargetUsd * curRate; // 显示币种的 FIRE 目标（表格/汇总分母）
+  useEffect(() => {
+    if (legacyTargetUsd !== null && Number.isFinite(baseRate)) {
+      setFireTargetBase(normalizeLegacyFireTarget(legacyTargetUsd * baseRate));
+      setLegacyTargetUsd(null);
+    }
+  }, [legacyTargetUsd, baseRate]);
+  useEffect(() => { if (legacyTargetUsd === null) lsSet("fire:fire-target-base", String(fireTargetBase)); }, [fireTargetBase, legacyTargetUsd]);
+  const fireTargetUsd = legacyTargetUsd ?? fireTargetBase / baseRate;
+  const effTargetDisplay = legacyTargetUsd !== null ? legacyTargetUsd * curRate : fireTargetBase * k;
 
-  const progress = fireTargetUsd > 0 ? (effCurUsd / fireTargetUsd) * 100 : 0;
+  const progress = fireTargetUsd > 0 ? (effCurUsd / fireTargetUsd) * 100 : Number.NaN;
   const passiveIncome = (curAssets * withdrawalRate) / 100;
   // 顶部 3 个汇总值：未手动改时跟随计算值，改了才固定（且持久化）
   const savedPassive = lsGet("fire:fire-passive", "");
   const savedOriginal = lsGet("fire:fire-original", "");
   const savedYears = lsGet("fire:fire-years", "");
-  const [passiveInput, setPassiveInput] = useState(() => savedPassive || String(Math.round(passiveIncome)));
-  const [originalInput, setOriginalInput] = useState(() => savedOriginal || String(Math.round(curCost)));
+  const [passiveInput, setPassiveInput] = useState(() => savedPassive || inputAmount(passiveIncome));
+  const [originalInput, setOriginalInput] = useState(() => savedOriginal || inputAmount(curCost));
   const [yearsInput, setYearsInput] = useState(() => savedYears || "");
   // 仅当保存的是「非零的真实编辑」才视为用户改过；旧的 0/空缓存视为未改，触发按实时重算
   const passiveDirty = useRef(Boolean(savedPassive && Number(savedPassive) !== 0));
   const originalDirty = useRef(Boolean(savedOriginal && Number(savedOriginal) !== 0));
   const yearsDirty = useRef(Boolean(savedYears && Number(savedYears) !== 0));
-  useEffect(() => { if (!passiveDirty.current) setPassiveInput(String(Math.round(passiveIncome))); }, [passiveIncome]);
-  useEffect(() => { if (!originalDirty.current) setOriginalInput(String(Math.round(curCost))); }, [curCost]);
+  useEffect(() => { if (!passiveDirty.current) setPassiveInput(inputAmount(passiveIncome)); }, [passiveIncome]);
+  useEffect(() => { if (!originalDirty.current) setOriginalInput(inputAmount(curCost)); }, [curCost]);
   useEffect(() => { if (passiveDirty.current) lsSet("fire:fire-passive", passiveInput); }, [passiveInput]);
   useEffect(() => { if (originalDirty.current) lsSet("fire:fire-original", originalInput); }, [originalInput]);
   useEffect(() => { if (yearsDirty.current) lsSet("fire:fire-years", yearsInput); }, [yearsInput]);
-  const clampedProgress = Math.min(Math.max(progress, 0), 100);
+  const clampedProgress = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0;
   // 水球液面：随 FIRE 进度升高（0% 空、100% 满）
   const waterY = 192 - (clampedProgress / 100) * 184;
   // 读数居中于「水」的纵向中点（随水位移动）
@@ -664,7 +673,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   useEffect(() => { if (tableDirty.current) lsSet("fire:fire-table", JSON.stringify(tableRows)); }, [tableRows]);
   // 今年这一行预填真实账户数据；用户一旦手动改过就不再覆盖
   useEffect(() => {
-    if (currentRowTouched.current) return;
+    if (currentRowTouched.current || ![effCurUsd, curCost, baseRate, fireTargetUsd].every(Number.isFinite)) return;
     setTableRows((prev) => prev.map((r) => {
       if (r.year !== currentYear) return r;
       const netBase = effCurUsd * baseRate;          // 主货币：当前资产（与上方「当前资产」一致，含手动覆盖）
@@ -698,15 +707,12 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
           if (typeof f.annualReturn === "number") setAnnualReturn(Number(f.annualReturn) || annualReturn);
           if (typeof f.inflation === "number") setInflation(Number(f.inflation) || inflation);
           if (typeof f.savingsRate === "number") setSavingsRate(Number(f.savingsRate) || savingsRate);
-          const loadedBaseCurrency = CURRENCIES.some((currency) => currency.code === String(f.baseCurrency))
-            ? String(f.baseCurrency)
-            : baseCurrency;
           if (Number(f.fireTargetBase) > 0) {
             setFireTargetBase(Number(f.fireTargetBase));
+            setLegacyTargetUsd(null);
             fireTargetTouched.current = true;
           } else if (Number(f.fireTargetUsd) > 0) {
-            const legacyRate = rates[loadedBaseCurrency] || FALLBACK_RATES[loadedBaseCurrency] || 1;
-            setFireTargetBase(normalizeLegacyFireTarget(Number(f.fireTargetUsd) * legacyRate));
+            setLegacyTargetUsd(Number(f.fireTargetUsd));
             fireTargetTouched.current = true;
           }
           if (typeof f.currentInput === "string" && f.currentInput !== "") { setCurrentInput(f.currentInput); currentDirty.current = true; }
@@ -739,6 +745,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   async function saveEdit() {
     if (saving) return;
     setSaveError("");
+    if (!Number.isFinite(fireTargetUsd) || legacyTargetUsd !== null) { setSaveError("汇率暂不可用"); return; }
     const amountBase = Number(currentInput);
     const assetRecord = currentInputEdited.current
       ? { amountBase, amountUsd: amountBase / baseRate, currency: baseCurrency }
@@ -780,7 +787,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
   // 【跨年落账】检测到新年（比上次结算年大）时，把刚结束的那一年用当前实时值快照固化
   const lastSettledRef = useRef<number>(Number(lsGet("fire:fire-settled", "0")) || 0);
   useEffect(() => {
-    if (!serverLoaded || !records || records.length === 0) return;
+    if (!serverLoaded || !records || records.length === 0 || ![effCurUsd, baseRate, fireTargetUsd, curCost].every(Number.isFinite)) return;
     if (currentYear <= lastSettledRef.current) return;
     setTableRows((prev) => {
       // 该年结束时的「当前资产」与上方卡片 / 水球 / 今年这一行同源：都取 effCurUsd
@@ -815,13 +822,13 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
 
   // 防抖保存：任一配置变化后 600ms 写回服务端
   useEffect(() => {
-    if (!serverLoaded || editing || storageMode !== "server") return;
+    if (!serverLoaded || editing || storageMode !== "server" || legacyTargetUsd !== null || ![fireTargetUsd, currentAssets, costAssets, baseRate, curRate].every(Number.isFinite)) return;
     const t = setTimeout(() => {
       const payload = { annualExpense, withdrawalRate, annualReturn, inflation, savingsRate, fireTargetBase, fireTargetUsd, currentInput: currentDirty.current ? currentInput : null, passiveInput, originalInput, yearsInput, displayCurrency, baseCurrency, tableRows };
       fetch("/api/v1/fire-settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fire: payload }) }).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
-  }, [serverLoaded, editing, storageMode, annualExpense, withdrawalRate, annualReturn, inflation, savingsRate, fireTargetBase, fireTargetUsd, currentInput, passiveInput, originalInput, yearsInput, displayCurrency, baseCurrency, tableRows]);
+  }, [serverLoaded, editing, storageMode, annualExpense, withdrawalRate, annualReturn, inflation, savingsRate, fireTargetBase, fireTargetUsd, currentInput, passiveInput, originalInput, yearsInput, displayCurrency, baseCurrency, tableRows, legacyTargetUsd, currentAssets, costAssets, baseRate, curRate]);
 
   const inputCls =
     "w-full rounded-lg border border-edge bg-white px-2.5 py-1.5 text-sm text-ink-2 outline-none transition-colors focus:border-brand dark:border-edge-strong dark:bg-[#1c1c1e] dark:text-white";
@@ -895,8 +902,9 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                       <button
                         type="button"
                         title={baseCurrency === option.value ? "当前默认/主货币" : "设为默认/主货币"}
+                        disabled={!Number.isFinite(fireTargetUsd) || !Number.isFinite(rates[option.value])}
                         onClick={() => {
-                          updateAnnualFireTarget(round2(fireTargetUsd * (rates[option.value] || 1)));
+                          updateAnnualFireTarget(round2(fireTargetUsd * rates[option.value]));
                           setBaseCurrency(option.value);
                           setDisplayCurrency(option.value);
                           setCurrencyMenuOpen(false);
@@ -1034,7 +1042,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
               {/* 金额 & 进度的水面倒影（模糊、倒置，随水位移动） */}
               <g transform={`translate(100, ${waterY}) scale(1, -1)`} opacity=".28" filter="url(#fireBlur)">
                 <text x="0" y="-5" textAnchor="middle" fill="#fff" fontSize="15" fontWeight="600">{fmtCur(effCurUsd)}</text>
-                <text x="0" y="-18" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600">{progress.toFixed(1)}%</text>
+                <text x="0" y="-18" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600">{Number.isFinite(progress) ? `${progress.toFixed(1)}%` : "—"}</text>
               </g>
             </g>
             {/* 玻璃壁 */}
@@ -1055,7 +1063,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
               >
                 <span className="relative text-[24px] font-semibold tabular-nums leading-none tracking-tight text-white">{fmtCur(effCurUsd)}</span>
                 <span className="relative mt-1.5 text-[18px] font-semibold leading-none tabular-nums text-white">
-                  {progress.toFixed(1)}<span className="text-[14px] text-white/85">%</span>
+                  {Number.isFinite(progress) ? progress.toFixed(1) : "—"}{Number.isFinite(progress) && <span className="text-[14px] text-white/85">%</span>}
                 </span>
               </div>
             </div>
@@ -1083,7 +1091,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             {editing ? (
               <input type="number" value={passiveInput} onChange={(e) => { passiveDirty.current = true; setPassiveInput(e.target.value); }} className={inputCls} />
             ) : (
-              <div className="text-[20px] font-semibold leading-tight tabular-nums text-ink-2 dark:text-white">{fmtPlan(Number(passiveInput) || 0)}</div>
+              <div className="text-[20px] font-semibold leading-tight tabular-nums text-ink-2 dark:text-white">{passiveInput.trim() ? fmtPlan(Number(passiveInput)) : "—"}</div>
             )}
           </div>
           <div>
@@ -1094,7 +1102,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                 {currentDirty.current && (
                   <button
                     type="button"
-                    onClick={() => { currentDirty.current = false; currentInputEdited.current = false; setCurrentInput(String(Math.round(currentAssets * baseRate))); }}
+                    onClick={() => { currentDirty.current = false; currentInputEdited.current = false; setCurrentInput(inputAmount(currentAssets * baseRate)); }}
                     title="恢复为真实资产"
                     className="flex-none rounded-md border border-edge px-2 py-1 text-[11px] text-muted transition-colors hover:border-edge-strong hover:text-ink-2 dark:border-edge-strong"
                   >
@@ -1160,7 +1168,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
             </thead>
             <tbody>
               {tableRows.map((row) => {
-                const num = (s: string) => (s === "" ? null : Number(s));
+                const num = (s: string) => (s.trim() === "" || !Number.isFinite(Number(s)) ? null : Number(s));
                 // 表格里存的是主货币值，展示时换算到显示币种
                 const money = (s: string) => { const n = num(s); return n != null ? fmtPlan(n * k) : "—"; };
                 const isCurYear = row.year === currentYear;
@@ -1174,7 +1182,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
                 const rateN = totalInvest != null && totalInvest > 0 && profitN != null ? (profitN / totalInvest) * 100 : null;
                 const targetBase = Number(row.target) > 0 ? Number(row.target) : fireTargetUsd * baseRate;
                 const pctN = curN != null && targetBase > 0 ? (curN / targetBase) * 100 : null;
-                const profitDisplay = profitN != null ? (profitN >= 0 ? "+" : "") + fmtPlan(profitN * k) : "—";
+                const profitDisplay = profitN != null && Number.isFinite(profitN * k) ? (profitN >= 0 ? "+" : "") + fmtPlan(profitN * k) : "—";
                 const rateDisplay = rateN != null ? fmtPct2(rateN) : "—";
                 const input = (key: "original" | "current" | "extra" | "profit" | "rate" | "target" | "progress") => (
                   <input value={row[key]} onChange={(e) => updateRow(row.year, key, e.target.value)} inputMode="decimal" placeholder="—" className={cellCls} />
@@ -1273,7 +1281,7 @@ export default function FireView({ records, quotes, livePrice }: FireViewProps) 
       {/* 汇率信息（右下角）：1 USD = X 显示币种 · 更新于日期 */}
       <div className="mt-3 flex justify-end">
         <span className="text-[12px] tabular-nums text-muted">
-          1 USD = {Number(curRate.toFixed(4))} {displayCurrency} · {ratesAt ? `更新于 ${new Date(ratesAt).getFullYear()}.${new Date(ratesAt).getMonth() + 1}.${new Date(ratesAt).getDate()}` : "参考汇率"}
+          {Number.isFinite(curRate) ? `1 USD = ${Number(curRate.toFixed(4))} ${displayCurrency}` : "暂无汇率"}{ratesAt ? ` · 更新于 ${new Date(ratesAt).getFullYear()}.${new Date(ratesAt).getMonth() + 1}.${new Date(ratesAt).getDate()}` : ""}
         </span>
       </div>
       <FireAssetHeatmap history={assetHistory} />
