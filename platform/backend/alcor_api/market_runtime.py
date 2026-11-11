@@ -11,14 +11,14 @@ from .market_transport import Transport
 from .market_worker import claim, execute, schedule
 
 
-def from_settings(db):
+def from_settings(db, *, reuse_latest=False):
     def policies():
         return tuple(Policy(**raw) for raw in getattr(db.settings, "market_data_policies", []))
 
     def targets():
         return tuple(Target(**raw) for raw in getattr(db.settings, "dividend_source_targets", []))
 
-    return Authority(db, policies(), policy_provider=policies), Transport(db, target_provider=targets)
+    return Authority(db, policies(), policy_provider=policies), Transport(db, target_provider=targets, reuse_latest=reuse_latest)
 
 
 def reader_from_settings(db):
@@ -40,17 +40,23 @@ async def cycle(authority, transport, worker_id):
 
 
 async def loop(db, stop, current=lambda: True):
-    authority, transport = from_settings(db)
+    authority, transport = from_settings(db, reuse_latest=True)
     worker_id = uuid4()
-    while not stop.is_set():
-        if current():
+    try:
+        while not stop.is_set():
+            if current():
+                try:
+                    await cycle(authority, transport, worker_id)
+                    from .public_market_worker import cycle as public_cycle
+                    await public_cycle(db, worker_id)
+                except Exception:  # noqa: BLE001 -- Keep source errors and credentials out of platform logs.
+                    logging.getLogger("alcor.worker").warning("market_latest_cycle_unavailable")
+            else:
+                await transport.close()
+            await transport.retire_idle()
             try:
-                await cycle(authority, transport, worker_id)
-                from .public_market_worker import cycle as public_cycle
-                await public_cycle(db, worker_id)
-            except Exception:  # noqa: BLE001 -- Keep source errors and credentials out of platform logs.
-                logging.getLogger("alcor.worker").warning("market_latest_cycle_unavailable")
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=1)
-        except TimeoutError:
-            pass
+                await asyncio.wait_for(stop.wait(), timeout=1)
+            except TimeoutError:
+                pass
+    finally:
+        await transport.close()

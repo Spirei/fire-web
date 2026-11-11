@@ -191,7 +191,8 @@ def collect(factory, ret_ok, payload, enums):
 
 
 def main():
-    payload = json.load(sys.stdin)
+    streaming = sys.argv[1:] == ['--latest-stream']
+    payload = None if streaming else json.load(sys.stdin)
     startup = time.perf_counter()
     with contextlib.redirect_stdout(sys.stderr):
         import logging
@@ -204,6 +205,29 @@ def main():
             handler.close()
             logger.file_logger.removeHandler(handler)
         ready = time.perf_counter()
+        if streaming:
+            # Import reuse only: every request gets its own quote context, its
+            # actual response and the existing bounded scalar conversion.
+            for _ in range(128):
+                line = sys.stdin.buffer.readline(16386)
+                if not line:
+                    return
+                if len(line) > 16385 or not line.endswith(b'\n'):
+                    raise ValueError('sdk_request_too_large_or_incomplete')
+                try:
+                    request = json.loads(line)
+                    if not isinstance(request,dict) or request.get('action') != 'latest':
+                        raise ValueError('sdk_latest_stream_only')
+                    value = collect(OpenQuoteContext, RET_OK, request,
+                                    {'AuType':AuType,'KLType':KLType,'Session':Session,'SubType':SubType})
+                    output = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(',',':'))
+                except Exception:  # noqa: BLE001 -- Provider errors may contain private target details.
+                    output = '{"error":"sdk_read_unavailable"}'
+                # SDK logs remain on stderr, while only this protocol goes to
+                # stdout; flush each complete independent observation.
+                sys.__stdout__.write(output+'\n')
+                sys.__stdout__.flush()
+            return
         value = collect(
             OpenQuoteContext, RET_OK, payload, {"AuType": AuType, "KLType": KLType, "Session": Session, "SubType": SubType}
         )

@@ -20,7 +20,7 @@ from .market_contract import collection_purpose, installed_bar_semantics, instal
 class Transport:
     fixture = False
 
-    def __init__(self, db, targets=(), *, target_provider=None, controlled_http=None):
+    def __init__(self, db, targets=(), *, target_provider=None, controlled_http=None, reuse_latest=False):
         self.db, self.targets, self.target_provider = (
             db,
             {target.id: target for target in targets},
@@ -29,6 +29,15 @@ class Transport:
         self.controlled_http = controlled_http or {}
         if self.controlled_http and db.settings.environment != "test":
             raise ValueError("controlled_source_outside_test")
+        from .sdk_read_session import LatestSDKSession
+        self.latest_session = LatestSDKSession()
+        self.reuse_latest = reuse_latest
+
+    async def close(self):
+        await self.latest_session.close()
+
+    async def retire_idle(self):
+        await self.latest_session.retire_idle()
 
     async def read(self, policy, query, cursor):
         if policy.fixture:
@@ -87,6 +96,12 @@ class Transport:
         url = f"{target.scheme}://{target.host}:{target.port}{target.path(symbol)}"
         approved_target(url, approval, approval["addresses"])
         pins = approved_target(url, approval, await resolve(target.host, target.port))
+        if latest and self.reuse_latest:
+            raw = await self.latest_session.read({
+                'action':'latest', 'host':pins[0], 'port':target.port,
+                'symbols':[symbol], 'query':asdict(query), 'cursor':cursor,
+            })
+            return raw, 'sdk_json_representation_not_wire_bytes'
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-I",
