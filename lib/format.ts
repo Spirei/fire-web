@@ -98,6 +98,7 @@ export function fmtCap(n: number): string {
 }
 
 export function fmtPct(n: number) {
+  if (!Number.isFinite(n)) return "—";
   return (n * 100).toFixed(2) + "%";
 }
 

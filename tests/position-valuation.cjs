@@ -33,4 +33,7 @@ const rates = load('ratesCache');
 assert.equal(rates.readCachedRates(),null,'old mixed guessed-rate caches cannot be restored');
 assert.deepEqual(Object.keys(rates.normalizeCachedRates({USD:1})),['USD']);
 assert.equal(rates.normalizeCachedRates({USD:1,HKD:8}).CNY,undefined);
+const {fmtPct} = load('format');
+for (const missing of [NaN,Infinity,-Infinity]) assert.equal(fmtPct(missing),'—');
+assert.equal(fmtPct(0),'0.00%');
 console.log('PASS independent position values, unknown marks/daily change, zero/negative cost and observed-only FX');
