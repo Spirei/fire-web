@@ -35,10 +35,10 @@ export const MULTI_CURRENCIES = [
 
 /** 本地货币市值 → 美元市值（rates 为对 USD 的汇率） */
 export function usdCap(market: string, cap: number, rates: Record<string, number>): number {
-  if (!cap) return 0;
-  const code = MARKET_CURRENCY[market] || "USD";
-  const rate = rates[code] || (code === "USD" ? 1 : 0);
-  return rate ? cap / rate : 0;
+  if (!Number.isFinite(cap) || cap <= 0) return Number.NaN;
+  const code = MARKET_CURRENCY[market];
+  const rate = code === "USD" ? 1 : rates[code];
+  return code && Number.isFinite(rate) && rate > 0 ? cap / rate : Number.NaN;
 }
 
 /** 按 7 种展示币种换算市值：本地币种返回原始值，其余 usd × 汇率 */
@@ -46,14 +46,14 @@ export function multiCurrencyCap(market: string, cap: number, rates: Record<stri
   const usd = usdCap(market, cap, rates);
   const out: Record<string, number> = {};
   for (const cur of MULTI_CURRENCIES) {
-    const rate = rates[cur.code] || (cur.code === "USD" ? 1 : 0);
+    const rate = cur.code === "USD" ? 1 : rates[cur.code] > 0 ? rates[cur.code] : Number.NaN;
     out[cur.code] = cur.code === (MARKET_CURRENCY[market] || "USD") ? cap : usd * rate;
   }
   return out;
 }
 
 export function fmtUsd(n: number): string {
-  if (!n) return "";
+  if (!Number.isFinite(n) || n <= 0) return "—";
   if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
   if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;

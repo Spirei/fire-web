@@ -52,3 +52,25 @@ async def test_reference_readiness_follows_verified_database_pool_generation(db,
     finally:
         stop.set()
         await task
+
+
+async def test_main_and_readiness_share_heartbeat_and_resume_after_pool_change(db, settings, monkeypatch):
+    from alcor_api import worker
+    from uuid import uuid4
+    now = [100.0]
+    monkeypatch.setattr(worker, 'monotonic', lambda: now[0])
+    identifier = uuid4()
+    async def observed():
+        async with db.connection() as conn:
+            return (await (await conn.execute('SELECT observed_at FROM worker_heartbeats WHERE worker_id=%s', (identifier,))).fetchone())['observed_at']
+    await asyncio.gather(*(worker.heartbeat(db, identifier) for _ in range(8)))
+    first = await observed()
+    await worker.heartbeat(db, identifier)
+    assert await observed() == first
+    now[0] += 5
+    await worker.heartbeat(db, identifier)
+    second = await observed()
+    assert second > first
+    await db.replace(settings)
+    await worker.heartbeat(db, identifier)
+    assert await observed() > second

@@ -8,6 +8,13 @@ from fastapi import HTTPException, Request
 COOKIE = "alcor_session"
 
 
+def assert_expected_account(request, account_id):
+    # A consistency check after authentication, never a caller-supplied identity.
+    expected = request.headers.get("x-alcor-expected-account")
+    if expected is not None and expected != account_id:
+        raise HTTPException(403, "当前账号已变化，请重新读取", headers={"X-Alcor-Retire-Context": "true"})
+
+
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
@@ -52,6 +59,7 @@ async def identity(request: Request) -> Identity:
     if not row:
         raise HTTPException(401, "登录已失效，请重新登录")
     who = Identity(**row, token_hash=digest(token), csrf=csrf_token(token))
+    assert_expected_account(request, who.id)
     # New Web binds reads to its displayed session. Older clients may omit this header.
     read_binding = request.headers.get("x-csrf-token")
     if request.method in {"GET", "HEAD"} and read_binding is not None:

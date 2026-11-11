@@ -154,7 +154,7 @@ export default function RecordsApp({
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
   initialFundBalances: Record<string, number|null>;
   initialSettingsVersion?: import("@/lib/siteSettingsCommand").SettingsVersion;
-  initialSettings: Pick<SiteSettings, "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
+  initialSettings: Pick<SiteSettings, "assetMarketOrder" | "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
   initialFlagIcons?: Record<string, string>;
@@ -434,7 +434,7 @@ export default function RecordsApp({
     quoteRequestRef.current = controller;
     setRefreshing(true);
     try {
-      const result = await readQuoteBatches(quoteRecords.map(r => ({ id: r.id, market: r.market, code: r.code })), controller.signal, { includeMarketCap: activeTabRef.current === "watchlist" });
+      const result = await readQuoteBatches(quoteRecords.map(r => ({ id: r.id, market: r.market, code: r.code })), controller.signal, { includeMarketCap: activeTabRef.current === "watchlist", ownerId:user.id });
       // 无有效返回不刷新时间，也不把旧值当作本次新行情。
       if (!result.completed.size) return;
       const currentRecords = recordsRef.current;
@@ -1087,6 +1087,7 @@ export default function RecordsApp({
             <>
           {activeTab === "watchlist" && (
             <WatchlistView
+              ownerId={user.id}
               initialSymbol={initialSymbol}
               initialNow={initialNow}
               records={records}
@@ -1102,6 +1103,9 @@ export default function RecordsApp({
           )}
           {activeTab === "holdings" && (
             <HoldingsView
+              ownerId={user.id}
+              isAdmin={user.role === "admin"}
+              assetMarketOrder={initialSettings.assetMarketOrder}
               records={records}
               quotes={quotes}
               livePrice={livePrice}
@@ -1126,6 +1130,8 @@ export default function RecordsApp({
               quotes={quotes}
               livePrice={livePrice}
               user={{
+                id: user.id,
+                role: user.role,
                 username: user?.username ?? "",
                 nickname: user?.nickname ?? "",
                 avatar: user?.avatar ?? ""
@@ -1148,6 +1154,8 @@ export default function RecordsApp({
           )}
           {activeTab === "pnl" && (
             <MobileBackGesture onBack={returnFromAssetPnl}><AssetPnlAnalysisView
+              key={user.id}
+              ownerId={user.id}
               onBack={returnFromAssetPnl}
               initialRecords={records}
               initialQuotes={quotes}
@@ -1156,6 +1164,9 @@ export default function RecordsApp({
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" && initialWorkspace.logs ? initialNow : 0} />}
           {activeTab === "global" && <GlobalPreviewView initialFx={initialWorkspace.global?.fx} initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} ledger={
             <HoldingsView
+              ownerId={user.id}
+              isAdmin={user.role === "admin"}
+              assetMarketOrder={initialSettings.assetMarketOrder}
               records={records}
               quotes={quotes}
               livePrice={livePrice}

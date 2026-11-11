@@ -10,6 +10,7 @@ import type { WatchGroup } from "@/lib/watchGroups";
 import { useWorkspaceActive } from "@/lib/workspacePanel";
 
 interface Props {
+  ownerId?: string;
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
   initialSymbol?: string;
   initialNow: number;
@@ -124,7 +125,7 @@ function FearGreedGauge({ score }: { score: number }) {
   );
 }
 
-export default function WatchlistView({ initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onToggleWatch, groups }: Props) {
+export default function WatchlistView({ ownerId, initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onToggleWatch, groups }: Props) {
   const active = useWorkspaceActive();
   const indicesFetchedAt = useRef(0);
   const [indexGroups, setIndexGroups] = useState<MarketIndices[]>([]);
@@ -353,6 +354,7 @@ export default function WatchlistView({ initialSymbol, initialNow, records, init
 
       {/* 股票添加与行情板（搜索 / 分组 / 刷新间隔） */}
       <QuotesView
+        ownerId={ownerId}
         initialWatchGroups={initialWatchGroups}
         initialSymbol={initialSymbol}
         initialNow={initialNow}

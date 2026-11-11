@@ -23,6 +23,7 @@ export default function MarketSourceSettings({ order, onSave, enabled = true }: 
   const [dragged, setDragged] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const busy = useRef(new Set<string>()), mounted = useRef(true), savePending = useRef(false);
+  const enabledRef = useRef(enabled); enabledRef.current = enabled;
   const pending = useRef<Record<string,string>>({});
   const generations = useRef<Record<string,number>>({});
   useEffect(() => { if (!savePending.current) setItems(orderOf(order)); }, [order]);
@@ -64,7 +65,7 @@ export default function MarketSourceSettings({ order, onSave, enabled = true }: 
   }
 
   async function test(key: string) {
-    if (busy.current.has(key)) return;
+    if (!mounted.current || !enabledRef.current || busy.current.has(key)) return;
     busy.current.add(key);
     generations.current[key] = (generations.current[key] ?? 0) + 1;
     const requestId = pending.current[key] ??= clientRequestId();
@@ -86,7 +87,7 @@ export default function MarketSourceSettings({ order, onSave, enabled = true }: 
   }
   async function testAll() {
     let cursor = 0;
-    const run = async () => { while (cursor < items.length) await test(items[cursor++]); };
+    const run = async () => { while (mounted.current && enabledRef.current && cursor < items.length) await test(items[cursor++]); };
     await Promise.all([run(),run()]);
   }
   return <div className="market-source-settings">

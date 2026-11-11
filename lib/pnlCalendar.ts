@@ -142,6 +142,10 @@ export function buildDailyAssetSeries({
   // A sealed order history does not establish historical holdings, cash, FX
   // or opening NAV. It must not manufacture an asset curve or account return.
   if (orders.some(order => order.executionModel === "source_registered_history" && order.historicalCoverageKnown !== true)) return [];
+  if (positions.some(position => {
+    const iso=MARKET_CURRENCY[position.market], rate=iso === "USD" ? 1 : rates[iso];
+    return !iso || !Number.isFinite(rate) || rate <= 0 || !closesMap[position.id]?.some(point => Number.isFinite(point.c) && point.c > 0);
+  })) return [];
   const byId = new Map(positions.map((p) => [p.id, p]));
   const recordItems = Object.entries(closesMap)
     .map(([id, items]) => ({
@@ -170,8 +174,8 @@ export function buildDailyAssetSeries({
     const gross = order.amount || order.price * order.qty;
     const cashFlow = order.side === "buy" ? gross + order.fees : -(gross - order.fees);
     const iso = MARKET_CURRENCY[rec.market] || "USD";
-    const rate = rates[iso] || (iso === "USD" ? 1 : 0);
-    flowByDate.set(date, (flowByDate.get(date) || 0) + cashFlow / (rate || 1));
+    const rate = iso === "USD" ? 1 : rates[iso];
+    flowByDate.set(date, (flowByDate.get(date) || 0) + cashFlow / rate);
   });
   ordersByRecord.forEach((list) => list.sort((a, b) => a.tradedAt.localeCompare(b.tradedAt)));
 
@@ -205,8 +209,8 @@ export function buildDailyAssetSeries({
       const rec = byId.get(id);
       if (!rec) return;
       const iso = MARKET_CURRENCY[rec.market] || "USD";
-      const rate = rates[iso] || (iso === "USD" ? 1 : 0);
-      asset += (close * Number(rec.qty || 0)) / (rate || 1);
+      const rate = iso === "USD" ? 1 : rates[iso];
+      asset += (close * Number(rec.qty || 0)) / rate;
       const state = quantityState.get(id);
       if (!state) return;
       while (
@@ -216,7 +220,7 @@ export function buildDailyAssetSeries({
         state.qty = Number(state.orders[state.cursor].positionQtyAfter) || 0;
         state.cursor += 1;
       }
-      actualAsset += (close * state.qty) / (rate || 1);
+      actualAsset += (close * state.qty) / rate;
     });
     if (previousActualAsset > 0) {
       const dailyReturn = (actualAsset - thisDayFlow) / previousActualAsset - 1;

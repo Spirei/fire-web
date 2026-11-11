@@ -317,3 +317,14 @@ async def test_private_ticker_binds_security_kind_owner_and_does_not_collect(quo
     assert await hashes(app)==before and transport.calls==calls
     client.cookies.clear()
     assert (await client.get('/api/fire/ticker')).status_code==401
+
+
+async def test_native_account_hint_is_only_a_guard_never_an_identity(quoted):
+    client,app,_authority,transport,_revision,headers,_source=quoted
+    async with app.state.db.connection() as conn:
+        owner=(await (await conn.execute("SELECT id FROM users WHERE username='MarketReader'")).fetchone())['id']
+    same=await client.post('/api/v2/quotes',json=body(),headers={**headers,'x-alcor-expected-account':owner})
+    assert same.status_code==200 and same.json()['data']['quotes']['known']['price']==120
+    other=await client.post('/api/v2/quotes',json=body(),headers={**headers,'x-alcor-expected-account':'another-owner'})
+    assert other.status_code==403 and other.headers['x-alcor-retire-context']=='true'
+    assert transport.calls==1

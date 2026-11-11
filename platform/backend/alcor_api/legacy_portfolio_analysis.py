@@ -77,7 +77,7 @@ def mount_legacy_portfolio_analysis(app,db,authority):
         try:
             credentials_present(request)
             who=await portfolio_member(request,db.settings,db)
-            if not await app.state.rate_limit(db,'legacy-portfolio-analysis:'+who.id,40,window_seconds=60):
+            if not await app.state.read_rate_limit(db,'legacy-portfolio-analysis:'+who.id,40,window_seconds=60):
                 raise HTTPException(429,'请求过于频繁')
             if not series:
                 currency=request.query_params.get('currency','USD').upper()

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from psycopg import Error as DatabaseError
-from psycopg_pool import PoolTimeout
+from psycopg_pool import PoolTimeout, TooManyRequests
 
 from .db import TargetMismatch
 
@@ -120,7 +120,7 @@ class Observations:
                 await asyncio.sleep(1)
                 try:
                     await self.flush()
-                except (DatabaseError, PoolTimeout, TargetMismatch, OSError, TimeoutError):
+                except (DatabaseError, PoolTimeout, TooManyRequests, TargetMismatch, OSError, TimeoutError):
                     if time.monotonic() - self.last_error > 60:
                         self.last_error = time.monotonic()
                         logging.getLogger("alcor.observability").warning(

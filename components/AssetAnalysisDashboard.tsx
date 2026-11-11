@@ -1,9 +1,14 @@
 "use client";
 import { Capsule, IconButton } from "@/components/Capsule";
 
+import { GlobalSettingsEditor, mergeVisibleOrder } from "@/lib/globalSettingsEditor";
 import VisibilityIcon from "@/components/VisibilityIcon";
 
 import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
+import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
+import { privateReadEpoch, recordsReadSignature } from "@/lib/privateReadContext";
+import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
 import { useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -64,17 +69,9 @@ interface DateRange { start: string; end: string }
 /** 资金余额按资金系统的币种清单（比展示币种多：含卡面库里会出现的台币 / 英镑等） */
 const EMPTY_CURRENCY_BALANCES: Record<FundCurrency, number> = emptyFundBalances();
 
-function readEffectiveBalanceCache(key: string): Record<FundCurrency, number> | null {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || "null");
-    if (!value || typeof value !== "object" || Array.isArray(value) || Object.values(value).some(amount => !Number.isFinite(amount))) return null;
-    return { ...EMPTY_CURRENCY_BALANCES, ...value };
-  } catch {
-    return null;
-  }
-}
 
 interface Props {
+  readSignature?: string;
   initialModuleOrder?: { left: string[]; right: string[] };
   positions: StockRecord[];
   quotes: Record<string, Quote>;
@@ -82,7 +79,7 @@ interface Props {
   rates: Record<string, number>;
   currency: "USD" | "CNY" | "HKD";
   stockIcons: Record<string, string>;
-  user?: { username?: string; nickname?: string; avatar?: string };
+  user?: { id?: string; role?: string; username?: string; nickname?: string; avatar?: string };
   /** 刷新行情 / 汇率 / 持仓记录（账户资产、持仓刷新按钮调用） */
   onRefreshMarketData?: () => Promise<void>;
   /** 进入资产盈亏分析页 */
@@ -133,18 +130,6 @@ function clampSplitPct(value: number) {
   return Math.min(ASSET_SPLIT_MAX, Math.max(ASSET_SPLIT_MIN, value));
 }
 
-function readSavedSplitPct() {
-  try {
-    const raw = localStorage.getItem(ASSET_SPLIT_STORAGE_KEY);
-    if (raw == null || raw === "") return ASSET_SPLIT_DEFAULT;
-    const saved = Number(raw);
-    if (!Number.isFinite(saved) || saved < ASSET_SPLIT_MIN || saved > ASSET_SPLIT_MAX) return ASSET_SPLIT_DEFAULT;
-    return saved;
-  } catch {
-    return ASSET_SPLIT_DEFAULT;
-  }
-}
-
 function splitPaneStyle(pct: number): React.CSSProperties {
   const left = clampSplitPct(pct);
   return {
@@ -153,45 +138,11 @@ function splitPaneStyle(pct: number): React.CSSProperties {
   } as React.CSSProperties;
 }
 
-function trendSignature(positions: StockRecord[]) {
-  return positions
-    .filter((record) => ["US", "HK", "CN", "JP", "KR"].includes(record.market.toUpperCase()))
-    .map((record) => `${record.id}:${record.qty}:${record.cost}:${record.updatedAt}`)
-    .join("|");
-}
-
-function readTrendCache(signature: string, currency: CurrencyCode, benchKey: BenchKey): TrendCache | null {
-  try {
-    const raw = localStorage.getItem(ASSET_TREND_CACHE_KEY);
-    if (!raw) return null;
-    const cached = JSON.parse(raw) as TrendCache;
-    if (
-      cached.signature === signature &&
-      cached.currency === currency &&
-      cached.benchKey === benchKey &&
-      Array.isArray(cached.points) &&
-      cached.points.length > 0
-    ) return cached;
-  } catch {
-    /* 缓存损坏时走正常加载 */
-  }
-  return null;
-}
-
-interface TrendCache {
-  signature: string;
-  currency: CurrencyCode;
-  benchKey: BenchKey;
-  points: TrendPoint[];
-  recordCloses: Record<string, CloseItem[]>;
-  at: number;
-}
-
 function AccountOverviewValue({ value, hidden, pending = false, forceCompact = false, symbol = "", signed = false }: { value: number; hidden: boolean; pending?: boolean; forceCompact?: boolean; symbol?: string; signed?: boolean }) {
   const hostRef = useRef<HTMLSpanElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const [overflowing, setOverflowing] = useState(false);
-  const sign = signed ? value >= 0 ? "+" : "−" : "";
+  const sign = signed && Number.isFinite(value) ? value >= 0 ? "+" : "−" : "";
   const full = `${sign}${fmtMoney(signed ? Math.abs(value) : value, symbol)}`;
   const compact = `${sign}${fmtMoneyCompact(signed ? Math.abs(value) : value, symbol)}`;
 
@@ -301,8 +252,12 @@ function DateRangePicker({ range, onApply, onClose }: { range: DateRange; onAppl
   </div>;
 }
 
-export default function AssetAnalysisDashboard({ initialModuleOrder, positions, quotes, livePrice, rates, currency, stockIcons, user, onRefreshMarketData, onOpenPnlAnalysis }: Props) {
+export default function AssetAnalysisDashboard({ initialModuleOrder, readSignature, positions, quotes, livePrice, rates, currency, stockIcons, user, onRefreshMarketData, onOpenPnlAnalysis }: Props) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
+  const foreground = useWorkspaceForeground();
+  const readRevision = usePrivateReadRevision();
+  const ownerId = user?.id || "";
+  const signature = readSignature || recordsReadSignature(positions);
   const [period, setPeriod] = usePersistedState<Period>("fire:asset-period", "ytd");
   const [chartTab, setChartTab] = usePersistedState<ChartTab>("fire:asset-chart-tab", "return");
   const [weighting, setWeighting] = usePersistedState<"simple" | "time">("fire:asset-weighting", "simple");
@@ -315,13 +270,15 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const { currency: displayCurrency, setCurrency: setDisplayCurrency } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
   const [assetsVisible, setAssetsVisible] = useState(true);
-  const [leftPanePct, setLeftPanePct] = useState(ASSET_SPLIT_DEFAULT);
-  const [splitReady, setSplitReady] = useState(false);
+  const [savedPanePct,setSavedPanePct] = usePersistedState(ASSET_SPLIT_STORAGE_KEY,ASSET_SPLIT_DEFAULT);
+  const [draftPanePct,setDraftPanePct] = useState<number|null>(null);
+  const leftPanePct=clampSplitPct(draftPanePct ?? savedPanePct);
   const leftPanePctRef = useRef(ASSET_SPLIT_DEFAULT);
   const splitRef = useRef<HTMLDivElement>(null);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [trendLoading, setTrendLoading] = useState(true);
   const [retryTick, setRetryTick] = useState(0);
+  const lastRetryTick=useRef(0);
   // 基准与趋势的「上一次成功数据」兜底：源站/限流抖动时保留整图，不闪成空白
   const benchmarkRef = useRef<{ key: BenchKey; items: CloseItem[] }>({ key: "spy", items: [] });
   const trendRef = useRef<TrendPoint[]>([]);
@@ -345,6 +302,9 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
 
   // 模块顺序：拖动手柄调整后写回 site_settings.assetAnalysisOrder（左右两栏各一组）
   const [moduleOrder, setModuleOrder] = useState<{ left: string[]; right: string[] }>(() => mergeModuleOrder(initialModuleOrder));
+  const layoutEditor=useMemo(()=>new GlobalSettingsEditor(ownerId),[ownerId]);
+  const [layoutSaving,setLayoutSaving]=useState(false);
+  const canReorder=user?.role === "admin" && !layoutSaving;
   const [dragModule, setDragModule] = useState<{ column: "left" | "right"; id: string } | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const moduleHandlePressed = useRef<string | null>(null);
@@ -364,7 +324,6 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const [fundBalancesReady, setFundBalancesReady] = useState(false);
   /** 银行卡现金（借记卡 / 预付卡余额，按卡币种）：用来解释可用现金里有多少来自银行卡 */
   const [cardCash, setCardCash] = useState<Record<string, number>>({});
-  const [cachedEffectiveBalances, setCachedEffectiveBalances] = useState<Record<FundCurrency, number> | null>(null);
   const handleFundBalances = useCallback((balances: Record<FundCurrency, number|null>, nextCardCash: Record<string, number|null>) => {
     setFundBalances(Object.fromEntries(Object.entries(balances).map(([key,value])=>[key,typeof value==='number'&&Number.isFinite(value)?value:NaN])) as Record<FundCurrency,number>);
     setCardCash(Object.fromEntries(Object.entries(nextCardCash||{}).map(([key,value])=>[key,typeof value==='number'&&Number.isFinite(value)?value:NaN])));
@@ -372,7 +331,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   }, []);
 
   useLayoutEffect(() => {
-    setCachedEffectiveBalances(readEffectiveBalanceCache(effectiveBalanceCacheKey));
+    try { localStorage.removeItem(effectiveBalanceCacheKey); } catch { /* discard only obsolete view cache */ }
   }, [effectiveBalanceCacheKey]);
 
   const [shareOpening, setShareOpening] = useState(false);
@@ -416,26 +375,17 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
 
   // 绘制前恢复分栏，避免 SSR 默认 29% 先画出再跳到本地保存值。
   // 首帧不写 inline 变量，让 <head> 同步脚本 / CSS 默认值先生效，避免刷新闪扩。
-  useLayoutEffect(() => {
-    const saved = readSavedSplitPct();
-    leftPanePctRef.current = saved;
-    setLeftPanePct(saved);
-    setSplitReady(true);
-  }, []);
 
   useLayoutEffect(() => {
-    const cached = readTrendCache(trendSignature(positions), displayCurrency, benchKey);
-    if (!cached) return;
-    trendRef.current = cached.points;
-    setTrend(cached.points);
-    if (cached.recordCloses && typeof cached.recordCloses === "object") setRecordCloses(cached.recordCloses);
-    setTrendLoading(false);
-  }, [positions, displayCurrency, benchKey]);
+    trendRef.current = []; setTrend([]); setRecordCloses({}); setOrders([]);
+    benchmarkRef.current = {key:benchKey,items:[]};
+    try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* disposable derived data */ }
+  }, [ownerId,signature,readRevision,benchKey]);
 
   const applySplitPct = (value: number) => {
     const next = Number(clampSplitPct(value).toFixed(2));
     leftPanePctRef.current = next;
-    setLeftPanePct(next);
+    setDraftPanePct(next);
     return next;
   };
 
@@ -452,7 +402,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       document.removeEventListener("pointerup", stop);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-      localStorage.setItem(ASSET_SPLIT_STORAGE_KEY, String(leftPanePctRef.current));
+      setSavedPanePct(leftPanePctRef.current); setDraftPanePct(null);
       showToast("布局宽度已自动保存");
     };
     document.body.style.cursor = "col-resize";
@@ -463,27 +413,21 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
 
   const resetSplit = () => {
     applySplitPct(ASSET_SPLIT_DEFAULT);
-    localStorage.setItem(ASSET_SPLIT_STORAGE_KEY, String(ASSET_SPLIT_DEFAULT));
+    setSavedPanePct(ASSET_SPLIT_DEFAULT); setDraftPanePct(null);
     showToast("布局宽度已恢复默认");
   };
 
   /* ---------- 模块拖拽排序：手柄按住才可拖，落下即写回服务端 ---------- */
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/settings")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled) return;
-        const saved = data?.settings?.assetAnalysisOrder;
-        if (saved) setModuleOrder(mergeModuleOrder(saved));
-      })
-      .catch(() => {
-        /* 读不到就沿用默认顺序 */
-      });
-    return () => {
-      cancelled = true;
+    if(!foreground)return;
+    let controller:AbortController|undefined;
+    const sync=()=>{controller?.abort();controller=new AbortController();const current=controller;
+      void platformRequest<{settings:{assetAnalysisOrder?:{left:string[];right:string[]}}}>("/api/settings",{signal:current.signal,headers:ownerId?{"X-Alcor-Expected-Account":ownerId}:{}},10000)
+        .then(data=>{if(!current.signal.aborted&&data?.settings)setModuleOrder(mergeModuleOrder(data.settings.assetAnalysisOrder));}).catch(()=>{});
     };
-  }, []);
+    sync();window.addEventListener("fire:settings-updated",sync);
+    return()=>{controller?.abort();window.removeEventListener("fire:settings-updated",sync);};
+  },[ownerId,foreground]);
 
   const moduleOrderIndex = (column: "left" | "right", id: string) => {
     const index = moduleOrder[column].indexOf(id);
@@ -491,19 +435,19 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   };
 
   const persistModuleOrder = async (next: { left: string[]; right: string[] }) => {
-    setModuleOrder(next);
+    if (!canReorder) return;
+    const previous=moduleOrder;
+    setModuleOrder(next); setLayoutSaving(true);
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assetAnalysisOrder: next })
+      const result=await layoutEditor.save(current=>{
+        const saved=mergeModuleOrder(current.assetAnalysisOrder);
+        return {assetAnalysisOrder:{left:next.left.join()===previous.left.join()?saved.left:mergeVisibleOrder(saved.left,next.left),right:next.right.join()===previous.right.join()?saved.right:mergeVisibleOrder(saved.right,next.right)}};
       });
-      if (!res.ok) throw new Error("save failed");
-      showToast("模块顺序已保存");
-      window.dispatchEvent(new Event("fire:settings-updated"));
-    } catch {
-      showToast("模块顺序保存失败，稍后再试", "err");
-    }
+      if (!result) {setModuleOrder(previous);return;}
+      setModuleOrder(mergeModuleOrder(result.settings.assetAnalysisOrder));
+      showToast(result.recovered?"已核对上次保存结果":"模块顺序已保存");
+    } catch(error) {setModuleOrder(previous);showToast(error instanceof Error?error.message:"模块顺序保存失败","err");}
+    finally {setLayoutSaving(false);}
   };
 
   const moveModule = (column: "left" | "right", fromId: string, toId: string) => {
@@ -517,10 +461,10 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   };
 
   const moduleDragProps = (column: "left" | "right", id: string) => ({
-    draggable: true,
+    draggable: canReorder,
     onDragStart: (event: React.DragEvent<HTMLDivElement>) => {
       // 只有从手柄按下才能拖，避免在卡片里选文字 / 拖输入框时误触发
-      if (moduleHandlePressed.current !== id) {
+      if (!canReorder || moduleHandlePressed.current !== id) {
         event.preventDefault();
         return;
       }
@@ -550,11 +494,11 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   });
 
   const moduleWrapperClass = (column: "left" | "right", id: string) =>
-    `group relative rounded-card transition-shadow ${
-      dragOverId === id && dragModule && dragModule.id !== id ? "ring-2 ring-[#3297f6]/50" : ""
+    `group relative rounded-card border border-transparent transition-colors ${
+      dragOverId === id && dragModule && dragModule.id !== id ? "!border-[var(--site-action)]" : ""
     }`;
 
-  const renderModuleHandle = (_column: "left" | "right", id: string) => (
+  const renderModuleHandle = (_column: "left" | "right", id: string) => !canReorder ? null : (
     <span
       role="button"
       tabIndex={-1}
@@ -613,15 +557,18 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const calendarYear = useMemo(() => registeredCalendar?.months ?? buildYearSummary(calendarSeries, calMonth.y, calMonth.m), [registeredCalendar, calendarSeries, calMonth]);
   const calendarAmount = (usd: number) => {
     const value = usd * currencyFactor;
+    if (!Number.isFinite(value)) return "—";
     const body = fmtMoneyCalendarCompact(Math.abs(value), symbol, 1e4);
     return `${value >= 0 ? "+" : "−"}${body}`;
   };
   const calendarCompact = (usd: number) => {
     const value = usd * currencyFactor;
+    if (!Number.isFinite(value)) return "—";
     return `${value < 0 ? "−" : "+"}${fmtMoneyCalendarCompact(Math.abs(value), symbol)}`;
   };
   const calendarNarrow = (usd: number) => {
     const value = usd * currencyFactor;
+    if (!Number.isFinite(value)) return "—";
     return `${value < 0 ? "−" : "+"}${fmtMoneyCalendarCell(Math.abs(value), symbol)}`;
   };
 
@@ -652,20 +599,11 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
     acc[key] = marketSummary;
     return acc;
   }, {} as Record<string, { asset: number; cost: number; pnl: number; day: number }>), [positions, quotes, livePrice, rates]);
-  const portfolioLedger = useMemo(() => buildPortfolioLedger(positions, orders, livePrice), [positions, orders, livePrice]);
+  const portfolioLedger = useMemo(() => buildPortfolioLedger(positions, orders, livePrice,rates), [positions, orders, livePrice,rates]);
   const reconciledFundBalances = useMemo(() => reconcileAccountCash(fundBalances, cardCash, [], {}), [fundBalances, cardCash]);
-  const effectiveFundBalances = !fundBalancesReady && cachedEffectiveBalances ? cachedEffectiveBalances : reconciledFundBalances;
-  const effectiveBalancesReady = cachedEffectiveBalances !== null || fundBalancesReady;
-  useEffect(() => {
-    if (fundBalancesReady && Object.values(reconciledFundBalances).some(amount => !Number.isFinite(amount))) {
-      setCachedEffectiveBalances(null);
-      try { localStorage.removeItem(effectiveBalanceCacheKey); } catch { /* 最新缺失状态优先于旧缓存 */ }
-      return;
-    }
-    if (!fundBalancesReady) return;
-    try { localStorage.setItem(effectiveBalanceCacheKey, JSON.stringify(reconciledFundBalances)); } catch { /* 缓存失败不影响最新数据 */ }
-  }, [effectiveBalanceCacheKey, reconciledFundBalances, fundBalancesReady]);
-  const accountSummaryTotals = useMemo(() => accountTotals(summary.asset, effectiveFundBalances, rates, displayCurrency, Number.isFinite(summary.asset), fundBalancesReady || cachedEffectiveBalances !== null), [summary.asset, effectiveFundBalances, rates, displayCurrency, fundBalancesReady, cachedEffectiveBalances]);
+  const effectiveFundBalances = reconciledFundBalances;
+  const effectiveBalancesReady = fundBalancesReady;
+  const accountSummaryTotals = useMemo(() => accountTotals(summary.asset, effectiveFundBalances, rates, displayCurrency, Number.isFinite(summary.asset), fundBalancesReady), [summary.asset, effectiveFundBalances, rates, displayCurrency, fundBalancesReady]);
   const cashTotal = accountSummaryTotals.totalCash ?? Number.NaN;
   // 银行卡现金：服务端已把它并进 balances（所以 cashTotal / 可用现金 / 净资产都含它），
   // 这里单独折算出显示货币的金额，用来在「账户资产」里说明这部分来源
@@ -714,20 +652,14 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   }, []);
 
   useEffect(() => {
+    if (!foreground) return;
     let cancelled = false;
-    const eligible = positions.filter((p) => ["US", "HK", "CN", "JP", "KR"].includes(p.market.toUpperCase()));
-    const signature = trendSignature(positions);
-    const cached = readTrendCache(signature, displayCurrency, benchKey);
-    if (cached) {
-      trendRef.current = cached.points;
-      setTrend(cached.points);
-      if (cached.recordCloses && typeof cached.recordCloses === "object") setRecordCloses(cached.recordCloses);
-      setTrendLoading(false);
-    } else if (trendRef.current.length === 0) {
-      setTrendLoading(true);
-    }
+    const controller = new AbortController(), epoch = privateReadEpoch();
+    const force=lastRetryTick.current!==retryTick; lastRetryTick.current=retryTick;
+    const eligible = positions.filter(record => ["US", "HK", "CN", "JP", "KR"].includes(record.market.toUpperCase()));
+    if (!trendRef.current.length) setTrendLoading(true);
     (async () => {
-      // 首屏优先：重型取数让位给首屏渲染（浏览器空闲再开始；有 localStorage 缓存时本来就已经先画出来了）
+      // Defer derived history work until the visible first frame.
       await new Promise<void>((resolve) => {
         const idleWindow = window as Window & {
           requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
@@ -735,15 +667,15 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
         if (typeof idleWindow.requestIdleCallback === "function") idleWindow.requestIdleCallback(() => resolve(), { timeout: 600 });
         else window.setTimeout(resolve, 150);
       });
-      if (cancelled) return;
+      if (cancelled || controller.signal.aborted) return;
       const bench = BENCHMARKS.find((b) => b.key === benchKey) || BENCHMARKS[0];
       // 「持仓日K + 订单」走一次聚合请求（服务端并发取数），基准单独一个小请求：
       // 不再由浏览器按持仓逐只打 /api/kline/full（17 只 ≈ 17 次请求 / 700KB）
       const [bundle, benchItems] = await Promise.all([
-        fetchPortfolioBundle({ days: 330 }),
-        fetchBenchmarkKline(bench.market, bench.code, 330, bench.index)
+        fetchPortfolioBundle({ days: 330,ownerId,signature,signal:controller.signal,force }),
+        fetchBenchmarkKline(bench.market, bench.code, 330, bench.index,{ownerId,signal:controller.signal,force})
       ]);
-      if (cancelled) return;
+      if (cancelled || controller.signal.aborted || epoch !== privateReadEpoch()) return;
       const positionRows = eligible.map((record) => ({
         record,
         items: normalizeCloses(bundle?.closes?.[record.id])
@@ -908,28 +840,22 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       if (points.length > 0) {
         trendRef.current = points;
         setTrend(points);
-        try {
-          const cache: TrendCache = {
-            signature,
-            currency: displayCurrency,
-            benchKey,
-            points,
-            recordCloses: nextRecordCloses,
-            at: Date.now()
-          };
-          localStorage.setItem(ASSET_TREND_CACHE_KEY, JSON.stringify(cache));
-        } catch {
-          /* 存储满 / 隐私模式忽略 */
-        }
+
       } else if (trendRef.current.length > 0) {
         setTrend(trendRef.current);
       } else {
         setTrend([]);
       }
       setTrendLoading(false);
-    })().catch(() => { if (!cancelled) setTrendLoading(false); });
-    return () => { cancelled = true; };
-  }, [positions, rates, displayCurrency, benchKey, retryTick]);
+    })().catch(error => {
+      if (cancelled || controller.signal.aborted) return;
+      if (error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
+        trendRef.current=[]; setTrend([]); setRecordCloses({}); setOrders([]); benchmarkRef.current={key:benchKey,items:[]};
+      }
+      setTrendLoading(false);
+    });
+    return () => { cancelled = true; controller.abort(); };
+  }, [positions, rates, displayCurrency, benchKey, retryTick,ownerId,signature,readRevision,foreground]);
 
   const activeRange = useMemo(() => period === "custom"
     ? customRange
@@ -940,7 +866,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const selectedValues = filteredTrend.map((point) => weighting === "time" ? point.timeIndex : point.simpleIndex);
   const firstValue = selectedValues[0] || 0;
   const latestValue = selectedValues.at(-1) || 0;
-  const returnRate = firstValue > 0 ? latestValue / firstValue - 1 : 0;
+  const returnRate = filteredTrend.length > 1 && firstValue > 0 ? latestValue / firstValue - 1 : Number.NaN;
   const benchLabel = BENCHMARKS.find((b) => b.key === benchKey)?.label ?? "标普 500";
   const hasBench = !!(latest && first && first.benchmark > 0);
   const benchRate = hasBench ? latest.benchmark / first.benchmark - 1 : 0;
@@ -948,7 +874,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
   const pointBeforeRange = trend.findLast((point) => point.date < activeRange.start);
   const cumulative = latest
     ? latest.pnl - (pointBeforeRange?.pnl ?? 0)
-    : period === "all" ? ledgerCumulativePnl : 0;
+    : period === "all" ? ledgerCumulativePnl : Number.NaN;
   const pnlLabel = period === "month" ? "本月盈亏"
     : period === "1m" ? "近 1 月盈亏"
       : period === "6m" ? "近 6 月盈亏"
@@ -1111,7 +1037,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
       </nav>
     </div>
 
-    <div ref={splitRef} className="asset-analysis-split" style={splitReady ? splitPaneStyle(leftPanePct) : undefined}>
+    <div ref={splitRef} className="asset-analysis-split" style={splitPaneStyle(leftPanePct)}>
       <aside className="flex min-w-0 flex-col gap-4">
         <div {...moduleDragProps("left", "account")} className={moduleWrapperClass("left", "account")} style={{ order: moduleOrderIndex("left", "account") }}>
           <section data-workspace-reveal className="asset-account-card card p-5">
@@ -1141,7 +1067,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
                     <path d="m9 18 6-6-6-6" />
                   </svg>}
                 </span>
-                <strong className={`mt-1 block text-sm tabular-nums ${summary.pnl >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={summary.pnl} hidden={!assetsVisible} signed forceCompact={currencyDisplayUnit === "compact"} /></strong>
+                <strong className={`mt-1 block text-sm tabular-nums ${!Number.isFinite(summary.pnl) ? "text-muted" : summary.pnl >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={summary.pnl} hidden={!assetsVisible} signed forceCompact={currencyDisplayUnit === "compact"} /></strong>
               </button>
               <div><div className="flex items-center gap-1"><span className="text-xs text-muted"><span className="md:hidden">可用现金</span><span className="hidden md:inline">现金</span></span><span className="md:hidden"><CashBalanceEditor preferredCurrency={displayCurrency} frozenByCurrency={frozenByCurrency} onSaved={handleFundBalances} /></span></div><strong className="mt-1 block text-sm tabular-nums"><span className="md:hidden"><AccountOverviewValue value={Math.max(0, cashTotal - frozenCashTotal)} hidden={!assetsVisible} pending={!effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></span><span className="hidden md:inline"><AccountOverviewValue value={cashTotal} hidden={!assetsVisible} pending={!effectiveBalancesReady} forceCompact={currencyDisplayUnit === "compact"} /></span></strong></div>
             </div>
@@ -1155,7 +1081,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
             <div className="flex items-end gap-6 border-b border-edge px-4 pt-3">{([['return', '收益率趋势图'], ['asset', '总资产趋势图']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setChartTab(key)} className={`relative shrink-0 whitespace-nowrap px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>{label}{chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}</button>)}</div>
             <div className="relative flex items-center gap-2 px-4 py-3"><div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{PERIODS.map(([key, label]) => <Capsule variant="secondary" aria-pressed={period === key} key={key} type="button" onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>{label}</Capsule>)}</div><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`} title="选择日期区间" aria-label="选择日期区间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" /></svg></button>{datePickerOpen && <DateRangePicker range={customRange} onClose={() => setDatePickerOpen(false)} onApply={(range) => { setCustomRange(range); setPeriod("custom"); setDatePickerOpen(false); setPnlExpanded(false); }} />}</div>
             {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">{formatRangeDate(customRange.start)} – {formatRangeDate(customRange.end)}</div>}
-            {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix={pnlLabel} /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[var(--capsule-fill)] font-bold text-white" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
+            {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix={pnlLabel} /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${!Number.isFinite(cumulative) ? "text-muted" : cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[var(--capsule-fill)] font-bold text-white" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${!Number.isFinite(returnRate) ? "text-muted" : returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
             {chartTab === "return" && historyIncomplete && (
               <MobileExplanation className="mx-4 mt-2 text-xs leading-relaxed text-muted" summary={<>订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓</>} mobileContent={<p>未覆盖的持仓从首个可靠日期计算，不回填年初。</p>}><p>
                 历史订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓；未覆盖仓位从首个可确认日期起计，不再回填到年初。
@@ -1165,7 +1091,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
               <div className="relative">
                 <button type="button" onClick={() => setBenchOpen((open) => !open)} aria-expanded={benchOpen} className="inline-flex items-center gap-1.5 text-ink transition-colors hover:text-ink">
                   <i className="h-2 w-2 rounded-full bg-[#ef5b19]" />
-                  <span>{cumulative > 0 ? "跑赢" : "跑输"}</span>
+                  <span>{Number.isFinite(benchDiff) ? (benchDiff! >= 0 ? "跑赢" : "跑输") : "基准对比"}</span>
                   <i className="h-2 w-2 rounded-full bg-[#4a90d9]" />
                   <span className="font-semibold">{benchLabel}</span>
                   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 text-muted transition-transform ${benchOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg>
@@ -1216,7 +1142,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
         </div>
 
         <div {...moduleDragProps("left", "funds")} className={moduleWrapperClass("left", "funds")} style={{ order: moduleOrderIndex("left", "funds") }}>
-          <FundsPanel holdingAssets={holdingAssetsByCurrency} balanceOverrides={effectiveFundBalances} onBalancesChange={handleFundBalances} />
+          <FundsPanel ownerId={ownerId} holdingAssets={holdingAssetsByCurrency} balanceOverrides={effectiveFundBalances} onBalancesChange={handleFundBalances} />
           {renderModuleHandle("left", "funds")}
         </div>
       </aside>

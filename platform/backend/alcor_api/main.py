@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from psycopg.errors import UniqueViolation
+from psycopg_pool import PoolTimeout, TooManyRequests
 
 from . import __build__, __version__, profiles, tasks
 from .account_preferences import router as account_preferences_router
@@ -163,6 +164,11 @@ def create_app(settings: Settings | None = None):
     app.state.db, app.state.settings, app.state.cache = db, settings, cache
     app.state.connections = connections
     app.state.rate_limit = rate_limit
+    from .read_budgets import ReadBudgets
+    read_budgets = ReadBudgets(cache, settings.instance_id)
+    async def read_rate_limit(database, key, maximum, *, window_seconds=900):
+        return await read_budgets.allow(key, maximum, window_seconds, lambda: app.state.rate_limit(database, key, maximum, window_seconds=window_seconds))
+    app.state.read_rate_limit = read_rate_limit
     app.state.request_observations = observations
     app.state.request_activity = request_activity
     mount_request_activity(app, db)
@@ -232,12 +238,12 @@ def create_app(settings: Settings | None = None):
     async def http_error(request, exc):
         if re.match(r'^/api/v[12]/',request.url.path):
             code=getattr(exc,'business_code',{400:40002,401:40101 if '需要有效的 App 连接' in str(exc.detail) else 40102,403:40301,404:40401,409:40901,422:40003,429:42901}.get(exc.status_code,50001))
-            return JSONResponse(status_code=exc.status_code,content={'code':code,'message':str(exc.detail)},headers={'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6]})
+            return JSONResponse(status_code=exc.status_code,content={'code':code,'message':str(exc.detail)},headers={**(exc.headers or {}),'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6]})
         if request.url.path in LEGACY_WEB_PATHS:
             payload = {'error': str(exc.detail)}
             if exc.headers and exc.headers.get('X-Alcor-Reauthentication') == 'required':
                 payload['requiresReauthentication'] = True
-            return JSONResponse(status_code=exc.status_code, content=payload, headers={'Cache-Control':'no-store'})
+            return JSONResponse(status_code=exc.status_code, content=payload, headers={**(exc.headers or {}),'Cache-Control':'no-store'})
         response=error(request, exc.status_code, f"http_{exc.status_code}", str(exc.detail))
         if exc.headers:response.headers.update(exc.headers)
         return response
@@ -247,6 +253,14 @@ def create_app(settings: Settings | None = None):
         if re.match(r'^/api/v[12]/',request.url.path):
             return JSONResponse(status_code=400,content={'code':40002,'message':'请求参数无效'},headers={'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6]})
         return error(request, 422, "invalid_input", "输入格式或范围不符合要求")
+
+    @app.exception_handler(PoolTimeout)
+    @app.exception_handler(TooManyRequests)
+    async def database_busy(request, exc):
+        # A bounded pool protects the database; contention must remain recoverable.
+        response = await http_error(request, HTTPException(503, "服务繁忙，请稍后重试"))
+        response.headers.update({'Retry-After':'3','Cache-Control':'no-store'})
+        return response
 
     @app.exception_handler(Exception)
     async def unexpected(request, exc):

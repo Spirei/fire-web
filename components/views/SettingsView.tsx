@@ -1,4 +1,5 @@
 "use client";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import MarketSourceSettings from "@/components/MarketSourceSettings";
 import Avatar from "@/components/Avatar";
 import { SESSION_PROOF, requestAdminProof } from "@/lib/adminProof";
@@ -689,10 +690,13 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 // 临界阻尼（无过冲、无回弹）+ 弹簧自身正是“起步缓、中间快、收尾柔”的缘故，
 // 比直接给速度/摩擦更流畅，不会有速度突跳或生硬停下的卡顿感。
 export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings, initialPasskeys, initialSettingsVersion }: Props) {
+  const foreground = useWorkspaceForeground();
   const avatarCrop = useImageCrop();
   const futuSave = useMemo(() => new SiteSettingsCommand(), []);
   const sourcesSave = useMemo(() => new SiteSettingsCommand(), []);
   const [fxSourceHost, setFxSourceHost] = useState("");
+  const [fxConfigError,setFxConfigError] = useState("");
+  const [fxConfigRetry,setFxConfigRetry] = useState(0);
   const [fxConfigRevision, setFxConfigRevision] = useState<number | null>(null);
   const settingCommands = useRef(new Map<string, SiteSettingsCommand>());
   const passkeyData = useMemo(() => createPasskeySettingsData(initialPasskeys), [user.username, user.uid, initialPasskeys]);
@@ -1353,13 +1357,14 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
   useEffect(() => {
-    if (activeAnchor !== "sources" || editingSources) return;
+    if (!foreground || !isAdminUser || activeAnchor !== "sources" || editingSources) return;
     const controller = new AbortController();
+    setFxConfigError("");
     void platformRequest<{revision:number;custom?:{url?:string}|null}>("/api/rates/provider", {signal:controller.signal})
-      .then(value => { if (!controller.signal.aborted) { setFxSourceHost(value.custom?.url ? new URL(value.custom.url).hostname : ""); setFxConfigRevision(value.revision); } })
-      .catch(() => {});
+      .then(value => { if (!controller.signal.aborted) { setFxSourceHost(value.custom?.url ? new URL(value.custom.url).hostname : ""); setFxConfigRevision(value.revision); setFxConfigError(""); } })
+      .catch(error => { if(!controller.signal.aborted){setFxConfigRevision(null);setFxConfigError(error instanceof Error?error.message:"配置读取失败");} });
     return () => controller.abort();
-  }, [activeAnchor, editingSources]);
+  }, [activeAnchor, editingSources,foreground,isAdminUser,fxConfigRetry]);
   const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
     : activeAnchor === "info" ? editingSiteInfo
     : activeAnchor === "appearance" ? editingAppearance
@@ -1506,7 +1511,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [groupsLoaded, setGroupsLoaded] = useState(!!initialSettingsVersion);
   const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [srcSaving, setSrcSaving] = useState(false);
-  const { label: futuStatusLabel, online: futuOnline, checking: futuChecking, skipped: futuSkipped, result: futuTest, test: testFutu } = useFutuConnectionStatus(site.futuHost, site.futuPort, isAdminUser && activeAnchor === "trade");
+  const { label: futuStatusLabel, online: futuOnline, checking: futuChecking, skipped: futuSkipped, result: futuTest, test: testFutu } = useFutuConnectionStatus(site.futuHost, site.futuPort, isAdminUser && foreground && activeAnchor === "trade");
   const [futuQuota, setFutuQuota] = useState<{
     loading: boolean;
     data?: {
@@ -3015,7 +3020,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </SettingsManagedGroup>
                 </SettingsSection>
                 <SettingsSection id="quote-sources" icon="quote-sources" title="行情源">
-                  <MarketSourceSettings enabled={isAdminUser && activeAnchor === "quote-sources"} order={site.quoteSourceOrder} onSave={order => saveBlock("quote-source-order", {quoteSourceOrder:order}, "行情源顺序已保存")} />
+                  <MarketSourceSettings enabled={isAdminUser && foreground && activeAnchor === "quote-sources"} order={site.quoteSourceOrder} onSave={order => saveBlock("quote-source-order", {quoteSourceOrder:order}, "行情源顺序已保存")} />
                 </SettingsSection>
                 <SettingsSection id="currency-display" icon="stocks" title="货币金额显示" desc="大额金额显示方式">
                   <div className="sw-row">
@@ -3066,12 +3071,12 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                   ) : (
                                     <span
                                       className="min-w-0 flex-1 truncate text-[12.5px] text-muted"
-                                      title={f.key === "currencyApiUrl" ? fxSourceHost : value || f.placeholder}
+                                      title={f.key === "currencyApiUrl" ? fxConfigError || fxSourceHost : value || f.placeholder}
                                     >
-                                      {f.key === "currencyApiUrl" ? fxSourceHost || "未配置" : value || f.placeholder}
+                                      {f.key === "currencyApiUrl" ? fxConfigError ? "读取失败" : fxConfigRevision===null ? "读取中…" : fxSourceHost || "未配置" : value || f.placeholder}
                                     </span>
                                   )}
-                                  {f.key === "currencyApiUrl" && !editingSources && <CronRefreshButton />}
+                                  {f.key === "currencyApiUrl" && !editingSources && (fxConfigError ? <IconButton size="sm" label="重新读取汇率配置" title="重新读取汇率配置" onClick={()=>setFxConfigRetry(value=>value+1)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg></IconButton> : <CronRefreshButton />)}
                                   {f.key !== "currencyApiUrl" && /^https?:\/\//i.test(value) && (
                                     <span className="settings-source-actions">
                                       <IconButton size="sm" framed

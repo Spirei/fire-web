@@ -1,4 +1,6 @@
 import type { StockRecord, TradeOrder } from "./types";
+import { convertAccountAmount } from "./accountCash";
+import { MARKET_CURRENCY } from "./currency";
 
 export interface LedgerPnlRow {
   recordId: string;
@@ -93,7 +95,8 @@ export function replayEconomicOrders(
 export function buildPortfolioLedger(
   records: StockRecord[],
   orders: TradeOrder[],
-  livePrice: (record: StockRecord) => number
+  livePrice: (record: StockRecord) => number,
+  rates: Record<string,number> = {USD:1}
 ): Map<string, LedgerPnlRow> {
   const grouped = new Map<string, TradeOrder[]>();
   for (const order of orders) {
@@ -113,18 +116,20 @@ export function buildPortfolioLedger(
     if (recordOrders.some(order => order.executionModel === "source_registered_history")) {
       // Original registered P/L is an observation. Replaying it with today's
       // cost algorithm would replace the very values the migration preserves.
-      const realizedPnl = recordOrders.reduce((sum, order) => sum + (
-        (order.side === "sell" || order.side === "dividend") && order.realizedPnl != null && Number.isFinite(Number(order.realizedPnl))
-          ? Number(order.realizedPnl) : 0
-      ), 0);
-      const unrealizedPnl = (price - currentCost) * currentQty;
+      const realizedPnl = recordOrders.reduce((sum, order) => {
+        if (order.side !== "sell" && order.side !== "dividend") return sum;
+        const value=order.realizedPnl != null ? Number(order.realizedPnl) : Number.NaN;
+        const source=order.realizedPnlCurrency || order.currency || MARKET_CURRENCY[order.market];
+        return sum + convertAccountAmount(value,source,rates,MARKET_CURRENCY[record.market]);
+      }, 0);
+      const unrealizedPnl = currentQty <= EPSILON ? 0 : (price - currentCost) * currentQty;
       result.set(record.id, {recordId:record.id,realizedPnl,unrealizedPnl,totalPnl:realizedPnl+unrealizedPnl,
-        investedCapital:Math.abs(currentCost*currentQty),complete:false,sourceRegistered:true});
+        investedCapital:currentQty <= EPSILON ? 0 : Math.abs(currentCost*currentQty),complete:false,sourceRegistered:true});
       continue;
     }
 
     if (recordOrders.length === 0) {
-      const unrealizedPnl = (price - currentCost) * currentQty;
+      const unrealizedPnl = currentQty <= EPSILON ? 0 : (price - currentCost) * currentQty;
       result.set(record.id, {
         recordId: record.id,
         realizedPnl: 0,

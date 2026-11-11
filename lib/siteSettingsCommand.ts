@@ -7,6 +7,8 @@ type Receipt = { requestId: string; state: string };
 
 /** Administrator settings share the original command, revision and receipt contract. */
 export class SiteSettingsCommand {
+  constructor(private readonly ownerId = "") {}
+  private get headers(): Record<string,string> { return this.ownerId ? {"X-Alcor-Expected-Account":this.ownerId} : {}; }
   private requestId?: string;
   private running?: Promise<void>;
 
@@ -27,7 +29,7 @@ export class SiteSettingsCommand {
     if (this.requestId) {
       const identifier = this.requestId;
       try {
-        const receipt = await platformRequest<Receipt>(`/api/settings/operations/${identifier}`);
+        const receipt = await platformRequest<Receipt>(`/api/settings/operations/${identifier}`,{headers:this.headers});
         this.accept(receipt, identifier);
       } catch (error) {
         if (error instanceof PlatformRequestError && error.status === 404) {
@@ -38,7 +40,7 @@ export class SiteSettingsCommand {
       return;
     }
     if (!password) throw new Error("请重新登录后完成网站设置");
-    const current = expected ?? await platformRequest<SettingsVersion>("/api/settings");
+    const current = expected ?? await platformRequest<SettingsVersion>("/api/settings",{headers:this.headers});
     if (!Number.isSafeInteger(current.revision) || current.revision < 0) {
       throw new Error("无法读取配置版本，请重试");
     }
@@ -47,7 +49,7 @@ export class SiteSettingsCommand {
     try {
       const saved = await platformRequest<{ requestId: string; operation?: Receipt; state?: string }>("/api/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...this.headers },
         body: JSON.stringify({ ...patch, requestId: identifier, revision: current.revision, ...(current.privateRevision === undefined || Number.isInteger(patch.modelServicesRevision) ? {} : { privateRevision: current.privateRevision }), currentPassword: password, ...(code ? { code } : {}) }),
       });
       if (saved.requestId !== identifier) throw new Error("保存结果尚未确认，请稍后核对");

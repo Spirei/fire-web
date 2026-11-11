@@ -3,9 +3,16 @@ import { IconButton, Capsule } from "@/components/Capsule";
 
 import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
 
-import { sharedRead } from "@/lib/sharedRead";
+import { useRates } from "@/lib/useRates";
+import { holdingAccountMarket } from "@/lib/stockAccount";
+import { accountHoldingPrice, convertAccountAmount } from "@/lib/accountCash";
+import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
+import { readQuoteBatches, applyQuoteBatches } from "@/lib/quoteBatches";
+import { accountReadHeaders, privateReadEpoch, recordsReadSignature } from "@/lib/privateReadContext";
+import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FALLBACK_RATES, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
+import { type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
 import { MARKET_CURRENCY } from "@/lib/currency";
 import PnlTrendChart, { type PnlTrendPoint } from "@/components/PnlTrendChart";
 import PnlCalendar from "@/components/PnlCalendar";
@@ -26,6 +33,7 @@ import { useMobileHorizontalSwipe } from "@/lib/useMobileHorizontalSwipe";
 
 
 type PnlRow = {
+  accountMarket?: string;
   id: string;
   name: string;
   code: string;
@@ -45,31 +53,6 @@ type PnlRow = {
 interface CloseItem {
   d: string;
   c: number;
-}
-
-interface AssetPnlSnapshot {
-  allRecords: StockRecord[];
-  records: StockRecord[];
-  quotes: Record<string, Quote>;
-  rates: Record<string, number>;
-  closesMap: Record<string, CloseItem[]>;
-  orders: TradeOrder[];
-  savedAt: number;
-}
-
-const ASSET_PNL_SNAPSHOT_KEY = "fire:asset-pnl-snapshot:v1";
-
-function readAssetPnlSnapshot(): AssetPnlSnapshot | null {
-  try {
-    const value = JSON.parse(localStorage.getItem(ASSET_PNL_SNAPSHOT_KEY) || "null") as AssetPnlSnapshot | null;
-    return value && Array.isArray(value.allRecords) && Array.isArray(value.records) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeAssetPnlSnapshot(snapshot: AssetPnlSnapshot) {
-  try { localStorage.setItem(ASSET_PNL_SNAPSHOT_KEY, JSON.stringify(snapshot)); } catch { /* 存储满或隐私模式不影响最新数据 */ }
 }
 
 const SUPPORTED = new Set(["US", "HK", "CN", "JP", "KR"]);
@@ -159,10 +142,12 @@ function AdaptivePnlIdentity({ row }: { row: PnlRow }) {
 
 export default function AssetPnlAnalysis({
   onBack,
+  ownerId = "",
   initialRecords,
   initialQuotes
 }: {
   onBack?: () => void;
+  ownerId?: string;
   initialRecords?: StockRecord[];
   initialQuotes?: Record<string, Quote>;
 }) {
@@ -170,12 +155,19 @@ export default function AssetPnlAnalysis({
   // 从资产分析页进入时固定复用点击当刻的数据，避免父层行情定时刷新触发整页历史重载。
   const initialRecordsRef = useRef(initialRecords);
   const initialQuotesRef = useRef(initialQuotes);
-  const initialBundleRef = useRef(peekPortfolioBundle(330));
+  initialRecordsRef.current = initialRecords;
+  initialQuotesRef.current = initialQuotes;
+  const signature = recordsReadSignature(initialRecords ?? []);
+  const foreground = useWorkspaceForeground();
+  const readRevision = usePrivateReadRevision();
+  const initialEpoch = useRef(privateReadEpoch());
+  const initialBundleRef = useRef(peekPortfolioBundle(330,{ownerId,signature}));
   const warmBundle = initialBundleRef.current;
   const [allRecords, setAllRecords] = useState<StockRecord[]>(() => initialRecords || []);
   const [records, setRecords] = useState<StockRecord[]>(() => (initialRecords || []).filter((record) => Number(record.qty) > 0));
   const [quotes, setQuotes] = useState<Record<string, Quote>>(() => initialQuotes || {});
-  const [rates, setRates] = useState<Record<string, number>>(FALLBACK_RATES);
+  const rates = useRates();
+  const [historyReady, setHistoryReady] = useState(Boolean(warmBundle));
   const [closesMap, setClosesMap] = useState<Record<string, CloseItem[]>>(() =>
     Object.fromEntries(
       (initialRecords || [])
@@ -188,6 +180,7 @@ export default function AssetPnlAnalysis({
   const [klineLoading, setKlineLoading] = useState(!warmBundle);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const lastReloadKey=useRef(0);
 
   const [period, setPeriod] = useState("全部");
   const [market, setMarket] = useState("全部");
@@ -217,124 +210,73 @@ export default function AssetPnlAnalysis({
   // 收益日历-每日股票盈亏明细（点击日历某天弹出）
   const [dayDetail, setDayDetail] = useState<{ date: string; rows: CalendarDayRow[] } | null>(null);
   useLayoutEffect(() => {
-    const cached = readAssetPnlSnapshot();
-    if (!cached) return;
-    if (initialRecordsRef.current === undefined) {
-      setAllRecords(cached.allRecords);
-      setRecords(cached.records);
-    }
-    if (initialQuotesRef.current === undefined) setQuotes(cached.quotes || {});
-    setRates((previous) => ({ ...previous, ...(cached.rates || {}), USD: 1 }));
-    if (!warmBundle) {
-      setClosesMap(cached.closesMap || {});
-      setOrders(cached.orders || []);
-    }
-    setLoading(false);
-    setKlineLoading(false);
-  }, [warmBundle]);
-  // 真实数据：持仓 + 行情 + 汇率 + 日K（含标普500基准）
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const cached = readAssetPnlSnapshot();
-      setLoading(!cached && initialRecordsRef.current === undefined);
-      setKlineLoading(!cached);
-      setLoadError("");
-      try {
-        const [recs, ratesRes, bundle] = await Promise.all([
-          initialRecordsRef.current
-            ? Promise.resolve(initialRecordsRef.current)
-            : fetch("/api/records").then(async (response) => {
-                if (!response.ok) throw new Error(response.status === 401 ? "登录已失效，请重新登录" : "持仓数据加载失败");
-                return response.json();
-              }),
-          sharedRead("/api/rates").then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetchPortfolioBundle({ days: 330 })
-        ]);
-        if (cancelled) return;
-        const nextRates = ratesRes?.rates ? { ...FALLBACK_RATES, ...ratesRes.rates, USD: 1 } : cached?.rates || FALLBACK_RATES;
-        const nextOrders = bundle?.orders || cached?.orders || [];
-        setRates(nextRates);
-        setOrders(nextOrders);
-        const importedRecords = recs as StockRecord[];
-        setAllRecords(importedRecords);
-        const positions = importedRecords.filter((r) => Number(r.qty) > 0);
-        setRecords(positions);
-        let nextQuotes = { ...(cached?.quotes || {}), ...(initialQuotesRef.current || {}) };
-        if (positions.length > 0 && initialQuotesRef.current === undefined) {
-          const qRes = await fetch("/api/quotes", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ items: positions.map((p) => ({ id: p.id, market: p.market, code: p.code })) })
-          }).catch(() => null);
-          const qData = await qRes?.json().catch(() => null);
-          if (!cancelled && qData?.quotes) {
-            nextQuotes = { ...nextQuotes, ...qData.quotes };
-            setQuotes(nextQuotes);
-          }
-        }
-        // 持仓 / 行情 / 汇率已就绪，先渲染页面（总额、排行、明细立即可见）
-        setLoading(false);
-        // 日K 直接来自聚合结果（服务端已按持仓并发取好），不再逐只请求 /api/kline/full
-        const closes: Record<string, CloseItem[]> = {};
-        positions.forEach((p) => {
-          const items = normalizeCloses(bundle?.closes?.[p.id]);
-          if (items.length > 0) closes[p.id] = items;
-        });
-        if (!cancelled) {
-          setClosesMap(closes);
-          setKlineLoading(false);
-          writeAssetPnlSnapshot({
-            allRecords: importedRecords,
-            records: positions,
-            quotes: nextQuotes,
-            rates: nextRates,
-            closesMap: Object.keys(closes).length > 0 ? closes : cached?.closesMap || {},
-            orders: nextOrders,
-            savedAt: Date.now()
-          });
-        }
-      } catch (error) {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "资产盈亏数据加载失败");
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setKlineLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
+    // Old disk snapshots have no account/security binding; they are disposable views, not ledger originals.
+    try { localStorage.removeItem("fire:asset-pnl-snapshot:v1"); } catch { /* optional storage */ }
+    const warm = peekPortfolioBundle(330,{ownerId,signature});
+    setAllRecords(initialRecordsRef.current ?? []);
+    setRecords((initialRecordsRef.current ?? []).filter(record => Number(record.qty) > 0));
+    setQuotes(privateReadEpoch() === initialEpoch.current ? initialQuotesRef.current ?? {} : {});
+    setOrders(warm?.orders ?? []); setClosesMap(warm?.closes ?? {}); setBenchCloses([]);
+    setHistoryReady(Boolean(warm));
+  }, [ownerId,signature,readRevision]);
 
-  // 基准（多市场下拉：标普500 / 纳斯达克 / 道琼斯 / 恒生指数 / 上证指数 / 深证成指）日 K
   useEffect(() => {
-    let cancelled = false;
-    const bench = BENCHMARKS.find((b) => b.key === benchKey) || BENCHMARKS[0];
-    (async () => {
-      const items = await fetchBenchmarkKline(bench.market, bench.code, 330, bench.index);
-      if (!cancelled) {
-        setBenchCloses(items);
-      }
+    if (!foreground) return;
+    const controller = new AbortController(), epoch = privateReadEpoch();
+    const force=lastReloadKey.current!==reloadKey; lastReloadKey.current=reloadKey;
+    const active = () => !controller.signal.aborted && epoch === privateReadEpoch();
+    setLoading(initialRecordsRef.current === undefined); setKlineLoading(true); setLoadError("");
+    void (async () => {
+      try {
+        const readRecords = async () => {
+          const rows = initialRecordsRef.current ?? await platformRequest<StockRecord[]>("/api/records",{signal:controller.signal,headers:accountReadHeaders(ownerId)},10000);
+          if (!Array.isArray(rows)) throw Error("持仓数据格式无效");
+          if (!active()) return rows;
+          const positions = rows.filter(record => Number(record.qty) > 0);
+          setAllRecords(rows); setRecords(positions); setLoading(false);
+          if (positions.length) {
+            const result = await readQuoteBatches(positions,controller.signal,{ownerId});
+            if (active()) setQuotes(previous => applyQuoteBatches(previous,result,positions,positions));
+          } else setQuotes({});
+          return rows;
+        };
+        const [rows,bundle] = await Promise.all([readRecords(),fetchPortfolioBundle({days:330,ownerId,signature,signal:controller.signal,force})]);
+        if (!active()) return;
+        setOrders(bundle?.orders ?? []); setHistoryReady(Boolean(bundle));
+        setClosesMap(Object.fromEntries(rows.map(record => [record.id,normalizeCloses(bundle?.closes?.[record.id])])));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
+          setAllRecords([]); setRecords([]); setQuotes({}); setOrders([]); setClosesMap({}); setBenchCloses([]); setHistoryReady(false);
+        }
+        setLoadError(error instanceof Error ? error.message : "资产盈亏数据加载失败");
+      } finally { if (!controller.signal.aborted) { setLoading(false); setKlineLoading(false); } }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [benchKey]);
+    return () => controller.abort();
+  }, [ownerId,signature,readRevision,foreground,reloadKey]);
+
+  useEffect(() => {
+    if (!foreground) return;
+    const controller = new AbortController();
+    const bench = BENCHMARKS.find(item => item.key === benchKey) || BENCHMARKS[0];
+    setBenchCloses([]);
+    void fetchBenchmarkKline(bench.market,bench.code,330,bench.index,{ownerId,signal:controller.signal}).then(items => {
+      if (!controller.signal.aborted) setBenchCloses(items);
+    }).catch(() => { if (!controller.signal.aborted) setBenchCloses([]); });
+    return () => controller.abort();
+  }, [ownerId,benchKey,readRevision,foreground]);
 
   const toUsd = (marketKey: string, value: number) => {
-    const iso = MARKET_CURRENCY[marketKey] || "USD";
-    const rate = rates[iso] || (iso === "USD" ? 1 : 0);
-    return rate ? value / rate : value;
+    const iso = MARKET_CURRENCY[marketKey];
+    return iso ? convertAccountAmount(value,iso,rates,"USD") : Number.NaN;
   };
 
   const positions = useMemo<PnlRow[]>(
     () =>
       records.map((r) => {
         const qty = Number(r.qty) || 0;
-        const price = quotes[r.id]?.price ?? (Number(r.price) || 0);
-        const cost = Number(r.cost) || 0;
+        const price = accountHoldingPrice(r,quotes);
+        const cost = r.cost === "" || r.cost == null ? Number.NaN : Number(r.cost);
         const mv = toUsd(r.market, price * qty);
         const cv = toUsd(r.market, cost * qty);
         const pnl = mv - cv;
@@ -343,8 +285,9 @@ export default function AssetPnlAnalysis({
           name: r.name || r.code,
           code: r.code,
           market: r.market as PnlRow["market"],
+          accountMarket: holdingAccountMarket(r),
           pnl,
-          rate: cv ? (pnl / cv) * 100 : 0,
+          rate: Number.isFinite(cost) && cost !== 0 ? (price-cost)/Math.abs(cost)*100 : Number.NaN,
           price,
           cost,
           qty
@@ -358,7 +301,7 @@ export default function AssetPnlAnalysis({
     const ledger = buildPortfolioLedger(
       allRecords,
       orders,
-      (record) => quotes[record.id]?.price ?? (Number(record.price) || 0)
+      (record) => accountHoldingPrice(record,quotes), rates
     );
     return allRecords.flatMap((record) => {
       const item = ledger.get(record.id);
@@ -374,9 +317,10 @@ export default function AssetPnlAnalysis({
         name: record.name || record.code,
         code: record.code,
         market: record.market as PnlRow["market"],
+        accountMarket: holdingAccountMarket(record),
         pnl: totalPnl,
         rate: investedCapital ? (totalPnl / investedCapital) * 100 : 0,
-        price: quotes[record.id]?.price ?? (Number(record.price) || 0),
+        price: accountHoldingPrice(record,quotes),
         cost: Number(record.cost) || 0,
         qty,
         realizedPnl,
@@ -392,20 +336,20 @@ export default function AssetPnlAnalysis({
     rows.filter(
       (row) =>
         key === "全部" ||
-        (key === "美股" && row.market === "US") ||
-        (key === "港股" && row.market === "HK") ||
-        (key === "A股" && row.market === "CN")
+        (key === "美股" && (row.accountMarket || row.market) === "US") ||
+        (key === "港股" && (row.accountMarket || row.market) === "HK") ||
+        (key === "A股" && (row.accountMarket || row.market) === "CN")
     );
   const positionsFiltered = useMemo(() => byMarket(positions, market), [positions, market]);
   const lifetimeFiltered = useMemo(() => byMarket(lifetimePositions, market), [lifetimePositions, market]);
   const calPositions = useMemo(() => byMarket(positions, calMarket), [positions, calMarket]);
 
-  const totalPnl = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + p.pnl, 0), [lifetimeFiltered]);
-  const realizedPnlTotal = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.realizedPnl || 0), 0), [lifetimeFiltered]);
-  const unrealizedPnlTotal = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0), [lifetimeFiltered]);
-  const costBasis = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.investedCapital || 0), 0), [lifetimeFiltered]);
+  const totalPnl = useMemo(() => historyReady ? lifetimeFiltered.reduce((sum, p) => sum + p.pnl, 0) : Number.NaN, [lifetimeFiltered,historyReady]);
+  const realizedPnlTotal = useMemo(() => historyReady ? lifetimeFiltered.reduce((sum, p) => sum + (p.realizedPnl ?? Number.NaN), 0) : Number.NaN, [lifetimeFiltered,historyReady]);
+  const unrealizedPnlTotal = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.unrealizedPnl ?? Number.NaN), 0), [lifetimeFiltered]);
+  const costBasis = useMemo(() => lifetimeFiltered.reduce((sum, p) => sum + (p.investedCapital ?? Number.NaN), 0), [lifetimeFiltered]);
   const hasRegisteredHistory=orders.some(order=>order.executionModel==='source_registered_history');
-  const returnPct = hasRegisteredHistory ? null : costBasis ? (totalPnl / costBasis) * 100 : 0;
+  const returnPct = hasRegisteredHistory || !historyReady || !lifetimeFiltered.every(row => row.complete) || !Number.isFinite(totalPnl) || !(costBasis > 0) ? null : (totalPnl / costBasis) * 100;
 
   // 盈亏总额卡片：货币换算 + 基准（多市场）
   const currencyFactor = displayCurrency === "USD" ? 1 : rates[displayCurrency] > 0 ? rates[displayCurrency] : Number.NaN;
@@ -493,7 +437,7 @@ export default function AssetPnlAnalysis({
 
   // 跑赢幅度 = 我的组合区间收益率 − 基准区间收益率（与资产分析页口径一致；时间加权用 timeIndex）
   const myTrendReturn = useMemo(() => {
-    if (chartPoints.length < 2) return 0;
+    if (chartPoints.length < 2) return Number.NaN;
     if (weighting === "time") {
       const first = chartPoints[0].timeIndex;
       const last = chartPoints[chartPoints.length - 1].timeIndex;
@@ -505,7 +449,7 @@ export default function AssetPnlAnalysis({
   }, [chartPoints, weighting]);
   const benchTrendReturn = useMemo(() => {
     const vals = chartPoints.filter((p) => p.benchmark > 0);
-    if (vals.length < 2) return 0;
+    if (vals.length < 2) return Number.NaN;
     return (vals[vals.length - 1].benchmark / vals[0].benchmark - 1) * 100;
   }, [chartPoints]);
   const benchDiff = myTrendReturn - benchTrendReturn;
@@ -514,7 +458,8 @@ export default function AssetPnlAnalysis({
   // 使用筛选区间之前的最后一个交易日作基线，避免所有周期误用同一个累计总额。
   const periodMetrics = useMemo(() => {
     if(hasRegisteredHistory&&period!=="全部")return {pnl:null,rate:null};
-    if (period === "全部" || dailyAssetFiltered.length === 0) return { pnl: totalPnl, rate: returnPct };
+    if (period === "全部") return { pnl: totalPnl, rate: returnPct };
+    if (dailyAssetFiltered.length < 2) return {pnl:null,rate:null};
     const first = dailyAssetFiltered[0];
     const last = dailyAssetFiltered[dailyAssetFiltered.length - 1];
     const firstIndex = dailyAsset.findIndex((item) => item.date === first.date);
@@ -522,8 +467,8 @@ export default function AssetPnlAnalysis({
     const pnl = last.actual - baseline.actual - (last.flow - baseline.flow);
     const rate = baseline.timeIndex > 0 ? (last.timeIndex / baseline.timeIndex - 1) * 100 : 0;
     return {
-      pnl: Number.isFinite(pnl) ? pnl : 0,
-      rate: Number.isFinite(rate) ? rate : 0
+      pnl: Number.isFinite(pnl) ? pnl : null,
+      rate: Number.isFinite(rate) ? rate : null
     };
   }, [period, dailyAsset, dailyAssetFiltered, totalPnl, returnPct,hasRegisteredHistory]);
   const periodPnl = periodMetrics.pnl;
@@ -750,8 +695,8 @@ export default function AssetPnlAnalysis({
                 {/* 盈亏总额大数字 / 收益率 / 日期（居中，对齐图1） */}
                 <div className="mt-4 text-center">
                   {hasRegisteredHistory&&period==="全部"&&<p className="mb-2 text-xs text-muted">已登记盈亏</p>}
-                  <p className={`text-3xl font-extrabold tracking-tight tabular-nums ${periodPnl==null?"text-muted":periodPnl >= 0 ? "text-up" : "text-down"}`}>{periodPnl==null?'—':moneyDisp(periodPnl)}</p>
-                  <p className={`mt-2 text-lg font-bold ${periodRate==null?"text-muted":periodRate >= 0 ? "text-up" : "text-down"}`}>{periodRate==null?'—':`${periodRate>=0?'+':''}${periodRate.toFixed(2)}%`}</p>
+                  <p className={`text-3xl font-extrabold tracking-tight tabular-nums ${periodPnl==null||!Number.isFinite(periodPnl)?"text-muted":periodPnl >= 0 ? "text-up" : "text-down"}`}>{periodPnl==null||!Number.isFinite(periodPnl)?'—':moneyDisp(periodPnl)}</p>
+                  <p className={`mt-2 text-lg font-bold ${periodRate==null||!Number.isFinite(periodRate)?"text-muted":periodRate >= 0 ? "text-up" : "text-down"}`}>{periodRate==null||!Number.isFinite(periodRate)?'—':`${periodRate>=0?'+':''}${periodRate.toFixed(2)}%`}</p>
                   <p className="mt-1.5 text-xs text-muted">{dateRange}</p>
                   {period === "全部" ? (
                     <p className="mt-2 text-[11px] text-muted">
@@ -794,7 +739,7 @@ export default function AssetPnlAnalysis({
                       <i className="ml-2 h-2 w-2 rounded-full bg-[#4a90d9]" />
                       <span className="font-semibold">{benchLabel}</span>
                       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 text-muted transition-transform ${benchOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg>
-                      <b className={`tabular-nums ${benchDiff >= 0 ? "text-up" : "text-down"}`}>{benchDiff >= 0 ? "+" : ""}{benchDiff.toFixed(2)}%</b>
+                      <b className={`tabular-nums ${benchDiff >= 0 ? "text-up" : "text-down"}`}>{Number.isFinite(benchDiff) ? `${benchDiff >= 0 ? "+" : ""}${benchDiff.toFixed(2)}%` : "—"}</b>
                     </button>
                     {benchOpen && (
                       <>

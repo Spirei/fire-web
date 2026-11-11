@@ -129,6 +129,8 @@ async def web_identity(
     async with db.connection() as conn:
         row=await legacy_session(conn,token,native_v1=bool(bearer) and not web_bearer_only,platform=platform)
     who=Identity(id=row['id'],username=row['username'],role=row['role'],token_hash=digest(token),csrf='',expires_at=row['expires_at'])
+    from .security import assert_expected_account
+    assert_expected_account(request, who.id)
     who.legacy_client=True
     who.legacy_platform=platform
     return who,row,token
@@ -138,6 +140,8 @@ async def native_identity(request,db,scope=None):
     token=request.headers.get('authorization','').removeprefix('Bearer ')
     async with db.connection() as conn:
         grant=await authenticate(conn,token,scope)
+    from .security import assert_expected_account
+    assert_expected_account(request, grant["user_id"])
     return identity_from_grant(grant,token,scope),grant
 
 

@@ -2,6 +2,7 @@
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconCheck, IconPencil, IconPlus, IconRefresh, IconX } from "@tabler/icons-react";
 import { ensureFlagIcons } from "@/lib/useAssetIcons";
@@ -62,6 +63,8 @@ function DragHandle({ label }: { label: string }) {
 }
 
 export default function FxConverter({ initial }: {initial?: FxRatesInitial}) {
+  const foreground=useWorkspaceForeground();
+  const foregroundRef=useRef(foreground); foregroundRef.current=foreground;
   const [initialSnapshot] = useState(() => { try { return initial?.data ? parseFxRatesSnapshot(initial.data) : null; } catch { return null; } });
   const hasRead = useRef(Boolean(initial));
   const { currency: displayCurrency } = useDisplayCurrency();
@@ -122,6 +125,7 @@ export default function FxConverter({ initial }: {initial?: FxRatesInitial}) {
   const rateAbortRef = useRef<AbortController | null>(null);
   const refreshPendingRef = useRef(false);
   const loadRates = useCallback(async (force = false) => {
+      if(!foregroundRef.current)return;
       if (refreshPendingRef.current) return;
       const requestId = ++rateRequestRef.current;
       rateAbortRef.current?.abort();
@@ -165,17 +169,20 @@ export default function FxConverter({ initial }: {initial?: FxRatesInitial}) {
   }, []);
 
   useEffect(() => {
+    if(!foreground)return;
     if (!initial || Date.now() - (initial.checkedAt || 0) >= 60000) void loadRates();
     const onRates = () => { void loadRates(); };
+    const sourceChanged=(event:Event)=>{if((event as CustomEvent).detail?.dataChanged===false)return;++rateRequestRef.current;rateAbortRef.current?.abort();rateAbortRef.current=null;refreshPendingRef.current=false;hasRead.current=false;setRates({USD:1});setQuoted(new Set(["USD"]));setUpdatedAt(null);setEstimatedMop(false);void loadRates();};
     window.addEventListener("fire:rates-updated", onRates);
+    window.addEventListener("fire:settings-updated",sourceChanged);
     return () => {
       ++rateRequestRef.current;
       rateAbortRef.current?.abort();
       rateAbortRef.current = null;
       refreshPendingRef.current = false;
-      window.removeEventListener("fire:rates-updated", onRates);
+      window.removeEventListener("fire:rates-updated", onRates); window.removeEventListener("fire:settings-updated",sourceChanged);
     };
-  }, [loadRates]);
+  }, [loadRates,foreground]);
 
   useEffect(() => {
     if (!refreshSuccess) return;

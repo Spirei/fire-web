@@ -1,8 +1,12 @@
 "use client";
 import { Capsule, IconButton } from "@/components/Capsule";
 
+import { platformRequest } from "@/lib/platformRequest";
+import { accountReadHeaders } from "@/lib/privateReadContext";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
+import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
 import { convertAccountAmount } from "@/lib/accountCash";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { IconReceipt, IconSearch, IconTrash } from "@tabler/icons-react";
 import { fmtMoney, fmtMoneyAdaptive, localDateKey } from "@/lib/format";
 import { showToast } from "@/lib/toast";
@@ -43,7 +47,7 @@ const EMPTY: Record<Currency, number|null> = Object.fromEntries(FUND_CURRENCIES.
 const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, { openingAsset: null, cashNetFlow: null, stockNetFlow: null, otherNetFlow: null }])) as Record<Currency, Summary>;
 const RECORD_PAGE_SIZE = 30;
 
-export default function FundsPanel({ holdingAssets, balanceOverrides, onBalancesChange }: { holdingAssets: Record<Currency, number|null>; balanceOverrides?: Partial<Record<Currency, number|null>>; onBalancesChange: (balances: Record<Currency, number|null>, cardCash: Record<string, number|null>) => void }) {
+export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrides, onBalancesChange }: { ownerId?: string; holdingAssets: Record<Currency, number|null>; balanceOverrides?: Partial<Record<Currency, number|null>>; onBalancesChange: (balances: Record<Currency, number|null>, cardCash: Record<string, number|null>) => void }) {
   const rates = useRates();
   const [currency, setCurrency] = usePersistedState<Currency>("fire:funds-display-currency", "USD");
   const [balances, setBalances] = useState<Record<Currency, number|null>>(EMPTY);
@@ -54,6 +58,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
   const [recordsPage, setRecordsPage] = useState(0);
   const [recordsTotal, setRecordsTotal] = useState(0);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsReadVersion,setRecordsReadVersion] = useState(0);
   const [recordsQuery, setRecordsQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [type, setType] = useState("deposit");
@@ -63,19 +68,43 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
   const [occurredAt, setOccurredAt] = useState(() => localDateKey());
   const [saving, setSaving] = useState(false);
   const recordsCache = useRef(new Map<string, { transactions: Tx[]; total: number }>());
-  const recordsRequest = useRef<{ id: number; controller: AbortController } | null>(null);
-  const load = useCallback(async () => {
-    const res = await fetch("/api/v1/funds?limit=1", { cache: "no-store" });
-    const json = await res.json().catch(() => null);
-    if (!res.ok) return;
-    recordsCache.current.clear();
-    const next = { ...EMPTY, ...(json?.data?.balances || {}) };
-    // 借记卡 / 预付卡余额已由服务端并进 balances，这里额外把原始明细带上去，
-    // 资产分析要在「银行卡现金」那一行说明可用现金里有多少来自银行卡
-    const cardCash = (json?.data?.cardCash || {}) as Record<string, number>;
-    setBalances(next); setSummaries({ ...EMPTY_SUMMARY, ...(json?.data?.summaries || {}) }); onBalancesChange(next, cardCash);
-  }, [onBalancesChange]);
+  const recordsRequest = useRef<{ controller: AbortController } | null>(null);
+  const foreground = useWorkspaceForeground();
+  const readRevision = usePrivateReadRevision();
+  const [readError,setReadError] = useState("");
+  const balanceRequest=useRef<{controller:AbortController;promise:Promise<void>}|null>(null);
+  useLayoutEffect(() => {
+    balanceRequest.current?.controller.abort(); balanceRequest.current=null;
+    recordsRequest.current?.controller.abort(); recordsRequest.current=null;
+    recordsCache.current.clear(); setTransactions([]); setRecordsTotal(0); setRecordsLoading(false);
+    setBalances(EMPTY); setSummaries(EMPTY_SUMMARY); setReadError("");
+    onBalancesChange(EMPTY,{USD:null});
+  },[ownerId,readRevision,onBalancesChange]);
+  const load = useCallback((force=false):Promise<void> => {
+    if (!foreground) return Promise.resolve();
+    if (balanceRequest.current && !force) return balanceRequest.current.promise;
+    balanceRequest.current?.controller.abort();
+    const controller=new AbortController();
+    const active=()=>!controller.signal.aborted && balanceRequest.current?.controller===controller;
+    const promise=(async()=>{
+      try {
+        const json=await platformRequest<{code:number;data:{balances:Record<string,number|null>;cardCash?:Record<string,number|null>;summaries?:Record<Currency,Summary>}}>("/api/v1/funds?limit=1",{signal:controller.signal,headers:accountReadHeaders(ownerId)},10000);
+        if (!active()) return;
+        if (json.code!==0 || !json.data?.balances || Array.isArray(json.data.balances) || Object.values(json.data.balances).some(value=>value!==null && (typeof value!=="number" || !Number.isFinite(value)))) throw Error("资金数据格式无效");
+        recordsCache.current.clear(); setRecordsReadVersion(value=>value+1);
+        const next={...EMPTY,...json.data.balances};
+        const cash=json.data.cardCash ?? {USD:null};
+        setBalances(next); setSummaries({...EMPTY_SUMMARY,...json.data.summaries}); setReadError(""); onBalancesChange(next,cash);
+      } catch (error) {
+        if (!active()) return;
+        setBalances(EMPTY); setSummaries(EMPTY_SUMMARY); setTransactions([]); recordsCache.current.clear();
+        setReadError(error instanceof Error?error.message:"资金暂时无法读取"); onBalancesChange(EMPTY,{USD:null});
+      } finally { if(balanceRequest.current?.controller===controller)balanceRequest.current=null; }
+    })();
+    balanceRequest.current={controller,promise}; return promise;
+  }, [ownerId,onBalancesChange,foreground]);
   const loadRecords = useCallback(async (_nextCurrency: Currency, page: number, query = "") => {
+    recordsRequest.current?.controller.abort(); recordsRequest.current=null;
     const normalizedQuery = query.trim();
     const key = `${page}:${normalizedQuery.toLocaleLowerCase("zh-CN")}`;
     const cached = recordsCache.current.get(key);
@@ -85,40 +114,41 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
       setRecordsLoading(false);
       return;
     }
-    recordsRequest.current?.controller.abort();
     const controller = new AbortController();
-    const id = (recordsRequest.current?.id || 0) + 1;
-    recordsRequest.current = { id, controller };
+    recordsRequest.current = { controller };
     setRecordsLoading(true);
     try {
       const offset = page * RECORD_PAGE_SIZE;
-      const res = await fetch(`/api/v1/funds?recordsOnly=1&limit=${RECORD_PAGE_SIZE}&offset=${offset}&q=${encodeURIComponent(normalizedQuery)}`, { cache: "no-store", signal: controller.signal });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || recordsRequest.current?.id !== id) return;
-      const nextTransactions = json?.data?.transactions || [];
-      const nextTotal = Number(json?.data?.pagination?.total) || 0;
+      const json = await platformRequest<{data:{transactions:Tx[];pagination:{total:number}}}>(`/api/v1/funds?recordsOnly=1&limit=${RECORD_PAGE_SIZE}&offset=${offset}&q=${encodeURIComponent(normalizedQuery)}`, { signal: controller.signal,headers:accountReadHeaders(ownerId) },10000);
+      if (controller.signal.aborted || recordsRequest.current?.controller !== controller) return;
+      if (!Array.isArray(json?.data?.transactions) || !Number.isSafeInteger(json.data.pagination?.total) || json.data.pagination.total<0) throw Error("资金记录格式无效");
+      const nextTransactions = json.data.transactions;
+      const nextTotal = json.data.pagination.total;
       recordsCache.current.set(key, { transactions: nextTransactions, total: nextTotal });
+      while (recordsCache.current.size > 20) recordsCache.current.delete(recordsCache.current.keys().next().value!);
       setTransactions(nextTransactions);
       setRecordsTotal(nextTotal);
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) showToast("资金记录搜索失败", "err");
+      if (!controller.signal.aborted) { setTransactions([]); setRecordsTotal(0); showToast("资金记录搜索失败", "err"); }
     } finally {
-      if (recordsRequest.current?.id === id) setRecordsLoading(false);
+      if (recordsRequest.current?.controller === controller) setRecordsLoading(false);
     }
-  }, []);
+  }, [ownerId]);
   useEffect(() => {
+    if (!foreground) return;
     void load();
-    const refresh = () => void load();
+    const refresh = () => void load(true);
     window.addEventListener("fire:orders-updated", refresh);
-    window.addEventListener("fire:records-updated", refresh);
+    window.addEventListener("fire:funds-updated", refresh);
     return () => {
       window.removeEventListener("fire:orders-updated", refresh);
-      window.removeEventListener("fire:records-updated", refresh);
+      window.removeEventListener("fire:funds-updated", refresh);
+      balanceRequest.current?.controller.abort(); recordsRequest.current?.controller.abort();
     };
-  }, [load]);
+  }, [load,foreground,readRevision]);
   useEffect(() => {
-    if (recordsOpen) void loadRecords(currency, recordsPage, debouncedQuery);
-  }, [currency, debouncedQuery, loadRecords, recordsOpen, recordsPage]);
+    if (foreground && recordsOpen) void loadRecords(currency, recordsPage, debouncedQuery);
+  }, [currency, debouncedQuery, loadRecords, recordsOpen, recordsPage,foreground,readRevision,recordsReadVersion]);
   useEffect(() => {
     const timer = window.setTimeout(() => { setRecordsPage(0); setDebouncedQuery(recordsQuery.trim()); }, 120);
     return () => window.clearTimeout(timer);
@@ -134,7 +164,7 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
     if (!Number.isFinite(value) || value <= 0) return showToast("请输入有效金额", "err");
     setSaving(true);
     const normalizedType = type === "deposit" && direction < 0 ? "withdrawal" : type;
-    const res = await fetch("/api/v1/funds", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currency, type: normalizedType, amount: value, direction, note, occurredAt }) });
+    const res = await fetch("/api/v1/funds", { method: "POST", headers: { "Content-Type": "application/json",...accountReadHeaders(ownerId) }, body: JSON.stringify({ currency, type: normalizedType, amount: value, direction, note, occurredAt }) });
     const json = await res.json().catch(() => null); setSaving(false);
     if (!res.ok) return showToast(json?.message || "保存失败", "err");
     window.dispatchEvent(new Event("fire:funds-updated"));
@@ -164,9 +194,10 @@ export default function FundsPanel({ holdingAssets, balanceOverrides, onBalances
   const profit = endingAsset - openingAsset - currentInvestment;
   const exactMoney = (value: number, signed = false) => Number.isFinite(value) ? `${signed && value > 0 ? "+" : ""}${fmtMoney(value, fundCurrencySymbol(currency))}` : "—";
   const cardMoney = (value: number, signed = false) => <>{signed && value > 0 ? "+" : ""}{fmtMoneyAdaptive(value, fundCurrencySymbol(currency), 1e5)}</>;
-  const metric = (label: string, value: number, tone: "plain" | "flow" | "result" = "plain") => <div className={`fund-flow-card fund-flow-card--${tone}`} title={`${label}：${exactMoney(value, tone !== "result")}`}><span className="fund-flow-label">{label}</span><strong className={`fund-flow-value ${tone !== "result" && value !== 0 ? value > 0 ? "text-up" : "text-down" : ""}`}>{cardMoney(value, tone !== "result")}</strong></div>;
+  const metric = (label: string, value: number, tone: "plain" | "flow" | "result" = "plain") => <div className={`fund-flow-card fund-flow-card--${tone}`} title={`${label}：${exactMoney(value, tone !== "result")}`}><span className="fund-flow-label">{label}</span><strong className={`fund-flow-value ${tone !== "result" && Number.isFinite(value) && value !== 0 ? value > 0 ? "text-up" : "text-down" : ""}`}>{cardMoney(value, tone !== "result")}</strong></div>;
   const calculationNotes = <div className="space-y-2 text-xs leading-relaxed text-muted"><p>盈亏额 = 期末总资产 − 期初总资产 − 当期净投入。</p><p>买卖与股息是账户内部现金流，不计入外部投入。</p><p>借记卡、预付卡余额计入现金；信用卡额度不计入。券商与卡包互转时，启用「券商账户」会同步反向流水，避免重复计算。</p></div>;
   return <section className="funds-panel card overflow-visible">
+    {readError && <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-3 text-xs text-muted" role="status"><span>{readError}</span><Capsule variant="secondary" size="sm" onClick={()=>void load(true)}>重试</Capsule></div>}
     <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-4"><div className="min-w-0"><div className="flex items-center gap-2.5"><h3 className="text-base font-bold">资金系统</h3><CurrencySelect value={currency} options={fundCurrencyOptions()} align="left" onChange={(next) => { setCurrency(next); setRecordsPage(0); }} /></div><p className="mt-0.5 truncate text-[11px] text-muted">现金与持仓共同构成账户资产</p></div><Capsule variant="secondary" type="button" onClick={() => setOpen(true)} className="h-8 shrink-0 px-3 text-xs"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="mr-1 h-3.5 w-3.5"><path d="M10 4v12M4 10h12" /></svg>记一笔</Capsule></div>
     <div className="p-5">
       <div className="fund-mobile-overview">

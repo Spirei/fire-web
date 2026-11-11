@@ -34,3 +34,5 @@ export function writeCachedRates(rates: Record<string, number>) {
     /* 存储不可用时忽略 */
   }
 }
+
+export function clearCachedRates() { try { localStorage.removeItem(RATES_CACHE_KEY); } catch {} }

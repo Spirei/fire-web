@@ -18,8 +18,8 @@ export function restoreQuoteSnapshot(quotes: Record<string, Quote>, instruments:
   return restored;
 }
 
-/** 两个滚动批次；失败只影响本批，不能抹掉其他批次或失败批的旧行情。 */
-export async function readQuoteBatches(items: Item[], signal?: AbortSignal, options: { includeMarketCap?: boolean } = {}): Promise<QuoteBatchResult> {
+/** 两个滚动批次；临时失败保留本批，身份或许可拒绝时撤下旧行情。 */
+export async function readQuoteBatches(items: Item[], signal?: AbortSignal, options: { includeMarketCap?: boolean; ownerId?: string } = {}): Promise<QuoteBatchResult> {
   const result: QuoteBatchResult = { quotes: Object.create(null), completed: new Set() };
   // Select a source per market; a mixed batch must not force US and HK/CN
   // securities onto one provider. Keep at most two requests in flight.
@@ -40,10 +40,13 @@ export async function readQuoteBatches(items: Item[], signal?: AbortSignal, opti
       const deadline = setTimeout(cancel, 30_000);
       try {
         const response = await fetch("/api/quotes", {
-          method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: controller.signal,
+          method: "POST", headers: { "Content-Type": "application/json", ...(options.ownerId ? {"X-Alcor-Expected-Account":options.ownerId} : {}) }, cache: "no-store", signal: controller.signal,
           body: JSON.stringify({ items: batch, includeMarketCap: options.includeMarketCap === true })
         });
-        if (!response.ok) continue;
+        if (!response.ok) {
+          if ([401,403].includes(response.status)) for (const item of batch) result.completed.add(item.id);
+          continue;
+        }
         const data = await response.json();
         if (!data?.quotes || typeof data.quotes !== "object" || Array.isArray(data.quotes)) continue;
         for (const item of batch) {

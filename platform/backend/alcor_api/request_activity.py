@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 from psycopg import Error as DatabaseError
-from psycopg_pool import PoolTimeout
+from psycopg_pool import PoolTimeout, TooManyRequests
 from pydantic import BaseModel
 
 from .db import TargetMismatch
@@ -88,7 +88,7 @@ class RequestActivity:
             try:
                 await self.flush()
                 failed = False
-            except (DatabaseError, PoolTimeout, TargetMismatch, OSError, TimeoutError):
+            except (DatabaseError, PoolTimeout, TooManyRequests, TargetMismatch, OSError, TimeoutError):
                 if not failed:
                     logging.getLogger("alcor.activity").warning("request_activity_storage_unavailable")
                 failed = True

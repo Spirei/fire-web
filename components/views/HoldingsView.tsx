@@ -1,4 +1,6 @@
 "use client";
+import { GlobalSettingsEditor, mergeVisibleOrder } from "@/lib/globalSettingsEditor";
+import { platformRequest } from "@/lib/platformRequest";
 import Pagination from "@/components/Pagination";
 import { IconButton, Capsule } from "@/components/Capsule";
 
@@ -51,6 +53,9 @@ import MarketCodeBadge from "@/components/MarketCodeBadge";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 
 interface Props {
+  ownerId?: string;
+  isAdmin?: boolean;
+  assetMarketOrder?: string[];
   records: StockRecord[];
   quotes: Record<string, Quote>;
   livePrice: (r: StockRecord) => number;
@@ -131,7 +136,7 @@ function SortTh({
   );
 }
 
-export default function HoldingsView({ records, quotes, livePrice, refreshQuotes, onAddMatch, onUpdate, onRemove, groups, markets, marketLabels, marketOptions, onMarketsChange, onOrdersChanged, initialFundBalances, valuationReady }: Props) {
+export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarketOrder, records, quotes, livePrice, refreshQuotes, onAddMatch, onUpdate, onRemove, groups, markets, marketLabels, marketOptions, onMarketsChange, onOrdersChanged, initialFundBalances, valuationReady }: Props) {
   const workspaceActive = useWorkspaceActive();
   const { brokerIcons, stockIcons, assetIcons } = useAssetIcons(["broker", "stock", "crypto", "metal"]);
   const { columns: holdingColumns } = useHoldingColumns();
@@ -259,9 +264,19 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   const [fundBalances, setFundBalances] = useState<Record<string, number|null>>(() => ({ ...initialFundBalances }));
   const { currency: displayCur, setCurrency: setDisplayCur } = useDisplayCurrency();
   const { unit: currencyDisplayUnit } = useCurrencyDisplayUnit();
-  // 市场盈亏卡片拖动顺序（本地记忆）
-  const [savedPnlOrder, setPnlOrder] = usePersistedState<string[]>("fire:holdings:pnl-order", []);
-  const pnlOrder = Array.isArray(savedPnlOrder) ? savedPnlOrder.filter(item => typeof item === "string") : [];
+  const editor = useMemo(() => new GlobalSettingsEditor(ownerId),[ownerId]);
+  const [layoutSaving,setLayoutSaving] = useState(false);
+  const canReorder = isAdmin && !layoutSaving;
+  const [pnlOrder,setPnlOrder] = useState<string[]>(assetMarketOrder ?? []);
+  useEffect(() => { setPnlOrder(assetMarketOrder ?? []); },[assetMarketOrder]);
+  useEffect(() => {
+    const controller=new AbortController();
+    const sync=()=>{ void platformRequest<{settings:{assetMarketOrder?:string[]}}>("/api/settings",{signal:controller.signal}).then(data=>{
+      if (!controller.signal.aborted) setPnlOrder(data.settings.assetMarketOrder ?? []);
+    }).catch(()=>{}); };
+    window.addEventListener("fire:settings-updated",sync);
+    return ()=>{controller.abort();window.removeEventListener("fire:settings-updated",sync);};
+  },[]);
   const pnlDragIndex = useRef<number | null>(null);
   const loadRates = useCallback(async () => {
     await readObservedRates(true);
@@ -433,12 +448,14 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
     const [item] = next.splice(from, 1);
     next.splice(to, 0, item);
     const order = next.map(([m]) => m);
-    setPnlOrder(order);
-    try {
-      localStorage.setItem("fire:holdings:pnl-order", JSON.stringify(order));
-    } catch {
-      /* 忽略存储异常 */
-    }
+    if (!canReorder) return;
+    const previous=pnlOrder;
+    setPnlOrder(order); setLayoutSaving(true);
+    void editor.save(current=>({assetMarketOrder:mergeVisibleOrder(current.assetMarketOrder ?? [],order)})).then(result=>{
+      if (!result) {setPnlOrder(previous);return;}
+      setPnlOrder(result.settings.assetMarketOrder ?? []);
+      showToast(result.recovered?"已核对上次保存结果":"市场盈亏顺序已保存");
+    }).catch(error=>{setPnlOrder(previous);showToast(error instanceof Error?error.message:"保存失败","err");}).finally(()=>setLayoutSaving(false));
   }
 
   const cur = active === "TOTAL" ? "USD" : marketMeta(active).currency || "USD";
@@ -550,23 +567,18 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
   }
 
   async function persistTabs(list: string[]) {
-    setTabOverride(list);
+    if (!canReorder) return;
+    const previous=displayedTabs;
+    setTabOverride(list); setLayoutSaving(true);
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markets: list })
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "保存失败");
-      onMarketsChange?.(
-        list,
-        Object.entries(labels).map(([key, v]) => ({ key, label: v.label, flag: v.flag }))
-      );
-      showToast("市场顺序已更新");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "保存失败", "err");
-    }
+      const result=await editor.save(current=>({markets:mergeVisibleOrder(current.markets ?? markets,list)}));
+      if (!result) {setTabOverride(previous);return;}
+      const saved=result.settings.markets ?? previous;
+      setTabOverride(saved);
+      onMarketsChange?.(saved,Object.entries(labels).map(([key,value])=>({key,label:value.label,flag:value.flag})));
+      showToast(result.recovered?"已核对上次保存结果":"市场顺序已保存");
+    } catch(error) {setTabOverride(previous);showToast(error instanceof Error?error.message:"保存失败","err");}
+    finally {setLayoutSaving(false);}
   }
 
   function onDropTab(to: number) {
@@ -1044,7 +1056,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
             <Capsule variant="secondary" aria-pressed={activeTab}
               key={m}
               type="button"
-              draggable
+              draggable={canReorder}
               onDragStart={(e) => {
                 dragIndex.current = i;
                 e.dataTransfer.effectAllowed = "move";
@@ -1055,18 +1067,18 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                 dragIndex.current = null;
               }}
               onClick={() => switchMarket(m)}
-              title="拖动排序 · 第一个为默认市场"
-              className={`pill-spring flex cursor-grab items-center gap-1.5 rounded-full px-4 py-2 text-sm active:cursor-grabbing ${
+              title={isAdmin?"拖动排序 · 第一个为默认市场":undefined}
+              className={`pill-spring flex ${canReorder?"cursor-grab active:cursor-grabbing":""} items-center gap-1.5 rounded-full px-4 py-2 text-sm ${
                 activeTab
                   ? "border border-edge-strong bg-white font-semibold text-ink-2 shadow-sm hover:bg-brand-hover hover:text-ink active:bg-bg-gray"
                   : "border border-edge-strong bg-white font-semibold text-muted hover:bg-brand-hover hover:text-ink active:bg-bg-gray"
               }`}
             >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3 opacity-50">
+              {isAdmin && <svg viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3 opacity-50">
                 <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
                 <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
                 <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
-              </svg>
+              </svg>}
               <MarketIcon market={m} flag={flagFor(m)} size={18} />
               {labelFor(m)}
               <span className={`text-xs tabular-nums ${activeTab ? "opacity-80" : "text-faint"}`}>{count}</span>
@@ -1134,7 +1146,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
               return (
                 <div
                   key={m}
-                  draggable
+                  draggable={canReorder}
                   onDragStart={(ev) => {
                     pnlDragIndex.current = i;
                     ev.dataTransfer.effectAllowed = "move";
@@ -1144,7 +1156,7 @@ export default function HoldingsView({ records, quotes, livePrice, refreshQuotes
                   onDragEnd={() => {
                     pnlDragIndex.current = null;
                   }}
-                  title="按住拖动排序"
+                  title={isAdmin?"按住拖动排序":undefined}
                   className="group relative cursor-grab rounded-[16px] border border-edge bg-white p-4 shadow-card transition-all duration-300 ease-out hover:border-edge-strong/50 hover:shadow-pop active:cursor-grabbing"
                 >
                   <div className="flex items-center justify-between gap-2">

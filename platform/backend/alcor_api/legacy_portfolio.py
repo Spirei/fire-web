@@ -88,7 +88,7 @@ def mount_legacy_portfolio(app, settings, db):
             response.headers["X-Alcor-Records-Revision"] = str(revision)
             return rows
         except HTTPException as exc:
-            return JSONResponse({"error": str(exc.detail), "code": getattr(exc, "business_code", exc.status_code * 100 + 1)}, status_code=exc.status_code)
+            return JSONResponse({"error": str(exc.detail), "code": getattr(exc, "business_code", exc.status_code * 100 + 1)}, status_code=exc.status_code, headers=exc.headers)
 
     @app.get("/api/v{version}/records", tags=["legacy-native-portfolio"])
     async def native_list(version: int, request: Request, response: Response):

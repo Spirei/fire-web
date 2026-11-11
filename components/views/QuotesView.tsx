@@ -7,6 +7,7 @@ import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard 
 import { usePersistedState } from "@/lib/usePersistedState";
 import { createQuoteSchedule } from "@/lib/quoteSchedule";
 import { fmtPct, fmtPrice } from "@/lib/format";
+import { useRates, usdCap } from "@/lib/useRates";
 import { fmtUsd } from "@/lib/currency";
 import { marketMeta, MARKET_LIST, type GroupConfig, type Quote, type SearchMatch, type StockRecord } from "@/lib/types";
 import type { Intraday } from "@/lib/quotes";
@@ -25,11 +26,17 @@ import AppSelect from "@/components/AppSelect";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import MiniTrendChart from "@/components/MiniTrendChart";
+import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
+import { accountReadHeaders } from "@/lib/privateReadContext";
+import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
+import { quoteInstrumentKey } from "@/lib/quoteBatches";
+import { intradayCacheKey, readIntradayCache, encodeIntradayCache, intradayFor, pruneIntraday, validIntraday, type IntradayEntries } from "@/lib/intradayCache";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 
 const WATCH_GROUP_CACHE_KEY = "fire:watch-groups";
 
 interface Props {
+  ownerId?: string;
   /** 个股详情直达代码（如 US.GOOGL），来自 /watchlist/US.GOOGL 路径 */
   initialSymbol?: string;
   initialNow: number;
@@ -58,8 +65,6 @@ const INTERVALS = [
   { label: "1日", ms: 86400000 }
 ];
 
-const CHART_CACHE_KEY = "fire:watchlist:charts";
-
 function compactFilterToken(groups: WatchGroup[], id: string): string {
   if (!id) return "";
   const group = groups.find((item) => item.id === id);
@@ -77,7 +82,7 @@ function filterIdFromToken(groups: WatchGroup[], raw: string): string {
   return "";
 }
 
-export default function QuotesView({ initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
+export default function QuotesView({ ownerId = "", initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, groups, onDetailChange, onToggleWatch }: Props) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const filterToken = searchParams.get("filter") ?? "";
@@ -86,7 +91,12 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   const [importOpen, setImportOpen] = useState(false);
   const [importGroupId, setImportGroupId] = useState("");
   const [fileImportOpen, setFileImportOpen] = useState(false);
-  const [charts, setCharts] = useState<Record<string, Intraday>>({});
+  const [charts, setCharts] = useState<IntradayEntries>({});
+  const rates = useRates();
+  const recordsRef = useRef(records); recordsRef.current = records;
+  const readRevision = usePrivateReadRevision();
+  const chartCacheKey = intradayCacheKey(ownerId);
+  const groupCacheKey = `${WATCH_GROUP_CACHE_KEY}:v2:${encodeURIComponent(ownerId)}`;
   const [savedInterval, setIntervalMs] = usePersistedState("fire:watch-refresh-ms", 60000);
   const intervalMs = INTERVALS.some(i => i.ms === savedInterval) ? savedInterval : 60000;
   const scheduleRef = useRef<ReturnType<typeof createQuoteSchedule> | null>(null);
@@ -106,6 +116,7 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   }, [quoteAt]);
   // 我的行情板：分组筛选（全部 / 市场分组 / 自定义分组，服务端实体，URL 同步）+ 每页 6 条分页
   const [watchGroups, setWatchGroups] = useState<WatchGroup[]>(initialWatchGroups);
+  const groupReadSequence = useRef(0);
   // useSearchParams 在 SSR 与水合阶段提供同一个地址快照，既保留首帧筛选，又避免直接读 window
   // 造成 ?filter=us 刷新时 className 不一致和先闪出「全部」。
   const [filterId, setFilterId] = useState(() => filterIdFromToken(initialWatchGroups, filterToken));
@@ -132,9 +143,11 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   // 服务端分组：加载 + 旧 localStorage 配置一次性迁移
   useLayoutEffect(() => {
     let cancelled = false;
+    const sequence=++groupReadSequence.current;
+    const controller = new AbortController(), deadline = setTimeout(() => controller.abort(),10000);
     // 不限制快照年龄：分组是低频配置，旧快照也优先于刷新首帧只显示“全部”。
     try {
-      const cached = JSON.parse(localStorage.getItem(WATCH_GROUP_CACHE_KEY) || "null") as { groups?: WatchGroup[]; at?: number } | null;
+      const cached = JSON.parse((ownerId && initialWatchGroups.length === 0 ? localStorage.getItem(groupCacheKey) : null) || "null") as { groups?: WatchGroup[]; at?: number } | null;
       if (Array.isArray(cached?.groups) && cached.groups.length > 0) {
         setWatchGroups(cached.groups);
       }
@@ -143,14 +156,17 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
     }
     async function load() {
       try {
-        const res = await fetch("/api/v1/watch-groups");
-        if (!res.ok) return;
+        const res = await fetch("/api/v1/watch-groups",{signal:controller.signal,cache:"no-store",headers:accountReadHeaders(ownerId)});
+        if (!res.ok) {
+          if (!cancelled && sequence===groupReadSequence.current && [401,403].includes(res.status)) { setWatchGroups([]); try { if(ownerId)localStorage.removeItem(groupCacheKey); } catch {} }
+          return;
+        }
         const data = await res.json().catch(() => null);
-        const list: WatchGroup[] = data?.data?.groups ?? [];
-        if (cancelled) return;
+        if (!Array.isArray(data?.data?.groups) || cancelled || controller.signal.aborted || sequence!==groupReadSequence.current) return;
+        const list: WatchGroup[] = data.data.groups;
         setWatchGroups(list);
         try {
-          if (list.length > 0) localStorage.setItem(WATCH_GROUP_CACHE_KEY, JSON.stringify({ groups: list, at: Date.now() }));
+          if (ownerId) localStorage.setItem(groupCacheKey, JSON.stringify({ groups: list, at: Date.now() }));
         } catch {
           /* 存储不可用忽略 */
         }
@@ -182,42 +198,43 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
           }
         });
         if (migrated) {
-          const res2 = await fetch("/api/v1/watch-groups");
+          const res2 = await fetch("/api/v1/watch-groups",{signal:controller.signal,headers:accountReadHeaders(ownerId)});
           const d2 = await res2.json().catch(() => null);
           const migratedGroups: WatchGroup[] = d2?.data?.groups ?? [];
-          if (!cancelled && migratedGroups.length > 0) {
+          if (!cancelled && sequence===groupReadSequence.current && res2.ok && Array.isArray(d2?.data?.groups)) {
             setWatchGroups(migratedGroups);
             try {
-              localStorage.setItem(WATCH_GROUP_CACHE_KEY, JSON.stringify({ groups: migratedGroups, at: Date.now() }));
+              ownerId && localStorage.setItem(groupCacheKey, JSON.stringify({ groups: migratedGroups, at: Date.now() }));
             } catch { /* 存储不可用时保留当前状态 */ }
           }
         }
       } catch {
-        /* 加载失败时保留已恢复的分组快照 */
-  }
-}
+          /* 临时读取失败保留本账号快照 */
+      } finally { clearTimeout(deadline); }
+    }
     void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    return () => { cancelled = true; controller.abort(); clearTimeout(deadline); };
+  }, [ownerId,groupCacheKey]);
 
   useEffect(() => {
-    let cancelled = false;
+    let controller:AbortController|undefined;
     const reload = async () => {
+      controller?.abort(); controller=new AbortController();
+      const activeController=controller,sequence=++groupReadSequence.current;
       try {
-        const response = await fetch("/api/v1/watch-groups", { cache: "no-store" });
-        const data = await response.json().catch(() => null);
-        const list: WatchGroup[] = data?.data?.groups ?? [];
-        if (!cancelled && response.ok && list.length > 0) {
-          setWatchGroups(list);
-          localStorage.setItem(WATCH_GROUP_CACHE_KEY, JSON.stringify({ groups: list, at: Date.now() }));
+        const data=await platformRequest<{data:{groups:WatchGroup[]}}>("/api/v1/watch-groups",{signal:activeController.signal,headers:accountReadHeaders(ownerId)},10000);
+        if (activeController.signal.aborted || sequence!==groupReadSequence.current || !Array.isArray(data?.data?.groups)) return;
+        setWatchGroups(data.data.groups);
+        try { if(ownerId)localStorage.setItem(groupCacheKey,JSON.stringify({groups:data.data.groups,at:Date.now()})); } catch {}
+      } catch(error) {
+        if (!activeController.signal.aborted && sequence===groupReadSequence.current && error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
+          setWatchGroups([]); try { if(ownerId)localStorage.removeItem(groupCacheKey); } catch {}
         }
-      } catch { /* 保留当前分组 */ }
+      }
     };
     window.addEventListener("fire:watch-groups-updated", reload);
-    return () => { cancelled = true; window.removeEventListener("fire:watch-groups-updated", reload); };
-  }, []);
+    return () => { controller?.abort(); window.removeEventListener("fire:watch-groups-updated", reload); };
+  }, [ownerId,groupCacheKey]);
 
   function writeFilterToUrl(id: string, mode: "push" | "replace" = "push") {
     if (!canUseWorkspaceUrl()) return;
@@ -460,14 +477,17 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
   const foregroundRef = useRef(foreground);
   foregroundRef.current = foreground;
 
-  useEffect(() => {
-    try {
-      const cached = JSON.parse(localStorage.getItem(CHART_CACHE_KEY) || "{}") as Record<string, Intraday>;
-      setCharts(Object.fromEntries(Object.entries(cached).map(([id, chart]) => [id, { ...chart, stale: true }])));
-    } catch {
-      /* 缓存损坏时等待重新获取 */
-    }
-  }, []);
+  useLayoutEffect(() => {
+    try { setCharts(readIntradayCache(ownerId ? localStorage.getItem(chartCacheKey) : null,ownerId,recordsRef.current)); }
+    catch { setCharts({}); }
+  }, [ownerId,chartCacheKey]);
+  const initialReadRevision = useRef(readRevision);
+  useLayoutEffect(() => {
+    if (initialReadRevision.current === readRevision) return;
+    initialReadRevision.current = readRevision;
+    setCharts({});
+    try { if (ownerId) localStorage.removeItem(chartCacheKey); } catch { /* optional cache */ }
+  }, [readRevision,ownerId,chartCacheKey]);
 
   const fetchCharts = useCallback(async () => {
     if (!foregroundRef.current || document.hidden || chartFetchingRef.current || pageRows.length === 0) return;
@@ -476,9 +496,9 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
     chartRequest.current = controller;
     const deadline = setTimeout(() => controller.abort(), 20000);
     try {
-      const res = await fetch("/api/charts", {
+      const data = await platformRequest<{charts: Record<string,Intraday>}>("/api/charts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...accountReadHeaders(ownerId) },
         signal: controller.signal,
         body: JSON.stringify({
           items: pageRows.map((r) => ({ id: r.id, market: r.market, code: r.code })),
@@ -486,29 +506,31 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
         })
       });
       if (controller.signal.aborted || !foregroundRef.current) return;
-      if (!res.ok) {
-        setCharts((prev) => Object.fromEntries(Object.entries(prev).map(([id, chart]) => [id, pageRows.some((row) => row.id === id) ? { ...chart, stale: true } : chart])));
-        return;
-      }
-      const data = await res.json();
-      if (controller.signal.aborted || !foregroundRef.current) return;
-      if (data.charts) setCharts((prev) => {
-        const next = { ...prev };
-        pageRows.forEach((row) => {
-          const fresh = data.charts[row.id] as Intraday | undefined;
-          if (fresh?.points?.length) next[row.id] = fresh;
-          else if (next[row.id]) next[row.id] = { ...next[row.id], stale: true };
-        });
-        try { localStorage.setItem(CHART_CACHE_KEY, JSON.stringify(next)); } catch { /* 存储不可用 */ }
-        return next;
+      if (!data?.charts || typeof data.charts !== "object" || Array.isArray(data.charts)) throw Error("走势响应格式无效");
+      setCharts(previous => {
+        const next = pruneIntraday(previous,recordsRef.current);
+        for (const row of pageRows) {
+          const current = recordsRef.current.find(record => record.id === row.id);
+          if (!current || quoteInstrumentKey(current) !== quoteInstrumentKey(row)) continue;
+          const fresh = data.charts[row.id];
+          if (validIntraday(fresh)) next[row.id] = {instrument:quoteInstrumentKey(row),chart:fresh,readAt:Date.now()};
+          else delete next[row.id];
+        }
+        const bounded = pruneIntraday(next,recordsRef.current);
+        try { if (ownerId) localStorage.setItem(chartCacheKey,encodeIntradayCache(ownerId,bounded,recordsRef.current)); } catch { /* optional cache */ }
+        return bounded;
       });
-    } catch {
-      if (!controller.signal.aborted && foregroundRef.current) setCharts((prev) => Object.fromEntries(Object.entries(prev).map(([id, chart]) => [id, pageRows.some((row) => row.id === id) ? { ...chart, stale: true } : chart])));
+    } catch (error) {
+      if (controller.signal.aborted || !foregroundRef.current) return;
+      if (error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
+        setCharts({});
+        try { if (ownerId) localStorage.removeItem(chartCacheKey); } catch { /* optional cache */ }
+      } else setCharts(previous => Object.fromEntries(Object.entries(pruneIntraday(previous,recordsRef.current)).map(([id,value]) => [id,{...value,chart:{...value.chart,stale:true}}])));
     } finally {
       clearTimeout(deadline);
       if (chartRequest.current === controller) { chartRequest.current = null; chartFetchingRef.current = false; }
     }
-  }, [pageRows]);
+  }, [pageRows,ownerId,chartCacheKey,readRevision]);
 
   const refreshAll = useCallback((force = false) => {
     if (document.hidden) return;
@@ -914,10 +936,10 @@ export default function QuotesView({ initialSymbol, initialNow, records, initial
                       <td className={`px-4 py-3.5 text-right font-semibold tabular-nums ${q && q.changePct >= 0 ? "text-up" : q ? "text-down" : "text-faint"}`}>
                         {q ? `${q.changePct >= 0 ? "+" : ""}${fmtPct(q.changePct / 100)}` : "—"}
                       </td>
-                      <td className="px-4 py-3.5"><MiniTrendChart points={charts[r.id]?.points.map((point) => point.price)} baseline={q?.prevClose} stale={!charts[r.id] || Boolean(charts[r.id]?.stale)} label={`${r.code} ${charts[r.id]?.date || ""} 当日走势`} /></td>
+                      <td className="px-4 py-3.5"><MiniTrendChart points={intradayFor(charts,r)?.points.map((point) => point.price)} baseline={q?.prevClose} stale={!intradayFor(charts,r) || Boolean(intradayFor(charts,r)?.stale)} label={`${r.code} ${intradayFor(charts,r)?.date || ""} 当日走势`} /></td>
                       <td className="px-4 py-3.5 text-right tabular-nums">{q ? fmtPrice(q.high, marketMeta(r.market).currency, r.market) : "—"}</td>
                       <td className="px-4 py-3.5 text-right tabular-nums">{q ? fmtPrice(q.low, marketMeta(r.market).currency, r.market) : "—"}</td>
-                      <td className="px-4 py-3.5 text-right tabular-nums">{(() => { const cap = q?.marketCap || (q?.totalShares && q?.price ? q.price * q.totalShares : 0); return cap ? fmtUsd(cap) : "—"; })()}</td>
+                      <td className="px-4 py-3.5 text-right tabular-nums">{(() => { const cap = q?.marketCap; return typeof cap === "number" && Number.isFinite(cap) && cap > 0 ? fmtUsd(usdCap(r.market,cap,rates)) : "—"; })()}</td>
                     </tr>
                   );
                 })}

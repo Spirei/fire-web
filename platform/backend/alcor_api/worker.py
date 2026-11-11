@@ -2,11 +2,12 @@ import asyncio
 import contextlib
 import logging
 import signal
+from time import monotonic
 from uuid import uuid4
 
 from psycopg import Error as DatabaseError
 from psycopg.types.json import Jsonb
-from psycopg_pool import PoolTimeout
+from psycopg_pool import PoolTimeout, TooManyRequests
 
 from . import __version__
 from .config import Settings
@@ -102,12 +103,21 @@ async def finish(db, task, result=None, error_code=None):
 
 
 async def heartbeat(db, worker_id):
-    async with db.connection() as conn:
-        await conn.execute(
-            """INSERT INTO worker_heartbeats (worker_id,version) VALUES (%s,%s)
-            ON CONFLICT (worker_id) DO UPDATE SET observed_at=clock_timestamp(),version=excluded.version""",
-            (worker_id, __version__),
-        )
+    # Main work and its readiness pulse share one beat, rather than contending
+    # on the same row and forcing duplicate durable writes on NAS storage.
+    if not hasattr(db, '_heartbeat_lock'):
+        db._heartbeat_lock = asyncio.Lock()
+    async with db._heartbeat_lock:
+        previous = getattr(db, '_heartbeat_cache', None)
+        if previous and previous[0] == worker_id and previous[1] is db.pool and 0 <= monotonic()-previous[2] < 5:
+            return
+        async with db.connection() as conn:
+            await conn.execute(
+                """INSERT INTO worker_heartbeats (worker_id,version) VALUES (%s,%s)
+                ON CONFLICT (worker_id) DO UPDATE SET observed_at=clock_timestamp(),version=excluded.version""",
+                (worker_id, __version__),
+            )
+        db._heartbeat_cache = (worker_id, db.pool, monotonic())
 
 
 async def diagnose(db, cache, task):
@@ -169,7 +179,7 @@ async def run(settings=None, stop=None):
         while True:
             if not reference_task.done() and reference_state.current(db):
                 try:await heartbeat(db,worker_id)
-                except (DatabaseError,TargetMismatch,ConnectionError,TimeoutError,PoolTimeout):
+                except (DatabaseError,TargetMismatch,ConnectionError,TimeoutError,PoolTimeout,TooManyRequests):
                     log.warning('worker_heartbeat_unavailable')
             await asyncio.sleep(3)
     try:

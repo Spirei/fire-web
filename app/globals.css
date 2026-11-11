@@ -7428,3 +7428,8 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
  .market-source-moves { flex-direction:row; gap:8px; }
 }
 @media(prefers-reduced-motion:reduce) { .market-source-row,.market-source-moves button { transition:none; } }
+
+/* Analysis uses the available workspace; keep the saved left split and give its tables more room. */
+@media (min-width:1280px) {
+  html[data-platform-align] .records-content > .tab-panel[data-workspace="assets"] > .asset-analysis-page { max-width:none; }
+}

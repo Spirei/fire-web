@@ -4,6 +4,7 @@ import { useCallback, useLayoutEffect, useMemo } from "react";
 import { type Quote, type StockRecord } from "@/lib/types";
 import AssetAnalysisDashboard from "@/components/AssetAnalysisDashboard";
 import { useAssetIcons } from "@/lib/useAssetIcons";
+import { recordsReadSignature } from "@/lib/privateReadContext";
 import { useRates } from "@/lib/useRates";
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
   records: StockRecord[];
   quotes: Record<string, Quote>;
   livePrice: (r: StockRecord) => number;
-  user?: { username?: string; nickname?: string; avatar?: string };
+  user?: { id?: string; role?: string; username?: string; nickname?: string; avatar?: string };
   refreshQuotes?: (options?: { force?: boolean }) => Promise<void>;
   onOpenPnlAnalysis?: () => void;
   onReady?: () => void | (() => void);
@@ -33,6 +34,7 @@ export default function AssetAnalysisView({ initialModuleOrder, records, quotes,
   return (
     <AssetAnalysisDashboard
       initialModuleOrder={initialModuleOrder}
+      readSignature={recordsReadSignature(records)}
       positions={positions}
       quotes={quotes}
       livePrice={livePrice}

@@ -55,6 +55,8 @@ export function reconcileAccountCash<T extends Record<string, number>>(balances:
 
 /** NaN is an unavailable value for the UI, not a fictitious 1:1 conversion. */
 export function convertAccountAmount(value: number, source: string, rates: Record<string, number>, currency: string) {
+  // An observed zero remains zero in every currency; it needs no estimated FX rate.
+  if (value === 0) return 0;
   if (source === currency) return Number.isFinite(value) ? value : Number.NaN;
   const from = rates[source], to = rates[currency];
   return Number.isFinite(value) && Number.isFinite(from) && from > 0 && Number.isFinite(to) && to > 0 ? value / from * to : Number.NaN;

@@ -52,7 +52,7 @@ def mount_legacy_quote_reads(app,settings,authority):
             assert_native_origin(request,settings)
             if request.query_params:raise HTTPException(400,"不支持查询参数")
             caller=request.client.host if request.client else "unknown"
-            if not await app.state.rate_limit(authority.db,digest("quotes:"+caller),120,window_seconds=60) or not await app.state.rate_limit(authority.db,"quotes-global",600,window_seconds=60):raise HTTPException(429,"请求过于频繁，请稍后再试")
+            if not await app.state.read_rate_limit(authority.db,digest("quotes:"+caller),120,window_seconds=60) or not await app.state.read_rate_limit(authority.db,"quotes-global",600,window_seconds=60):raise HTTPException(429,"请求过于频繁，请稍后再试")
             who=None
             auth_cookie=any(name in request.cookies for name in (COOKIE,WEB_COOKIE,OLD_COOKIE)) or any(
                 re.search(r'(?:^|;)[ \t]*'+re.escape(name)+r'[ \t]*(?:=|;|$)',request.headers.get('cookie',''))

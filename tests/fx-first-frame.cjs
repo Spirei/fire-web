@@ -5,7 +5,8 @@ function load(file){
  if(cache.has(file))return cache.get(file);
  const exports={};cache.set(file,exports);
  const mocks={
-  '@/lib/workspacePanel':{useWorkspaceSearchParams:()=>new URLSearchParams('section=convert&from=USD&amount=100'),useWorkspaceLocationGuard:()=>()=>true},
+  '@/lib/useWorkspaceForeground':{useWorkspaceForeground:()=>true},
+  '@/lib/workspacePanel':{useWorkspaceActive:()=>true,useWorkspaceSearchParams:()=>new URLSearchParams('section=convert&from=USD&amount=100'),useWorkspaceLocationGuard:()=>()=>true},
   '@/lib/currencyPrefs':{useDisplayCurrency:()=>({currency:'USD'})},
   '@/lib/usePersistedState':{usePersistedState:(_,value)=>React.useState(value)},
   '@/lib/useAssetIcons':{ensureFlagIcons:()=>undefined},

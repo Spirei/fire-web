@@ -165,3 +165,47 @@ async def test_interface_checks_are_owner_scoped_and_never_trigger_collection(cl
         assert (await (await conn.execute('SELECT count(*) n FROM market_data_operations')).fetchone())['n'] == 0
         assert (await (await conn.execute('SELECT count(*) n FROM market_diagnostic_admissions')).fetchone())['n'] == 0
     assert (await client.get('/api/fire/system/interface-checks',headers={'authorization':'Bearer synthetic-invalid'})).status_code == 403
+
+
+async def test_private_reads_reject_a_stale_account_hint_after_authentication(client, admin):
+    who = await fire_login(client)
+    owner = who['user']['id']
+    okay = await client.get('/api/records', headers={'x-alcor-expected-account': owner})
+    assert okay.status_code == 200, okay.text
+    refused = await client.get('/api/records', headers={'x-alcor-expected-account': 'previous-account'})
+    assert refused.status_code == 403 and refused.headers['x-alcor-retire-context'] == 'true'
+    login = await client.post('/api/session/login', json={'login':'AdminOne','password':'Synthetic9Pass'})
+    assert login.status_code == 200, login.text
+    client.headers['x-csrf-token'] = login.json()['csrf']
+    assert (await client.get('/api/reference/rates', headers={'x-alcor-expected-account': owner})).status_code == 200
+    assert (await client.get('/api/reference/rates', headers={'x-alcor-expected-account': 'previous-account'})).status_code == 403
+    client.cookies.clear(); client.headers.pop('x-csrf-token',None)
+    assert (await client.get('/api/records', headers={'x-alcor-expected-account': owner})).status_code == 401
+
+
+async def test_database_pool_contention_is_bounded_and_recovers(client, app, admin):
+    import asyncio
+    from psycopg_pool import TooManyRequests
+    pool = app.state.db.pool
+    held = [await pool.getconn() for _ in range(pool.max_size)]
+    try:
+        # The real bounded pool times out without producing an unhandled 500.
+        response = await client.get('/api/auth/setup-status')
+        assert response.status_code == 503, response.text
+        assert response.headers['retry-after'] == '3'
+        assert '服务繁忙' in response.text
+        # Queue overflow follows the same recoverable response contract.
+        original = pool.getconn
+        async def full(*args, **kwargs):
+            raise TooManyRequests('synthetic bounded queue')
+        pool.getconn = full
+        try:
+            response = await client.get('/api/records')
+            assert response.status_code == 503, response.text
+            assert response.headers['retry-after'] == '3'
+        finally:
+            pool.getconn = original
+    finally:
+        for connection in held:
+            await pool.putconn(connection)
+    assert (await client.get('/api/auth/setup-status')).status_code == 200
