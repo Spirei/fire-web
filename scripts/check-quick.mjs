@@ -7,6 +7,7 @@ const checks = [
   ["公开源码", "npm", ["run", "audit:public"]],
   ["部署配置", "npm", ["run", "audit:deploy"]],
   ["镜像发布契约", process.execPath, ["tests/deploy-publication.mjs"]],
+  ["CI 软件源故障恢复", process.execPath, ["tests/ci-install-apt.mjs"]],
   ["前端与启动回归", "npm", ["run", "test:review"]],
   ["类型检查", process.execPath, ["node_modules/typescript/bin/tsc", "--noEmit"]],
   ["版本一致性、数据库只读检查与发布回执", "uv", ["run", "--frozen", "--project", "platform", "--group", "dev", "pytest", "platform/tests/test_releases.py", "platform/tests/test_fire_config_database.py", "platform/tests/test_deployment_build_receipts.py", "-q"]],

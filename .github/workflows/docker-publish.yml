@@ -64,7 +64,7 @@ jobs:
         working-directory: platform
         run: uv sync --frozen --python 3.12
       - name: Install image runtime library
-        run: sudo apt-get update && sudo apt-get install -y libcairo2
+        run: sudo bash scripts/ci-install-apt.sh libcairo2
       - name: Install dependencies
         run: npm ci
       - name: Quick source and startup checks
@@ -109,7 +109,7 @@ jobs:
         working-directory: platform
         run: uv sync --frozen --python 3.12
       - name: Install isolated cache and image runtime libraries
-        run: sudo apt-get update && sudo apt-get install -y redis-server libcairo2
+        run: sudo bash scripts/ci-install-apt.sh redis-server libcairo2
       - name: Install dependencies
         run: npm ci
       - name: Complete internal PostgreSQL and Worker regression
