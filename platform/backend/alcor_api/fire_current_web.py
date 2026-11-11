@@ -69,7 +69,9 @@ async def workspace_ticker(request: Request, who: Member):
         quote = result["quotes"].get(item["key"], {})
         output.append({"key": item["key"], "label": item.get("label", item["key"]), "market": item.get("market", ""), "secid": item.get("secid", item.get("legacySecid")),
                        "price": quote.get("price"), "change": quote.get("change"), "changePct": quote.get("changePct"),
-                       "points": [], "observedAt": quote.get("time"), "source": quote.get("source")})
+                       "points": [], "observedAt": quote.get("time"), "source": quote.get("source"),
+                       "session": quote.get("session"), "displayStale": quote.get("displayStale"), "cached": quote.get("cached"),
+                       "sourceRevision": result.get("quoteStates", {}).get(item["key"], {}).get("sourceRevision")})
     return JSONResponse({"items": output, "interval": presentation.get("interval", 5), "pollSec": 60,
                          "collectionOnRead": False}, headers=PRIVATE)
 

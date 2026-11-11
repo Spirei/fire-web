@@ -1186,7 +1186,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, positions, 
                 )}
               </div>
             </div>}
-            {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : filteredTrend.length > 1 ? <PnlTrendChart points={filteredTrend} tab={chartTab} weighting={weighting} benchLabel={benchLabel} /> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>历史行情不足，后续交易日会自动补全趋势</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
+            {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : filteredTrend.length > 1 ? <PnlTrendChart points={filteredTrend} tab={chartTab} weighting={weighting} benchLabel={benchLabel} /> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>暂无已采集的历史行情</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
           </section>
           {renderModuleHandle("left", "trend")}
         </div>

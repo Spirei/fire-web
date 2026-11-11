@@ -15,6 +15,10 @@ interface TickerItem {
   change: number | null;
   changePct: number | null;
   points: number[];
+  observedAt?: string;
+  source?: string;
+  retained?: boolean;
+  displayStale?: boolean;
 }
 
 function fmtPrice(v: number | null): string {
@@ -107,7 +111,7 @@ function TickerChip({ item }: { item: TickerItem }) {
   // 昨收 = 现价 − 涨跌额（接口给的是今日涨跌额）；拿不到就不画基准线
   const baseline = item.price != null && item.change != null ? item.price - item.change : null;
   return (
-    <div className="ticker-item flex max-w-full items-center gap-2.5 rounded-2xl px-3 py-2" title={item.price === null ? `${item.label}：当前来源暂无可用报价` : item.label}>
+    <div className="ticker-item flex max-w-full items-center gap-2.5 rounded-2xl px-3 py-2" title={item.price === null ? `${item.label}：当前来源暂无可用报价` : [item.label,item.retained || item.displayStale ? "缓存报价" : "",item.source,item.observedAt].filter(Boolean).join(" · ")}>
       <span className="group/icon relative flex-none">
         <MarketIcon market={item.market} size={22} title="" />
         <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-edge bg-white px-2 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-[0_6px_18px_rgba(10,14,25,.14)] transition-all duration-150 group-hover/icon:opacity-100 dark:bg-[#1c2433] dark:text-[#e7ebf1]">
@@ -134,8 +138,8 @@ function unquoted(item: Pick<TickerItem,"key"|"label"|"market">):TickerItem {
 
 function readTickerCache(key: string): { items: TickerItem[]; interval?: number; pollSec?: number } | null {
   try {
-    const raw = JSON.parse(sessionStorage.getItem(key) || "null") as { items?: TickerItem[]; interval?: number; pollSec?: number } | null;
-    if (Array.isArray(raw?.items) && raw.items.length) return { items: raw.items, interval: raw.interval, pollSec: raw.pollSec };
+    const raw = JSON.parse(sessionStorage.getItem(key) || "null") as { items?: TickerItem[]; interval?: number; pollSec?: number; readAt?: number } | null;
+    if (Array.isArray(raw?.items) && raw.items.length && typeof raw.readAt === "number" && Date.now() - raw.readAt >= 0 && Date.now() - raw.readAt <= 300000) return { items: raw.items.map(item => ({...item,retained:true})), interval: raw.interval, pollSec: raw.pollSec };
   } catch {
     /* ignore */
   }
@@ -160,11 +164,13 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
   }, [cacheKey]);
 
   useEffect(() => {
+    let generation = 0;
     async function load(signal: AbortSignal) {
+      const currentGeneration = generation;
       try {
         const res = configuration ? null : await fetch("/api/ticker", { cache: "no-store", signal });
         const data = configuration ? await readWorkspaceTicker(configuration, signal) : await res!.json().catch(() => null);
-        if (signal.aborted) return;
+        if (signal.aborted || currentGeneration !== generation) return;
         if (res && !res.ok) {
           // Unavailable public facts must not erase the configured index names
           // or keep revoked prices in the browser cache.
@@ -177,9 +183,10 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);
           if (typeof data.pollSec === "number" && data.pollSec >= 30) pollSec.current = data.pollSec;
-          try { sessionStorage.setItem(cacheKey, JSON.stringify({ items: data.items, interval: data.interval, pollSec: data.pollSec })); } catch { /* quota */ }
+          try { sessionStorage.setItem(cacheKey, JSON.stringify({ items: data.items, interval: data.interval, pollSec: data.pollSec, readAt: Date.now() })); } catch { /* quota */ }
         }
       } catch (error) {
+        if (signal.aborted || currentGeneration !== generation) return;
         pollSec.current = Math.min(300, pollSec.current * 2);
         if (!signal.aborted && error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
           setItems(current => current.map(unquoted));
@@ -188,7 +195,11 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
       }
     }
     const polling = startVisiblePolling({ read: load, interval: () => pollSec.current * 1000 });
-    const onSettings = () => { void polling.refresh(); };
+    const onSettings = () => {
+      ++generation; setItems(current => current.map(unquoted));
+      try { sessionStorage.removeItem(cacheKey); } catch { /* optional cache */ }
+      void polling.refresh();
+    };
     window.addEventListener("fire:settings-updated", onSettings);
     return () => {
       polling.stop();
