@@ -15,6 +15,7 @@ from .legacy_identity import (
     assert_native_origin,
     envelope,
     native_identity,
+    native_profile_version,
     native_version,
     public_profile,
     web_identity,
@@ -78,7 +79,7 @@ def mount_profile_compatibility(app, settings, db, rate_limit):
                 result["avatar"] = result["avatar"].replace(
                     "/api/v2/auth/avatar?", "/api/client/profile/avatar?", 1
                 )
-            return result
+            return native_profile_version(result, version) if version is not None else result
 
     @app.put("/api/auth/profile")
     async def web_profile(request: Request):

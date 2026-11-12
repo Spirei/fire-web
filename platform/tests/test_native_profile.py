@@ -5,7 +5,7 @@ import io
 
 from PIL import Image
 from profile_test_support import private_profile_files  # noqa: F401 -- pytest autouse fixture
-from test_legacy_devices import bearer, grant, register
+from test_legacy_devices import PASSWORD, bearer, grant, register
 
 
 async def test_canonical_profile_uses_existing_row_and_native_scope_cas(client, db):
@@ -58,8 +58,12 @@ async def test_native_avatar_sanitized_owner_revision_bound_and_revocation_check
     # accepts the old cache-busting query and returns the same original image.
     read = await grant(db, uid, "portfolio.read")
     for version in (1, 2):
+        me = await client.get(f"/api/v{version}/auth/me", headers=bearer(read))
+        assert me.status_code == 200, me.text
+        avatar = me.json()["data"]["avatar"]
+        assert avatar == f"/api/v{version}/auth/avatar?revision={revision}"
         picture = await client.get(
-            f"/api/v{version}/auth/avatar", params={"revision": revision, "avatarVersion": "1"},
+            avatar + "&avatarVersion=1",
             headers=bearer(read),
         )
         assert picture.status_code == 200, picture.text
@@ -67,6 +71,25 @@ async def test_native_avatar_sanitized_owner_revision_bound_and_revocation_check
         assert picture.headers["content-type"] == "image/jpeg"
         assert "no-store" in picture.headers["cache-control"]
     assert (await client.get("/api/v2/auth/avatar", params={"revision": revision})).status_code == 401
+    for version in (1, 2):
+        changed = await client.put(
+            f"/api/v{version}/auth/profile", json={"nickname": "Native alias"}, headers=bearer(pair)
+        )
+        assert changed.status_code == 200, changed.text
+        avatar = changed.json()["data"]["avatar"]
+        assert avatar.startswith(f"/api/v{version}/auth/avatar?revision=")
+        revision = avatar.split("revision=", 1)[1]
+        assert (await client.get(avatar, headers=bearer(read))).content == result.content
+        snapshot = await client.get(f"/api/v{version}/account-assets", headers=bearer(read))
+        assert snapshot.status_code == 200, snapshot.text
+        assert snapshot.json()["data"]["profile"]["avatar"] == avatar
+    old = await client.post("/api/v1/auth/login", json={"username": "DeviceOwner", "password": PASSWORD})
+    assert old.status_code == 200, old.text
+    legacy = {"authorization": "Bearer " + old.json()["data"]["token"]}
+    me = await client.get("/api/v1/auth/me", headers=legacy)
+    assert me.status_code == 200, me.text
+    assert me.json()["data"]["avatar"] == f"/api/v1/auth/avatar?revision={revision}"
+    assert (await client.get(me.json()["data"]["avatar"], headers=legacy)).content == result.content
     other = await register(client, "OtherProfile")
     other_pair = await grant(db, other, "portfolio.read")
     assert (

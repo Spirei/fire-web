@@ -178,6 +178,16 @@ def profile_value(user,*,scope=None,email_availability=None):
     return value
 
 
+def native_profile_version(value, version):
+    """Keep managed self-avatar links within the caller's existing API version."""
+    avatar = value.get('avatar')
+    if isinstance(avatar, str):
+        for prefix in ('/api/auth/avatar?', '/api/v1/auth/avatar?', '/api/v2/auth/avatar?'):
+            if avatar.startswith(prefix):
+                return {**value, 'avatar': f'/api/v{version}/auth/avatar?' + avatar[len(prefix):]}
+    return value
+
+
 def discovery(version,config):
     p=f'/api/v{version}'
     security={'version':version,'read_scope':'security.read','write_scope':'security.write','email_verification_path':p+'/auth/email-verification','totp_path':p+'/auth/totp','passkeys_path':p+'/auth/passkeys','devices_path':p+'/auth/security-devices','password_reset_path':p+'/auth/password-reset','password_reset_email_code_ttl_seconds':1800,'passkey_registration':{'supported':False,'rpID':config['rp_id'],'origin':config['origin'],'reason':'web_registration_only'},'account_change':{'version':1,'write_scope':'security.write','proof_ttl_seconds':300,'password':{'verify_path':p+'/auth/password-change/verify','confirm_path':p+'/auth/password-change/confirm','verification':'current_password','requires_totp':False},'email':{'request_path':p+'/auth/email-change/request','verify_path':p+'/auth/email-change/verify','confirm_path':p+'/auth/email-change/confirm','verification':'current_email_code','code_digits':6,'challenge_ttl_seconds':1800,'retry_after_seconds':60,'max_attempts':5,'requires_password':False,'requires_totp':False},'reauthentication_required':True}}
@@ -396,7 +406,7 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
                 from .security import lock_read_identity
                 current = await lock_read_identity(conn, who, require_admin=False)
                 value = await public_profile(conn, who.id, scope=current['scope'], settings=settings)
-        return value
+        return native_profile_version(value, version)
 
     @app.get('/api/v{version}/auth/me', tags=['legacy-native-identity'])
     async def native_me(version: int, request: Request, response: Response):

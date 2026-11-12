@@ -97,6 +97,8 @@ def mount_legacy_cash_assets(app,rate_limit):
             if action=='snapshot':
                 if any(key not in ('currency','costMethod','usPrice') or len(request.query_params.getlist(key))!=1 for key in request.query_params):raise HTTPException(400,'资产查询参数无效')
                 data=await service.snapshot(who,dict(request.query_params))
+                from .legacy_identity import native_profile_version
+                data['profile']=native_profile_version(data['profile'],version)
             elif action=='cash' and request.method=='GET':
                 data=await owner_cash_page(service,commands,who,request.query_params)
             elif action=='global':
