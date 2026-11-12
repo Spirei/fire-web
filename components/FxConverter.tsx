@@ -172,7 +172,13 @@ export default function FxConverter({ initial }: {initial?: FxRatesInitial}) {
     if(!foreground)return;
     if (!initial || Date.now() - (initial.checkedAt || 0) >= 60000) void loadRates();
     const onRates = () => { void loadRates(); };
-    const sourceChanged=(event:Event)=>{if((event as CustomEvent).detail?.dataChanged===false)return;++rateRequestRef.current;rateAbortRef.current?.abort();rateAbortRef.current=null;refreshPendingRef.current=false;hasRead.current=false;setRates({USD:1});setQuoted(new Set(["USD"]));setUpdatedAt(null);setEstimatedMop(false);void loadRates();};
+    const sourceChanged=(event:Event)=>{
+      const detail=(event as CustomEvent).detail;
+      if(detail?.dataChanged===false)return;
+      ++rateRequestRef.current;rateAbortRef.current?.abort();rateAbortRef.current=null;refreshPendingRef.current=false;
+      if(detail?.fxSourceChanged===true){hasRead.current=false;setRates({USD:1});setQuoted(new Set(["USD"]));setUpdatedAt(null);setEstimatedMop(false);}
+      void loadRates();
+    };
     window.addEventListener("fire:rates-updated", onRates);
     window.addEventListener("fire:settings-updated",sourceChanged);
     return () => {

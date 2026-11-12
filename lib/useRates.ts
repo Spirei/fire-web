@@ -32,7 +32,14 @@ export function useRates(): Record<string, number> {
     };
     const polling = startVisiblePolling({read:load, interval:()=>60000});
     const refresh = () => { void polling.refresh(); };
-    const sourceChanged=(event:Event)=>{if((event as CustomEvent).detail?.dataChanged===false)return;clearCachedRates();setRates({...FALLBACK_RATES});void polling.refresh();};
+    const sourceChanged=(event:Event)=>{
+      const detail=(event as CustomEvent).detail;
+      if(detail?.dataChanged===false)return;
+      // A general settings notification is not evidence that the FX source
+      // changed. Keep the observed conversion until its replacement arrives.
+      if(detail?.fxSourceChanged===true){clearCachedRates();setRates({...FALLBACK_RATES});}
+      void polling.refresh();
+    };
     window.addEventListener("fire:rates-updated", refresh);
     window.addEventListener("fire:settings-updated",sourceChanged);
     return () => { polling.stop(); window.removeEventListener("fire:rates-updated", refresh); window.removeEventListener("fire:settings-updated",sourceChanged); };

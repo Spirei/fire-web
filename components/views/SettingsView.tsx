@@ -1627,10 +1627,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
         sourceFieldsEdited.current.clear();
       }
       const data = await platformRequest<{settings:SiteSettings}>("/api/settings");
-      let url=fxSourceUrl;
+      let url=fxSourceUrl,fxSourceChanged=false;
       if((keys as readonly string[]).includes("currencyApiUrl")){
         const observed=await platformRequest<{revision:number;custom?:{url?:string}|null;urlRestricted?:boolean}>("/api/rates/provider?includeUrl=1",{headers:{'X-Alcor-Expected-Account':user.id}});
         if(observed.urlRestricted)throw new Error('请验证身份后查看接口地址');
+        fxSourceChanged=observed.revision!==fxConfigRevision;
         url=observed.custom?.url || "";setFxConfigRevision(observed.revision);setFxConfigError("");
       }
       const saved = { ...site, ...data.settings, currencyApiUrl: url };
@@ -1639,7 +1640,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       sourceFieldsEdited.current.clear();
       captureSaved(saved);
       setSourcesNeedRead(false);
-      window.dispatchEvent(new Event("fire:settings-updated"));
+      window.dispatchEvent(new CustomEvent("fire:settings-updated",{detail:{fxSourceChanged}}));
       setSrcMsg(null);
       showToast("已保存");
       return true;
