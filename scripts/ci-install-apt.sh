@@ -26,8 +26,17 @@ apt_options=(
   -o APT::Update::Error-Mode=any
 )
 install_packages() {
-  apt-get "${apt_options[@]}" "$@" update &&
-    apt-get "${apt_options[@]}" "$@" install -y --no-install-recommends "${missing[@]}"
+  local options=("${apt_options[@]}" "$@")
+  # Per-connection timeouts do not bound many slow index/download requests.
+  # Bound one complete mirror attempt, including its child apt/dpkg processes.
+  timeout --kill-after=15s 300s bash -c '
+    count=$1
+    shift
+    options=("${@:1:count}")
+    shift "$count"
+    apt-get "${options[@]}" update &&
+      apt-get "${options[@]}" install -y --no-install-recommends "$@"
+  ' ci-apt-attempt "${#options[@]}" "${options[@]}" "${missing[@]}"
 }
 
 codename=$(lsb_release -cs)

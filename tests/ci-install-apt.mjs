@@ -18,8 +18,18 @@ process.stdout.write("install ok installed");`,
     "dpkg": 'process.stdout.write("amd64\\n");',
     "timeout": `
 const assert = require("node:assert/strict");
-assert.equal(process.argv[2], "10s", "DNS checks must have a hard deadline");
-const result = require("node:child_process").spawnSync(process.argv[3], process.argv.slice(4), { stdio: "inherit" });
+const args = process.argv.slice(2);
+let command;
+if (args[0] === "10s") command = args.slice(1);
+else {
+  assert.equal(args[0], "--kill-after=15s", "stuck children must have a final kill deadline");
+  assert.equal(args[1], "300s", "one whole mirror attempt must have a total deadline");
+  const primary = args.some(arg => arg.endsWith("/ubuntu.list"));
+  require("node:fs").appendFileSync(process.env.MOCK_TIMEOUT_LOG, JSON.stringify({primary}) + "\\n");
+  if (process.env.MOCK_TIMEOUT === "all" || process.env.MOCK_TIMEOUT === "primary" && primary) process.exit(124);
+  command = args.slice(2);
+}
+const result = require("node:child_process").spawnSync(command[0], command.slice(1), { stdio: "inherit" });
 process.exit(result.status ?? 1);`,
     "getent": `
 const host = process.argv.at(-1);
@@ -45,11 +55,13 @@ if (process.env.MOCK_FAILURE === "all" ||
   for (const [name, body] of Object.entries(mocks)) {
     writeFileSync(join(fixture, name), `#!/usr/bin/env node\n${body}\n`, { mode: 0o755 });
   }
-  function run(failure = "", installed = "", dns = "") {
+  function run(failure = "", installed = "", dns = "", timeout = "") {
     const log = join(fixture, "calls.jsonl");
     const dnsLog = join(fixture, "dns.log");
+    const timeoutLog = join(fixture, "timeout.log");
     writeFileSync(log, "");
     writeFileSync(dnsLog, "");
+    writeFileSync(timeoutLog, "");
     const result = spawnSync("bash", [script, "redis-server", "libcairo2"], {
       cwd: root,
       encoding: "utf8",
@@ -58,6 +70,8 @@ if (process.env.MOCK_FAILURE === "all" ||
         PATH: fixture + ":" + process.env.PATH,
         MOCK_LOG: log,
         MOCK_DNS_LOG: dnsLog,
+        MOCK_TIMEOUT_LOG: timeoutLog,
+        MOCK_TIMEOUT: timeout,
         MOCK_FAILURE: failure,
         MOCK_INSTALLED: installed,
         MOCK_DNS: dns,
@@ -79,13 +93,16 @@ if (process.env.MOCK_FAILURE === "all" ||
       }
       assert(!/azure|trusted=yes|allow-insecure/.test(call.sources));
     }
-    return { ...result, calls, dns: readFileSync(dnsLog, "utf8").trim().split("\n").filter(Boolean) };
+    return { ...result, calls,
+      dns: readFileSync(dnsLog, "utf8").trim().split("\n").filter(Boolean),
+      attempts: readFileSync(timeoutLog,"utf8").trim().split("\n").filter(Boolean).map(JSON.parse) };
   }
 
   assert.equal(spawnSync("bash", [script], { encoding: "utf8" }).status, 2);
   const ready = run("all", "redis-server,libcairo2");
   assert.equal(ready.status, 0, ready.stderr);
   assert.equal(ready.calls.length, 0, "installed packages must not require network");
+  assert.equal(ready.attempts.length, 0);
 
   const healthy = run("", "libcairo2");
   assert.equal(healthy.status, 0, healthy.stderr);
@@ -129,6 +146,15 @@ if (process.env.MOCK_FAILURE === "all" ||
   assert.equal(unavailable.status, 100, "total network failure must keep blocking publication");
   assert.deepEqual(unavailable.calls.map(call => call.phase), ["update", "update"]);
   assert.equal(existsSync(unavailable.calls[1].source), false, "failure must also clean temporary sources");
+  const timedOut = run("", "", "", "primary");
+  assert.equal(timedOut.status, 0, timedOut.stderr);
+  assert.deepEqual(timedOut.attempts, [{primary:true},{primary:false}]);
+  assert.deepEqual(timedOut.calls.map(call => call.phase), ["update", "install"]);
+  assert(timedOut.calls.every(call => call.source.endsWith("/kernel.list")), "a timed-out mirror must fall back to its own fresh signed indexes");
+  const bothTimedOut = run("", "", "", "all");
+  assert.equal(bothTimedOut.status, 100, "two exhausted deadlines must keep blocking publication");
+  assert.equal(bothTimedOut.attempts.length, 2);
+  assert.equal(bothTimedOut.calls.length, 0);
 
   const workflow = readFileSync(join(root, ".github/workflows/docker-publish.yml"), "utf8");
   assert.match(workflow, /run: sudo bash scripts\/ci-install-apt\.sh libcairo2/);
