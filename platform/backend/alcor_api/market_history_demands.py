@@ -57,4 +57,25 @@ async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust=
             old=await (await conn.execute('SELECT revision FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s',(who.id,stream['id'],principal))).fetchone() if stream else None
             result=await bound.demand(who,uuid5(rid,'history:'+str(revision)+canonical(asdict(query))),revision,asdict(query),old['revision'] if old else 0,observed=True)
             streams.append(result['streamId'])
-        return await authority.save_receipt(conn,who.id,rid,operation,{'requestId':str(rid),'state':'accepted','streams':streams,'unavailable':unavailable})
+        return await authority.save_receipt(conn,who.id,rid,operation,{'requestId':str(rid),'purpose':'history.prepare','state':'accepted','streams':streams,'unavailable':unavailable})
+
+
+async def progress(authority,who,request_id):
+    """Observe the original intent; never renew demand or retry a provider here."""
+    async with authority.db.connection() as conn,conn.transaction():
+        await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+        await authority.authorize_read(conn,who)
+        saved=await authority.receipt(conn,who.id,UUID(str(request_id)))
+        if not saved or saved.get('purpose')!='history.prepare':raise HTTPException(404,'本人历史采集请求不存在')
+        identifiers=[UUID(value) for value in saved['streams']]
+        rows=await (await conn.execute('SELECT s.id,s.source_revision,s.query,t.status FROM market_streams s LEFT JOIN tasks t ON t.id=s.current_task_id WHERE s.owner_id=%s AND s.id=ANY(%s)',(who.id,identifiers))).fetchall() if identifiers else []
+        if len(rows)!=len(set(identifiers)):raise HTTPException(409,'历史采集范围已变化')
+        from .market_authority import query_from
+        for row in rows:
+            _,policy=await authority.config(conn,who.id,row['source_revision'])
+            authority.validate_query(policy,query_from(row['query']))
+        pending=any(row['status'] in (None,'queued','running','cancel_requested') for row in rows)
+        failed=any(row['status'] in ('failed','cancelled') for row in rows)
+        return {'requestId':str(request_id),'pending':pending,'failed':failed,'unavailable':saved['unavailable'],
+                'state':'pending' if pending else 'failed' if failed else 'complete',
+                'streams':[{'id':str(row['id']),'state':row['status'] or 'pending'} for row in rows]}

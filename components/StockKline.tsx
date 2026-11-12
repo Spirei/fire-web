@@ -1,5 +1,8 @@
 "use client";
 import { prepareMarketHistory } from "@/lib/marketHistory";
+import { privateReadEpoch } from "@/lib/privateReadContext";
+import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import AppModal from "@/components/AppModal";
 import { Capsule } from "@/components/Capsule";
 
@@ -121,7 +124,7 @@ const STYLE_ORDER_KEY = "fire-web:stock-chart-basic-style-order";
 const BASIC_STYLES: ChartStyle[] = ["area", "line", "marked", "step"];
 const ADVANCED_STYLES: ChartStyle[] = ["hlc", "baseline", "candle", "hollow", "ohlc"];
 const ALL_STYLES: ChartStyle[] = [...BASIC_STYLES, ...ADVANCED_STYLES];
-const chartCache = new Map<string, ChartCacheEntry>();
+
 const DEFAULT_MA_CONFIGS: MAConfig[] = [
   { enabled: true, period: 5, color: "#ff8a1f" }, { enabled: true, period: 10, color: "#19a9dd" },
   { enabled: true, period: 20, color: "#df63d2" }, { enabled: true, period: 30, color: "#2481e8" },
@@ -350,6 +353,10 @@ function tooltipDate(label: string, intradayMode: boolean, marketName: string) {
 }
 
 export default function StockKline({ market, code, name, height = 420 }: Props) {
+  const readRevision=usePrivateReadRevision();
+  const foreground=useWorkspaceForeground();
+  const chartCacheRef=useRef(new Map<string,ChartCacheEntry>());
+  const chartCache=chartCacheRef.current;
   const [savedView, persistView] = usePersistedState<KlineView | null>(KLINE_VIEW_KEY, null);
   const [savedSettings, persistSettings] = usePersistedState<KlineSettings | null>(KLINE_SETTINGS_KEY, null);
   const initialView = normalizeKlineView(savedView);
@@ -591,17 +598,12 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
   };
 
   useLayoutEffect(() => {
+    if(!foreground)return;
     let cancelled = false;
+    const epoch=privateReadEpoch();
     const controller = new AbortController();
-    const key = `${market}:${code}`;
-    const storageKey = `fire-web:stock-chart:${key}`;
-    let cached = chartCache.get(key);
-    if (!cached) {
-      try {
-        const stored = JSON.parse(localStorage.getItem(storageKey) || sessionStorage.getItem(storageKey) || "null") as ChartCacheEntry | null;
-        if (stored) cached = stored;
-      } catch {}
-    }
+    const key = `${readRevision}:${market}:${code}`;
+    const cached=chartCache.get(key);
     const fresh = cached ?? null;
     if (fresh) {
       setItems(fresh.items); setIntraday(fresh.intraday); setFiveDay(fresh.fiveDay); setSessionDay(fresh.sessionDay);
@@ -616,47 +618,50 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     const persistSnapshot = () => {
       const value = { ...snapshot };
       chartCache.set(key, value);
-      try { sessionStorage.setItem(storageKey, JSON.stringify(value)); } catch {}
-      try { localStorage.setItem(storageKey, JSON.stringify(value)); } catch {}
     };
     const reveal = () => { hasVisibleData = true; if (!cancelled) { setLoading(false); setError(""); } };
     const getJson = async (url: string, init?: RequestInit) => {
       const response = await fetch(url, { ...init, signal: controller.signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
+      const data=await response.json();
+      if(cancelled || privateReadEpoch()!==epoch)throw new DOMException("Aborted","AbortError");
+      return data;
     };
 
     const tasks = [
-      getJson(`/api/kline/session-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
+      () => getJson(`/api/kline/session-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
         const rows = Array.isArray(data?.points) ? data.points : [];
         if (rows.length) { snapshot.sessionDay = rows; snapshot.at = Date.now(); persistSnapshot(); }
         if (!cancelled && rows.length) setSessionDay(rows);
         if (rows.length) reveal();
       }),
-      getJson("/api/charts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: "detail", market, code }] }) }).then((data) => {
+      () => getJson("/api/charts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ id: "detail", market, code }] }) }).then((data) => {
         const rows = Array.isArray(data?.charts?.detail?.points) ? data.charts.detail.points : [];
         if (rows.length) { snapshot.intraday = rows; snapshot.at = Date.now(); persistSnapshot(); }
         if (!cancelled && rows.length) setIntraday(rows);
         if (rows.length) reveal();
       }),
-      getJson(`/api/kline/five-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
+      () => getJson(`/api/kline/five-day?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`).then((data) => {
         const rows = Array.isArray(data?.points) ? data.points : [];
         if (rows.length) { snapshot.fiveDay = rows; snapshot.at = Date.now(); persistSnapshot(); }
         if (!cancelled && rows.length) setFiveDay(rows);
         if (rows.length) reveal();
       })
     ];
-    Promise.allSettled(tasks).then(() => {
+    const selected=market==="US"?tasks:[tasks[1]];
+    prepareMarketHistory([{market,code}],{days:5,minute:true,signal:controller.signal})
+      .then(()=>Promise.allSettled(selected.map(run=>run()))).then(() => {
       if (cancelled) return;
       setLoading(false);
       if (!hasVisibleData) setError("暂无走势数据");
-    });
+    }).catch(error=>{if(!cancelled && error?.name!=="AbortError"){setLoading(false);if(!hasVisibleData)setError("暂无走势数据");}});
     return () => { cancelled = true; controller.abort(); };
-  }, [market, code]);
+  }, [market, code,readRevision,foreground]);
 
   // 长周期数据较大，首屏不回源；用户选择日/周/月/季/年 K 时才加载一次并复用缓存。
   // 周/月/季/年K 走富途周期接口（qfq 前复权，与富途行情一致），日K/YTD 走日线接口。
   useEffect(() => {
+    if(!foreground)return;
     const need =
       range === "WEEK" ? "week" :
       range === "MONTH" ? "month" :
@@ -668,12 +673,13 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       return;
     }
     const controller = new AbortController();
-    const key = `${market}:${code}:${need}:${adjust}`;
+    const key = `${readRevision}:${market}:${code}:${need}:${adjust}`;
     setLongRangeLoading(true);
     const periodQuery = need === "daily" ? "" : `&period=${need}`;
     prepareMarketHistory([{market,code}],{days:3200,adjust,signal:controller.signal}).then(()=>fetch(`/api/kline/full?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&limit=3200${periodQuery}&adjust=${adjust}`, { signal: controller.signal }))
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((data) => {
+        if(controller.signal.aborted)return;
         const rows = Array.isArray(data?.items) ? data.items : [];
         setItems(rows);
         setItemsKind(need);
@@ -682,12 +688,10 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
         const cached = chartCache.get(key) || { at: Date.now(), items: [], intraday: [], fiveDay: [], sessionDay: [] };
         const value = { ...cached, items: rows, at: Date.now() };
         chartCache.set(key, value);
-        try { sessionStorage.setItem(`fire-web:stock-chart:${key}`, JSON.stringify(value)); } catch {}
-        try { localStorage.setItem(`fire-web:stock-chart:${key}`, JSON.stringify(value)); } catch {}
       })
-      .catch((error) => { if (error?.name !== "AbortError") { setLongRangeLoading(false); setError("长周期数据加载失败"); } });
+      .catch((error) => { if (!controller.signal.aborted && error?.name !== "AbortError") { setLongRangeLoading(false); setError("长周期数据加载失败"); } });
     return () => controller.abort();
-  }, [range, market, code, items.length, itemsKind, adjust, itemsAdjust]);
+  }, [range, market, code, items.length, itemsKind, adjust, itemsAdjust,readRevision,foreground]);
 
   const data = useMemo(() => {
     const effectiveStyle = style;
@@ -732,6 +736,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
 
   // 比较标的价格序列：与主图共用 X 轴，按各自 source 的首个有效价归一化为涨跌幅%。
   useEffect(() => {
+    if(!foreground)return;
     if (compareItems.length === 0) {
       setCompareSeries([]);
       return;
@@ -744,9 +749,13 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
       try {
         let points: { k: string; price: number }[] = [];
         if (range === "DAY" || range === "5D") {
-          const resp = await fetch(`/api/kline/session-day?market=${encodeURIComponent(item.market)}&code=${encodeURIComponent(item.code)}`, { signal: controller.signal });
+          await prepareMarketHistory([{market:item.market,code:item.code}],{days:5,minute:true,signal:controller.signal});
+          const resp = item.market === "US"
+            ? await fetch(`/api/kline/session-day?market=${encodeURIComponent(item.market)}&code=${encodeURIComponent(item.code)}`, {signal:controller.signal})
+            : await fetch("/api/charts",{method:"POST",signal:controller.signal,headers:{"Content-Type":"application/json"},body:JSON.stringify({items:[{id:"compare",market:item.market,code:item.code}]})});
           const payload = resp.ok ? await resp.json().catch(() => null) : null;
-          const rows = Array.isArray(payload?.points) ? payload.points as FiveDayPoint[] : [];
+          const chart=payload?.charts?.compare;
+          const rows = Array.isArray(payload?.points) ? payload.points as FiveDayPoint[] : Array.isArray(chart?.points) ? chart.points.map((p:IntradayPoint)=>({...p,date:chart.date})) as FiveDayPoint[] : [];
           points = rows.map((p) => ({ k: `${p.date} ${p.time}`, price: p.price }));
           if (range === "DAY") {
             const latestDay = points[points.length - 1]?.k.slice(0, 10);
@@ -783,7 +792,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     });
     return () => { cancelled = true; controller.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compareItems, range, data.labels.length]);
+  }, [compareItems, range, data.labels.length,readRevision,foreground]);
 
   /** 添加比较标的（自动分配折线颜色，已在列表则不重复）。 */
   const addCompare = (item: { market: string; code: string; name: string }) => {

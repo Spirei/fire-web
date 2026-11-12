@@ -132,17 +132,34 @@ def mount_legacy_history_bars(app, settings, authority):
         from .market_history_demands import prepare
         from uuid import UUID
         assert_native_origin(request,settings)
-        who=await history_member(request,authority.db)
+        version=2 if request.url.path.startswith('/api/v2/') else 1 if request.url.path.startswith('/api/v1/') else None
+        who=await history_member(request,authority.db,version)
         if getattr(who,'native_client',False):who,_=await native_identity(request,authority.db,'portfolio.write')
-        raw=await body(request,('requestId','items','days','index','adjust'))
-        if set(raw)-{'requestId','items','days','index','adjust'}:raise HTTPException(400,'历史需求字段无效')
+        raw=await body(request,('requestId','items','days','index','adjust','minute'))
+        if set(raw)-{'requestId','items','days','index','adjust','minute'}:raise HTTPException(400,'历史需求字段无效')
+        if type(raw.get('minute',False)) is not bool:raise HTTPException(400,'历史时间粒度无效')
         try:rid=UUID(str(raw['requestId']))
         except (ValueError,TypeError,KeyError):raise HTTPException(400,'请求编号无效') from None
         items=subscription_items({'items':raw.get('items')})
         for item in items:item['instrument']='index' if raw.get('index') is True else 'asset' if item['market']=='ASSET' else 'equity'
-        result=await prepare(authority,who,rid,items,raw.get('days',330),adjust=raw.get('adjust','none'))
+        result=await prepare(authority,who,rid,items,raw.get('days',330),adjust=raw.get('adjust','none'),minute=raw.get('minute',False))
         versioned=request.url.path.startswith(('/api/v1/','/api/v2/'))
         return JSONResponse({'code':0,'message':'ok','data':result} if versioned else result,headers={'Cache-Control':'private, no-store'})
+
+    @app.get('/api/kline/preparations/{request_id}')
+    @app.get('/api/v1/kline/preparations/{request_id}')
+    @app.get('/api/v2/kline/preparations/{request_id}')
+    async def preparation_progress(request_id:str,request:Request):
+        from uuid import UUID
+        from .market_history_demands import progress
+        assert_native_origin(request,settings)
+        version=2 if request.url.path.startswith('/api/v2/') else 1 if request.url.path.startswith('/api/v1/') else None
+        who=await history_member(request,authority.db,version)
+        try:rid=UUID(request_id)
+        except ValueError:raise HTTPException(400,'请求编号无效') from None
+        if not await app.state.read_rate_limit(authority.db,'history-progress:'+who.id,180,window_seconds=60):raise HTTPException(429,'历史进度读取过于频繁')
+        result=await progress(authority,who,rid)
+        return JSONResponse({'code':0,'message':'ok','data':result} if version else result,headers={'Cache-Control':'private, no-store','Vary':'Cookie, Authorization'})
 
     @app.get("/api/kline/full")
     async def full(request: Request):

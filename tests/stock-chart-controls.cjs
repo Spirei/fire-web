@@ -28,6 +28,8 @@ function harness() {
     setTimeout: fn => { const id = ++timerId; timers.set(id, fn); return id; },
     clearTimeout: id => timers.delete(id),
     require: id => id === 'react' ? hooks : id === 'react/jsx-runtime' ? require(id)
+      : id === '@/lib/usePrivateReadRevision' ? {usePrivateReadRevision:()=>0}
+      : id === '@/lib/useWorkspaceForeground' ? {useWorkspaceForeground:()=>true}
       : id === '@/lib/usePersistedState' ? { usePersistedState: (_, initial) => hooks.useState(initial) }
       : { __esModule: true, default: () => null }
   });

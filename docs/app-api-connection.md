@@ -59,3 +59,5 @@ Web、v1、v2 共享同一份来源配置、证券身份、PG 观测和后台采
 指数的 `GET /api/v1/indices`、`GET /api/v2/indices` 在本人已有兼容行情配置时，与顶部及自选页读取同一份指数观测；显式指定的发现来源和匿名公共许可保持各自边界。`POST /api/v1/indices/prepare`、`POST /api/v2/indices/prepare` 接受 `{requestId}`，需要 `portfolio.write`，仅登记服务器固定指数身份。`open: null` 表示尚无已核实开市状态，不可当作休市；价格和时间的缺项保持未知。
 
 腾讯 `tencent-minute-v1` 仅采集 CN/HK 常规盘单证券分钟价格，走同一来源许可、Worker 与原件核对；不视为 OHLC、实时成交时间或已规范化成交量。美股 ALL 分时继续使用明确许可的富途真实时间帧。指数与股票代码命名空间独立，App 不会把上证指数 000001 读作深圳同代码股票。
+
+历史准备支持 `minute: true`（CN/HK REGULAR、US ALL）。`GET /api/v1/kline/preparations/{requestId}` 和 v2 对应路径只读返回本人原请求的 `pending`、`failed`、`state`、`unavailable` 和任务状态；需要 portfolio.read，不登记需求、不触发采集、不重发失败任务。页面等待原进度完成再读取图表；只有确认 failed 后才以新 UUID 请求备用源，未知提交先停止。

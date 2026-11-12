@@ -58,6 +58,11 @@ async def test_tencent_minute_preparation_collection_and_app_read_share_facts(le
     body={'items':[{'id':'cn','market':'CN','code':'002602'}]}
     first=await legacy.post('/api/charts',json=body)
     assert first.status_code==200,first.text
+    rid=str(uuid4())
+    intent=await legacy.post('/api/kline/prepare',json={'requestId':rid,'items':[{'market':'CN','code':'002602'}],'days':5,'minute':True})
+    assert intent.status_code==200,intent.text
+    before=await legacy.get('/api/kline/preparations/'+rid)
+    assert before.status_code==200 and before.json()['pending'] is True,before.text
     class Source:
         fixture=True
         async def read(self,policy,query,cursor):
@@ -67,6 +72,8 @@ async def test_tencent_minute_preparation_collection_and_app_read_share_facts(le
     assert await schedule(app.state.market_authority)==1
     task=await claim(app.state.db,uuid4(),kind='market.history');assert task
     assert await execute(app.state.market_authority,task,Source())=='complete'
+    after=await legacy.get('/api/kline/preparations/'+rid)
+    assert after.status_code==200 and after.json()['pending'] is False and after.json()['state']=='complete',after.text
     web=await legacy.post('/api/charts',json=body)
     assert web.status_code==200 and len(web.json()['charts']['cn']['points'])==2,web.text
     async with app.state.db.connection() as conn:
@@ -159,6 +166,18 @@ async def test_native_prepare_requires_write_scope_and_keeps_versioned_envelope(
     accepted=await legacy.post('/api/v2/kline/prepare',json=request,headers={'authorization':'Bearer '+writer['access_token']})
     assert accepted.status_code==200 and accepted.json()['code']==0,accepted.text
     assert accepted.json()['data']['requestId']==request['requestId']
+    progress_url='/api/v2/kline/preparations/'+request['requestId']
+    async with app.state.db.connection() as conn:
+        before={t:(await (await conn.execute('SELECT count(*) n FROM '+t)).fetchone())['n'] for t in ('market_demands','market_data_jobs','market_source_pages','market_data_operations')}
+    # A read-only App connection can follow the original task. Reading state
+    # neither starts a new task nor renews an existing subscription.
+    state=await legacy.get(progress_url,headers={'authorization':'Bearer '+reader['access_token']})
+    assert state.status_code==200 and state.json()['data']['state']=='complete',state.text
+    assert state.json()['data']['unavailable']==[{**request['items'][0],'instrument':'equity'}]
+    assert (await legacy.get('/api/v2/kline/preparations/'+str(uuid4()),headers={'authorization':'Bearer '+reader['access_token']})).status_code==404
+    async with app.state.db.connection() as conn:
+        after={t:(await (await conn.execute('SELECT count(*) n FROM '+t)).fetchone())['n'] for t in before}
+    assert before==after
     empty=await legacy.post('/api/v2/portfolio-series/prepare',json={'requestId':str(uuid4()),'days':330},headers={'authorization':'Bearer '+writer['access_token']})
     assert empty.status_code==200 and empty.json()['code']==0 and empty.json()['data']['state']=='empty',empty.text
 
