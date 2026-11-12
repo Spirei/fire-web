@@ -193,7 +193,8 @@ async def test_worker_closes_the_import_lane_on_retirement_stop_and_failed_cycle
         if state=='database_unavailable':raise RuntimeError('controlled unavailable')
     async def public(*args):pass
     monkeypatch.setattr(market_runtime,'from_settings',configured)
-    monkeypatch.setattr(market_runtime,'cycle',cycle)
+    monkeypatch.setattr(market_runtime,'batch_cycle',cycle)
     monkeypatch.setattr(public_market_worker,'cycle',public)
-    await market_runtime.loop(object(),stop,current=lambda:state!='retired')
+    async with asyncio.timeout(3):
+        await market_runtime.loop(object(),stop,current=lambda:state!='retired')
     assert lane.closed==(2 if state=='retired' else 1) and lane.retired==1

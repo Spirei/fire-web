@@ -19,14 +19,22 @@ PG 和 Redis 连接只接受服务器环境配置。系统总览展示当前脱�
 - `FIRE_REDIS_URL`：可选缓存连接；缺少缓存配置不会显示假连接状态。
 - `FIRE_CONNECTION_SECRET_DIR`、`FIRE_BACKUP_DIR`、`FIRE_BACKUP_SECRET_DIR`、`FIRE_FILE_ROOT`、`FIRE_ASSET_ROOT`：分别设置在私有挂载目录下，保持秘密、备份和文件的边界。目录须允许容器用户 1000 访问。
 - `FIRE_WORKER=on`：启用独立后台任务进程；关闭时任务保持排队，不伪造心跳。
-- `STOCKLOG_PROXY`：Yahoo 行情与历史的 HTTP 代理，如 `http://proxy-host:8080`；空值或 `off` 为直连，其他行情和汇率保持各自连接方式。
 - `FIRE_PRIVATE_DIR`：私有数据的宿主机目录，挂载到容器 `/private`。
 - `FIRE_NETWORK`：数据库所在的现有私有容器网络。
 - `GHCR_IMAGE`、`IMAGE_TAG`、`HOST_PORT`：已验收镜像与可配置宿主机端口。
 
 `docker-compose.ghcr.yml` 保留 Fire 和受限更新器，沿用主分支已经完成的 3D 展示迁出。更新器不开放宿主机端口；自定义图片、字体、图标、分享图继续使用各自挂载目录。
 
-Yahoo 代理可以在项目 `.env` 中设置 `STOCKLOG_PROXY=http://proxy-host:8080`，或在实际 YAML 的 `fire.environment` 中直接填写该变量。保存后构建项目以重新创建容器，再到「设置 → 投资与行情 → 行情源」检测 Yahoo。只启动或重启旧容器不会更新环境；真实代理地址保留在群晖配置中，不提交到仓库。
+Yahoo 行情与历史的 HTTP 代理直接写在实际 YAML 的 `fire.environment` 中，不从 `.env` 引用：
+
+```yaml
+services:
+  fire:
+    environment:
+      STOCKLOG_PROXY: "http://proxy-host:8080"
+```
+
+将示例换成实际 HTTP 代理地址；使用 `"off"` 关闭代理。保存后构建项目以重新创建容器，再到「设置 → 投资与行情 → 行情源」检测 Yahoo。只启动或重启旧容器不会更新环境；其他行情和汇率保持原连接方式，真实代理地址仅留在群晖配置中。
 
 镜像包含匹配的 PG 客户端工具，可在构建时通过 `PG_MAJOR` 选择 16、17 或 18，须与实际备份恢复要求核对。容器内不安装数据库服务器。
 

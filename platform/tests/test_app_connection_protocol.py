@@ -31,6 +31,9 @@ def protocol(response, version):
 
 async def test_asset_readers_share_current_proof_but_still_exclude_broker_writers(client,admin,app):
     from alcor_api.broker_accounts import serialize_brokers
+    from alcor_api.market_history_reads import LicensedHistory
+    from alcor_api.market_pool_sources import PoolSources
+    from fastapi import HTTPException
     from source_pure_read_candidate.test_reads import snapshot
     from test_trading import setup
     await setup(client,name='Synthetic parallel asset read',qty='2',cost='10')
@@ -61,6 +64,13 @@ async def test_asset_readers_share_current_proof_but_still_exclude_broker_writer
             for response in responses:
                 assert response.status_code==200,response.text
                 protocol(response,1 if '/v1/' in str(response.request.url) else 2)
+            # History/pool reads share the same native proof too; missing source
+            # material returns its real state promptly, not an UPDATE-lock wait.
+            pool=await asyncio.wait_for(PoolSources(app.state.market_authority).read(who),2)
+            assert pool['entries']==[]
+            with pytest.raises(HTTPException) as missing:
+                await asyncio.wait_for(LicensedHistory(app.state.market_authority).read(who,'US','AAPL',frame='day',adjust='none'),2)
+            assert missing.value.status_code==503
             # PostgreSQL may give an already queued writer priority over later
             # readers; queue it only after checking concurrent read completion.
             task=asyncio.create_task(writer())

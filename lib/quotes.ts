@@ -54,6 +54,8 @@ export interface Quote {
   source?: "futu" | "tencent" | "eastmoney" | "yahoo" | "auto";
   /** A recent active-pool snapshot was returned while scheduled updates continue. */
   cached?: boolean;
+  /** An earlier real observation is shown while a fresh provider result is unavailable. */
+  displayStale?: boolean;
 }
 export interface QuoteItem {
   id: string;

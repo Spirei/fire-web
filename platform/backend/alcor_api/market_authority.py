@@ -312,7 +312,7 @@ class Authority:
                 ).fetchone()
             old = await (
                 await conn.execute(
-                    "SELECT * FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s FOR UPDATE",
+                    "SELECT *,revoked_at IS NULL AND hot_until>clock_timestamp() AND expires_at>clock_timestamp() AS hot FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s FOR UPDATE",
                     (who.id, stream["id"], principal),
                 )
             ).fetchone()
@@ -358,7 +358,10 @@ class Authority:
                 "UPDATE market_streams SET demand_generation=demand_generation+1 WHERE owner_id=%s AND id=%s",
                 (who.id, stream["id"]),
             )
-            if query.kind=='latest':
+            if query.kind=='latest' and (not observed or not old or not old['hot'] or old['session_version']!=user['session_version']):
+                # Repeated visible-page observations renew demand retention,
+                # but must not shorten the worker's five-second source cadence.
+                # New/revived demand still wakes a sleeping stream immediately.
                 await conn.execute('UPDATE market_streams SET next_due=least(next_due,clock_timestamp()) WHERE owner_id=%s AND id=%s',(who.id,stream['id']))
             return await self.save_receipt(
                 conn,

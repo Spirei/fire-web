@@ -27,14 +27,20 @@ class Transport:
             target_provider,
         )
         self.controlled_http = controlled_http or {}
+        self.http_limit = asyncio.Semaphore(6)
         if self.controlled_http and db.settings.environment != "test":
             raise ValueError("controlled_source_outside_test")
         from .sdk_read_session import LatestSDKSession
+        from .market_latest_batch import LatestBatch
         self.latest_session = LatestSDKSession()
+        self.latest_batch = LatestBatch(self.latest_session)
         self.reuse_latest = reuse_latest
 
     async def close(self):
+        await self.latest_batch.close()
         await self.latest_session.close()
+        from .market_latest_batch import LatestBatch
+        self.latest_batch = LatestBatch(self.latest_session)
 
     async def retire_idle(self):
         await self.latest_session.retire_idle()
@@ -51,7 +57,8 @@ class Transport:
                 or not all(ipaddress.ip_address(address).is_loopback for address in approval["addresses"])
             ):
                 raise ValueError("fixture_network_not_loopback")
-            return await fetch_page(url, approval), "http_response_body"
+            async with self.http_limit:
+                return await fetch_page(url, approval), "http_response_body"
         targets = (
             {target.id: target for target in self.target_provider()} if self.target_provider else self.targets
         )
@@ -63,27 +70,32 @@ class Transport:
             from .market_eastmoney_latest import VERSION, fetch, installed
             if policy.source_version != VERSION or not installed(query) or 'latest' not in policy.purposes:
                 raise ValueError('eastmoney_source_protocol_not_installed')
-            return await fetch(target, query, cursor)
+            async with self.http_limit:
+                return await fetch(target, query, cursor)
         if policy.source=='tencent':
             from .market_tencent_minute import VERSION as MINUTE_VERSION,fetch as minute_fetch,installed as minute_installed
             if policy.source_version==MINUTE_VERSION:
                 if not minute_installed(query)or collection_purpose(query)not in policy.purposes:raise ValueError('tencent_minute_protocol_not_licensed')
-                return await minute_fetch(target,query,cursor)
+                async with self.http_limit:
+                    return await minute_fetch(target,query,cursor)
             from .market_tencent_latest import VERSION,fetch,installed
             if policy.source_version!=VERSION or not installed(query)or 'latest'not in policy.purposes:raise ValueError('tencent_source_protocol_not_licensed')
-            return await fetch(target,query,cursor)
+            async with self.http_limit:
+                return await fetch(target,query,cursor)
         if policy.source=='coingecko':
             from .market_crypto_latest import VERSION,fetch,installed
             if (policy.source_version!=VERSION or not installed(query) or 'latest' not in policy.purposes
                     or 'ASSET' not in policy.markets):
                 raise ValueError('crypto_source_protocol_not_installed')
-            return await fetch(target,query,cursor)
+            async with self.http_limit:
+                return await fetch(target,query,cursor)
         if policy.source == 'yahoo':
             from .market_yahoo_history import VERSION, fetch, installed
             if (policy.source_version != VERSION or not installed(query, policy)
                     or collection_purpose(query) not in policy.purposes or query.market not in policy.markets):
                 raise ValueError('source_protocol_not_installed')
-            return await fetch(target, query, cursor, policy)
+            async with self.http_limit:
+                return await fetch(target, query, cursor, policy)
         if target.source != 'futu':
             raise ValueError('source_target_unavailable')
         latest = installed_latest_semantics(query)
@@ -106,7 +118,7 @@ class Transport:
         approved_target(url, approval, approval["addresses"])
         pins = approved_target(url, approval, await resolve(target.host, target.port))
         if latest and self.reuse_latest:
-            raw = await self.latest_session.read({
+            raw = await self.latest_batch.read((policy.owner_id, policy.id, policy.license_revision, target.fingerprint), {
                 'action':'latest', 'host':pins[0], 'port':target.port,
                 'symbols':[symbol], 'query':asdict(query), 'cursor':cursor,
             })

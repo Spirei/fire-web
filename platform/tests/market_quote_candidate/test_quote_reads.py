@@ -234,8 +234,15 @@ async def test_reconfirmed_alternative_without_new_stream_does_not_block_current
         assert (await (await conn.execute('SELECT count(*) AS n FROM market_streams WHERE source_revision=%s',(renewed.json()['revision'],))).fetchone())['n']==0
     explicit_old=await client.post('/api/v2/quotes',json=body(),headers={**headers,'x-alcor-market-source':old_revision})
     assert explicit_old.status_code==403
-    # Merely editing a license without explicitly reconfirming it is still a rejection.
+    # The retired alternative is never used, but it must not retire the App's
+    # entire market context while an independently authorized quote is valid.
     authority.policies=(original,replace(alternative,license_revision='alternative-v3'))
+    available=await client.post('/api/v2/quotes',json=body(),headers=headers)
+    assert available.status_code==200,available.text
+    assert available.json()['data']['quotes']['known']['source']==original.source
+    assert (await client.post('/api/v2/quotes',json=body(),headers={**headers,'x-alcor-market-source':old_revision})).status_code==403
+    # Without any current authorization, old material still cannot be displayed.
+    authority.policies=(replace(original,license_revision='current-also-unconfirmed'),replace(alternative,license_revision='alternative-v3'))
     assert (await client.post('/api/v2/quotes',json=body(),headers=headers)).status_code==403
 
 

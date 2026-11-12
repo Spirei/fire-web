@@ -8,8 +8,8 @@ services:
     ports:
       - "${HOST_PORT:-3000}:3000"
     environment:
-      # Yahoo 行情与历史的可选 HTTP 代理；在 .env 设置地址，off 为直连。
-      STOCKLOG_PROXY: ${STOCKLOG_PROXY:-off}
+      # Yahoo 行情与历史的 HTTP 代理，直接改为 "http://proxy-host:8080"；off 为直连。
+      STOCKLOG_PROXY: "off"
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: 3000

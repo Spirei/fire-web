@@ -433,7 +433,11 @@ class BatchQuotes:
                             try:self.authority.validate_query(candidate, Subscriptions.query({'market':market,'code':symbol},query_instrument,session or preferred_session,candidate))
                             except (HTTPException,ValueError):continue
                             confirmed.add(candidate.id)
-                        if not retained_policy_ids <= confirmed:
+                        # Auto selection may use a currently authorized alternate
+                        # even when a different old provider no longer covers
+                        # this security. Never return that old provider's fact.
+                        authorized_alternate = source_preference == 'auto' and bool(candidates)
+                        if not retained_policy_ids <= confirmed and not authorized_alternate:
                             raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
                     if preferred_session is not None and market == 'US':
                         extended = [c for c in candidates if c[0]['contents'].get('requestedSession') == preferred_session and c[2]['session'] == preferred_session]

@@ -4,7 +4,7 @@ from fastapi import HTTPException
 
 from .market_authority import active_demands
 from .market_pool_reads import enrich_metadata, milliseconds
-from .security import lock_mutation_identity
+from .security import lock_read_identity
 
 
 class PoolSources:
@@ -13,7 +13,7 @@ class PoolSources:
     async def read(self,who,*,shared=False):
         async with self.db.connection() as conn,conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
-            await lock_mutation_identity(conn,who,require_admin=shared)
+            await lock_read_identity(conn,who,require_admin=shared)
             user=await (await conn.execute('SELECT role FROM users WHERE id=%s',(who.id,))).fetchone()
             if not user or user['role']!=who.role:raise HTTPException(403,'读取权限已变化')
             now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']

@@ -81,6 +81,39 @@ def diagnostic_collect(factory, ret_ok, payload):
         context.close()
 
 
+def snapshot_records(context, ret_ok, symbols):
+    """An unsupported security cannot reject the other requested snapshots."""
+    import re
+
+    pending, result, skipped = [symbols], [], []
+    budget = min(41, len(symbols) * 2 + 1)
+    while pending and budget:
+        group = pending.pop(0)
+        budget -= 1
+        ret, frame = context.get_market_snapshot(group)
+        if ret == ret_ok:
+            result.extend(records(frame))
+            if len(result) > 1000:
+                raise ValueError('sdk_records_invalid')
+            continue
+        if len(group) == 1:
+            skipped.extend(group)
+            continue
+        # Provider error text stays in this process. Only an exact requested
+        # symbol may be pruned; otherwise isolate with bounded bisection.
+        named = [symbol for symbol in group if re.search(r'(?<![A-Z0-9._])' + re.escape(symbol) + r'(?![A-Z0-9._])', str(frame))]
+        if len(named) == 1:
+            skipped.extend(named)
+            pending.insert(0, [symbol for symbol in group if symbol != named[0]])
+        else:
+            middle = len(group) // 2
+            pending[:0] = [group[:middle], group[middle:]]
+    skipped.extend(symbol for group in pending for symbol in group)
+    if not result:
+        raise ValueError('sdk_read_rejected')
+    return result, sorted(set(skipped))
+
+
 def collect(factory, ret_ok, payload, enums):
     """One bounded quote read; only explicit price_series may subscribe its own symbol."""
     action = payload.get("action")
@@ -127,7 +160,10 @@ def collect(factory, ret_ok, payload, enums):
         raise ValueError('sdk_latest_semantics_invalid')
     context = factory(host=payload["host"], port=payload["port"])
     subscribed = False
+    subscribed_symbols = symbols
     realtime = []
+    snapshot = None
+    skipped = []
     try:
         if action == "price_series":
             arguments = {'subscribe_push': False, 'is_first_push': False}
@@ -140,21 +176,27 @@ def collect(factory, ret_ok, payload, enums):
             ret, frame = context.get_rt_data(symbols[0])
             next_key = None
         elif action == "latest":
-            ret, frame = context.get_market_snapshot(symbols)
+            snapshot, skipped = snapshot_records(context, ret_ok, symbols)
+            ret = ret_ok
             next_key = None
-            if ret == ret_ok and len(symbols)==1 and symbols[0].startswith('US.') and config['session'] in ('PRE','OVERNIGHT'):
+            if symbols[0].startswith('US.') and config['session'] in ('PRE','OVERNIGHT'):
                 # Snapshot update_time is the regular close even while extended
                 # fields change. Obtain an actual source minute clock instead.
                 try:
-                    subscribed_ret,_=context.subscribe(symbols,[enums['SubType'].RT_DATA],subscribe_push=False,is_first_push=False,session=getattr(enums['Session'],'ALL'))
+                    subscribed_symbols=[symbol for symbol in symbols if symbol not in skipped]
+                    subscribed_ret,_=context.subscribe(subscribed_symbols,[enums['SubType'].RT_DATA],subscribe_push=False,is_first_push=False,session=getattr(enums['Session'],'ALL'))
                     subscribed=subscribed_ret==ret_ok
                     if subscribed:
-                        rt_ret,rt_frame=context.get_rt_data(symbols[0])
-                        if rt_ret==ret_ok:
-                            observed=records(rt_frame,limit=6000)
-                            # Keep a small candidate tail. A next-minute point
-                            # must not hide the latest already observed point.
-                            realtime=[row for row in observed if row.get('is_blank') is False and type(row.get('cur_price')) in (int,float) and row['cur_price']>0][-4:]
+                        for symbol in subscribed_symbols:
+                            try:
+                                rt_ret,rt_frame=context.get_rt_data(symbol)
+                                if rt_ret==ret_ok:
+                                    observed=records(rt_frame,limit=6000)
+                                    # Preserve each security's own latest real
+                                    # candidate tail, clock and previous close.
+                                    realtime.extend([row for row in observed if row.get('code')==symbol and row.get('is_blank') is False and type(row.get('cur_price')) in (int,float) and row['cur_price']>0][-4:])
+                            except Exception:
+                                continue
                 except Exception:
                     realtime=[]
         else:
@@ -193,7 +235,8 @@ def collect(factory, ret_ok, payload, enums):
         if next_key is not None and (not isinstance(next_key, bytes) or len(next_key) > 65536):
             raise ValueError("sdk_cursor_invalid")
         return {
-            "records": records(frame, limit=6000 if action=='price_series' else 1000),
+            "records": snapshot if snapshot is not None else records(frame, limit=6000 if action=='price_series' else 1000),
+            **({'skipped': skipped} if skipped else {}),
             **({"realTimeRecords":realtime} if realtime else {}),
             "nextCursor": base64.b64encode(next_key).decode() if next_key is not None else None,
             "representation": "sdk_json_representation_not_wire_bytes",
@@ -203,7 +246,7 @@ def collect(factory, ret_ok, payload, enums):
         if subscribed:
             with contextlib.suppress(Exception):
                 # Only this temporary context's requested symbol/type, never unsubscribe_all.
-                context.unsubscribe(symbols, [enums['SubType'].RT_DATA])
+                context.unsubscribe(subscribed_symbols, [enums['SubType'].RT_DATA])
         context.close()
 
 

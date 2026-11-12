@@ -8207,7 +8207,7 @@ export const V0_1_80_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_81_ENTRY: VersionEntry = {
   ...V0_1_80_ENTRY,
   version: "v0.1.81", date: "2026-11-12", summary: "行情源管理与迁移后读取修复",
   software: V0_1_80_ENTRY.software.map(item => ({...item,version:"v0.1.81"})),
@@ -8244,10 +8244,25 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_81_ENTRY,
+  version: "v0.1.82", date: "2026-11-13", summary: "稳定共享行情与当前持仓读取",
+  software: V0_1_81_ENTRY.software.map(item => ({...item,version:"v0.1.82"})),
+  changes: [
+    {kind:"fix",title:"并发配置读取不再短暂清空行情来源",desc:"运行配置先在独立候选中完成解密与当前管理员核对，再一次发布，修复并发请求读到临时空来源、误报许可失效并连带清空行情的问题。取消读取不发布中间状态，迟到旧配置不覆盖新版本；真实授权撤销仍禁用来源。"},
+    {kind:"fix",title:"行情任务合并读取与独立回退",desc:"对照迁移前实现恢复同一市场、目标、来源许可与时段的富途合并快照，每批最多二十只，HTTP 来源并发最多六个，完成后继续处理到期需求。单只不支持证券先剔除或二分定位，其余保留各自源时间与任务回执；重复观察续期需求，但不再缩短后台采集间隔，来源目录每次操作只核对一次。"},
+    {kind:"fix",title:"自动备用来源不撤下其他有效报价",desc:"自动模式允许当前已获许可的备用来源提供该证券的真实报价，另一旧来源失效不再连带拒绝整批；显式失效来源与真实账户授权撤销仍拒绝。网页短暂空响应保留同证券的上次观察并标记缓存过期，不改源时间、时段与涨跌依据。"},
+    {kind:"fix",title:"区分当前持仓与证券目录",desc:"自选或历史目录的未知数量不再默认标成当前持仓，避免污染持仓数量及汇总；数量保持未知，已知零数量与今日清仓各自保留。存在当前官方观察或已核对持仓检查点时，未知数量仍显示不完整持仓，不伪造为零或完整估值。"},
+    {kind:"fix",title:"行情历史与来源查询并行读取",desc:"历史和来源只读查询沿用当前授权的共享读取证明，避免与同账户资产查询相互升级锁。写入、撤销和迟到结果校验保持原有约束，Web 与 App 共用数据服务。"},
+    {kind:"fix",title:"Yahoo 代理直接保存在 YAML",desc:"HTTP 代理地址直接配置在部署 YAML 的 STOCKLOG_PROXY，不通过 .env 引用；继续验证目标公网地址、TLS 主机与实际行情，个人代理地址不进入仓库。"},
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_81_ENTRY,
   V0_1_80_ENTRY,
   V0_1_79_ENTRY,
   V0_1_78_ENTRY,

@@ -35,6 +35,53 @@ async def native(app,scope='portfolio.read portfolio.write',owner=None):
 def items(*codes):return {'items':[{'market':'US','code':code} for code in (codes or ('AAPL',))]}
 
 
+async def test_frequent_quote_observation_renews_intent_without_shortening_source_cadence(market):
+    client,app,_authority,transport,revision=market
+    headers,_=await native(app)
+    headers['x-alcor-market-source']=revision
+    quote={'items':[{'id':'held','market':'US','code':'AAPL'}]}
+    first=await client.post('/api/v2/quotes',json=quote,headers=headers)
+    assert first.status_code==200,first.text
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE market_streams SET next_due=clock_timestamp()+interval '5 minutes'")
+        before=(await (await conn.execute('SELECT next_due FROM market_streams')).fetchone())['next_due']
+    again=await client.post('/api/v2/quotes',json=quote,headers=headers)
+    assert again.status_code==200,again.text
+    async with app.state.db.connection() as conn:
+        assert (await (await conn.execute('SELECT next_due FROM market_streams')).fetchone())['next_due']==before
+        await conn.execute("UPDATE market_demands SET hot_until=clock_timestamp()-interval '1 second'")
+    revived=await client.post('/api/v2/quotes',json=quote,headers=headers)
+    assert revived.status_code==200,revived.text
+    async with app.state.db.connection() as conn:
+        assert (await (await conn.execute('SELECT next_due<clock_timestamp() AS awake FROM market_streams')).fetchone())['awake']
+    assert transport.calls==0
+
+
+async def test_automatic_multi_security_selection_checks_source_catalog_once_per_operation(market,monkeypatch):
+    from alcor_api.market_authority import Authority
+
+    client,app,authority,transport,_revision=market
+    base=authority.policies[0]
+    authority.policies=tuple(replace(base,id=source,source=source,source_version=version,purposes=('latest',),markets=('US',))
+        for source,version in [('futu','futu-sdk-records-v1'),('tencent','tencent-quotes-v1'),('eastmoney','eastmoney-quotes-v1')])
+    for policy in authority.policies:
+        saved=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':policy.id})
+        assert saved.status_code==200,saved.text
+    object.__setattr__(app.state.db.settings,'_legacy_quote_source','auto')
+    headers,_=await native(app)
+    calls=0
+    config=Authority.config
+    async def checked(self,*args,**kwargs):
+        nonlocal calls
+        calls+=1
+        return await config(self,*args,**kwargs)
+    monkeypatch.setattr(Authority,'config',checked)
+    response=await client.post('/api/v2/quotes',headers=headers,json={
+        'items':[{'id':str(i),'market':'US','code':f'SYN{i:02}'} for i in range(19)]})
+    assert response.status_code==200,response.text
+    assert calls<60 and transport.calls==0
+
+
 async def mutate(client,headers,value=None,*,method='POST',uid=None,path=PATH):
     supplied={**headers}
     if uid is not None:supplied['x-alcor-request-id']=str(uid)

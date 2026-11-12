@@ -40,15 +40,46 @@ async def cycle(authority, transport, worker_id, *, history_turn=False):
     }
 
 
+async def batch_cycle(authority, transport, worker_id, *, history_turn=False, maximum=20):
+    """Lease a bounded set of independent reads; every result keeps its own proof."""
+    if type(maximum) is not int or not 1 <= maximum <= 20:
+        raise ValueError("market_worker_batch_invalid")
+    await project_alert_demands(authority)
+    await schedule(authority)
+    tasks = []
+    if history_turn:
+        historical = await claim(authority.db, worker_id, kind="market.history")
+        if historical:
+            tasks.append(historical)
+    while len(tasks) < maximum:
+        latest = await claim(authority.db, worker_id, kind="market.latest")
+        if latest is None:
+            break
+        tasks.append(latest)
+    if not tasks:
+        historical = await claim(authority.db, worker_id, kind="market.history")
+        if historical:
+            tasks.append(historical)
+    # Gather all leased children before the next batch. A failed provider must
+    # neither cancel unrelated securities nor leave unbounded orphan reads.
+    outcomes = await asyncio.gather(
+        *(execute(authority, task, transport) for task in tasks), return_exceptions=True,
+    )
+    if any(isinstance(outcome, BaseException) for outcome in outcomes):
+        logging.getLogger("alcor.worker").warning("market_latest_batch_unavailable")
+    return bool(tasks)
+
+
 async def loop(db, stop, current=lambda: True):
     authority, transport = from_settings(db, reuse_latest=True)
     worker_id = uuid4()
     cycles=0
     try:
         while not stop.is_set():
+            progressed = False
             if current():
                 try:
-                    await cycle(authority, transport, worker_id,history_turn=cycles%4==3)
+                    progressed = await batch_cycle(authority, transport, worker_id,history_turn=cycles%4==3)
                     cycles+=1
                     from .public_market_worker import cycle as public_cycle
                     await public_cycle(db, worker_id)
@@ -57,6 +88,9 @@ async def loop(db, stop, current=lambda: True):
             else:
                 await transport.close()
             await transport.retire_idle()
+            if progressed:
+                await asyncio.sleep(0)
+                continue
             try:
                 await asyncio.wait_for(stop.wait(), timeout=1)
             except TimeoutError:

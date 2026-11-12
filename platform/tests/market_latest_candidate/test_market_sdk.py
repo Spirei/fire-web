@@ -54,6 +54,60 @@ def test_one_shared_snapshot_batch_and_close_unknown_metric_not_zero():
     assert result["representation"] == "sdk_json_representation_not_wire_bytes"
 
 
+@pytest.mark.parametrize('named', [True, False])
+def test_unsupported_otc_is_isolated_from_other_batch_securities(named):
+    class Rows:
+        def __init__(self, rows): self.rows = rows
+        def to_dict(self, _): return self.rows
+
+    class Mixed(Context):
+        def get_market_snapshot(self, symbols):
+            self.calls.append(('snapshot', list(symbols)))
+            if 'US.SFTBY' in symbols:
+                return -1, 'Unsupported US.SFTBY' if named else 'Unsupported market'
+            return 0, Rows([{'code': symbol, 'last_price': 25.1} for symbol in symbols])
+
+    context = Mixed()
+    result = collect(lambda **_: context, 0, {
+        'action': 'latest', 'host': 'controlled', 'port': 1234,
+        'symbols': ['US.AAPL', 'US.SFTBY', 'US.MSFT'],
+    }, ENUMS)
+    assert {row['code'] for row in result['records']} == {'US.AAPL', 'US.MSFT'}
+    assert result['skipped'] == ['US.SFTBY'] and context.closed
+    assert len(context.calls) <= 7
+
+
+def test_extended_batch_keeps_each_security_own_clock_and_closes_only_own_subscriptions():
+    class Rows:
+        def __init__(self, rows): self.rows = rows
+        def to_dict(self, _): return self.rows
+
+    class Extended(Context):
+        def get_market_snapshot(self, symbols):
+            return 0, Rows([{'code': symbol, 'last_price': 25.1} for symbol in symbols])
+        def subscribe(self, symbols, types, **kwargs):
+            self.calls.append(('subscribe', list(symbols), types, kwargs))
+            return 0, None
+        def get_rt_data(self, symbol):
+            at = '2026-11-13 04:01:00' if symbol == 'US.AAPL' else '2026-11-13 04:02:00'
+            return 0, Rows([{'code': symbol, 'time': at, 'is_blank': False, 'cur_price': 25.2}])
+        def unsubscribe(self, symbols, types):
+            self.calls.append(('unsubscribe', list(symbols), types))
+
+    context = Extended()
+    enums = {**ENUMS, 'SubType': SimpleNamespace(RT_DATA='source-rt')}
+    result = collect(lambda **_: context, 0, {
+        'action': 'latest', 'host': 'controlled', 'port': 1234,
+        'symbols': ['US.AAPL', 'US.MSFT'],
+        'query': {'frame': 'latest', 'adjust': 'none', 'session': 'PRE'},
+    }, enums)
+    assert [(row['code'], row['time']) for row in result['realTimeRecords']] == [
+        ('US.AAPL', '2026-11-13 04:01:00'), ('US.MSFT', '2026-11-13 04:02:00')]
+    assert context.calls[0][0:3] == ('subscribe', ['US.AAPL', 'US.MSFT'], ['source-rt'])
+    assert context.calls[-1] == ('unsubscribe', ['US.AAPL', 'US.MSFT'], ['source-rt'])
+    assert context.closed
+
+
 def test_history_explicit_period_adjust_session_and_original_page_key():
     context = Context()
     result = collect(

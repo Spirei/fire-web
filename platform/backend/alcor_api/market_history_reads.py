@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from .market_authority import query_from
 from .market_contract import code, series_fingerprint
 from .native_app_auth import CLIENT
-from .security import lock_mutation_identity
+from .security import lock_read_identity
 
 
 class LicensedHistory:
@@ -38,7 +38,7 @@ class LicensedHistory:
             raise HTTPException(400, "历史代码或来源版本无效") from exc
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            await lock_mutation_identity(conn, who, require_admin=False)
+            await lock_read_identity(conn, who, require_admin=False)
             actor = await (await conn.execute("SELECT role FROM users WHERE id=%s", (who.id,))).fetchone()
             if not actor or actor["role"] != who.role:
                 raise HTTPException(403, "账号权限已变化")

@@ -46,6 +46,18 @@ def complete_sum(values):
     return None if any(value is None for value in values) else sum(values,Decimal(0))
 
 
+def position_state(row, record):
+    quantity = decimal(record['qty'])
+    if quantity is not None:
+        return 'open' if quantity != 0 else 'closed'
+    # Watchlist/snapshot catalogs share the record table with positions. Their
+    # missing quantity is not an open holding. A current official observation
+    # or checked position checkpoint still keeps an incomplete holding visible.
+    if record.get('officialObservation') or record.get('transferObservation') or row.get('trade_tip_id'):
+        return 'quantity_unknown'
+    return 'catalog'
+
+
 async def averages(conn,owner,records,actual):
     ids=[record['id'] for record in records]
     if not ids:return {},{}
@@ -125,7 +137,9 @@ async def snapshot(service,who,options):
                         source='record';price_at=(record.get('officialObservation') or {}).get('reportDate') or record['updatedAt']
                 currency=CURRENCIES.get(row['market']);account=accounts.get(row['broker_account_id'])
                 kind=account['account_kind'] if account else 'unknown'
-                if qty is None or qty!=0:kinds.add(kind)
+                position_status=position_state(row,record)
+                is_active=position_status in ('open','quantity_unknown')
+                if is_active:kinds.add(kind)
                 cost=(diluted if selected['costMethod']=='diluted' else average.get(rid)) if known else None
                 native_market=Decimal(0) if qty==0 else qty*price if known and qty is not None and qty>0 and price is not None and price>=0 else None
                 native_cost=Decimal(0) if qty==0 else qty*cost if known and qty is not None and qty>0 and cost is not None else None
@@ -150,7 +164,7 @@ async def snapshot(service,who,options):
                     'valuationCurrency':selected['currency'],'marketValue':display(market_value,2),'costValue':display(cost_value,2),'holdingPnl':display(pnl_value,2),
                     'holdingPnlPct':display(native_pnl/abs(native_cost)*100,2) if native_pnl is not None and native_cost not in (None,0) else None,
                     'dayPnl':None,'dayPnlPct':None,'dayPnlUnavailableReason':'missing_verified_day_opening_position_and_cashflows',
-                    'weightPct':None,'clearedAt':iso(closed) if closed else None,'clearedToday':closed_today,'active':qty is None or qty!=0,
+                    'weightPct':None,'clearedAt':iso(closed) if closed else None,'clearedToday':closed_today,'active':is_active,'positionState':position_status,
                     'valuationComplete':market_value is not None,'valuationUnavailableReason':reason,'rawRecord':record})
             active=[row for row in values if row['active']]
             scoped_books=[book for book in overview['books'] if book['currencies']]

@@ -8,7 +8,7 @@ export function selectQuoteRecords(records: StockRecord[], view: string): StockR
   return records.filter(record => view === "watchlist" || Number(record.qty) > 0);
 }
 
-export interface QuoteBatchResult { quotes: Record<string, Quote>; completed: Set<string> }
+export interface QuoteBatchResult { quotes: Record<string, Quote>; completed: Set<string>; retired?: Set<string> }
 
 export function quoteInstrumentKey(item: Item): string {
   return JSON.stringify([item.id, item.market.toUpperCase(), normalizeMarketCode(item.market.toUpperCase(), item.code)]);
@@ -26,7 +26,7 @@ export function restoreQuoteSnapshot(quotes: Record<string, Quote>, instruments:
 
 /** 两个滚动批次；临时失败保留本批，身份或许可拒绝时撤下旧行情。 */
 export async function readQuoteBatches(items: Item[], signal?: AbortSignal, options: { includeMarketCap?: boolean; ownerId?: string } = {}): Promise<QuoteBatchResult> {
-  const result: QuoteBatchResult = { quotes: Object.create(null), completed: new Set() };
+  const result: QuoteBatchResult = { quotes: Object.create(null), completed: new Set(), retired: new Set() };
   // Select a source per market; a mixed batch must not force US and HK/CN
   // securities onto one provider. Keep at most two requests in flight.
   const markets = new Map<string, Item[]>();
@@ -50,7 +50,7 @@ export async function readQuoteBatches(items: Item[], signal?: AbortSignal, opti
           body: JSON.stringify({ items: batch, includeMarketCap: options.includeMarketCap === true })
         });
         if (!response.ok) {
-          if ([401,403].includes(response.status)) for (const item of batch) result.completed.add(item.id);
+          if ([401,403].includes(response.status)) for (const item of batch) { result.completed.add(item.id); result.retired!.add(item.id); }
           continue;
         }
         const data = await response.json();
@@ -85,7 +85,8 @@ export function applyQuoteBatches(previous: Record<string, Quote>, result: Quote
     }
     if (!result.completed.has(item.id)) continue;
     if (result.quotes[item.id]) merged[item.id] = result.quotes[item.id];
-    else delete merged[item.id];
+    else if (result.retired?.has(item.id)) delete merged[item.id];
+    else if (merged[item.id]) merged[item.id] = { ...merged[item.id], cached: true, displayStale: true };
   }
   return merged;
 }

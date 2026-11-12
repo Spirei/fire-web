@@ -34,24 +34,31 @@ class Subscriptions:
                      instrument=instrument or ('asset' if item['market'] == 'ASSET' else 'equity'),
                      session=(session or 'REGULAR') if item['market']=='US' and (policy is None or policy.source=='futu' or policy.source=='yahoo' and session in ('PRE','AFTER')) else 'REGULAR').validate()
 
-    async def source(self,conn,who,items,selected,source_preference=None,instrument=None,session=None):
+    async def approved_sources(self,conn,who):
+        rows=await (await conn.execute("SELECT revision FROM market_source_configs WHERE owner_id=%s ORDER BY revision LIMIT 1001",(who.id,))).fetchall()
+        if len(rows)>1000:raise HTTPException(503,'当前来源版本超过核对范围')
+        approved=[]
+        for row in rows:
+            try:_,policy=await self.authority.config(conn,who.id,row['revision'])
+            except HTTPException:continue
+            approved.append((row['revision'],policy))
+        return approved
+
+    async def source(self,conn,who,items,selected,source_preference=None,instrument=None,session=None,*,configs=None):
         if selected is not None:
             _,policy=await self.authority.config(conn,who.id,selected)
             if not {item["market"] for item in items}<=set(policy.markets) or "latest" not in policy.purposes:raise HTTPException(403,"当前来源许可未覆盖此市场")
             for item in items:
                 self.authority.validate_query(policy,self.query(item,instrument,session,policy))
             return selected
-        rows=await (await conn.execute("SELECT revision FROM market_source_configs WHERE owner_id=%s ORDER BY revision",(who.id,))).fetchall()
         approved=[];families={}
-        for row in rows:
-            try:_,policy=await self.authority.config(conn,who.id,row["revision"])
-            except HTTPException:continue
+        for revision,policy in configs if configs is not None else await self.approved_sources(conn,who):
             if {item["market"] for item in items}<=set(policy.markets) and "latest" in policy.purposes:
                 try:
                     for item in items:self.authority.validate_query(policy,self.query(item,instrument,session,policy))
                 except (HTTPException,ValueError):continue
                 if source_preference in ("futu","tencent")and any(item["market"]!="ASSET"for item in items)and policy.source!=source_preference:continue
-                approved.append(row["revision"]);families[row["revision"]]=policy.source
+                approved.append(revision);families[revision]=policy.source
         if source_preference=="auto"and approved:
             order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
             # A refused or failed security must not permanently pin an entire
@@ -91,12 +98,15 @@ class Subscriptions:
             bound=Authority(Bound(conn,self.db.settings),policy_provider=lambda:tuple(self.authority.policy_provider()) if self.authority.policy_provider else self.authority.policies)
             streams=set()
             if not remove:
-                revision = None if selected is None and source_preference == 'auto' else await self.source(conn,who,items,selected,source_preference,instrument,session)
+                # This cache belongs only to the already locked owner operation.
+                # Each demand still rechecks its selected actual config/license.
+                configs=await self.approved_sources(conn,who) if selected is None else None
+                revision = None if selected is None and source_preference == 'auto' else await self.source(conn,who,items,selected,source_preference,instrument,session,configs=configs)
                 rows=await (await conn.execute("SELECT DISTINCT s.query->>'market' AS market,s.query->>'code' AS code FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id WHERE d.owner_id=%s AND d.origin='client' AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp() AND s.query->>'kind'='latest'",(who.id,))).fetchall()
                 if len({(row["market"],row["code"]) for row in rows}|{(row["market"],row["code"]) for row in items})>256:raise HTTPException(409,"最多保留 256 个行情订阅")
                 principal=str(getattr(who,"grant_id",None) or "web:"+who.token_hash)
                 for item in items:
-                    item_revision = revision or await self.source(conn,who,[item],None,source_preference,instrument,session)
+                    item_revision = revision or await self.source(conn,who,[item],None,source_preference,instrument,session,configs=configs)
                     _, selected_policy = await self.authority.config(conn,who.id,item_revision)
                     desired = self.query(item,instrument,session,selected_policy)
                     rows=await (await conn.execute("SELECT * FROM market_streams WHERE owner_id=%s AND source_revision=%s AND query->>'kind'='latest' AND query->>'market'=%s AND query->>'code'=%s AND query->>'instrument'=%s AND (%s::text IS NULL OR query->>'session'=%s) FOR UPDATE",(who.id,item_revision,item["market"],item["code"],desired.instrument,desired.session if session is not None else None,desired.session))).fetchall()

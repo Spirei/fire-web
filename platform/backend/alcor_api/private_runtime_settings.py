@@ -637,7 +637,11 @@ async def load_runtime_on_connection(conn,settings):
     revision,rows,failures=await service.rows(conn)
     if not rows and not failures:return {'revision':revision,'changed':False,'unavailable':{}}
     before=hashlib.sha256(canonical(primitive({group:{key:getattr(settings,SMTP_MAP.get(key,key),None) for key in values if key in SOURCE_FIELDS or key in SMTP_MAP or key in ('business_notification_targets','worker_poll_seconds','lease_seconds')} for group,values in base.items()})).encode()).hexdigest()
-    for group,values in base.items():apply_group(settings,group,values)
+    # Validate a detached candidate. Resetting the shared Settings before an
+    # awaited owner check briefly removed live sources/FX from other requests.
+    # An interrupted reader must never publish that intermediate empty state.
+    candidate=copy.copy(settings)
+    for group,values in base.items():apply_group(candidate,group,values)
     for row in sorted(rows,key=lambda row: list(GROUP_FIELDS).index(row['group_name']) if row['group_name'] in GROUP_FIELDS else -1):
         group=row['group_name']
         try:
@@ -646,15 +650,27 @@ async def load_runtime_on_connection(conn,settings):
                 raise HTTPException(403,'Runtime approval owner is no longer authorized')
             values=service.decrypt(row)
             actor=SimpleNamespace(id=row['actor_id'])
-            validate_group(group,values,actor,settings)
-            apply_group(settings,group,values)
+            validate_group(group,values,actor,candidate)
+            apply_group(candidate,group,values)
         except (HTTPException,ValueError,TypeError,KeyError):
             failures[group]='unavailable_requires_current_instance_reapproval'
-            disable_group(settings,group,row['managed_fields'],row['managed_targets'])
+            disable_group(candidate,group,row['managed_fields'],row['managed_targets'])
     if 'schema' in failures:
-        for group,values in base.items():disable_group(settings,group,list(values))
+        for group,values in base.items():disable_group(candidate,group,list(values))
     previous_revision=getattr(settings,'_private_runtime_revision',None)
     previous_unavailable=getattr(settings,'_private_runtime_unavailable',None)
+    if isinstance(previous_revision,int) and previous_revision>revision:
+        # A slower reader of an older PG revision cannot roll back an already
+        # verified newer runtime. No provider call or settings write is replayed.
+        return {'revision':previous_revision,'changed':False,'unavailable':dict(previous_unavailable or {})}
+    # No await in this publication: async consumers see one fully checked
+    # configuration. Invalid actual permissions still publish disabled targets.
+    attributes=set(SOURCE_FIELDS)|set(SMTP_MAP.values())|{
+        'provider_model_targets','active_model_service_id','_legacy_quote_source','_legacy_quote_order',
+        'business_notification_targets','worker_poll_seconds','lease_seconds',
+    }
+    for attribute in attributes:
+        assign(settings,attribute,getattr(candidate,attribute,None))
     object.__setattr__(settings,'_private_runtime_unavailable',dict(failures))
     object.__setattr__(settings,'_private_runtime_revision',revision)
     after=hashlib.sha256(canonical(primitive({group:{key:getattr(settings,SMTP_MAP.get(key,key),None) for key in values if key in SOURCE_FIELDS or key in SMTP_MAP or key in ('business_notification_targets','worker_poll_seconds','lease_seconds')} for group,values in base.items()})).encode()).hexdigest()
