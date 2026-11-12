@@ -15,13 +15,30 @@ from .fx_response_originals import ResponseBytes, ResponseRejected
 class PinnedBackend:
     def __init__(self, host, port, address, delegate=None):
         self.host, self.port = host, port
-        self.address = str(ipaddress.ip_address(address))
+        values=(address,) if isinstance(address,str) else tuple(address)
+        if not 1<=len(values)<=32:raise ValueError('approved_address_count_invalid')
+        self.addresses=tuple(sorted({str(ipaddress.ip_address(item)) for item in values},key=lambda item:(ipaddress.ip_address(item).version,item)))
+        self.address=self.addresses[0]
         self.delegate = delegate or AutoBackend()
 
     async def connect_tcp(self, host, port, **kwargs):
         if (host, port) != (self.host, self.port):
             raise ValueError("unapproved_connection")
-        return await self.delegate.connect_tcp(self.address, port, **kwargs)
+        # All candidates were already resolved and approved by the caller.
+        # A NAS without an IPv6 route must still reach its approved IPv4 peer.
+        # Only TCP connection establishment may fall back; HTTP/TLS is never replayed.
+        budget=kwargs.get('timeout');budget=5.0 if budget is None else budget
+        deadline=asyncio.get_running_loop().time()+budget
+        last=None
+        try:
+            async with asyncio.timeout(budget):
+                for address in self.addresses:
+                    remaining=deadline-asyncio.get_running_loop().time()
+                    if remaining<=0:raise httpcore.ConnectTimeout()
+                    try:return await self.delegate.connect_tcp(address,port,**{**kwargs,'timeout':remaining})
+                    except (httpcore.ConnectError,httpcore.ConnectTimeout) as error:last=error
+        except TimeoutError:raise httpcore.ConnectTimeout() from None
+        raise last
 
     async def connect_unix_socket(self, *args, **kwargs):
         raise ValueError("unix_socket_forbidden")
@@ -43,7 +60,7 @@ async def fetch(url, approval, headers=None, *, resolver=resolve, backend_factor
     async with asyncio.timeout(15):
         addresses = await resolver(parsed.hostname, port)
         pins = approved_target(url, approval, addresses)
-        backend = backend_factory(parsed.hostname, port, pins[0])
+        backend = backend_factory(parsed.hostname, port, pins[0] if len(pins)==1 else pins)
         # URL hostname is retained for certificate validation / TLS SNI / Host.
         async with (
             httpcore.AsyncConnectionPool(network_backend=backend, retries=0, max_connections=1) as pool,

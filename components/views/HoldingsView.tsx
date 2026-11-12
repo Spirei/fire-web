@@ -47,7 +47,7 @@ import RefreshButton from "@/components/RefreshButton";
 import DeleteIcon from "@/components/DeleteIcon";
 import ImportSnapshotModal from "@/components/ImportSnapshotModal";
 import { holdingAccountMarket, holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "@/lib/stockAccount";
-import { convertAccountAmount, positionFigures } from "@/lib/accountCash";
+import { convertAccountAmount, positionFigures, positionWeight } from "@/lib/accountCash";
 import StockConnectBadge from "@/components/StockConnectBadge";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
@@ -343,7 +343,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
       case "mv": return price * qty * f;
       case "pnl": return Number.isFinite(cost) ? (price - cost) * qty * f : null;
       case "rate": return cost !== 0 && Number.isFinite(cost) ? (price - cost) / Math.abs(cost) : null;
-      case "weight": return filteredMarketValue ? price * qty * f / filteredMarketValue : 0;
+      case "weight": return positionWeight(price * qty * f, filteredMarketValue);
     }
   }
 
@@ -543,7 +543,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
     // Aggregates remain incomplete; only this row falls back with its own symbol.
     const displayMoneyFactor = Number.isFinite(convertedFactor) ? convertedFactor : 1;
     const displayMoneyCurrency = Number.isFinite(convertedFactor) ? active === "TOTAL" ? totalCurLabel : marketMeta(holdingAccountMarket(record)).currency : meta.currency;
-    const weight = marketValue !== null && filteredMarketValue ? marketValue * factor / filteredMarketValue : null;
+    const weight = positionWeight(marketValue === null ? Number.NaN : marketValue * factor, filteredMarketValue);
 
     if (key === "identity") {
       const icon = record.market.toUpperCase() === "ASSET" ? assetIcons[record.code.toUpperCase()] : stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
@@ -563,7 +563,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
     if (key === "dayPnlRate") return dayPnlRate !== null ? <span className={`font-semibold ${dayPnlRate >= 0 ? "text-up" : "text-down"}`}>{dayPnlRate >= 0 ? "+" : ""}{fmtPct(dayPnlRate)}</span> : <span className="text-faint">—</span>;
     if (key === "pnl") return pnl !== null ? <span className={`font-semibold ${pnl >= 0 ? "text-up" : "text-down"}`}>{signedMoney(pnl * displayMoneyFactor, displayMoneyCurrency)}</span> : <span className="text-faint">—</span>;
     if (key === "pnlRate") return pnlRate !== null ? <span className={`font-semibold ${pnlRate >= 0 ? "text-up" : "text-down"}`}>{pnlRate >= 0 ? "+" : ""}{fmtPct(pnlRate)}</span> : <span className="text-faint">—</span>;
-    return weight !== null ? <span className="font-semibold">{fmtPct(weight)}</span> : <span className="text-faint">—</span>;
+    return Number.isFinite(weight) ? <span className="font-semibold">{fmtPct(weight)}</span> : <span className="text-faint">—</span>;
   }
 
   async function persistTabs(list: string[]) {

@@ -47,6 +47,34 @@ def public_identity(row):
     return kind, market, code
 
 
+def stock_image_reference_counts(records):
+    """Count declared image references, never decode an entire directory to page it.
+
+    This is directory metadata, not an integrity receipt. Selected items and
+    every image response still pass through the unchanged original checks.
+    """
+    from .asset_lookup_contract import normalize
+    from .asset_web_keys import RELATED
+
+    def referenced(row):
+        return bool(row.get('light_version') or row.get('dark_version') or row.get('fileVariants'))
+
+    roots = {}
+    for row, source in sorted(records, key=lambda pair: (pair[1] == 'legacy-file', str(pair[0].get('created_at') or ''), pair[0]['id'])):
+        roots.setdefault((row['market'], row['code'].upper()), referenced(row))
+    counts = {}
+    for row, _ in records:
+        code = normalize(row['market'], row['code'])
+        seen = set()
+        while row['market'] == 'US' and code in RELATED and code not in seen:
+            seen.add(code)
+            code = RELATED[code]
+        known = roots.get(('US', code), False) if seen and code not in seen else referenced(row)
+        if known:
+            counts[row['market']] = counts.get(row['market'], 0) + 1
+    return counts
+
+
 def fingerprint(data):
     return hashlib.sha256(
         json.dumps(data, sort_keys=True, ensure_ascii=True, allow_nan=False, separators=(",", ":")).encode()
@@ -496,11 +524,7 @@ class AssetManagement:
                 if kind == "card":
                     removed_count += (await (await conn.execute("SELECT count(*) AS n FROM card_catalog_public_index WHERE deleted_at IS NOT NULL")).fetchone())["n"]
                 if kind == "stock" and not deleted:
-                    image_budget = {"bytes": 0, "verified": set()}
-                    for row, source in records:
-                        projected = await self.legacy_directory.project(row, image_budget) if source == "legacy-file" else await self.catalog.project(conn, row, {}, image_budget)
-                        if projected.get("imageUrl"):
-                            market_counts[row["market"]] = market_counts.get(row["market"], 0) + 1
+                    market_counts = stock_image_reference_counts(records)
                 selected_market = directory.get("market", "ALL")
                 if selected_market != "ALL":
                     records = [(r, source) for r, source in records if selected_market in r.get("material_state", {}).get("brokerMarkets", r.get("brokerMarkets", []))] if kind == "broker" else [(r, source) for r, source in records if r["market"] == selected_market]
@@ -570,6 +594,7 @@ class AssetManagement:
             return {
                 "assets": assets,
                 **({"marketCounts": market_counts, "removedCount": removed_count} if directory is not None else {}),
+                **({"marketCountsBasis": "image-references"} if directory is not None and kind == "stock" else {}),
                 "excludedMarkets": sorted(aid[7:] for aid in removed if aid.startswith("market:")),
                 "total": total,
                 "page": page,

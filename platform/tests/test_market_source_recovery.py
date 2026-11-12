@@ -131,6 +131,22 @@ def test_futu_night_uses_real_minute_clock_when_snapshot_keeps_regular_close():
     assert not rejected and issues
 
 
+@pytest.mark.parametrize('error,reason,message',[
+    (ValueError('address_not_approved'),'source_target_changed','来源地址校验未通过'),
+    (TimeoutError('private host and token'),'source_timeout','来源响应超时'),
+    (ValueError('private provider response with credentials'),'quote_not_observed','未取得该市场报价'),
+])
+def test_probe_failures_explain_fixed_categories_without_exposing_private_details(error,reason,message):
+    from alcor_api.market_source_tests import public_probe_failure
+    assert public_probe_failure(error)=={'reason':reason,'message':message}
+
+
+def test_probe_http_failure_never_exposes_vendor_body():
+    from alcor_api.dividend_source_transport import ResponseFailure
+    from alcor_api.market_source_tests import public_probe_failure
+    assert public_probe_failure(ResponseFailure(b'private response with token',429))=={'reason':'source_http_error','message':'来源返回 HTTP 429'}
+
+
 async def test_adding_history_preserves_opend_and_replaces_superseded_client_leases(legacy,app,monkeypatch):
     async def resolve(host,port):return ['8.8.8.8']
     async def diagnostic(self,policy,action):return {'responded':True,'qotLogined':True}

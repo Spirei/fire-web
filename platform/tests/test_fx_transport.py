@@ -1,4 +1,6 @@
 import pytest
+import asyncio
+import httpcore
 from alcor_api.fx_provider_transport import PinnedBackend, fetch
 
 
@@ -16,6 +18,25 @@ async def test_transport_pins_connect_and_preserves_origin():
     assert calls == [("192.0.2.20", 443)]
     with pytest.raises(ValueError):
         await backend.connect_tcp("attacker.example", 443)
+
+
+async def test_approved_address_fallback_does_not_re_resolve_or_leave_connect_budget():
+    calls=[]
+    class Delegate:
+        async def connect_tcp(self,address,port,**kwargs):
+            calls.append((address,port,kwargs['timeout']))
+            if address=='192.0.2.20':raise httpcore.ConnectError('controlled unreachable address')
+            return 'approved stream'
+    backend=PinnedBackend('provider.example',443,['2001:db8::20','192.0.2.20','192.0.2.21'],Delegate())
+    assert await backend.connect_tcp('provider.example',443,timeout=.5)=='approved stream'
+    assert [row[0] for row in calls]==['192.0.2.20','192.0.2.21']
+    assert all(0<row[2]<=.5 for row in calls)
+    with pytest.raises(ValueError,match='unapproved_connection'):
+        await backend.connect_tcp('other.example',443,timeout=.5)
+    class Slow:
+        async def connect_tcp(self,*args,**kwargs):await asyncio.sleep(10)
+    with pytest.raises(httpcore.ConnectTimeout):
+        await PinnedBackend('provider.example',443,['192.0.2.20','2001:db8::20'],Slow()).connect_tcp('provider.example',443,timeout=.01)
 
 
 @pytest.mark.asyncio

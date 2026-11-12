@@ -176,6 +176,15 @@ class Transport:
             or any(not ipaddress.ip_address(address).is_loopback for address in pins)
         ):
             raise ValueError("diagnostic_fixture_not_loopback")
+        if self.reuse_latest:
+            raw = await self.latest_session.read({"action":action,"host":pins[0],"port":target.port,
+                "quoteProbe":action=="futu.test" and "latest" in policy.purposes and "US" in policy.markets},startup_wait=True)
+            current={item.id:item for item in self.target_provider()} if self.target_provider else self.targets
+            if policy.target_id not in current or current[policy.target_id].fingerprint!=target.fingerprint:
+                raise ValueError("source_target_changed")
+            value=json.loads(raw)
+            if not isinstance(value,dict):raise TypeError("diagnostic_response_invalid")
+            return value
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-I",

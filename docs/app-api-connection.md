@@ -63,3 +63,7 @@ Web、v1、v2 共享同一份来源配置、证券身份、PG 观测和后台采
 历史准备支持 `minute: true`（CN/HK REGULAR、US ALL）。`GET /api/v1/kline/preparations/{requestId}` 和 v2 对应路径只读返回本人原请求的 `pending`、`failed`、`state`、`unavailable` 和任务状态；需要 portfolio.read，不登记需求、不触发采集、不重发失败任务。页面等待原进度完成再读取图表；只有确认 failed 后才以新 UUID 请求备用源，未知提交先停止。
 
 网页管理员读取 `/api/rates/provider?includeUrl=1` 可在当前有效验证下读取完整汇率地址；默认配置读取与 App 接口继续隐藏凭据。验证过期时返回 `urlRestricted: true`，网页通过 `/api/rates/provider/reauthenticate` 完成原身份校验后再读；显示地址不改变供应商配置，也不发起行情或汇率采集。
+
+网页分析页的订单使用 v1 `{code,data:{orders}}` 包装，完整订单读取独立于历史行情与基准图；图表局部材料不得覆盖订单列表。素材目录 `marketCountsBasis: image-references` 表示图片引用数量，不是原件完整性回执；只有当前分页和图片响应执行原件校验。来源检测只返回固定错误分类，不包含 SDK 文本、目标凭据或供应商响应正文；行情与汇率 TCP 回退仅限本次 DNS 校验通过的已核准地址，保持同一连接总时限、TLS 主机验证和单次 HTTP 请求。
+
+富途 Worker 保留单个有界 SDK 加载进程，先核对启动握手再发送证券请求；加载最多 45 秒，行情读取另限 12 秒。只读观察者在加载阶段取消时不发送其证券请求，下一次读取可接回同一受控加载；发出请求后超时或取消必须回收进程，迟到 stdout 不得成为下一证券的响应。来源检测共用同一次加载，美股按当前请求时段核对实际观测，不以连接测试的常规收盘价替代盘前、盘后或夜盘。

@@ -159,6 +159,50 @@ async def test_catalog_stock_counts_are_registered_images_independent_of_search(
     assert (await client.get('/api/assets/catalog?type=group')).status_code==400
 
 
+def test_stock_reference_counts_follow_shared_underlying_without_certifying_bytes():
+    from alcor_api.asset_catalog_management import stock_image_reference_counts
+    root={'id':'root','type':'stock','market':'US','code':'TSLA','light_version':'synthetic-version'}
+    etf={'id':'etf','type':'stock','market':'US','code':'TSLL.AM','fileVariants':[]}
+    assert stock_image_reference_counts([(root,False),(etf,'legacy-file')])=={'US':2}
+    assert stock_image_reference_counts([({**root,'light_version':None},False),({**etf,'fileVariants':[{}]},'legacy-file')])=={}
+
+
+async def test_stock_directory_page_does_not_read_all_image_originals(client, admin, app, settings, tmp_path, monkeypatch):
+    import time
+    from test_legacy_asset_directory import SVG,write
+    await fire_login(client)
+    root=tmp_path/'large-public-directory';settings.file_root=root
+    directory=app.state.legacy_asset_directory;directory.root=root
+    formats=[]
+    for fmt,extension in [('PNG','png'),('JPEG','jpg'),('WEBP','webp')]:
+        output=io.BytesIO();Image.new('RGB',(64,64),'blue').save(output,fmt)
+        formats.append((extension,output.getvalue()))
+    formats.append(('svg',SVG))
+    size=0
+    for i in range(2048):
+        market='CN' if i%2==0 else 'US';code=str(i//2).zfill(6) if market=='CN' else 'BULK'+str(i//2).zfill(4)
+        extension,raw=formats[(i//2)%len(formats)]
+        if i==0:extension,raw='svg',b'<svg xmlns="http://www.w3.org/2000/svg"><script>unsafe()</script></svg>'
+        write(root,f'asset/stock/{market}/{code}.{extension}',raw);size+=len(raw)
+    legacy_reads=[];registered_reads=[]
+    original_legacy=directory.project;catalog=app.state.asset_lookup_catalog;original_registered=catalog.project
+    async def project_legacy(row,budget):
+        legacy_reads.append(row['id']);return await original_legacy(row,budget)
+    async def project_registered(conn,row,cache,budget,**kwargs):
+        registered_reads.append(row['id']);return await original_registered(conn,row,cache,budget,**kwargs)
+    monkeypatch.setattr(directory,'project',project_legacy);monkeypatch.setattr(catalog,'project',project_registered)
+    started=time.monotonic();response=await client.get('/api/assets/catalog?type=stock');elapsed=time.monotonic()-started
+    assert response.status_code==200,response.text
+    value=response.json();assert value['total']==2048 and len(value['assets'])==10
+    assert value['marketCounts']=={'CN':1024,'US':1024} and value['marketCountsBasis']=='image-references'
+    assert len(legacy_reads)==10 and not registered_reads,'pagination must bound original reads, regardless of directory size'
+    bad=next(item for item in value['assets'] if item['code']=='000000');assert not bad['imageUrl']
+    assert (await client.get('/uploads/asset/stock/CN/000000.svg')).status_code!=200
+    valid=next(item for item in value['assets'] if item['imageUrl']);image=await client.get(valid['imageUrl'])
+    assert image.status_code==200 and hashlib.sha256(image.content).hexdigest() in valid['imageUrl']
+    print(f'catalog-scale: 2048 PNG/JPEG/WebP/SVG originals, {size} bytes, 10 original checks, {elapsed:.3f}s listing')
+
+
 async def test_personal_activity_owner_only_same_source_streak_and_no_self_count(client, admin, app, settings):
     await fire_login(client)
     await app.state.request_activity.flush()

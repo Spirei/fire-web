@@ -12,10 +12,26 @@ from .fx_reference import external_delivery_blocked
 from .legacy_identity import assert_native_origin, body
 from .market_contract import Query
 from .market_worker import decode
+from .market_sessions import requested_session
 from .security import lock_mutation_identity
 
 PROVIDERS = ("futu", "tencent", "eastmoney", "yahoo")
 SAMPLES = (("US", "AAPL"), ("HK", "00700"), ("CN", "600519"), ("JP", "7203"), ("KR", "005930"))
+
+
+def public_probe_failure(error):
+    """Expose fixed failure categories, never SDK text, URLs or vendor bodies."""
+    import httpcore
+    from .dividend_source_transport import ResponseFailure
+    if isinstance(error, (TimeoutError, httpcore.TimeoutException)):
+        return {'reason':'source_timeout','message':'来源响应超时'}
+    if isinstance(error, ResponseFailure) and error.status != 200:
+        return {'reason':'source_http_error','message':f'来源返回 HTTP {error.status}'}
+    if isinstance(error, httpcore.NetworkError):
+        return {'reason':'source_network_error','message':'来源网络连接失败'}
+    if isinstance(error, ValueError) and str(error) in {'address_not_approved','target_not_approved','source_target_unavailable','source_target_changed'}:
+        return {'reason':'source_target_changed','message':'来源地址校验未通过'}
+    return {'reason':'quote_not_observed','message':'未取得该市场报价'}
 
 
 def market_queries(authority, policy):
@@ -23,7 +39,7 @@ def market_queries(authority, policy):
     for market, code in SAMPLES:
         if market not in policy.markets:
             continue
-        query = Query("latest", market, code)
+        query = Query("latest", market, code, session=requested_session() if policy.source=='futu' and market=='US' else 'REGULAR')
         try:
             authority.validate_query(policy, query)
         except HTTPException:
@@ -38,11 +54,17 @@ async def probe_markets(authority, transport, policy):
     result = {"state": "unavailable", "message": "未取得有效报价", "markets": markets}
     private_transport = None
     try:
-        async with asyncio.timeout(18):
+        async with asyncio.timeout(55 if policy.source=='futu' else 18):
             known = None
             reader = transport
             if policy.source == "futu":
-                observed = await transport.diagnostic(policy, "futu.test")
+                # One probe owns one imported SDK lane for both connection and
+                # market checks; importing pandas/Futu twice exhausted the probe.
+                from .market_transport import Transport
+                private_transport = Transport(authority.db, tuple(transport.targets.values()), target_provider=transport.target_provider,
+                                              controlled_http=transport.controlled_http, reuse_latest=True)
+                reader = private_transport
+                observed = await reader.diagnostic(policy, "futu.test")
                 connected = observed.get("responded") is True and observed.get("qotLogined") is True
                 result["connectionState"] = "connected" if connected else "unavailable"
                 if not connected:
@@ -52,18 +74,13 @@ async def probe_markets(authority, transport, policy):
                 candidate = observed.get("quote") or {}
                 if observed.get("quotePermissionVerified") is True and candidate.get("code") == "US.AAPL":
                     known = candidate.get("price")
-                # This probe owns its import process and always releases it.
-                # Ordinary API/public transports keep their original lifecycle.
-                from .market_transport import Transport
-                private_transport = Transport(authority.db, tuple(transport.targets.values()), target_provider=transport.target_provider,
-                                              controlled_http=transport.controlled_http, reuse_latest=True)
-                reader = private_transport
             for query in queries:
                 row = markets[query.market]
                 started = time.perf_counter()
                 try:
-                    if query.market == "US" and known is not None:
+                    if query.market == "US" and known is not None and query.session=='REGULAR':
                         price = known
+                        row['session']='REGULAR'
                     else:
                         original, _ = await reader.read(policy, query, None)
                         facts, _, _ = decode(policy, query, original)
@@ -73,17 +90,19 @@ async def probe_markets(authority, transport, policy):
                         if stamp is not None and (stamp.tzinfo is None or stamp > datetime.now(UTC)+timedelta(seconds=5)):
                             price = None
                         row["sourceTime"] = fact.get("at")
+                        row['session']=fact.get('session')
                     if type(price) not in (int, float) or not math.isfinite(price) or price <= 0:
                         raise ValueError("quote_not_observed")
                     row.update(state="available", price=price, message="报价可用")
-                except Exception:  # noqa: BLE001 -- Never expose SDK errors or private target details.
-                    row.update(state="unavailable", message="未取得该市场报价")
+                except Exception as error:  # noqa: BLE001 -- Only fixed public categories leave the probe.
+                    row.update(state="unavailable", **public_probe_failure(error))
                 row.update(elapsedMs=round((time.perf_counter()-started)*1000), observedAt=datetime.now(UTC).isoformat())
     except TimeoutError:
+        result.update(reason='source_timeout',message='检测超时')
         for row in markets.values():
-            if row["state"] == "unknown": row["message"] = "检测超时，结果未确认"
-    except Exception:  # noqa: BLE001 -- Preserve completed market results only.
-        result["message"] = "连接或报价不可用"
+            if row["state"] == "unknown": row.update(reason='source_timeout',message="检测超时，结果未确认")
+    except Exception as error:  # noqa: BLE001 -- Preserve completed market results only.
+        result.update(public_probe_failure(error))
     finally:
         if private_transport is not None:
             await private_transport.close()
@@ -93,6 +112,11 @@ async def probe_markets(authority, transport, policy):
         result.update(state="available" if len(available) == len(markets) else "partial",
                       message="报价可用" if len(available) == len(markets) else f"{len(available)}/{len(markets)} 个市场报价可用",
                       price=first["price"],code=first["code"],market=first["market"])
+        if first.get('session'):result['session']=first['session']
+    elif markets and all(row.get('reason') == next(iter(markets.values())).get('reason') for row in markets.values()):
+        first=next(iter(markets.values()))
+        if first.get('reason') and result.get('reason') != 'source_timeout':
+            result.update(reason=first['reason'],message=first['message'])
     return result
 
 

@@ -28,7 +28,7 @@ async def fetch_page(url, approval):
     approved_target(url, approval, approval["addresses"])
     async with asyncio.timeout(15):
         pins = approved_target(url, approval, await resolve(parsed.hostname, port))
-        backend = PinnedBackend(parsed.hostname, port, pins[0])
+        backend = PinnedBackend(parsed.hostname, port, pins)
         async with (
             httpcore.AsyncConnectionPool(network_backend=backend, retries=0, max_connections=1) as pool,
             pool.stream(

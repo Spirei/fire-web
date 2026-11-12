@@ -9,6 +9,7 @@ import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
 import { accountReadHeaders, privateReadEpoch, recordsReadSignature } from "@/lib/privateReadContext";
 import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
+import { readAnalysisOrders } from "@/lib/analysisOrders";
 import { useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +37,7 @@ const PnlTrendChart = dynamic(() => import("@/components/PnlTrendChart"), {
 import QuickTradeDialog from "@/components/QuickTradeDialog";
 import HoldingDividendDialog from "@/components/HoldingDividendDialog";
 import { buildPortfolioLedger } from "@/lib/portfolioLedger";
-import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, reconcileAccountCash, positionFigures } from "@/lib/accountCash";
+import { ACCOUNT_MARKET_CURRENCY, accountTotals, convertAccountAmount, reconcileAccountCash, positionFigures, positionWeight } from "@/lib/accountCash";
 import FundsPanel from "@/components/FundsPanel";
 import CashBalanceEditor from "@/components/CashBalanceEditor";
 import { holdingAccountMarket, holdingAccountCurrency, holdingMoneyFactor, isStockConnect } from "@/lib/stockAccount";
@@ -299,18 +300,23 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   }, [positions.length, savedAssetMarket, savedHoldingsMarket, savedPnlMarket, assetMarket, holdingsMarket, pnlMarket, setAssetMarket, setHoldingsMarket, setPnlMarket]);
   const [pnlExpanded, setPnlExpanded] = useState(false);
   const [orders, setOrders] = useState<TradeOrder[]>([]);
+  const [ordersLoading,setOrdersLoading]=useState(true);
+  const [ordersError,setOrdersError]=useState("");
+  useLayoutEffect(()=>{setOrders([]);setOrdersLoading(true);setOrdersError("");},[ownerId,signature,readRevision]);
   // Historical orders are independent from licensed price history. A missing
   // benchmark or bar must not erase the owner's recorded order calendar.
   useEffect(() => {
     if (!foreground || !ownerId) return;
     const controller=new AbortController(),epoch=privateReadEpoch();
-    void platformRequest<{orders:TradeOrder[]}>("/api/v1/orders?scope=all&limit=5000",{signal:controller.signal,headers:accountReadHeaders(ownerId)},20000).then(data=>{
+    setOrdersLoading(true);
+    void readAnalysisOrders(ownerId,controller.signal).then(data=>{
       if(controller.signal.aborted || epoch!==privateReadEpoch())return;
-      if(!Array.isArray(data?.orders))throw Error("历史订单格式无效");
-      setOrders(data.orders);
+      setOrders(data);setOrdersError("");
     }).catch(error=>{
-      if(!controller.signal.aborted && epoch===privateReadEpoch() && error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0))setOrders([]);
-    });
+      if(controller.signal.aborted || epoch!==privateReadEpoch())return;
+      if(error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0))setOrders([]);
+      setOrdersError(error instanceof Error?error.message:"历史订单读取失败");
+    }).finally(()=>{if(!controller.signal.aborted && epoch===privateReadEpoch())setOrdersLoading(false);});
     return ()=>controller.abort();
   },[ownerId,signature,readRevision,foreground]);
 
@@ -360,19 +366,21 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   const handleRefresh = async (kind: "assets" | "holdings" | "orders") => {
     if (refreshing) return;
     setRefreshing(kind);
+    const epoch=privateReadEpoch();
+    if(kind==="orders")setOrdersLoading(true);
     try {
       if (kind === "orders") {
         // 与组合聚合接口保持同一口径（limit=5000），否则刷新后订单列表会从 5000 缩到 500
-        const res = await fetch("/api/v1/orders?scope=all&limit=5000", { cache: "no-store" });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || data?.code !== 0) throw new Error(data?.message || "订单刷新失败");
-        setOrders(Array.isArray(data?.data?.orders) ? data.data.orders : []);
+        const data=await readAnalysisOrders(ownerId);
+        if(epoch===privateReadEpoch()){setOrders(data);setOrdersError("");}
       } else {
         await onRefreshMarketData?.();
       }
     } catch (error) {
+      if(kind==="orders" && epoch===privateReadEpoch())setOrdersError(error instanceof Error?error.message:"历史订单读取失败");
       showToast(error instanceof Error ? error.message : "刷新失败", "err");
     } finally {
+      if(kind==="orders" && epoch===privateReadEpoch())setOrdersLoading(false);
       setRefreshing(null);
     }
   };
@@ -391,7 +399,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   // 首帧不写 inline 变量，让 <head> 同步脚本 / CSS 默认值先生效，避免刷新闪扩。
 
   useLayoutEffect(() => {
-    trendRef.current = []; setTrend([]); setRecordCloses({}); setOrders([]);
+    trendRef.current = []; setTrend([]); setRecordCloses({});
     benchmarkRef.current = {key:benchKey,items:[]};
     try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* disposable derived data */ }
   }, [ownerId,signature,readRevision,benchKey]);
@@ -697,7 +705,6 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
       const benchmarkItems = benchItems;
       const fetchedOrdersAll: TradeOrder[] = bundle?.orders ?? [];
       if (fetchedOrdersAll.some(order => order.executionModel === "source_registered_history" && order.historicalCoverageKnown !== true)) {
-        if(bundle)setOrders(fetchedOrdersAll);
         trendRef.current=[];setTrend([]);setRecordCloses(Object.fromEntries(positionRows.map(row => [row.record.id, row.items])));setTrendLoading(false);
         try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* storage unavailable */ }
         return;
@@ -710,7 +717,6 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
       if (benchmarkItems.length > 0) benchmarkRef.current = { key: benchKey, items: benchmarkItems };
       const nextRecordCloses = Object.fromEntries(positionRows.map((row) => [row.record.id, row.items]));
       setRecordCloses(nextRecordCloses);
-      if(bundle)setOrders(fetchedOrdersAll);
       const fetchedOrders = fetchedOrdersAll.filter((order) => order.status === "filled");
 
       // 使用所有行情日期，但每个标的在自己的首个有效行情之前以首个收盘价回填。
@@ -919,7 +925,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
         case "dayPnlRate": return quote?.changePct || 0;
         case "pnl": return toDisplay(record, (price - cost) * qty);
         case "pnlRate": return cost ? (price - cost) / Math.abs(cost) : 0;
-        case "weight": return holdingAssetTotal ? marketValue / holdingAssetTotal : 0;
+        case "weight": return positionWeight(marketValue, holdingAssetTotal);
       }
     };
     const left = value(a);
@@ -1022,7 +1028,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     const quote = quotes[record.id];
     const dayPnl = positionFigures(record, quotes).dayPnl;
     const dayPnlRate = quote && Number.isFinite(quote.changePct) ? quote.changePct / 100 : Number.NaN;
-    const weight = holdingAssetTotal ? toDisplay(record, price * qty) / holdingAssetTotal : 0;
+    const weight = positionWeight(toDisplay(record, price * qty), holdingAssetTotal);
     const displayMarketValue = toDisplay(record, price * qty);
     const displayDayPnl = toDisplay(record, dayPnl);
     const displayPnl = toDisplay(record, pnl);
@@ -1201,12 +1207,13 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
         </div>
 
         <div {...moduleDragProps("right", "orders")} className={moduleWrapperClass("right", "orders")} style={{ order: moduleOrderIndex("right", "orders") }}>
-          <TradeOrdersPanel
+          {ordersError && !orders.length ? <div role="alert" className="rounded-2xl border border-edge bg-white p-4 text-sm text-muted"><span>{ordersError}</span><button type="button" className="ml-3 font-semibold text-ink" disabled={ordersLoading} onClick={()=>void handleRefresh("orders")}>{ordersLoading?"读取中…":"重新读取"}</button></div> : <TradeOrdersPanel
             orders={orders}
+            loading={ordersLoading}
             stockIcons={stockIcons}
             storageKey="fire:asset-order-tab"
             onRefresh={() => handleRefresh("orders")}
-          />
+          />}
           {renderModuleHandle("right", "orders")}
         </div>
         <div id="asset-calendar" {...moduleDragProps("right", "calendar")} className={moduleWrapperClass("right", "calendar")} style={{ order: moduleOrderIndex("right", "calendar") }}>

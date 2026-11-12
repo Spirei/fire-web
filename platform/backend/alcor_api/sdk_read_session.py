@@ -11,14 +11,19 @@ from time import monotonic
 
 
 class LatestSDKSession:
-    def __init__(self, script=None, *, timeout=12, maximum=128):
+    def __init__(self, script=None, *, timeout=12, startup_timeout=45, maximum=128):
         self.script = script or Path(__file__).with_name('market_futu_sdk.py')
-        self.timeout, self.maximum = timeout, maximum
+        self.timeout, self.startup_timeout, self.maximum = timeout, startup_timeout, maximum
         self.lock = asyncio.Lock()
         self.process, self.target, self.reads = None, None, 0
         self.last_used = 0
+        self.starting = None
 
     async def stop(self):
+        starting,self.starting=self.starting,None
+        if starting is not None and starting is not asyncio.current_task():
+            starting.cancel()
+            with contextlib.suppress(BaseException):await starting
         process, self.process = self.process, None
         self.target, self.reads = None, 0
         self.last_used = 0
@@ -27,6 +32,19 @@ class LatestSDKSession:
                 with contextlib.suppress(ProcessLookupError):
                     process.kill()
             await process.wait()
+
+    async def ready(self, process):
+        try:
+            async with asyncio.timeout(self.startup_timeout):
+                raw=await process.stdout.readline()
+                if raw!=b'{"ready":true,"protocol":"futu-read-v1"}\n':
+                    raise ValueError('sdk_startup_protocol_invalid')
+        except BaseException:
+            if process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):process.kill()
+            await process.wait()
+            if self.process is process:self.process=None
+            raise
 
     async def close(self):
         async with self.lock:
@@ -37,12 +55,13 @@ class LatestSDKSession:
             if self.process is not None and monotonic()-self.last_used >= 90:
                 await self.stop()
 
-    async def read(self, payload):
+    async def read(self, payload, *, startup_wait=False):
         target = (payload['host'], payload['port'])
         # Waiting for this lane is bounded too. A waiting observer must not kill
         # another observer's active request if it times out before acquiring it.
-        async with asyncio.timeout(self.timeout):
+        async with asyncio.timeout(self.timeout+(self.startup_timeout if startup_wait else 0)):
             async with self.lock:
+                sent=False
                 try:
                     if (self.process is None or self.process.returncode is not None
                             or self.target != target or self.reads >= self.maximum):
@@ -55,12 +74,21 @@ class LatestSDKSession:
                                  'HOME':pwd.getpwuid(os.getuid()).pw_dir},
                         )
                         self.target = target
+                        self.last_used=monotonic()
+                        self.starting=asyncio.create_task(self.ready(self.process))
+                        self.starting.add_done_callback(lambda task:None if task.cancelled() else task.exception())
+                    # Before readiness no quote request has been sent. A short
+                    # observer timeout may leave the one bounded import warming;
+                    # late quote stdout still always retires the process below.
+                    await asyncio.shield(self.starting)
                     encoded = json.dumps(payload, allow_nan=False, separators=(',',':')).encode()
                     if len(encoded) > 16384:
                         raise ValueError('sdk_request_too_large')
-                    self.process.stdin.write(encoded+b'\n')
-                    await self.process.stdin.drain()
-                    raw = await self.process.stdout.readline()
+                    async with asyncio.timeout(self.timeout):
+                        sent=True
+                        self.process.stdin.write(encoded+b'\n')
+                        await self.process.stdin.drain()
+                        raw = await self.process.stdout.readline()
                     self.reads += 1
                     self.last_used = monotonic()
                     if not raw.endswith(b'\n') or not 1 < len(raw) <= 131072:
@@ -77,7 +105,7 @@ class LatestSDKSession:
                     raise
                 except BaseException:
                     # No late stdout can become the next security's response.
-                    await self.stop()
+                    if sent or self.starting is None or self.starting.done():await self.stop()
                     raise
 
 

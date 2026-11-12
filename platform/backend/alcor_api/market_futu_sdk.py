@@ -223,6 +223,8 @@ def main():
         if streaming:
             # Import reuse only: every request gets its own quote context, its
             # actual response and the existing bounded scalar conversion.
+            sys.__stdout__.write('{"ready":true,"protocol":"futu-read-v1"}\n')
+            sys.__stdout__.flush()
             for _ in range(128):
                 line = sys.stdin.buffer.readline(16386)
                 if not line:
@@ -231,10 +233,14 @@ def main():
                     raise ValueError('sdk_request_too_large_or_incomplete')
                 try:
                     request = json.loads(line)
-                    if not isinstance(request,dict) or request.get('action') != 'latest':
+                    if not isinstance(request,dict) or request.get('action') not in {'latest','futu.test','futu.quota'}:
                         raise ValueError('sdk_latest_stream_only')
+                    request_started = time.perf_counter()
                     value = collect(OpenQuoteContext, RET_OK, request,
                                     {'AuType':AuType,'KLType':KLType,'Session':Session,'SubType':SubType})
+                    if request.get('action') in {'futu.test','futu.quota'}:
+                        value['sdkStartupMs'] = round((ready-startup)*1000)
+                        value['connectionElapsedMs'] = round((time.perf_counter()-request_started)*1000)
                     output = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(',',':'))
                 except Exception:  # noqa: BLE001 -- Provider errors may contain private target details.
                     output = '{"error":"sdk_read_unavailable"}'

@@ -48,6 +48,12 @@ export function positionFigures(record: StockRecord, quotes: Record<string, Quot
   return { marketValue, costValue, holdingPnl: marketValue - costValue, dayPnl };
 }
 
+/** A missing quote or FX observation cannot become a zero portfolio share. */
+export function positionWeight(marketValue: number, totalMarketValue: number): number {
+  return Number.isFinite(marketValue) && marketValue >= 0 && Number.isFinite(totalMarketValue) && totalMarketValue > 0
+    ? marketValue / totalMarketValue : Number.NaN;
+}
+
 /** Cash is independent of valuation. Legacy arguments remain compatible but never infer cash from equity. */
 export function reconcileAccountCash<T extends Record<string, number>>(balances: T, _cardCash: Record<string, number>, _equities: InvestmentEquity[], _nativeHoldings: Record<string, number>): T {
   return Object.fromEntries(Object.entries(balances).map(([code, value]) => [code, typeof value === "number" && Number.isFinite(value) ? value : Number.NaN])) as T;

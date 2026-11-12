@@ -483,23 +483,50 @@ async def test_source_probe_reuses_the_same_fixed_targets(monkeypatch):
     from types import SimpleNamespace
     from alcor_api.market_source_tests import probe_markets
     from alcor_api.market_transport import Transport
+    monkeypatch.setattr('alcor_api.market_source_tests.requested_session',lambda:'REGULAR')
     target=SimpleNamespace(id='fixed')
-    async def diagnostic(policy, action):
+    owned=[]
+    async def diagnostic(self,policy, action):
+        owned.append(self)
+        assert self.reuse_latest is True
         return {'responded':True,'qotLogined':True,'quotePermissionVerified':True,'quote':{'code':'US.AAPL','price':210.25}}
     async def read(self,policy,query,cursor):
         assert self.targets=={'fixed':target} and self.target_provider is None
         assert self.reuse_latest is True
+        assert owned==[self],'connection and quotation checks must share the probe-owned SDK import'
         return b'{"records":[{"code":"HK.00700","last_price":409.6,"update_time":"2026-01-02 15:59:00"}]}','sdk_json_representation_not_wire_bytes'
     monkeypatch.setattr(Transport,'read',read)
+    monkeypatch.setattr(Transport,'diagnostic',diagnostic)
     authority=SimpleNamespace(db=object(),validate_query=lambda policy,query:None)
-    transport=SimpleNamespace(targets={'fixed':target},target_provider=None,controlled_http={},diagnostic=diagnostic)
+    transport=SimpleNamespace(targets={'fixed':target},target_provider=None,controlled_http={})
     result=await probe_markets(authority,transport,SimpleNamespace(markets=('US','HK'),source='futu',fixture=False))
     assert result['state']=='available' and result['markets']['HK']['price']==409.6
+
+
+async def test_source_probe_current_night_never_uses_diagnostic_regular_close(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from alcor_api.market_source_tests import probe_markets
+    from alcor_api.market_transport import Transport
+    monkeypatch.setattr('alcor_api.market_source_tests.requested_session',lambda:'OVERNIGHT')
+    async def diagnostic(self,policy,action):
+        return {'responded':True,'qotLogined':True,'quotePermissionVerified':True,'quote':{'code':'US.AAPL','price':355.63}}
+    async def read(self,policy,query,cursor):
+        assert query.session=='OVERNIGHT'
+        return json.dumps({'records':[{'code':'US.AAPL','update_time':'2026-11-11 16:00:00','last_price':'355.63','prev_close_price':'348.51'}],
+            'realTimeRecords':[{'code':'US.AAPL','time':'2026-11-11 20:12:00','is_blank':False,'cur_price':'356.20','last_close':'355.63'}]}).encode(),'sdk_json_representation_not_wire_bytes'
+    monkeypatch.setattr(Transport,'diagnostic',diagnostic);monkeypatch.setattr(Transport,'read',read)
+    authority=SimpleNamespace(db=object(),validate_query=lambda policy,query:None)
+    transport=SimpleNamespace(targets={},target_provider=None,controlled_http={})
+    result=await probe_markets(authority,transport,SimpleNamespace(markets=('US',),source='futu',fixture=False))
+    assert result['state']=='available' and result['price']==356.2 and result['session']=='OVERNIGHT'
+    assert result['markets']['US']['sourceTime']=='2026-11-12T01:12:00+00:00'
 
 
 async def test_source_order_and_explicit_quote_tests_persist_without_automatic_probe(legacy, app, monkeypatch):
     import json
     from alcor_api.market_transport import Transport
+    monkeypatch.setattr('alcor_api.market_source_tests.requested_session',lambda:'REGULAR')
     calls=[]
     reads=[]
     async def diagnostic(self,policy,action):

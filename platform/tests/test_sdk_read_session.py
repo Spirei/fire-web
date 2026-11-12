@@ -10,6 +10,7 @@ from alcor_api.sdk_read_session import LatestSDKSession, SDKReadRejected
 def child(tmp_path):
     script = tmp_path/'controlled_sdk.py'
     script.write_text('''import json,os,sys,time
+print('{"ready":true,"protocol":"futu-read-v1"}',flush=True)
 for line in sys.stdin:
     value=json.loads(line); symbol=value['symbols'][0]
     if symbol=='HANG':time.sleep(30)
@@ -22,6 +23,36 @@ for line in sys.stdin:
 
 def request(symbol, host='127.0.0.1'):
     return {'action':'latest','host':host,'port':11111,'symbols':[symbol]}
+
+
+async def test_slow_import_is_bounded_and_shared_without_sending_timed_out_security(tmp_path):
+    script=tmp_path/'slow_import.py'
+    script.write_text('''import json,os,sys,time
+time.sleep(.5)
+print('{"ready":true,"protocol":"futu-read-v1"}',flush=True)
+for line in sys.stdin:
+    print(json.dumps({'pid':os.getpid(),'symbol':json.loads(line)['symbols'][0]}),flush=True)
+''')
+    session=LatestSDKSession(script,timeout=.2,startup_timeout=2)
+    try:
+        with pytest.raises(TimeoutError):await session.read(request('US.OLD'))
+        process=session.process
+        assert process is not None and process.returncode is None and session.reads==0
+        await asyncio.sleep(.6)
+        value=json.loads(await session.read(request('HK.NEW')))
+        assert value=={'pid':process.pid,'symbol':'HK.NEW'} and session.reads==1
+    finally:await session.close()
+    assert process.returncode is not None and session.starting is None
+
+
+async def test_import_timeout_and_invalid_ready_protocol_retire_the_owned_process(tmp_path):
+    for name,body,error in [('hang','import time;time.sleep(10)',TimeoutError),('invalid','print(\'{"records":[]}\',flush=True)',ValueError)]:
+        script=tmp_path/(name+'.py');script.write_text(body)
+        session=LatestSDKSession(script,timeout=.2,startup_timeout=.1)
+        try:
+            with pytest.raises(error):await session.read(request('US.AAPL'),startup_wait=True)
+            assert session.process is None and session.starting is None
+        finally:await session.close()
 
 
 async def test_reads_reuse_import_but_keep_securities_and_refusal_independent(child):
@@ -111,6 +142,7 @@ def test_actual_sdk_entry_stream_keeps_existing_conversion_and_closes_each_conte
             return [{'code':self.symbol,'last_price':12.5,'unknown':float('nan')}]
     class Context:
         def __init__(self, **kwargs):self.closed=False;contexts.append(self)
+        def get_global_state(self):return 0,{'qot_logined':True}
         def get_market_snapshot(self, symbols):
             return (1,'private provider error') if symbols==['US.REFUSED'] else (0,Frame(symbols[0]))
         def close(self):self.closed=True
@@ -121,18 +153,23 @@ def test_actual_sdk_entry_stream_keeps_existing_conversion_and_closes_each_conte
     logger.logger=SimpleNamespace(file_logger=SimpleNamespace(handlers=[]))
     monkeypatch.setitem(sys.modules,'futu',futu)
     monkeypatch.setitem(sys.modules,'futu.common.ft_logger',logger)
-    payloads=[request('US.AAPL'),request('US.REFUSED'),{**request('US.AAPL'),'action':'history'},request('HK.00700')]
+    payloads=[request('US.AAPL'),request('US.REFUSED'),{**request('US.AAPL'),'action':'history'},request('HK.00700'),
+              {'action':'futu.test','host':'192.0.2.10','port':11111,'quoteProbe':True}]
     source=io.TextIOWrapper(io.BytesIO(('\n'.join(map(json.dumps,payloads))+'\n').encode()))
     output=io.StringIO()
     monkeypatch.setattr(sys,'stdin',source)
     monkeypatch.setattr(sys,'__stdout__',output)
     monkeypatch.setattr(sys,'argv',['sdk','--latest-stream'])
     sdk.main()
-    rows=list(map(json.loads,output.getvalue().splitlines()))
-    assert len(rows)==4 and len(contexts)==3 and all(context.closed for context in contexts)
+    messages=list(map(json.loads,output.getvalue().splitlines()))
+    assert messages[0]=={'ready':True,'protocol':'futu-read-v1'}
+    rows=messages[1:]
+    assert len(rows)==5 and len(contexts)==4 and all(context.closed for context in contexts)
     assert rows[0]['records']==[{'code':'US.AAPL','last_price':12.5,'unknown':None}]
     assert rows[1]==rows[2]=={'error':'sdk_read_unavailable'}
     assert rows[3]['records'][0]['code']=='HK.00700'
+    assert rows[4]['responded'] is True and rows[4]['quote']=={'code':'US.AAPL','price':12.5}
+    assert all(type(rows[4][key]) is int and rows[4][key]>=0 for key in ('sdkStartupMs','connectionElapsedMs'))
     assert all(row.get('representation')=='sdk_json_representation_not_wire_bytes' for row in (rows[0],rows[3]))
     assert 'private' not in output.getvalue()
 

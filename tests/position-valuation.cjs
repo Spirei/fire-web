@@ -12,7 +12,7 @@ function load(name) {
   }});
   return exports;
 }
-const {positionFigures, accountHoldingPrice, convertAccountAmount} = load('accountCash');
+const {positionFigures, accountHoldingPrice, convertAccountAmount, positionWeight} = load('accountCash');
 const r = {id:'one',market:'US',code:'AAPL',qty:10,cost:20,price:25};
 let f = positionFigures(r, {});
 assert.equal(f.marketValue,250); assert.equal(f.costValue,200); assert.equal(f.holdingPnl,50);
@@ -29,6 +29,10 @@ assert.equal(f.marketValue,300); assert(Number.isNaN(f.holdingPnl));
 assert.equal(convertAccountAmount(100,'HKD',{},'HKD'),100,'native values require no FX observation');
 assert(Number.isNaN(convertAccountAmount(100,'HKD',{USD:1},'USD')));
 assert.equal(convertAccountAmount(100,'HKD',{USD:1,HKD:8},'USD'),12.5);
+assert.equal(positionWeight(25,100),.25);
+assert.equal(positionWeight(0,100),0);
+for(const total of [NaN,Infinity,0,-1]) assert(Number.isNaN(positionWeight(25,total)),'missing totals and FX must not become zero shares');
+assert(Number.isNaN(positionWeight(NaN,100)));
 const rates = load('ratesCache');
 assert.equal(rates.readCachedRates(),null,'old mixed guessed-rate caches cannot be restored');
 assert.deepEqual(Object.keys(rates.normalizeCachedRates({USD:1})),['USD']);
