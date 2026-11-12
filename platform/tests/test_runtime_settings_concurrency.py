@@ -34,7 +34,7 @@ async def test_source_configuration_remains_coherent_while_another_connection_re
     class Paused:
         def __init__(self, conn): self.conn = conn
         async def execute(self, query, parameters=None):
-            if str(query).startswith('SELECT active,role,deleted_at FROM users'):
+            if str(query).startswith('SELECT id,active,role,deleted_at FROM users'):
                 entered.set()
                 await release.wait()
             return await self.conn.execute(query, parameters)
@@ -67,7 +67,7 @@ async def test_slow_older_configuration_cannot_replace_a_newer_saved_revision(cl
     class Paused:
         def __init__(self,conn):self.conn=conn
         async def execute(self,query,parameters=None):
-            if str(query).startswith('SELECT active,role,deleted_at FROM users'):
+            if str(query).startswith('SELECT id,active,role,deleted_at FROM users'):
                 entered.set()
                 await release.wait()
             return await self.conn.execute(query,parameters)

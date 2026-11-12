@@ -11,6 +11,7 @@ from uuid import uuid4
 from psycopg import Error as DatabaseError
 from psycopg_pool import PoolTimeout, TooManyRequests
 
+from . import request_timing
 from .db import TargetMismatch
 
 METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
@@ -75,11 +76,14 @@ class Observations:
                     await conn.execute(
                         "SELECT singleton FROM request_rollup_state WHERE singleton FOR UPDATE"
                     )
-                    for item in batch:
-                        await conn.execute(
-                            "INSERT INTO request_observations(observation_key,at,path,method,source,status,duration) VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(observation_key) DO NOTHING",
-                            item,
-                        )
+                    if batch:
+                        # psycopg pipelines the bounded batch without changing
+                        # its transaction, deduplication or failure requeue.
+                        async with conn.cursor() as cursor:
+                            await cursor.executemany(
+                                "INSERT INTO request_observations(observation_key,at,path,method,source,status,duration) VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(observation_key) DO NOTHING",
+                                batch,
+                            )
                     prior = await (
                         await conn.execute(
                             "SELECT lost FROM request_observation_producers WHERE id=%s", (self.producer_id,)
@@ -140,14 +144,16 @@ class ObserveRequests:
         ]
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] != "http" or not scope.get("path", "").startswith("/api/"):
             return await self.app(scope, receive, send)
+        timing, token = request_timing.begin()
         start, status = time.monotonic(), 503
 
         async def outgoing(message):
             nonlocal status
             if message["type"] == "http.response.start":
                 status = message["status"]
+                message = {**message, "headers": [*message.get("headers", []), (b"server-timing", timing.header())]}
             await send(message)
 
         try:
@@ -156,8 +162,8 @@ class ObserveRequests:
             status = 499
             raise
         finally:
-            path = scope.get("path", "")
-            if path.startswith("/api/"):
+            try:
+                path = scope.get("path", "")
                 route = getattr(scope.get("route"), "path", None) or next(
                     (template for pattern, template in self.templates if pattern.fullmatch(path)),
                     "/api/[unmatched]",
@@ -172,6 +178,8 @@ class ObserveRequests:
                     status,
                     (time.monotonic() - start) * 1000,
                 )
+            finally:
+                request_timing.finish(timing, token)
 
 
 async def rollup(db):

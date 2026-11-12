@@ -181,3 +181,23 @@ def catalogue(app, *, document=None):
     if cacheable:
         app.state.fire_api_catalogue = (signature, result)
     return result
+
+
+async def read_catalogue(app):
+    """Generate immutable source metadata off-loop after caller authorization."""
+    import asyncio
+
+    task = getattr(app.state, 'fire_api_catalogue_task', None)
+    if task is None:
+        task = asyncio.create_task(asyncio.to_thread(catalogue, app))
+        app.state.fire_api_catalogue_task = task
+
+        def completed(finished):
+            if getattr(app.state, 'fire_api_catalogue_task', None) is finished:
+                app.state.fire_api_catalogue_task = None
+            # A disconnected sole reader must not leave an unhandled error.
+            if not finished.cancelled():
+                finished.exception()
+
+        task.add_done_callback(completed)
+    return await asyncio.shield(task)

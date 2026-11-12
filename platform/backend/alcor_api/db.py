@@ -1,10 +1,11 @@
-from contextlib import asynccontextmanager
 import hashlib
+from contextlib import asynccontextmanager
 
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from .config import Settings
+from .request_timing import TimedConnection, elapsed, measure, start
 
 PRODUCT = "alcor-platform"
 
@@ -38,6 +39,7 @@ class Database:
         self.pool = (
             AsyncConnectionPool(
                 settings.database_url.get_secret_value(),
+                connection_class=TimedConnection,
                 open=False,
                 min_size=settings.pool_min_size,
                 max_size=settings.pool_size,
@@ -68,19 +70,27 @@ class Database:
     async def connection(self):
         if not self.pool:
             raise TargetMismatch("Database is not configured")
-        async with self.pool.connection() as conn:
-            await verify_identity(conn, self.settings)
-            versions = await (await conn.execute("SELECT name,sha256 FROM schema_migrations")).fetchall()
-            if (
-                not self.expected_migrations
-                or {r["name"]: r["sha256"] for r in versions} != self.expected_migrations
-            ):
-                raise TargetMismatch("Database schema does not match this application release")
-            if "0131_private_runtime_settings.sql" in self.expected_migrations:
-                from .private_runtime_settings import load_runtime_on_connection
+        started, acquired = start(), False
+        try:
+            async with self.pool.connection() as conn:
+                elapsed('pool_wait', started)
+                acquired = True
+                with measure('db_guard'):
+                    await verify_identity(conn, self.settings)
+                    versions = await (await conn.execute("SELECT name,sha256 FROM schema_migrations")).fetchall()
+                    if (
+                        not self.expected_migrations
+                        or {r["name"]: r["sha256"] for r in versions} != self.expected_migrations
+                    ):
+                        raise TargetMismatch("Database schema does not match this application release")
+                    if "0131_private_runtime_settings.sql" in self.expected_migrations:
+                        from .private_runtime_settings import load_runtime_on_connection
 
-                await load_runtime_on_connection(conn, self.settings)
-            yield conn
+                        await load_runtime_on_connection(conn, self.settings)
+                yield conn
+        finally:
+            if not acquired:
+                elapsed('pool_wait', started)
 
     async def replace(self, settings):
         candidate = Database(settings)

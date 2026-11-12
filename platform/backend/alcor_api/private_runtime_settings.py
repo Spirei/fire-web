@@ -642,10 +642,16 @@ async def load_runtime_on_connection(conn,settings):
     # An interrupted reader must never publish that intermediate empty state.
     candidate=copy.copy(settings)
     for group,values in base.items():apply_group(candidate,group,values)
+    # Recheck current approvers on every checkout, in one bounded query. Do not
+    # reuse an authorization cache or await after publishing the candidate.
+    actor_ids=list(dict.fromkeys(row['actor_id'] for row in rows))
+    actors={row['id']:row for row in await (await conn.execute(
+        'SELECT id,active,role,deleted_at FROM users WHERE id=ANY(%s)',(actor_ids,)
+    )).fetchall()} if actor_ids else {}
     for row in sorted(rows,key=lambda row: list(GROUP_FIELDS).index(row['group_name']) if row['group_name'] in GROUP_FIELDS else -1):
         group=row['group_name']
         try:
-            current_actor=await (await conn.execute("SELECT active,role,deleted_at FROM users WHERE id=%s",(row['actor_id'],))).fetchone()
+            current_actor=actors.get(row['actor_id'])
             if not current_actor or not current_actor['active'] or current_actor['role']!='admin' or current_actor['deleted_at'] is not None:
                 raise HTTPException(403,'Runtime approval owner is no longer authorized')
             values=service.decrypt(row)

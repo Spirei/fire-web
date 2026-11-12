@@ -47,6 +47,7 @@ const server = http.createServer(async (req, res) => {
     body: Buffer.concat(chunks),
   });
   res.setHeader("content-type", "application/json");
+  res.setHeader("server-timing", 'backend_ttfb;dur=12.34, sql_execute;dur=4.56;desc="2 statements"');
   res.setHeader("set-cookie", [
     "fire_session=fake; HttpOnly; Path=/",
     "other=value; Path=/",
@@ -75,6 +76,7 @@ const server = http.createServer(async (req, res) => {
     });
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "private, no-store");
+    assert.equal(response.headers.get("server-timing"), 'backend_ttfb;dur=12.34, sql_execute;dur=4.56;desc="2 statements"');
     assert.equal(response.headers.getSetCookie().length, 2);
     await response.text();
     const actual = seen.at(-1);
@@ -138,6 +140,7 @@ const server = http.createServer(async (req, res) => {
       ),
     );
     assert.equal(routed.status, 200);
+    assert.equal(routed.headers.get("server-timing"), 'backend_ttfb;dur=12.34, sql_execute;dur=4.56;desc="2 statements"');
     await routed.text();
     assert.equal(seen.at(-1).url, "/api/fire/tasks/receipts/123?limit=1");
     const binary = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 255, 128]);

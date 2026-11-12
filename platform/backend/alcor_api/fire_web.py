@@ -200,15 +200,18 @@ async def cancel_task(task_id: UUID, request: Request, who: Admin):
 
 @router.get("/system/api-migration")
 async def api_migration(request: Request, who: Admin):
-    from .fire_api_surface import catalogue
+    from .fire_api_surface import read_catalogue
+    from .request_timing import measure
 
     try:
-        result = catalogue(request.app)
+        with measure('catalogue'):
+            result = await read_catalogue(request.app)
         etag = result["etag"]
         candidates = request.headers.get("if-none-match", "").split(",")
         if any(value.strip().removeprefix("W/") == etag.removeprefix("W/") or value.strip() == "*" for value in candidates):
             return Response(status_code=304, headers={"etag": etag, "cache-control": "private, no-store"})
-        return JSONResponse(result, headers={"etag": etag, "cache-control": "private, no-store"})
+        with measure('json_encode'):
+            return JSONResponse(result, headers={"etag": etag, "cache-control": "private, no-store"})
     except (OSError, ValueError):
         raise HTTPException(503, "Fire API 清单尚未生成") from None
 
