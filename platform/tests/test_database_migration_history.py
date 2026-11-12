@@ -89,3 +89,35 @@ async def test_original_history_is_visible_atomic_and_deduplicated(client,db,set
     assert cancel.json()['status']=='succeeded' and cancel.json()['result']['history_imported']
     saved=(await client.get('/api/fire/database-migration/preparations/'+str(t['id'])+'/conversion')).json()
     assert saved['history_imports'][0]['id']==str(running['id'])
+    # A complete native order read may contain both real original history and
+    # separately recorded native fills. Reading must never repost either one.
+    from test_trading import setup, command as native_command, submit, economic
+    client.headers.pop('x-csrf-token',None)
+    session=await client.post('/api/session/login',json={'login':'AdminOne','password':'Synthetic9Pass'})
+    assert session.status_code==200,session.text
+    client.headers['x-csrf-token']=session.json()['csrf']
+    _account,native_record=await setup(client,name='Synthetic native account beside registered history')
+    await submit(client,native_command(native_record))
+    before_read=await economic(db,running['owner_id'])
+    for version in (1,2):
+        mixed=await client.get(f'/api/v{version}/account-assets/orders?scope=all&status=all',headers=headers)
+        assert mixed.status_code==200,mixed.text
+        value=mixed.json()['data']
+        assert value['count']==3 and len(value['items'])==3
+        assert value['source']=='platform_native_and_registered_history'
+        assert value['executionModel']=='registered_history_and_atomic_internal_orders'
+        assert value['settlesPendingOrders'] is False
+        history_rows=[row for row in value['items'] if row['executionModel']=='source_registered_history']
+        assert {row['id'] for row in history_rows}=={'original-fill','original-pending'}
+        assert all(row['cancellable'] is False and row['apiManaged'] is False and row['historyLocked'] is True for row in history_rows)
+        assert all(row['historicalCoverageKnown'] is False for row in history_rows)
+        internal=next(row for row in value['items'] if row['executionModel']=='owner_recorded_fill')
+        assert internal['identityMatches'] is True and internal['recordId']==native_record['id']
+        assert internal['positionQtyBefore']==0 and internal['positionQtyAfter']==2
+        if version==2:
+            import os
+            from pathlib import Path
+            if os.environ.get('ALCOR_NATIVE_ORDER_CAPTURE'):
+                output=Path(os.environ['ALCOR_NATIVE_ORDER_CAPTURE'])
+                output.write_text(mixed.text);output.chmod(0o600)
+    assert await economic(db,running['owner_id'])==before_read

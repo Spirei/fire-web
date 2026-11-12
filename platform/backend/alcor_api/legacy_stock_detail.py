@@ -14,7 +14,7 @@ from .legacy_history_bars import bar_rows, history_member
 from .legacy_identity import assert_native_origin
 from .market_contract import CURRENCIES
 from .market_history_reads import LicensedHistory
-from .market_quote_reads import BatchQuotes
+from .market_quote_selection import configured_quotes
 
 QUOTE_FIELDS = (
     "name",
@@ -91,7 +91,7 @@ def observed_caps(cap, currency, rates):
 
 
 def mount_legacy_stock_detail(app, settings, authority):
-    quotes, history, fx = BatchQuotes(authority), LicensedHistory(authority), FxWorker(authority.db)
+    history, fx = LicensedHistory(authority), FxWorker(authority.db)
 
     async def execute(request, version):
         headers = {
@@ -152,8 +152,8 @@ def mount_legacy_stock_detail(app, settings, authority):
                 data = {"market": market, "code": symbol, "historyLimit": limit, "kline": kline}
             else:
                 identifier = market + ":" + symbol
-                latest = await quotes.read(
-                    who,
+                latest = await configured_quotes(
+                    authority, who,
                     [{"id": identifier, "market": market, "code": symbol}],
                     request.headers.get("x-alcor-market-source"),
                 )

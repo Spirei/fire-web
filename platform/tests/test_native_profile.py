@@ -54,6 +54,19 @@ async def test_native_avatar_sanitized_owner_revision_bound_and_revocation_check
     assert result.headers["content-type"] == "image/jpeg"
     assert result.headers["x-content-type-options"] == "nosniff"
     assert result.content[:3] == b"\xff\xd8\xff"
+    # The existing native self-avatar transport needs only portfolio.read,
+    # accepts the old cache-busting query and returns the same original image.
+    read = await grant(db, uid, "portfolio.read")
+    for version in (1, 2):
+        picture = await client.get(
+            f"/api/v{version}/auth/avatar", params={"revision": revision, "avatarVersion": "1"},
+            headers=bearer(read),
+        )
+        assert picture.status_code == 200, picture.text
+        assert picture.content == result.content
+        assert picture.headers["content-type"] == "image/jpeg"
+        assert "no-store" in picture.headers["cache-control"]
+    assert (await client.get("/api/v2/auth/avatar", params={"revision": revision})).status_code == 401
     other = await register(client, "OtherProfile")
     other_pair = await grant(db, other, "portfolio.read")
     assert (

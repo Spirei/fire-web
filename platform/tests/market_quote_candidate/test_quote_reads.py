@@ -300,6 +300,54 @@ async def test_quote_and_index_observation_do_not_roll_back_for_unrelated_retire
     assert rejected.status_code==403,'unconfirmed original source still cannot supply the old AAPL quote'
 
 
+async def test_portfolio_asset_snapshot_and_detail_follow_the_same_configured_quote(quoted):
+    from test_trading import setup as trading_setup
+    client,app,authority,transport,revision,headers,source=quoted
+    alternative=replace(authority.policies[0],id='alternate-price',source='controlled_alternate')
+    authority.policies+=(alternative,)
+    configured=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':alternative.id})
+    assert configured.status_code==200,configured.text
+    async def collect(policy,query,cursor):
+        transport.calls+=1
+        fact={**source,'price':'140' if policy.id==alternative.id else '120'}
+        return canonical({'query':asdict(query),'licenseRevision':policy.license_revision,'facts':[fact],'nextCursor':None}).encode(),'controlled_http_response_body'
+    transport.read=collect
+    await demand(client,configured.json()['revision']);await schedule(authority)
+    task=await claim(app.state.db,uuid4());assert task
+    assert await execute(authority,task,transport)=='observed'
+    _account,record=await trading_setup(client,name='Synthetic shared quote account',qty='2',cost='100')
+    app.state.db.settings._legacy_quote_source='auto'
+    app.state.db.settings._legacy_quote_order=['controlled_market','controlled_alternate']
+    # Canonical source-specific reads must still report ambiguity. Business
+    # projections follow the owner's configured order without extra collection.
+    ambiguous=await client.post('/api/market/quotes/read',json=body(),headers=headers)
+    assert ambiguous.json()['quoteStates']['known']['state']=='ambiguous_source'
+    calls=transport.calls
+    before=await hashes(app)
+    async def projections(price):
+        quoted=await client.post('/api/v2/quotes',json=body(),headers=headers)
+        assert quoted.status_code==200,quoted.text
+        assert quoted.json()['data']['quotes']['known']['price']==price
+        overview=await client.get('/api/v2/overview',headers=headers)
+        assert overview.status_code==200,overview.text
+        assert overview.json()['data']['totalMarket']==price*2
+        assert overview.json()['data']['totalPnl']==(price-100)*2
+        snapshot=await client.get('/api/v2/account-assets?usPrice=regular',headers=headers)
+        assert snapshot.status_code==200,snapshot.text
+        value=snapshot.json()['data']['positions'][0]
+        assert value['recordId']==record['id'] and value['price']==price
+        assert value['nativeMarketValue']==price*2 and value['nativeHoldingPnl']==(price-100)*2
+        detail=await client.get('/api/v2/stock-detail?market=US&code=AAPL&includeKline=0',headers=headers)
+        assert detail.status_code==200,detail.text
+        assert detail.json()['data']['quote']['price']==price
+    await projections(120)
+    app.state.db.settings._legacy_quote_order.reverse()
+    await projections(140)
+    explicit=await client.get('/api/v2/stock-detail?market=US&code=AAPL&includeKline=0',headers={**headers,'x-alcor-market-source':revision})
+    assert explicit.status_code==200 and explicit.json()['data']['quote']['price']==120
+    assert transport.calls==calls and await hashes(app)==before
+
+
 async def test_ambiguous_request_ids_and_missing_securities_do_not_borrow_other_quotes(quoted):
     client,_app,_authority,transport,_revision,headers,_source=quoted
     requested=body({'id':'same','market':'US','code':'AAPL'},{'id':'same','market':'US','code':'MSFT'},{'id':'missing','market':'US','code':'MSFT'})

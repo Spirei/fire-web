@@ -20,7 +20,7 @@ from .fx_reference import FxWorker
 from .legacy_asset_authority import LegacyAssetAuthority
 from .legacy_asset_snapshot import CURRENCIES, complete_sum, decimal
 from .legacy_flat_orders import TransactionDB
-from .market_quote_reads import BatchQuotes
+from .market_quote_selection import configured_quotes
 from .position_transfer_checkpoint import economic_initial
 from .scope_coverage import record_status, scope_status, status
 from .trade_accounting import replay_economic_trades
@@ -152,10 +152,10 @@ class PortfolioOverview(LegacyAssetAuthority):
         quoted = {"quotes": {}, "quoteStates": {}}
         try:
             if original:
-                quoted = await BatchQuotes(self.market_authority).read(
-                    who,
+                quoted = await configured_quotes(
+                    self.market_authority, who,
                     [{"id": r["id"], "market": r["market"], "code": r["code"]} for r in original],
-                    session="REGULAR" if us_price == "regular" else None,
+                    regular=us_price == "regular",
                 )
         except HTTPException as exc:
             if exc.status_code in (401, 403):

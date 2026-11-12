@@ -55,6 +55,15 @@ async def test_native_v2_login_has_no_cookie_coupling_and_tokens_rotate_without_
     discovered=await client.get('/api/v2/auth/config')
     assert discovered.status_code==200 and discovered.json()['data']['native_login']['login_path']=='/api/v2/auth/login'
     assert discovered.headers['x-alcor-api-version']=='2'
+    contract=discovered.json()['data']['records_contract']
+    assert contract['supported'] is True and contract['version']==1
+    assert contract['records_path']=='/api/v2/records'
+    assert contract['record_path']=='/api/v2/records/{id}'
+    assert contract['operation_path']=='/api/v2/records/operations/{requestId}'
+    assert contract['search_path']=='/api/v2/search'
+    assert contract['read_scope']=='portfolio.read' and contract['write_scope']=='portfolio.write'
+    assert contract['idempotency']=='reject-duplicate-query-original' and contract['automatic_mutation_replay'] is False
+    assert discovered.json()['data']['chart_series']=={'version':1,'path':'/api/v2/chart-series','markets':['US','HK','CN']}
     response=await client.post('/api/v2/auth/login',json={'client_id':'fire-ios','username':'SourceAdmin','password':'SyntheticSource9','device_name':'QA iOS'})
     assert response.status_code==200,response.text
     challenge=response.json()['data'];assert challenge['status']=='requires_2fa' and challenge['purpose']=='login'

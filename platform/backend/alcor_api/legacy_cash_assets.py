@@ -114,7 +114,7 @@ def mount_legacy_cash_assets(app,rate_limit):
                 else:data=await commands.command(who,await body(request,8192),submit=action=='submit')
             status=data.get('status',200) if isinstance(data,dict) else 200
             if status!=200:return JSONResponse({'code':data.get('code',status*100+1),'message':data.get('message','操作未完成')},status_code=status,headers=headers)
-            return JSONResponse({'code':0,'data':data},status_code=status,headers=headers)
+            return JSONResponse({'code':0,'message':'ok','data':data},status_code=status,headers=headers)
         except UniqueViolation as exc:
             if exc.diag.constraint_name!='asset_request_domain':raise
             return JSONResponse({'code':40901,'message':'原UUID已用于其他金融操作，请查询原回执'},status_code=409,headers=headers)

@@ -12,7 +12,7 @@ from .cash_overview import CashOverview
 from .fee_repair_model import replay
 from .fx_reference import FxWorker
 from .legacy_broker_read import iso
-from .market_quote_reads import BatchQuotes
+from .market_quote_selection import configured_quotes
 from .position_transfer_checkpoint import economic_initial
 from .trade_accounting import replay_economic_trades
 from .trade_amendment_history import attach_amendments, effective_rows
@@ -85,7 +85,7 @@ async def snapshot(service,who,options):
     async with service.context(who) as conn:
         original=await (await conn.execute('SELECT id,market,code,revision FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         if len(original)>10000:raise HTTPException(409,'持仓超过完整读取上限')
-    quoted=await BatchQuotes(service.market_authority).read(who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original])
+    quoted=await configured_quotes(service.market_authority,who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original],regular=selected['usPrice']=='regular')
     fx=await FxWorker(service.db).snapshot(exact=True)
     async with service.context(who) as conn:
         rows=await (await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
@@ -102,6 +102,8 @@ async def snapshot(service,who,options):
         accounts=await (await conn.execute('SELECT id,account_kind,holding_source FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL',(who.id,))).fetchall()
         accounts={row['id']:row for row in accounts}
         now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
+        from .legacy_identity import public_profile
+        owner=await public_profile(conn,who.id,scope='portfolio.read')
         values=[];money={};kinds=set()
         with localcontext() as context:
             context.prec=80
@@ -115,6 +117,10 @@ async def snapshot(service,who,options):
                 source='quote' if price is not None else 'unavailable';price_at=state.get('sourceTime') if price is not None else None
                 if price is None and (row['market']!='US' or selected['usPrice']=='observed'):
                     price=decimal(record['price'])
+                    # Ordinary record zero is an unknown-price placeholder;
+                    # an explicit broker report retains its own observed mark.
+                    if price is not None and (price<0 or price==0 and not record.get('officialObservation')):
+                        price=None
                     if price is not None:
                         source='record';price_at=(record.get('officialObservation') or {}).get('reportDate') or record['updatedAt']
                 currency=CURRENCIES.get(row['market']);account=accounts.get(row['broker_account_id'])
@@ -153,10 +159,10 @@ async def snapshot(service,who,options):
             total_market=None if separated else complete_sum([money[row['recordId']][0] for row in active])
             total_cost=None if separated else complete_sum([money[row['recordId']][1] for row in active])
             cash_rows=scoped_books[0]['currencies'] if len(scoped_books)==1 and not separated else []
-            cash_complete=bool(cash_rows) and all(row['complete'] and row['ownerBalance'] is not None for row in cash_rows)
+            source_complete=bool(cash_rows) and all(row['complete'] and row['ownerBalance'] is not None for row in cash_rows)
             cash_values={row['currency']:decimal(row['ownerBalance']) for row in cash_rows}
-            cash_total=complete_sum([convert(amount,currency,selected['currency'],fx['rates']) for currency,amount in cash_values.items()]) if cash_complete else None
-            if cash_total is None:cash_complete=False
+            cash_total=complete_sum([convert(amount,currency,selected['currency'],fx['rates']) for currency,amount in cash_values.items()]) if source_complete else None
+            cash_complete=source_complete and cash_total is not None
             asset_total=total_market+cash_total if total_market is not None and cash_total is not None else None
             for row in active:
                 row['weightPct']=display(money[row['recordId']][0]/total_market*100,2) if total_market is not None and total_market>0 and money[row['recordId']][0] is not None else None
@@ -169,14 +175,20 @@ async def snapshot(service,who,options):
                     'marketValue':display(totals[0],2),'holdingPnl':display(totals[1],2),
                     'date':now.astimezone(ZoneInfo(ZONES[market])).date().isoformat() if market in ZONES else None,'timeZone':ZONES.get(market),
                     'cash':None,'cashUnavailableReason':'currency_balances_not_allocated_to_markets','dayPnl':None,'sessionStatus':'unknown'})
-        result={'accountId':who.id,'collectionRevision':head['revision'] if head else 0,'currency':selected['currency'],'options':selected,
+        result={'schemaVersion':1,'accountId':who.id,
+            'profile':{'accountId':who.id,'username':owner['username'],'nickname':owner.get('nickname'),'uid':owner.get('uid'),'avatar':owner.get('avatar')},
+            'collectionRevision':head['revision'] if head else 0,'currency':selected['currency'],'options':selected,
             'positions':values,'markets':markets,'summary':{'totalMarket':display(total_market,2),'totalCost':display(total_cost,2),
                 'holdingPnl':display(total_market-total_cost,2) if total_market is not None and total_cost is not None else None,
                 'totalCash':display(cash_total,2),'totalAsset':display(asset_total,2),'holdingsComplete':total_market is not None,'costComplete':total_cost is not None,
                 'cashComplete':cash_complete,'totalAssetComplete':asset_total is not None,'dayPnl':None,'dayPnlPct':None,'dayPnlUnavailableReason':'missing_verified_account_day_opening_nav',
                 'unconvertedCurrencies':sorted({row['currency'] or 'UNKNOWN:'+row['market'] for row in active if money[row['recordId']][0] is None})},
-            'cash':{'nativeBalancesByCurrency':{key:display(value) for key,value in cash_values.items()} if cash_complete else None,
-                    'sourceComplete':cash_complete,'complete':cash_complete,'source':'platform_owner_kind_posted_cash_ledger','marketAllocationAvailable':False},
+            'cash':{'nativeBalancesByCurrency':{key:display(value) for key,value in cash_values.items()} if source_complete else None,
+                    'sourceComplete':source_complete,'complete':cash_complete,'source':'recorded_cash_ledger',
+                    'sourceAuthority':'platform_owner_kind_posted_cash_ledger','valuationIndependent':True,'marketAllocationAvailable':False},
+            'todayOrders':{'items':[],'count':0,'available':False,'emptyReason':'snapshot_orders_not_included',
+                    'dateBasis':'exchange_local_calendar_date','timeZones':ZONES,'unknownDateOrderIds':[],'settlesPendingOrders':False},
+            'unavailable':['account_day_pnl','position_day_pnl','today_orders','derivatives','underlying_merge'],
             'migration':{'coverageScope':'platform_owned_records_quotes_fx_cash_books','accountKindsSeparated':separated,'cashBooks':overview['books'],
                          'quoteStates':quoted['quoteStates'],'fxObservation':{key:value for key,value in fx.items() if key!='rates'},
                          'historicalCoverageKnown':False,'realTimePricesAssumed':False,'financialWrites':False}}

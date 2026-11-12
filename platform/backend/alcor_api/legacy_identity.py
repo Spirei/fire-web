@@ -281,6 +281,8 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
         async with db.connection() as conn:
             config = await (await conn.execute('SELECT * FROM identity_passkey_config WHERE singleton=true')).fetchone()
         value = discovery(version, config)
+        from .native_business_discovery import discovery as business_discovery
+        value.update(business_discovery(version))
         from .native_identity_capabilities import email_verification_availability, native_email_registration_discovery
         async with db.connection() as conn:
             mail_availability = await email_verification_availability(conn, settings)

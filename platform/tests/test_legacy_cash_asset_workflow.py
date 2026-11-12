@@ -1,5 +1,7 @@
 """Two deferred native HTTP workflows over isolated PG, without provider collection."""
 
+import os
+from pathlib import Path
 from uuid import uuid4
 
 from source_pure_read_candidate.test_reads import snapshot as business_snapshot
@@ -11,6 +13,58 @@ from test_trading import setup as trading_setup
 SCOPES='portfolio.read portfolio.write cash.read positions.read assets.read'
 
 
+async def test_native_snapshot_keeps_verified_original_cash_when_quotes_and_fx_are_missing(client,db,admin):
+    account,record=await trading_setup(client,name='Synthetic native snapshot',qty='2',cost='10')
+    await cash_submit(client,cash_command(None,amount='0',note='Synthetic independent unallocated opening'))
+    async with db.connection() as conn:
+        await conn.execute('UPDATE portfolio_records SET price=0 WHERE owner_id=%s AND id=%s',(admin,record['id']))
+    headers=bearer(await grant(db,admin,'portfolio.read'))
+    before=await business_snapshot(db)
+    for version in (1,2):
+        root=f'/api/v{version}'
+        contract=(await client.get(root+'/auth/config')).json()['data']['account_assets']
+        assert contract['snapshot_path']==root+'/account-assets'
+        assert contract['features']['cash_price_independent'] is True
+        assert contract['features']['cash_valuation']=='recorded_cash_ledger_price_independent'
+        assert contract['features']['today_orders'] is False
+        result=await client.get(root+'/account-assets?currency=HKD',headers=headers)
+        assert result.status_code==200,result.text
+        assert result.json()['message']=='ok'
+        value=result.json()['data']
+        assert value['schemaVersion']==1 and value['accountId']==value['profile']['accountId']==admin
+        assert value['profile']['username']=='AdminOne'
+        assert value['options']=={'currency':'HKD','costMethod':'diluted','usPrice':'observed'}
+        assert value['cash']['sourceComplete'] is True
+        assert value['cash']['nativeBalancesByCurrency']=={'USD':1000}
+        assert value['cash']['source']=='recorded_cash_ledger' and value['cash']['valuationIndependent'] is True
+        assert value['cash']['sourceAuthority']=='platform_owner_kind_posted_cash_ledger'
+        assert value['cash']['complete'] is False and value['summary']['totalCash'] is None
+        assert value['summary']['totalAsset'] is None
+        position=value['positions'][0]
+        assert position['price'] is None and position['priceSource']=='unavailable'
+        assert position['marketValue'] is None and position['nativeMarketValue'] is None
+        orders=value['todayOrders']
+        assert orders['available'] is False and orders['emptyReason']=='snapshot_orders_not_included'
+        assert orders['items']==[] and orders['count']==0 and orders['settlesPendingOrders'] is False
+        assert orders['dateBasis']=='exchange_local_calendar_date' and 'today_orders' in value['unavailable']
+        if version==2 and os.environ.get('ALCOR_NATIVE_ASSET_CAPTURE'):
+            output=Path(os.environ['ALCOR_NATIVE_ASSET_CAPTURE'])
+            output.write_text(result.text);output.chmod(0o600)
+        usd=await client.get(root+'/account-assets?currency=USD',headers=headers)
+        assert usd.status_code==200,usd.text
+        current=usd.json()['data']
+        assert current['cash']['sourceComplete'] is True and current['cash']['complete'] is True
+        assert current['summary']['totalCash']==1000 and current['summary']['totalAsset'] is None
+    assert await business_snapshot(db)==before
+    # Separate real/simulated books remain separate even when both ledgers have openings.
+    await trading_setup(client,name='Synthetic separate simulated cash',account_kind='simulated',amount='2000')
+    mixed=await client.get('/api/v2/account-assets',headers=headers)
+    assert mixed.status_code==200,mixed.text
+    value=mixed.json()['data']
+    assert value['cash']['sourceComplete'] is False and value['cash']['nativeBalancesByCurrency'] is None
+    assert value['summary']['totalCash'] is None and value['summary']['totalAsset'] is None
+
+
 async def test_native_cash_assets_unknown_reads_scopes_and_instrument_receipt(client,db,admin):
     pair=await grant(db,admin,SCOPES)
     headers=bearer(pair)
@@ -20,6 +74,7 @@ async def test_native_cash_assets_unknown_reads_scopes_and_instrument_receipt(cl
         for path in ('/account-assets/cash','/broker-accounts/cash','/account-assets/positions','/account-assets/summary'):
             response=await client.get(base+path,headers=headers)
             assert response.status_code==200,response.text
+            assert response.json()['message']=='ok','native ApiEnvelope requires a success message'
             data=response.json()['data']
             if path.endswith('/positions'):
                 assert data['items']==[]
@@ -66,6 +121,7 @@ async def test_native_cash_assets_unknown_reads_scopes_and_instrument_receipt(cl
         original=await (await conn.execute('SELECT to_jsonb(r) AS row FROM portfolio_records r WHERE owner_id=%s AND id=%s',(admin,record['id']))).fetchone()
     applied=await client.put(root,json=mutation,headers=headers)
     assert applied.status_code==200,applied.text
+    assert applied.json()['message']=='ok'
     receipt=applied.json()['data']
     assert receipt['state']=='completed' and receipt['financialIdentityChanged'] is False
     assert receipt['data']['instrument']['revision']==1
