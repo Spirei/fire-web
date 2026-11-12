@@ -26,16 +26,31 @@ def mount_rates(app, settings, db, *, worker=None, wait_timeout=15):
             raise HTTPException(403, "需要管理员权限")
         return who
 
-    async def provider_config():
-        async with db.connection() as conn:
-            return await (await conn.execute(
-                "SELECT c.enabled,c.daily_budget,c.revision,p.config AS custom FROM fx_config c LEFT JOIN fx_provider_revisions p ON p.id=c.provider_revision WHERE singleton=true"
+    async def provider_config(who=None,*,include_url=False):
+        async with db.connection() as conn,conn.transaction():
+            row=await (await conn.execute(
+                "SELECT c.enabled,c.daily_budget,c.revision,p.config AS custom,p.id,p.secret_cipher,p.credential_instance FROM fx_config c LEFT JOIN fx_provider_revisions p ON p.id=c.provider_revision WHERE singleton=true"
             )).fetchone()
+            result={key:row[key] for key in ('enabled','daily_budget','revision','custom')}
+            if include_url and row['custom']:
+                from .security import lock_mutation_identity
+                from .admin_verification import require_admin_verification
+                await lock_mutation_identity(conn,who,require_admin=True)
+                try:await require_admin_verification(conn,who,'reference')
+                except HTTPException as exc:
+                    if exc.status_code!=403:raise
+                    return {**result,'urlRestricted':True}
+                from .fx_custom import decrypt_existing,existing_key
+                from .fx_provider_credentials import materialize
+                url,_=materialize(row['custom'],decrypt_existing(existing_key(db.settings),row))
+                result['custom']={**row['custom'],'url':url}
+            if include_url:result['urlRestricted']=False
+            return result
 
     @app.get("/api/rates/provider")
     async def web_provider(request: Request):
-        await current_web(request, admin=True)
-        return JSONResponse(await provider_config(), headers={"Cache-Control":"private, no-store","Vary":"Cookie"})
+        who=await current_web(request, admin=True)
+        return JSONResponse(await provider_config(who,include_url=request.query_params.get('includeUrl')=='1'), headers={"Cache-Control":"private, no-store","Vary":"Cookie"})
 
     @app.get("/api/rates/operations/{request_id}")
     async def web_receipt(request_id: str, request: Request):
@@ -132,6 +147,10 @@ def mount_rates(app, settings, db, *, worker=None, wait_timeout=15):
             raise HTTPException(400, messages.get(str(exc), "接口设置未通过校验，请核对自定义接口及高级设置")) from None
 
     from .admin_verification import VerificationInput, verify_admin_access
+
+    @app.post('/api/rates/provider/reauthenticate',status_code=204)
+    async def web_reauthenticate(data:VerificationInput,request:Request):
+        return await verify_admin_access(data,request,await current_web(request,admin=True),'reference')
 
     @app.post("/api/reference/rates/provider/reauthenticate", status_code=204)
     async def reauthenticate(data: VerificationInput, request: Request):

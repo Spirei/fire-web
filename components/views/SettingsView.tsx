@@ -1,4 +1,6 @@
 "use client";
+
+import { sourceSettingsPatch } from "@/lib/sourceSettingsPatch";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import MarketSourceSettings from "@/components/MarketSourceSettings";
 import Avatar from "@/components/Avatar";
@@ -692,9 +694,12 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings, initialPasskeys, initialSettingsVersion }: Props) {
   const foreground = useWorkspaceForeground();
   const avatarCrop = useImageCrop();
-  const futuSave = useMemo(() => new SiteSettingsCommand(), []);
-  const sourcesSave = useMemo(() => new SiteSettingsCommand(), []);
+  const futuSave = useMemo(() => new SiteSettingsCommand(user.id), [user.id]);
+  const sourcesSave = useMemo(() => new SiteSettingsCommand(user.id), [user.id]);
+  const sourceFieldsEdited=useRef(new Set<string>());
   const [fxSourceHost, setFxSourceHost] = useState("");
+  const [fxSourceUrl,setFxSourceUrl]=useState("");
+  const [fxUrlRestricted,setFxUrlRestricted]=useState(false);
   const [fxConfigError,setFxConfigError] = useState("");
   const [fxConfigRetry,setFxConfigRetry] = useState(0);
   const [fxConfigRevision, setFxConfigRevision] = useState<number | null>(null);
@@ -1311,6 +1316,10 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingHomeNav, setEditingHomeNav] = useState(false);
   const [editingTabs, setEditingTabs] = useState(false);
   const [editingSources, setEditingSources] = useState(false);
+  const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [srcSaving, setSrcSaving] = useState(false);
+  const [sourcesNeedRead,setSourcesNeedRead]=useState(false);
+
   const [editingModel, setEditingModel] = useState(false);
   const [uploadingModelIconId, setUploadingModelIconId] = useState<string | null>(null);
   const modelDragIndexRef = useRef<number | null>(null);
@@ -1356,15 +1365,37 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [editingFutu, setEditingFutu] = useState(false);
   const [editingMarketBadges, setEditingMarketBadges] = useState(false);
   const [editingAppearance, setEditingAppearance] = useState(false);
+  function applyFxProvider(value:{revision:number;custom?:{url?:string}|null;urlRestricted?:boolean}) {
+    const stored=value.custom?.url || "",url=value.urlRestricted ? "" : stored;
+    setFxSourceHost(stored ? new URL(stored).hostname : "");setFxSourceUrl(url);setFxUrlRestricted(value.urlRestricted===true);
+    setSite(current=>({...current,currencyApiUrl:url}));
+    if(lastSavedRef.current)lastSavedRef.current.site.currencyApiUrl=url;
+    setFxConfigRevision(value.revision);setFxConfigError("");
+  }
+  async function beginSourceEdit(){
+    if(srcSaving)return;
+    try{
+      if(activeAnchor==='sources' && fxUrlRestricted){
+        setSrcSaving(true);
+        const proof=await requestAdminProof();if(!proof)return;
+        await platformRequest('/api/rates/provider/reauthenticate',{method:'POST',headers:{'Content-Type':'application/json','X-Alcor-Expected-Account':user.id},body:JSON.stringify(proof)});
+        const value=await platformRequest<{revision:number;custom?:{url?:string}|null;urlRestricted?:boolean}>('/api/rates/provider?includeUrl=1',{headers:{'X-Alcor-Expected-Account':user.id}});
+        if(value.urlRestricted)throw new Error('请验证身份后查看接口地址');
+        applyFxProvider(value);
+      }
+      sourceFieldsEdited.current.clear();setSrcMsg(null);setEditingSources(true);
+    }catch(error){setSrcMsg({type:'err',text:error instanceof Error?error.message:'接口地址读取失败'});}
+    finally{setSrcSaving(false);}
+  }
   useEffect(() => {
     if (!foreground || !isAdminUser || activeAnchor !== "sources" || editingSources) return;
     const controller = new AbortController();
     setFxConfigError("");
-    void platformRequest<{revision:number;custom?:{url?:string}|null}>("/api/rates/provider", {signal:controller.signal})
-      .then(value => { if (!controller.signal.aborted) { setFxSourceHost(value.custom?.url ? new URL(value.custom.url).hostname : ""); setFxConfigRevision(value.revision); setFxConfigError(""); } })
+    void platformRequest<{revision:number;custom?:{url?:string}|null;urlRestricted?:boolean}>("/api/rates/provider?includeUrl=1", {signal:controller.signal,headers:{'X-Alcor-Expected-Account':user.id}})
+      .then(value => { if (!controller.signal.aborted) applyFxProvider(value); })
       .catch(error => { if(!controller.signal.aborted){setFxConfigRevision(null);setFxConfigError(error instanceof Error?error.message:"配置读取失败");} });
     return () => controller.abort();
-  }, [activeAnchor, editingSources,foreground,isAdminUser,fxConfigRetry]);
+  }, [activeAnchor, editingSources,foreground,isAdminUser,fxConfigRetry,user.id]);
   const activeEditState = activeAnchor === "trading-square" ? editingTradingSquare
     : activeAnchor === "info" ? editingSiteInfo
     : activeAnchor === "appearance" ? editingAppearance
@@ -1390,7 +1421,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "app-nav") setEditingTabs(true);
     else if (activeAnchor === "groups") setEditingStockGroups(true);
     else if (activeAnchor === "market-badges") setEditingMarketBadges(true);
-    else if (SOURCE_DETAIL_ANCHORS.has(activeAnchor)) setEditingSources(true);
+    else if (SOURCE_DETAIL_ANCHORS.has(activeAnchor)) void beginSourceEdit();
     else if (activeAnchor === "translation") setEditingModel(true);
     else if (activeAnchor === "trade") setEditingFutu(true);
     else if (activeAnchor === "profile") setEditingProfile(true);
@@ -1399,7 +1430,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     const onEditActive = () => beginActiveEdit();
     window.addEventListener("fire:settings-edit-active", onEditActive);
     return () => window.removeEventListener("fire:settings-edit-active", onEditActive);
-  }, [activeAnchor]);
+  }, [activeAnchor,fxUrlRestricted,srcSaving,user.id]);
   // 把「当前分区是否在编辑」广播给标题栏（铅笔 ↔ 完成图标切换）
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("fire:settings-edit-state", { detail: { editing: activeEditState, auto: ["palette", "passkeys"].includes(activeAnchor) } }));
@@ -1469,7 +1500,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     else if (activeAnchor === "ticker") setEditingTicker(false);
     else if (activeAnchor === "nav") setEditingHomeNav(false);
     else if (activeAnchor === "app-nav") setEditingTabs(false);
-    else if (SOURCE_DETAIL_ANCHORS.has(activeAnchor)) setEditingSources(false);
+    else if (SOURCE_DETAIL_ANCHORS.has(activeAnchor)) {sourceFieldsEdited.current.clear();setSrcMsg(null);setEditingSources(false);}
     else if (activeAnchor === "translation") setEditingModel(false);
     else if (activeAnchor === "trade") setEditingFutu(false);
     else if (activeAnchor === "market-badges") setEditingMarketBadges(false);
@@ -1490,7 +1521,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     showToast("已取消未保存的修改");
   }
   const EDIT_CANCEL_BUTTON = (
-    <Capsule variant="ghost" size="sm" type="button" onClick={cancelActiveEdit} className="">取消</Capsule>
+    <Capsule variant="ghost" size="sm" type="button" disabled={SOURCE_DETAIL_ANCHORS.has(activeAnchor) && srcSaving} onClick={cancelActiveEdit} className="">取消</Capsule>
   );
 
   saveActiveEditRef.current = saveActiveEdit;
@@ -1509,8 +1540,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   const [deleteTotpCode, setDeleteTotpCode] = useState("");
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupsLoaded, setGroupsLoaded] = useState(!!initialSettingsVersion);
-  const [srcMsg, setSrcMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [srcSaving, setSrcSaving] = useState(false);
   const { label: futuStatusLabel, online: futuOnline, checking: futuChecking, skipped: futuSkipped, result: futuTest, test: testFutu } = useFutuConnectionStatus(site.futuHost, site.futuPort, isAdminUser && foreground && activeAnchor === "trade");
   const [futuQuota, setFutuQuota] = useState<{
     loading: boolean;
@@ -1575,34 +1604,48 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   async function saveStockSources(): Promise<boolean> {
     setSrcSaving(true);
     setSrcMsg(null);
+    let confirmed=sourcesNeedRead;
     try {
       const keys = SOURCE_SECTIONS.find(section => section.id === activeAnchor)?.keys ?? [];
       const previous = lastSavedRef.current?.site;
       if (!previous && !sourcesSave.pending) throw new Error("配置尚未读完，请稍后保存");
-      const patch: Record<string, unknown> = {};
-      for (const key of keys) {
-        if (site[key] !== previous?.[key]) patch[key] = site[key];
-      }
-      if (!Object.keys(patch).length && !sourcesSave.pending) return true;
-      if (patch.currencyApiUrl && !sourcesSave.pending) {
+      const patch: Record<string, unknown> = sourceSettingsPatch(keys,sourceFieldsEdited.current,site as unknown as Record<string,unknown>);
+      if (!Object.keys(patch).length && !sourcesSave.pending && !sourcesNeedRead) return true;
+      if ("currencyApiUrl" in patch && !patch.currencyApiUrl && !sourcesSave.pending && !sourcesNeedRead) throw new Error("请输入汇率接口地址");
+      if (patch.currencyApiUrl && !sourcesSave.pending && !sourcesNeedRead) {
         if (!Number.isSafeInteger(fxConfigRevision)) throw new Error("请先读取当前汇率配置");
         if (!await appConfirm("允许此接口提供汇率数据？", { title: "保存汇率来源" })) return false;
         patch.currencyApproved = true;
         patch.currencyRevision = fxConfigRevision;
       }
-      const proof = sourcesSave.pending ? { password: "", code: "" } : await requestAdminProof();
-      if (!proof) return false;
-      await sourcesSave.save(patch, proof.password, proof.code);
+      if(!sourcesNeedRead){
+        const proof = sourcesSave.pending ? { password: "", code: "" } : await requestAdminProof();
+        if (!proof) return false;
+        await sourcesSave.save(patch, proof.password, proof.code);
+        confirmed=true;
+        setSourcesNeedRead(true);
+        sourceFieldsEdited.current.clear();
+      }
       const data = await platformRequest<{settings:SiteSettings}>("/api/settings");
-      const saved = { ...site, ...data.settings, currencyApiUrl: "" };
+      let url=fxSourceUrl;
+      if((keys as readonly string[]).includes("currencyApiUrl")){
+        const observed=await platformRequest<{revision:number;custom?:{url?:string}|null;urlRestricted?:boolean}>("/api/rates/provider?includeUrl=1",{headers:{'X-Alcor-Expected-Account':user.id}});
+        if(observed.urlRestricted)throw new Error('请验证身份后查看接口地址');
+        url=observed.custom?.url || "";setFxConfigRevision(observed.revision);setFxConfigError("");
+      }
+      const saved = { ...site, ...data.settings, currencyApiUrl: url };
       setSite(saved);
+      setFxSourceUrl(url);setFxSourceHost(url ? new URL(url).hostname : "");
+      sourceFieldsEdited.current.clear();
       captureSaved(saved);
+      setSourcesNeedRead(false);
       window.dispatchEvent(new Event("fire:settings-updated"));
       setSrcMsg(null);
       showToast("已保存");
       return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "行情与汇率接口保存失败";
+      const detail=err instanceof Error ? err.message : "行情与汇率接口保存失败";
+      const message=confirmed ? `保存已完成，读取结果失败：${detail}` : detail;
       setSrcMsg({ type: "err", text: message });
       showToast(message, "err");
       return false;
@@ -2016,7 +2059,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
             category={currentCategory?.label || "账户设置"}
             detailKey={activeAnchor}
             showBack={activeAnchor === "totp" && (totpEnabled || !!totpSetup || totpLandingStage === "method")}
-            closeDisabled={Object.values(blockSaving).some(Boolean) || (activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "trading-square" && !!blockSaving.tradingSquare) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}
+            closeDisabled={Object.values(blockSaving).some(Boolean) || (SOURCE_DETAIL_ANCHORS.has(activeAnchor) && srcSaving) || (activeAnchor === "totp" && totpBusy) || (activeAnchor === "profile" && profileSaving) || (activeAnchor === "trading-square" && !!blockSaving.tradingSquare) || (activeAnchor === "mobile-nav" && !!blockSaving["mobile-nav"])}
             onBack={activeAnchor === "totp" ? () => {
               if (totpBusy) return;
               if (totpSetup && totpSetupStage === "verify") { setTotpSetupStage("name"); setTotpSetupCode(""); setTotpMsg(null); return; }
@@ -3040,11 +3083,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   desc={SOURCE_SECTIONS.find((section) => section.id === activeAnchor)?.desc || "实时行情、搜索、分时走势与汇率换算"}
                   id={SOURCE_DETAIL_ANCHORS.has(activeAnchor) ? activeAnchor : "sources"}
                   titleAction={!editingSources ? (
-                    <IconButton size="sm" type="button" onClick={() => setEditingSources(true)} className="" title="编辑股票来源接口" label="编辑股票来源接口">
+                    <IconButton size="sm" type="button" disabled={srcSaving} onClick={() => void beginSourceEdit()} className="" title="编辑股票来源接口" label="编辑股票来源接口">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
                     </IconButton>
                   ) : undefined}
-                  action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<Capsule variant="secondary" size="sm" type="button" onClick={() => { void saveActiveEdit(); }} className="">保存</Capsule></div> : undefined}
+                  action={editingSources ? <div className="flex items-center gap-2">{EDIT_CANCEL_BUTTON}<Capsule variant="secondary" size="sm" type="button" disabled={srcSaving} onClick={() => { void saveActiveEdit(); }} className="">{srcSaving ? "保存中…" : sourcesSave.pending || sourcesNeedRead ? "核对保存结果" : "保存"}</Capsule></div> : undefined}
                 >
                   <div className="source-field-list flex flex-col">
                     {SOURCE_SECTIONS.filter((section) => section.id === activeAnchor).map(({ id, keys }) => {
@@ -3061,19 +3104,22 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                                   {editingSources ? (
                                     <input
                                       className="sw-row-input"
-                                      type={f.key === "currencyApiUrl" ? "password" : "text"}
+                                      type="text"
+                                      inputMode="url"
+                                      spellCheck={false}
                                       autoComplete="off"
+                                      disabled={srcSaving || sourcesSave.pending || sourcesNeedRead}
                                       value={value}
-                                      title={f.key === "currencyApiUrl" ? undefined : value}
-                                      onChange={(e) => setSite((s) => ({ ...s, [f.key]: e.target.value }))}
+                                      title={value}
+                                      onChange={(e) => {sourceFieldsEdited.current.add(f.key);setSite((s) => ({ ...s, [f.key]: e.target.value }));}}
                                       placeholder={f.key === "currencyApiUrl" ? "输入汇率接口地址" : f.placeholder}
                                     />
                                   ) : (
                                     <span
                                       className="min-w-0 flex-1 truncate text-[12.5px] text-muted"
-                                      title={f.key === "currencyApiUrl" ? fxConfigError || fxSourceHost : value || f.placeholder}
+                                      title={f.key === "currencyApiUrl" ? fxConfigError || fxSourceUrl || fxSourceHost : value || f.placeholder}
                                     >
-                                      {f.key === "currencyApiUrl" ? fxConfigError ? "读取失败" : fxConfigRevision===null ? "读取中…" : fxSourceHost || "未配置" : value || f.placeholder}
+                                      {f.key === "currencyApiUrl" ? fxConfigError ? "读取失败" : fxConfigRevision===null ? "读取中…" : fxSourceUrl || fxSourceHost || "未配置" : value || f.placeholder}
                                     </span>
                                   )}
                                   {f.key === "currencyApiUrl" && !editingSources && (fxConfigError ? <IconButton size="sm" label="重新读取汇率配置" title="重新读取汇率配置" onClick={()=>setFxConfigRetry(value=>value+1)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg></IconButton> : <CronRefreshButton />)}
@@ -3111,6 +3157,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                       );
                     })}
                   </div>
+                  {srcMsg?.type === "err" && <p role="alert" className="settings-form-message is-error">{srcMsg.text}</p>}
                 </SettingsSection>
               </div>
             )}

@@ -61,3 +61,5 @@ Web、v1、v2 共享同一份来源配置、证券身份、PG 观测和后台采
 腾讯 `tencent-minute-v1` 仅采集 CN/HK 常规盘单证券分钟价格，走同一来源许可、Worker 与原件核对；不视为 OHLC、实时成交时间或已规范化成交量。美股 ALL 分时继续使用明确许可的富途真实时间帧。指数与股票代码命名空间独立，App 不会把上证指数 000001 读作深圳同代码股票。
 
 历史准备支持 `minute: true`（CN/HK REGULAR、US ALL）。`GET /api/v1/kline/preparations/{requestId}` 和 v2 对应路径只读返回本人原请求的 `pending`、`failed`、`state`、`unavailable` 和任务状态；需要 portfolio.read，不登记需求、不触发采集、不重发失败任务。页面等待原进度完成再读取图表；只有确认 failed 后才以新 UUID 请求备用源，未知提交先停止。
+
+网页管理员读取 `/api/rates/provider?includeUrl=1` 可在当前有效验证下读取完整汇率地址；默认配置读取与 App 接口继续隐藏凭据。验证过期时返回 `urlRestricted: true`，网页通过 `/api/rates/provider/reauthenticate` 完成原身份校验后再读；显示地址不改变供应商配置，也不发起行情或汇率采集。

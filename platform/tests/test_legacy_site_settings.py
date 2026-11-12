@@ -157,6 +157,23 @@ async def test_explicit_fx_url_save_seals_credentials_and_registers_current_prov
     metadata=await legacy.get('/api/rates/provider')
     assert metadata.status_code==200 and metadata.json()['revision']==2
     assert 'synthetic-key' not in metadata.text
+    # Only the explicit, verified administrator view may read the full URL.
+    shown=await legacy.get('/api/rates/provider?includeUrl=1')
+    assert shown.status_code==200 and shown.json()['custom']['url']==payload['currencyApiUrl'],shown.text
+    assert shown.json()['urlRestricted'] is False
+    async with db.connection() as conn:
+        await conn.execute("UPDATE sessions SET auth_method='password',created_at=clock_timestamp()-interval '20 minutes' WHERE user_id=(SELECT id FROM users WHERE username='AdminOne')")
+        await conn.execute("DELETE FROM identity_challenges WHERE purpose='reference-reauth'")
+    restricted=await legacy.get('/api/rates/provider?includeUrl=1')
+    assert restricted.status_code==200 and restricted.json()['urlRestricted'] is True
+    assert 'synthetic-key' not in restricted.text
+    unlock=await legacy.post('/api/rates/provider/reauthenticate',json={'password':'Synthetic9Pass'})
+    assert unlock.status_code==204,unlock.text
+    shown=await legacy.get('/api/rates/provider?includeUrl=1')
+    assert shown.status_code==200 and shown.json()['custom']['url']==payload['currencyApiUrl']
+    async with db.connection() as conn:
+        assert (await (await conn.execute('SELECT count(*) n FROM fx_provider_revisions')).fetchone())['n']==1
+        assert not await (await conn.execute('SELECT 1 FROM fx_refresh_tasks')).fetchone(),'viewing the URL never collects rates or configures another provider'
     fetches=[]
     async def requester(url,approval,headers):
         fetches.append(url)
