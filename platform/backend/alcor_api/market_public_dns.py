@@ -1,5 +1,6 @@
 """Public DNS rotation for the fixed quote origins, never arbitrary provider URLs."""
 import ipaddress
+import os
 import re
 from urllib.parse import unquote, urlsplit
 
@@ -39,6 +40,28 @@ def validate_mode(target):
     public_addresses(target.addresses)
 
 
+def fixed_quote_url(parsed):
+    host,path=parsed.hostname,parsed.path
+    return parsed.scheme=='https' and (parsed.port or 443)==443 and (
+        host=='qt.gtimg.cn' and re.fullmatch(r'/q=(?:us|hk|sh|sz|bj|jp|kr)[A-Z0-9._]+',path)
+        or host=='web.ifzq.gtimg.cn' and path=='/appstock/app/minute/query'
+        or host in HOSTS['eastmoney'] and path=='/api/qt/ulist.np/get'
+        or host in HOSTS['yahoo'] and path.startswith('/v8/finance/chart/')
+        and unquote(path.removeprefix('/v8/finance/chart/')) not in ('','.','..')
+        and not any(c in unquote(path.removeprefix('/v8/finance/chart/')) for c in '/\\'))
+
+
+def local_public_quote_pins(url,approval):
+    """An explicit local mode uses only existing approved public pins, never fake IPs."""
+    if os.environ.get('FIRE_QUOTE_DNS_MODE','system')!='approved_public_pins':return None
+    if os.environ.get('FIRE_ENVIRONMENT') not in ('local','test'):
+        raise ValueError('local_quote_dns_mode_required')
+    if not fixed_quote_url(urlsplit(url)):return None
+    # Keep the exact declared origin/path, saved address approval and TLS name.
+    # This neither approves a DNS answer nor adds an address from the request.
+    return public_addresses(quote_pins(url,approval,approval['addresses']))
+
+
 def quote_pins(url,approval,resolved):
     # The exact declared origin/path still has to match before any socket opens.
     approved_target(url,approval,approval['addresses'])
@@ -46,15 +69,6 @@ def quote_pins(url,approval,resolved):
     if mode is None:return approved_target(url,approval,resolved)
     if mode!='public_fixed_quote_host':raise ValueError('target_not_approved')
     parsed=urlsplit(url)
-    host,path=parsed.hostname,parsed.path
-    if parsed.scheme!='https' or (parsed.port or 443)!=443:
-        raise ValueError('target_not_approved')
-    allowed=(host=='qt.gtimg.cn' and re.fullmatch(r'/q=(?:us|hk|sh|sz|bj|jp|kr)[A-Z0-9._]+',path)
-        or host=='web.ifzq.gtimg.cn' and path=='/appstock/app/minute/query'
-        or host in HOSTS['eastmoney'] and path=='/api/qt/ulist.np/get'
-        or host in HOSTS['yahoo'] and path.startswith('/v8/finance/chart/')
-        and unquote(path.removeprefix('/v8/finance/chart/')) not in ('','.','..')
-        and not any(c in unquote(path.removeprefix('/v8/finance/chart/')) for c in '/\\'))
-    if not allowed:raise ValueError('target_not_approved')
+    if not fixed_quote_url(parsed):raise ValueError('target_not_approved')
     public_addresses(approval['addresses'])
     return public_addresses(resolved)

@@ -32,8 +32,10 @@ async def fetch_page(url, approval):
         parsed.hostname in ('query1.finance.yahoo.com','query2.finance.yahoo.com')
         and parsed.path.startswith('/v8/finance/chart/')) else {}
     async with asyncio.timeout(15):
-        from .market_public_dns import quote_pins
-        pins = quote_pins(url, approval, await resolve(parsed.hostname, port))
+        from .market_public_dns import quote_pins, local_public_quote_pins
+        pins = local_public_quote_pins(url, approval)
+        if pins is None:
+            pins = quote_pins(url, approval, await resolve(parsed.hostname, port))
         from .market_quote_proxy import quote_backend
         backend = await quote_backend(url, pins, resolver=resolve)
         async with (

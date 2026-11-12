@@ -3,7 +3,7 @@ from dataclasses import asdict, replace
 
 import pytest
 from alcor_api.dividend_sources import Target, canonical, digest
-from alcor_api.market_public_dns import quote_pins
+from alcor_api.market_public_dns import quote_pins, local_public_quote_pins
 
 
 def target():
@@ -85,9 +85,12 @@ def test_other_fixed_quote_protocols_keep_their_exact_origin_and_path(source,hos
 
 @pytest.mark.parametrize('source,host,symbol',[
     ('eastmoney','push2delay.eastmoney.com','1.600519'),('yahoo','query1.finance.yahoo.com','AAPL')])
-async def test_wire_keeps_hostname_and_pins_one_resolution_without_following_redirect(monkeypatch,source,host,symbol):
+@pytest.mark.parametrize('local_mode',[False,True])
+async def test_wire_keeps_hostname_and_pins_one_resolution_without_following_redirect(monkeypatch,source,host,symbol,local_mode):
     from alcor_api import dividend_source_transport as wire
     seen=[];resolutions=[];status=200
+    monkeypatch.setenv('FIRE_ENVIRONMENT','local')
+    monkeypatch.setenv('FIRE_QUOTE_DNS_MODE','approved_public_pins' if local_mode else 'system')
     class Response:
         async def __aenter__(self):self.status=status;return self
         async def __aexit__(self,*args):pass
@@ -95,7 +98,7 @@ async def test_wire_keeps_hostname_and_pins_one_resolution_without_following_red
     class Pool:
         def __init__(self,**kwargs):
             backend=kwargs['network_backend']
-            assert backend.host==host and backend.addresses==('1.1.1.1',)
+            assert backend.host==host and backend.addresses==(('8.8.8.8',) if local_mode else ('1.1.1.1',))
             assert kwargs['retries']==0 and kwargs['max_connections']==1
         async def __aenter__(self):return self
         async def __aexit__(self,*args):pass
@@ -111,4 +114,25 @@ async def test_wire_keeps_hostname_and_pins_one_resolution_without_following_red
     status=302
     with pytest.raises(wire.ResponseFailure) as refused:await wire.fetch_page(url,declared)
     assert refused.value.status==302 and refused.value.raw==b'provider-body'
-    assert seen==[('GET',url),('GET',url)] and resolutions==[(host,443)]*2
+    assert seen==[('GET',url),('GET',url)] and resolutions==([] if local_mode else [(host,443)]*2)
+
+
+def test_local_saved_pins_require_explicit_mode_and_never_expand_to_custom_origins(monkeypatch):
+    url='https://push2delay.eastmoney.com/api/qt/ulist.np/get'
+    monkeypatch.delenv('FIRE_QUOTE_DNS_MODE',raising=False)
+    assert local_public_quote_pins(url,approval()) is None
+    monkeypatch.setenv('FIRE_QUOTE_DNS_MODE','approved_public_pins')
+    monkeypatch.setenv('FIRE_ENVIRONMENT','production')
+    with pytest.raises(ValueError,match='local_quote_dns_mode_required'):
+        local_public_quote_pins(url,approval())
+    monkeypatch.setenv('FIRE_ENVIRONMENT','local')
+    assert local_public_quote_pins(url,approval())==('8.8.8.8',)
+    assert local_public_quote_pins('https://custom.example/rates',approval()) is None
+    assert local_public_quote_pins('http://push2delay.eastmoney.com/api/qt/ulist.np/get',approval()) is None
+    assert local_public_quote_pins('https://push2delay.eastmoney.com/custom',approval()) is None
+    for addresses in (['198.18.0.1'],['127.0.0.1'],['8.8.8.8','10.0.0.1']):
+        bad={**approval(),'addresses':addresses}
+        with pytest.raises(ValueError,match='address_not_approved'):
+            local_public_quote_pins(url,bad)
+    bad={**approval(),'target':['https','other.example',443,'/api/qt/ulist.np/get']}
+    with pytest.raises(ValueError):local_public_quote_pins(url,bad)

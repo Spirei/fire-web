@@ -25,6 +25,11 @@ def load_fire_settings():
     missing = [name for name in REQUIRED if not os.environ.get("FIRE_" + name, "").strip()]
     if missing:
         raise ValueError("缺少必填配置：" + ", ".join("FIRE_" + name for name in missing))
+    dns_mode = os.environ.get("FIRE_QUOTE_DNS_MODE", "system")
+    if dns_mode not in ("system", "approved_public_pins"):
+        raise ValueError("FIRE_QUOTE_DNS_MODE 配置无效")
+    if dns_mode != "system" and os.environ["FIRE_ENVIRONMENT"] not in ("local", "test"):
+        raise ValueError("已批准公网地址模式仅用于隔离的本地或测试环境")
     validate_database_target(os.environ["FIRE_DATABASE_URL"])
     # Fire has one infrastructure authority: its server environment.
     overrides = {"connections_from_environment": True, "deployment_checks_workflow": "docker-publish.yml"}

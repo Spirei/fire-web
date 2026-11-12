@@ -47,6 +47,17 @@ def test_current_fire_upload_root_can_use_explicit_operator_directory(fire_env, 
     assert load_fire_settings().public_upload_root == tmp_path
 
 
+def test_saved_quote_pins_are_explicit_and_local_only(fire_env, monkeypatch):
+    monkeypatch.setenv('FIRE_QUOTE_DNS_MODE','approved_public_pins')
+    with pytest.raises(ValueError,match='仅用于隔离'):
+        load_fire_settings()
+    monkeypatch.setenv('FIRE_ENVIRONMENT','local')
+    assert load_fire_settings().environment=='local'
+    monkeypatch.setenv('FIRE_QUOTE_DNS_MODE','unknown')
+    with pytest.raises(ValueError,match='FIRE_QUOTE_DNS_MODE'):
+        load_fire_settings()
+
+
 def test_uuid_required_zero_rejected_and_secret_values_hidden(fire_env, monkeypatch):
     monkeypatch.delenv("FIRE_INSTANCE_ID")
     with pytest.raises(ValueError, match="FIRE_INSTANCE_ID"):

@@ -93,6 +93,8 @@ Web、v1、v2 共享同一份来源配置、证券身份、PG 观测和后台采
 
 固定公共行情的显式接入为 Tencent、Eastmoney、Yahoo 的已实现 HTTPS 主机和路径登记 `dns_policy: public_dns`；每次解析最多 32 个公网地址，混入任一私网、回环、链路本地、保留或多播地址即拒绝整次连接。TCP 只使用本次验证结果，TLS/SNI 保留原主机，不跟随跳转或重发 HTTP。旧 `pinned` 指纹不变，自定义、私有和汇率地址不获得此模式；接入仅升级本人已生成且主机和协议一致的目标，保留许可、市场、代码映射。既有公共模式再次接入不会因 DNS 轮换而重建来源。
 
+隔离的本地验收遇到 Fake-IP DNS 时，可在私有启动 YAML 显式设置 `FIRE_QUOTE_DNS_MODE: approved_public_pins`，仅固定行情主机使用原已批准的公网地址，继续验证原许可路径与 TLS 主机，不信任或连接 Fake-IP。预发布及生产拒绝启用；默认仍走本次系统 DNS，自定义、私有和汇率目标不使用本地选项。
+
 Yahoo Chart 请求恢复迁移前使用的 `User-Agent: Mozilla/5.0` 与 `Accept: application/json`，不增加 Cookie 或认证、不跟随跳转、不自动重试 HTTP 403/429，仍以真实供应商结果判断可用状态。
 
 Yahoo 的行情与历史通过 YAML 的 `fire.environment` 直接配置 `STOCKLOG_PROXY: "http://proxy-host:port"`，使用显式 HTTP CONNECT 出口，不从 `.env` 引用；留空或 `"off"` 为直连。实际代理地址只留在群晖配置，不进入公开源码。修改后须保存项目并重建容器，随后用实际行情源检测确认；只重启旧容器不会更新环境。固定 Yahoo Chart 目标仍校验公网地址、原主机证书和实际响应，其他行情、汇率与自定义来源保持原连接方式。

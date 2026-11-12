@@ -33,6 +33,8 @@ npm start -- --port 3001
 
 未指定 `FIRE_PYTHON` 时优先使用当前后端 `platform/.venv`，没有虚拟环境才使用系统 `python3`。私有配置与密钥不能提交到 Git。需要独立行情设置的本地验收使用隔离数据库；不得通过更改线上数据库的环境身份来启动本地 HTTP 服务，也不要向同一个实例同时启动第二个行情 Worker。
 
+本机使用 Fake-IP DNS 时，隔离的 `local` / `test` 环境可在启动 YAML 中显式配置 `FIRE_QUOTE_DNS_MODE: approved_public_pins`。仅固定公共行情主机使用已批准的公网地址，保留许可路径、TLS 主机名及单次 HTTP 请求；不会连接 Fake-IP 或私网地址。默认仍核对本次系统 DNS；自定义、汇率与 OpenD 目标不使用该选项，预发布和生产环境拒绝启用。
+
 ## 管理
 
 系统总览统一管理 PostgreSQL、Redis 和 Worker；后台任务可查询持久回执、详情及取消状态。接口迁移页读取 `contracts/fire-api-surface.json` 并逐项核对实际注册的方法与路径，接入状态不代表页面已验收。旧数据及备份不会由源码更新自动迁移或删除。
