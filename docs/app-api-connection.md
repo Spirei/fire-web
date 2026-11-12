@@ -55,3 +55,7 @@ Web、v1、v2 共享同一份来源配置、证券身份、PG 观测和后台采
 | POST | `/api/v1/portfolio-series/prepare`、`/api/v2/portfolio-series/prepare` | `requestId` UUID、`days`（1–1200）；证券范围由服务器读取本人持仓 |
 
 这些入口需要当前网页登录或带 `portfolio.write` 的 App 授权，不接收用户编号、来源地址或私有主机。返回统一的 `code/message/data` 信封和已接受任务范围，复用原 UUID 可以查询原结果；后台完成前读取已有历史，切页不取消已接受的采集。已完成日线复用原件，数据不足时不生成收益率、净值或补零曲线。GET 历史读取保持只读。
+
+指数的 `GET /api/v1/indices`、`GET /api/v2/indices` 在本人已有兼容行情配置时，与顶部及自选页读取同一份指数观测；显式指定的发现来源和匿名公共许可保持各自边界。`POST /api/v1/indices/prepare`、`POST /api/v2/indices/prepare` 接受 `{requestId}`，需要 `portfolio.write`，仅登记服务器固定指数身份。`open: null` 表示尚无已核实开市状态，不可当作休市；价格和时间的缺项保持未知。
+
+腾讯 `tencent-minute-v1` 仅采集 CN/HK 常规盘单证券分钟价格，走同一来源许可、Worker 与原件核对；不视为 OHLC、实时成交时间或已规范化成交量。美股 ALL 分时继续使用明确许可的富途真实时间帧。指数与股票代码命名空间独立，App 不会把上证指数 000001 读作深圳同代码股票。

@@ -18,6 +18,7 @@ from .security import lock_mutation_identity
 
 SPECS = {
     'tencent': ('qt.gtimg.cn','tencent-quotes-v1',('US','HK','CN'),('latest',)),
+    'tencent-minute': ('web.ifzq.gtimg.cn','tencent-minute-v1',('HK','CN'),('price_series.minute.REGULAR',)),
     'eastmoney': ('push2delay.eastmoney.com','eastmoney-quotes-v1',('US','HK','CN','JP','KR','SG'),('latest',)),
     'yahoo': ('query1.finance.yahoo.com','yahoo-chart-history-v1',('US','HK','CN','JP','KR','SG'),('latest','bars.day')),
 }
@@ -38,8 +39,9 @@ async def setup(db, authority, who, request_id):
         if not addresses or any(not ip_address(a).is_global or ip_address(a).is_multicast for a in addresses):
             raise HTTPException(503,'行情源地址暂时无法核对')
         identifier='quotes-'+provider+'-'+sha256(who.id.encode()).hexdigest()[:20]
-        target=Target(identifier,provider,host,443,addresses,approved_access=True)
-        policy=Policy(identifier,provider,version,identifier,target.fingerprint,who.id,'market-settings-v1',purposes,markets)
+        family=provider.split('-',1)[0]
+        target=Target(identifier,family,host,443,addresses,approved_access=True)
+        policy=Policy(identifier,family,version,identifier,target.fingerprint,who.id,'market-settings-v1',purposes,markets)
         if provider=='tencent':
             from dataclasses import replace
             policy=replace(policy,timestamp_zones=(('US','America/New_York'),('HK','Asia/Hong_Kong'),('CN','Asia/Shanghai')))
@@ -60,7 +62,13 @@ async def setup(db, authority, who, request_id):
         chosen=[]
         for target,policy in generated:
             # Preserve any already configured, usable provider and its approval.
-            selected=await selection(authority,conn,who,policy['source'])
+            selected=None
+            if policy['source_version']=='tencent-minute-v1':
+                old=await (await conn.execute('SELECT revision FROM market_source_configs WHERE owner_id=%s AND policy_id=%s AND policy_fingerprint=%s',(who.id,policy['id'],Policy(**policy).fingerprint))).fetchone()
+                if old:
+                    try:selected=(old['revision'],(await authority.config(conn,who.id,old['revision']))[1])
+                    except HTTPException:pass
+            else:selected=await selection(authority,conn,who,policy['source'])
             if selected:
                 chosen.append((None,selected[0]));continue
             targets=[t for t in targets if t.get('id')!=target['id']]+[target]

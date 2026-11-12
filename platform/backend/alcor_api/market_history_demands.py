@@ -37,7 +37,7 @@ async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust=
                 usable.append((revision,policy))
             if not usable:
                 unavailable.append(item);continue
-            failed=await (await conn.execute("SELECT DISTINCT s.source_revision FROM market_streams s JOIN tasks t ON t.id=s.current_task_id WHERE s.owner_id=%s AND s.source_revision=ANY(%s) AND s.query->>'kind'=%s AND s.query->>'market'=%s AND s.query->>'code'=%s AND t.status='failed' AND t.finished_at>clock_timestamp()-interval '60 seconds'",(who.id,[v[0] for v in usable],query.kind,query.market,query.code))).fetchall()
+            failed=await (await conn.execute("SELECT DISTINCT s.source_revision FROM market_streams s JOIN tasks t ON t.id=s.current_task_id WHERE s.owner_id=%s AND s.source_revision=ANY(%s) AND (s.query->>'kind'=%s OR %s AND s.query->>'kind'='latest') AND s.query->>'market'=%s AND s.query->>'code'=%s AND s.query->>'instrument'=%s AND t.status='failed' AND t.finished_at>clock_timestamp()-interval '60 seconds'",(who.id,[v[0] for v in usable],query.kind,minute,query.market,query.code,query.instrument))).fetchall()
             failed_revisions={r['source_revision'] for r in failed}
             usable=[v for v in usable if v[0] not in failed_revisions] or usable
             # Reuse the existing authorized history rather than introducing a

@@ -106,6 +106,24 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
         return response({'sourceVersion':VERSION,'purposes':['discovery.search','discovery.indices','discovery.top','discovery.ranking.volume','discovery.ranking.amount'],
             'automaticCollection':False,'readPath':'/api/market/discovery','collectPath':'/api/market/discovery/collect','receiptPath':'/api/market/discovery/operations/{requestId}'},request)
 
+    @app.post('/api/v1/indices/prepare')
+    @app.post('/api/v2/indices/prepare')
+    async def prepare_indices(request:Request):
+        from uuid import UUID
+        from .legacy_identity import body
+        from .market_index_reads import items
+        from .market_subscription_writes import Subscriptions
+        version=2 if request.url.path.startswith('/api/v2/') else 1
+        who=await member(request,version,write=True)
+        await rate(request,'indices.prepare',who)
+        raw=await body(request,('requestId',))
+        if set(raw)!={'requestId'}:raise HTTPException(400,'指数需求字段无效')
+        try:rid=UUID(str(raw['requestId']))
+        except (ValueError,TypeError):raise HTTPException(400,'请求编号无效') from None
+        values=[{'market':item['market'],'code':item['code']} for item in items()]
+        result,_=await Subscriptions(authority).mutate(who,rid,values,observe=True,source_preference='auto',instrument='index')
+        return response({'code':0,'message':'ok','data':result},request)
+
     async def legacy(request,kind,version=None):
         try:
             assert_native_origin(request,settings)
@@ -127,6 +145,11 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
                     local_rows,coverage=await local(conn,value['q'],authority.db)
                 if local_rows:
                     data={'results':local_rows,'coverage':coverage}
+                    return response({'code':0,'message':'ok','data':data} if version else data,request)
+            if kind=='indices' and who is not None and 'x-alcor-market-source' not in request.headers:
+                from .market_index_reads import installed,read as index_quotes
+                if await installed(authority,who):
+                    data=await index_quotes(authority,who)
                     return response({'code':0,'message':'ok','data':data} if version else data,request)
             if 'x-alcor-market-source' not in request.headers:
                 public = getattr(app.state,'public_discovery',None)

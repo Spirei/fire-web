@@ -50,19 +50,29 @@ def ticker_items(config):
     return configured,items
 
 
-@router.post('/api/fire/ticker/demand')
-async def ticker_demand(request: Request, who: Member):
+async def index_demand(request,who,items):
     from .market_subscription_writes import Subscriptions,subscription_items
     raw=await body(request,('requestId',))
     if set(raw)!={'requestId'}:raise HTTPException(400,'指数需求字段无效')
     try:rid=UUID(str(raw['requestId']))
     except (ValueError,TypeError):raise HTTPException(400,'请求编号无效') from None
     await budget(request,who,'workspace-ticker-demand',30)
-    _,items=ticker_items(getattr(request.app.state.db.settings,'public_ticker',{}))
     if not items:return JSONResponse({'requestId':str(rid),'state':'empty'},headers=PRIVATE)
     normalized=subscription_items({'items':[{'market':i['market'],'code':i['code']} for i in items]})
     result,_=await Subscriptions(request.app.state.market_authority).mutate(who,rid,normalized,observe=True,source_preference='auto',instrument='index')
     return JSONResponse(result,headers=PRIVATE)
+
+
+@router.post('/api/fire/ticker/demand')
+async def ticker_demand(request: Request, who: Member):
+    _,items=ticker_items(getattr(request.app.state.db.settings,'public_ticker',{}))
+    return await index_demand(request,who,items)
+
+
+@router.post('/api/fire/indices/demand')
+async def indices_demand(request: Request, who: Member):
+    from .market_index_reads import items
+    return await index_demand(request,who,items())
 
 
 @router.get("/api/fire/ticker")

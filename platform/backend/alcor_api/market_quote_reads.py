@@ -268,7 +268,7 @@ class BatchQuotes:
     def __init__(self, authority):
         self.authority, self.db = authority, authority.db
 
-    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None):
+    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None, legacy_instruments=False):
         if instrument not in (None, "equity", "index", "asset"):
             raise HTTPException(400, "证券类型无效")
         if session not in (None, "REGULAR", "PRE", "AFTER", "OVERNIGHT"):
@@ -350,10 +350,12 @@ class BatchQuotes:
                         approved = await policy(source_revision)
                         if market not in approved.markets or "latest" not in approved.purposes:
                             raise HTTPException(403, "当前来源许可未覆盖所请求的行情")
+                    query_instrument=instrument
+                    if legacy_instruments and query_instrument is None:query_instrument='asset' if market=='ASSET' else 'equity'
                     streams = await (
                         await conn.execute(
                             "SELECT s.*,c.policy_id,t.status AS task_status,t.finished_at AS task_finished_at FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision LEFT JOIN tasks t ON t.id=s.current_task_id WHERE s.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND (%s::uuid IS NULL OR s.source_revision=%s) AND (%s::text IS NULL OR s.query->>'session'=%s) AND (%s::text IS NULL OR s.query->>'instrument'=%s) ORDER BY s.source_revision,s.id",
-                            (who.id, market, symbol, source_revision, source_revision, session, session, instrument, instrument),
+                            (who.id, market, symbol, source_revision, source_revision, session, session, query_instrument, query_instrument),
                         )
                     ).fetchall()
                     candidates = []

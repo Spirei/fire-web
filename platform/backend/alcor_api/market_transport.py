@@ -65,6 +65,10 @@ class Transport:
                 raise ValueError('eastmoney_source_protocol_not_installed')
             return await fetch(target, query, cursor)
         if policy.source=='tencent':
+            from .market_tencent_minute import VERSION as MINUTE_VERSION,fetch as minute_fetch,installed as minute_installed
+            if policy.source_version==MINUTE_VERSION:
+                if not minute_installed(query)or collection_purpose(query)not in policy.purposes:raise ValueError('tencent_minute_protocol_not_licensed')
+                return await minute_fetch(target,query,cursor)
             from .market_tencent_latest import VERSION,fetch,installed
             if policy.source_version!=VERSION or not installed(query)or 'latest'not in policy.purposes:raise ValueError('tencent_source_protocol_not_licensed')
             return await fetch(target,query,cursor)

@@ -118,7 +118,7 @@ class Subscriptions:
                 # Old subscriptions are owner-wide intent. Remove client leases from
                 # all devices, never the independent price-alert/background demand.
                 if selected is not None and not await (await conn.execute("SELECT 1 FROM market_source_configs WHERE owner_id=%s AND revision=%s",(who.id,selected))).fetchone():raise HTTPException(404,"本人来源配置不存在")
-                rows=await (await conn.execute("SELECT d.stream_id,s.query FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id WHERE d.owner_id=%s AND d.origin='client' AND d.revoked_at IS NULL AND s.query->>'kind'='latest' AND (%s::uuid IS NULL OR s.source_revision=%s) FOR UPDATE OF d",(who.id,selected,selected))).fetchall()
+                rows=await (await conn.execute("SELECT d.stream_id,s.query FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id WHERE d.owner_id=%s AND d.origin='client' AND d.revoked_at IS NULL AND s.query->>'kind'='latest' AND ((%s::text IS NULL AND COALESCE(s.query->>'instrument','equity')!='index') OR s.query->>'instrument'=%s) AND (%s::uuid IS NULL OR s.source_revision=%s) FOR UPDATE OF d",(who.id,instrument,instrument,selected,selected))).fetchall()
                 stream_queries={row["stream_id"]:row["query"] for row in rows}
                 wanted={(row["market"],row["code"]) for row in items} if items is not None else None
                 streams={row["stream_id"] for row in rows if wanted is None or (row["query"]["market"],row["query"]["code"]) in wanted}

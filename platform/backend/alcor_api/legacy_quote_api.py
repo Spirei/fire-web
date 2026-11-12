@@ -66,6 +66,8 @@ def mount_legacy_quote_reads(app,settings,authority):
                 body=None
             items=items_from(body)
             selected_session=body.get("session") if isinstance(body,dict) else None
+            selected_instrument=body.get('instrument') if canonical and isinstance(body,dict) else None
+            if selected_instrument not in (None,'equity','index','asset'):raise HTTPException(400,'证券类型无效')
             if selected_session not in (None,"REGULAR","PRE","AFTER","OVERNIGHT"):raise HTTPException(400,"最新报价时段无效")
             if selected_session is None and not canonical:selected_session=requested_session()
             tracking={"tracked":False,"automaticCollection":False,"reason":"canonical_explicit_demand_only" if canonical else "empty_request"}
@@ -116,7 +118,7 @@ def mount_legacy_quote_reads(app,settings,authority):
                             else:
                                 tracking={"tracked":False,"reason":"demand_precondition_unavailable","automaticCollection":False}
                         headers["X-Alcor-Quote-Tracked"]="unknown" if tracking["tracked"] is None else "true" if tracking["tracked"] else "false"
-                    result=await service.read(who,items,request.headers.get("x-alcor-market-source"),session=selected_session if canonical else None,preferred_session=None if canonical else selected_session,include_market_cap=not isinstance(body,dict) or body.get("includeMarketCap") is not False,strict_sources=not canonical,source_preference=None if canonical else getattr(settings,"_legacy_quote_source",None))
+                    result=await service.read(who,items,request.headers.get("x-alcor-market-source"),session=selected_session if canonical else None,preferred_session=None if canonical else selected_session,instrument=selected_instrument,legacy_instruments=not canonical,include_market_cap=not isinstance(body,dict) or body.get("includeMarketCap") is not False,strict_sources=not canonical,source_preference=None if canonical else getattr(settings,"_legacy_quote_source",None))
             data=result if canonical else {"quotes":result["quotes"]}
             if not canonical and items and request.headers.get("x-alcor-register-demand") == "true":
                 data["tracking"]=tracking

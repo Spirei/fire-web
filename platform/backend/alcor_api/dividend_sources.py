@@ -91,7 +91,7 @@ class Target:
             raise ValueError("plaintext_unapproved")
         if self.source == "futu" and (self.scheme != "http" or not self.allow_plaintext):
             raise ValueError("native_sdk_plaintext_requires_explicit_approval")
-        if self.source=='tencent' and(self.scheme!='https'or self.host!='qt.gtimg.cn'or self.port!=443 or self.fixture):raise ValueError('tencent_fixed_target_required')
+        if self.source=='tencent' and(self.scheme!='https'or self.host not in ('qt.gtimg.cn','web.ifzq.gtimg.cn')or self.port!=443 or self.fixture):raise ValueError('tencent_fixed_target_required')
         if self.source == 'coingecko' and (self.scheme!='https' or self.host.lower()!='api.coingecko.com'
                                           or self.port!=443 or self.fixture):
             raise ValueError('crypto_fixed_target_required')
@@ -115,6 +115,7 @@ class Target:
     def path(self, symbol):
         if self.source=='tencent':
             if not re.fullmatch(r'(?:us|hk|sh|sz|bj|jp|kr)[A-Z0-9._]+',symbol):raise ValueError('tencent_symbol_invalid')
+            if self.host=='web.ifzq.gtimg.cn':return '/appstock/app/minute/query'
             return '/q='+symbol
         if self.source == 'coingecko':
             return '/api/v3/coins/markets'

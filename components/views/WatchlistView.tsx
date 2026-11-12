@@ -1,5 +1,9 @@
 "use client";
 
+import { clientRequestId } from "@/lib/randomId";
+import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
+import { accountReadHeaders, privateReadEpoch } from "@/lib/privateReadContext";
+import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
 import { useEffect, useRef, useState } from "react";
 import { fmtNum, fmtPct, fmtQuoteTime } from "@/lib/format";
 import type { GroupConfig, Market, Quote, SearchMatch, StockRecord } from "@/lib/types";
@@ -38,7 +42,7 @@ interface MarketIndices {
   market: Market;
   label: string;
   flag: string;
-  open: boolean;
+  open: boolean | null;
   indices: IndexQuote[];
 }
 
@@ -127,51 +131,44 @@ function FearGreedGauge({ score }: { score: number }) {
 
 export default function WatchlistView({ ownerId, initialSymbol, initialNow, records, initialWatchGroups = [], quotes, quoteAt, refreshing, refreshQuotes, onAddMatch, onToggleWatch, groups }: Props) {
   const active = useWorkspaceActive();
+  const readRevision=usePrivateReadRevision();
   const indicesFetchedAt = useRef(0);
+  const indicesScope=useRef("");
   const [indexGroups, setIndexGroups] = useState<MarketIndices[]>([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
   // 刷新时若 URL 已带个股详情路径（/watchlist/US.GOOGL），首帧即隐藏指数卡片，避免闪现
   const [detailOpen, setDetailOpen] = useState(() => Boolean(initialSymbol));
-  const INDICES_CACHE_KEY = "fire:indices:cache";
+
 
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
     let request: AbortController | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
-    // 先用本地缓存秒出指数卡片，再后台拉取最新数据
-    try {
-      const raw = localStorage.getItem(INDICES_CACHE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as MarketIndices[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setIndexGroups(parsed);
-          setIndicesLoading(false);
-        }
-      }
-    } catch {
-      /* 缓存无效忽略 */
-    }
+    const scope=JSON.stringify([ownerId,readRevision]);
+    if(indicesScope.current!==scope){indicesScope.current=scope;indicesFetchedAt.current=0;setIndexGroups([]);setIndicesLoading(true);}
+    // Retire the former unscoped public cache. Private quotes remain bound to
+    // the current owner and source permission; the shared PG facts are cached.
+    try { localStorage.removeItem("fire:indices:cache"); } catch { /* unavailable storage */ }
     const load = () => {
       if (document.hidden || request) return;
       const controller = new AbortController();
       request = controller;
       setIndicesError("");
-      fetch("/api/indices", { signal: controller.signal })
-        .then((res) => (res.ok ? res.json() : null))
+      const epoch=privateReadEpoch();
+      platformRequest("/api/fire/indices/demand",{method:"POST",signal:controller.signal,headers:{"Content-Type":"application/json",...accountReadHeaders(ownerId)},body:JSON.stringify({requestId:clientRequestId()})},10000)
+        .catch(error=>{if(error instanceof PlatformRequestError && [401,403,409].includes(error.status ?? 0))throw error;})
+        .then(()=>platformRequest<{groups:MarketIndices[]}>("/api/indices",{signal:controller.signal,headers:accountReadHeaders(ownerId)},10000))
         .then((data) => {
-          if (!cancelled && data?.groups) {
+          if (!cancelled && !controller.signal.aborted && epoch===privateReadEpoch() && data?.groups) {
             indicesFetchedAt.current = Date.now();
             setIndexGroups(data.groups);
-            try {
-              localStorage.setItem(INDICES_CACHE_KEY, JSON.stringify(data.groups));
-            } catch {
-              /* 存储失败忽略 */
-            }
+
           }
         })
-        .catch(() => {
+        .catch(error => {
+          if (!cancelled && !controller.signal.aborted && error instanceof PlatformRequestError && [401,403,409].includes(error.status ?? 0))setIndexGroups([]);
           if (!cancelled && !controller.signal.aborted && !indicesFetchedAt.current) setIndicesError("全球指数暂时不可用");
         })
         .finally(() => {
@@ -196,7 +193,7 @@ export default function WatchlistView({ ownerId, initialSymbol, initialNow, reco
       if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [active]);
+  }, [active,ownerId,readRevision]);
 
   const dragIndex = useRef<number | null>(null);
 
@@ -280,7 +277,7 @@ export default function WatchlistView({ ownerId, initialSymbol, initialNow, reco
                   <span className="flex flex-none items-center gap-1.5">
                     {g.indices[0]?.latest != null && (
                       <span
-                        title={g.open ? "交易中" : "休市"}
+                        title={g.open == null ? "交易状态待核对" : g.open ? "交易中" : "休市"}
                         className={`h-2 w-2 flex-none rounded-full ${
                           g.open
                             ? `live-dot ${(g.indices[0]?.changePct ?? 0) >= 0 ? "bg-up" : "bg-down"}`

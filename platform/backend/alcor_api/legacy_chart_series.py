@@ -30,7 +30,9 @@ def minute_points(rows, policy, query, days, now=None, *, session_day=False):
         try:
             at = datetime.fromisoformat(value["at"])
             real_time = getattr(query, "kind", "bars") == "price_series"
-            if real_time and (value.get("dataKind") != "provider_real_time_time_frame" or value.get("sourceBlank") is not False):
+            source_point = (policy.source == 'tencent' and policy.source_version == 'tencent-minute-v1'
+                            and value.get('dataKind') == 'provider_observed_minute_price')
+            if real_time and not source_point and (value.get("dataKind") != "provider_real_time_time_frame" or value.get("sourceBlank") is not False):
                 continue
             price = float(number(value["price"] if real_time else value["c"], positive=True))
             if (

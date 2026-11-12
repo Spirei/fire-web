@@ -159,6 +159,11 @@ async def current(authority, conn, task):
 
 def decode(policy, query, raw, *, cursor_in=None):
     if policy.source=='tencent':
+        from .market_tencent_minute import VERSION as MINUTE_VERSION,parse as minute_parse
+        if policy.source_version==MINUTE_VERSION:
+            if cursor_in is not None:raise ValueError('tencent_minute_cursor_invalid')
+            facts,issues,cursor=minute_parse(raw,query)
+            return [{**fact,'fixture':False}for fact in facts],issues,cursor
         from .market_tencent_latest import VERSION,parse
         if policy.source_version!=VERSION or cursor_in is not None:raise ValueError('tencent_protocol_not_installed')
         facts,issues,cursor=parse(raw,query,policy)

@@ -106,9 +106,14 @@ class LicensedHistory:
             if raw:choices=raw
         if self.automatic and revision is None and len(choices)>1 and all(p.source in ('futu','yahoo','eastmoney','tencent') for p,q in choices.values()):
             observed={}
+            times={}
             for key,value in choices.items():
-                if await (await conn.execute('SELECT 1 FROM market_facts WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s LIMIT 1',(owner,key[0],key[1]))).fetchone():observed[key]=value
+                latest=await (await conn.execute('SELECT max(source_time) AS at FROM market_facts WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s',(owner,key[0],key[1]))).fetchone()
+                if latest['at'] is not None:observed[key]=value;times[key]=latest['at']
             if observed:choices=observed
+            if kind=='price_series' and times:
+                newest=max(times.values())
+                choices={key:value for key,value in choices.items() if times.get(key)==newest}
             order=getattr(self.db.settings,'_legacy_quote_order',None) or ['futu','tencent','eastmoney','yahoo']
             for provider in order:
                 selected={key:value for key,value in choices.items() if value[0].source==provider}

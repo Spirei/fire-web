@@ -35,7 +35,7 @@ class PoolReads:
             "FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id "
             "LEFT JOIN tasks t ON t.id=s.current_task_id WHERE (%s OR d.owner_id=%s) "
             "AND (%s OR d.origin='client') AND d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp()) "
-            "AND s.query->>'kind'='latest' AND (%s::text IS NULL OR s.query->>'market'=%s) "
+            "AND s.query->>'kind'='latest' AND COALESCE(s.query->>'instrument','equity')!='index' AND (%s::text IS NULL OR s.query->>'market'=%s) "
             "ORDER BY d.owner_id,d.stream_id,d.principal LIMIT 4097",(shared,who.id,shared or pool,market,market)
         )).fetchall()
         if len(rows)>4096:
