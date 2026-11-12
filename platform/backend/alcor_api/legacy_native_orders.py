@@ -15,14 +15,14 @@ from .legacy_identity import assert_native_origin, native_identity
 from .legacy_optional_credentials import credentials_present
 from .legacy_trading_snapshot import TIME_ZONES, fee_transport, scalar, snapshot_in_transaction
 from .profile_http import bounded_body
-from .security import lock_mutation_identity
+from .security import lock_mutation_identity, lock_read_identity
 
 
 class NativeOrders(InternalOrders):
     async def listing(self, who, *, scope='today', status='all', record_id=None):
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
-            await lock_mutation_identity(conn,who,require_admin=False)
+            await lock_read_identity(conn,who,require_admin=False)
             _, snapshot = await snapshot_in_transaction(conn,who,strict=False,scope_record_id=record_id)
             now = datetime.now(UTC)
             items, unknown_dates = [], []
