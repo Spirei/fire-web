@@ -4,7 +4,7 @@ export interface QuoteDetailMetrics {
   /** Snapshot currency; cap is an observed total, never ETF AUM/price-derived. */
   currency?: string | null;
   time?: string;
-  source?: "futu" | "tencent";
+  source?: "futu" | "tencent" | "eastmoney" | "yahoo";
   turnoverRate?: number | null;
   peTtm?: number | null;
   pe?: number | null;
@@ -20,10 +20,12 @@ export interface Quote {
   high: number;
   low: number;
   time: string;
-  /** 当前涨跌的常规收盘基准；夜盘为本周期 20:00 前的最近常规收盘。 */
+  /** 当前涨跌的来源基准；保留供应商在相应时段给出的昨收及公司行动调整。 */
   prevClose?: number;
   /** PRE / AFTER / OVERNIGHT 表示当前 price 已切换为对应扩展时段有效价。 */
-  session?: "PRE" | "REGULAR" | "AFTER" | "OVERNIGHT";
+  session?: "PRE" | "REGULAR" | "AFTER" | "OVERNIGHT" | "UNKNOWN";
+  expectedSession?: "PRE" | "REGULAR" | "AFTER" | "OVERNIGHT";
+  extendedUnavailable?: boolean;
   /** 成交量（股/手，腾讯 f36） */
   volume?: number;
   /** 成交额（本地货币，腾讯 f37） */
@@ -49,7 +51,7 @@ export interface Quote {
   /** Optional strict detail metrics; legacy pe/marketCap remain independent. */
   detailMetrics?: QuoteDetailMetrics;
   /** 行情来源：futu=富途 / tencent=腾讯兜底 / yahoo=Yahoo 扩展时段兜底 / auto */
-  source?: "futu" | "tencent" | "yahoo" | "auto";
+  source?: "futu" | "tencent" | "eastmoney" | "yahoo" | "auto";
   /** A recent active-pool snapshot was returned while scheduled updates continue. */
   cached?: boolean;
 }

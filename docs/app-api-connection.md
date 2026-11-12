@@ -42,3 +42,16 @@
 `platform/tests/test_app_connection_protocol.py` 使用隔离 PG 与实际 HTTP 路由，覆盖并发读取、读锁与续期互斥、初次认证后撤销、权限不足、账号不一致、限流、畸形令牌、无重定向及统一错误响应。相关身份、现金、持仓与行情测试继续核对原金融与授权合同。
 
 这些服务端测试不代替发布后的 App 连接、模拟器或真机验收；源码、镜像、运行容器和 App 安装结果分别核对。
+
+### 行情和历史采集
+
+Web、v1、v2 共享同一份来源配置、证券身份、PG 观测和后台采集任务。普通美股报价 POST 按当前美东时段登记需求；返回的 `session`、`priceField`、`sourceTimestampAuthority` 表示实际取得的口径。`expectedSession` 仅表示当前请求意图，`extendedUnavailable` 表示尚未取得该时段报价。不得仅凭来源为富途或 Yahoo 认定已取得扩展行情。
+
+富途快照仍报常规盘收盘时间时，盘前和夜盘可采用同一次受控 SDK 读取中的真实分时点与 `last_close`。空白点、其他证券、其他时段和未知基准拒绝发布；报价分钟时间与快照指标时间分别保留，不把请求时间写成成交时间。
+
+| 方法 | 接口 | 请求 |
+| --- | --- | --- |
+| POST | `/api/v1/kline/prepare`、`/api/v2/kline/prepare` | `requestId` UUID、`items: [{market,code}]`（1–100）、`days`（1–3300）、`adjust`（none/qfq/hfq）、可选 `index` |
+| POST | `/api/v1/portfolio-series/prepare`、`/api/v2/portfolio-series/prepare` | `requestId` UUID、`days`（1–1200）；证券范围由服务器读取本人持仓 |
+
+这些入口需要当前网页登录或带 `portfolio.write` 的 App 授权，不接收用户编号、来源地址或私有主机。返回统一的 `code/message/data` 信封和已接受任务范围，复用原 UUID 可以查询原结果；后台完成前读取已有历史，切页不取消已接受的采集。已完成日线复用原件，数据不足时不生成收益率、净值或补零曲线。GET 历史读取保持只读。

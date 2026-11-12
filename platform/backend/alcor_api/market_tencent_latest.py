@@ -73,7 +73,7 @@ def parse(raw,query,policy):
     result=observation(raw,query);clock=result['sourceClock'];at=None
     if clock:
         try:
-            candidate=datetime.strptime(clock,'%Y%m%d%H%M%S')if re.fullmatch(r'[0-9]{14}',clock)else datetime.fromisoformat(clock)
+            candidate=datetime.strptime(clock,'%Y%m%d%H%M%S')if re.fullmatch(r'[0-9]{14}',clock)else datetime.strptime(clock,'%Y/%m/%d %H:%M:%S') if re.fullmatch(r'[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}',clock) else datetime.fromisoformat(clock)
             if candidate.tzinfo is None:
                 zones=dict(getattr(policy,'timestamp_zones',()))
                 if query.market in zones:

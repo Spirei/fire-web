@@ -175,6 +175,12 @@ def decode(policy, query, raw, *, cursor_in=None):
             raise ValueError('yahoo_history_version_not_installed')
         facts, issues, cursor = parse(raw, query, cursor_in=cursor_in, policy=policy)
         return [{**fact, 'fixture': policy.fixture} for fact in facts], issues, cursor
+    if policy.source == 'eastmoney' and not policy.fixture:
+        from .market_eastmoney_latest import VERSION, parse
+        if policy.source_version != VERSION:
+            raise ValueError('eastmoney_quote_version_not_installed')
+        facts, issues, cursor = parse(raw, query)
+        return [{**fact, 'fixture': False} for fact in facts], issues, cursor
     if not isinstance(raw, bytes) or not 1 <= len(raw) <= (2 * 1024 * 1024 if query.kind == 'price_series' else 131072):
         raise ValueError("source_response_size_invalid")
     value = json.loads(
@@ -338,7 +344,7 @@ async def execute(authority, task, transport):
         stream,policy,reason=await current(authority,conn,task)
         if reason=='lost':return reason
         if reason:return await stop(conn,db,task,reason)
-        if decode_failed:return await stop(conn,db,task,'source_outcome_unknown')
+        if decode_failed or query.kind=='latest' and not facts:return await stop(conn,db,task,'source_outcome_unknown')
         changed = False
         for fact in facts:
             at = source_time(fact["at"], "UTC")

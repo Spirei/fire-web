@@ -231,6 +231,8 @@ class Authority:
         yahoo = policy.source == 'yahoo' and policy.source_version == VERSION and installed(query, policy)
         from .market_tencent_latest import VERSION as TENCENT_VERSION,installed as tencent_installed
         tencent=policy.source=='tencent'and policy.source_version==TENCENT_VERSION and tencent_installed(query)
+        from .market_eastmoney_latest import VERSION as EASTMONEY_VERSION, installed as eastmoney_installed
+        eastmoney = policy.source == 'eastmoney' and policy.source_version == EASTMONEY_VERSION and eastmoney_installed(query)
         crypto = False
         if policy.source == 'coingecko':
             from .market_crypto_latest import VERSION as CRYPTO_VERSION
@@ -239,7 +241,7 @@ class Authority:
             if not crypto:
                 raise HTTPException(503, '此加密资产来源尚未安装该证券或行情口径')
         if query.kind == 'latest' and not (
-            yahoo or crypto or tencent or policy.source == 'futu' and policy.source_version == 'futu-sdk-records-v1' and installed_latest_semantics(query)
+            yahoo or crypto or tencent or eastmoney or policy.source == 'futu' and policy.source_version == 'futu-sdk-records-v1' and installed_latest_semantics(query)
             or policy.fixture and policy.source != 'futu'
         ):
             raise HTTPException(503, '此来源尚未安装该最新报价口径')
@@ -323,12 +325,13 @@ class Authority:
             if not old and not remove and not existing_active:
                 count = await (
                     await conn.execute(
-                        """SELECT count(DISTINCT d.stream_id) AS n FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id
+                        """SELECT count(DISTINCT (s.query->>'market',s.query->>'code',s.query->>'instrument')) AS n FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id
                     WHERE d.owner_id=%s AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp() AND s.query->>'kind'='latest'""",
                         (who.id,),
                     )
                 ).fetchone()
-                if query.kind == "latest" and count["n"] >= 256:
+                same_security=await (await conn.execute("SELECT 1 FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id WHERE d.owner_id=%s AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp() AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND s.query->>'instrument'=%s LIMIT 1",(who.id,query.market,query.code,query.instrument))).fetchone()
+                if query.kind == "latest" and count["n"] >= 256 and not same_security:
                     raise HTTPException(409, "最多保留256个行情订阅")
             user = await (
                 await conn.execute("SELECT session_version FROM users WHERE id=%s", (who.id,))

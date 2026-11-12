@@ -11,13 +11,9 @@ from .fx_provider_parser import unique
 from .market_contract import CURRENCIES, ZONES, number
 
 VERSION = 'yahoo-chart-history-v1'
-INDEXES = {
-    'dji': ('US', 'DJI', '^DJI'), 'spx': ('US', 'SPX', '^GSPC'),
-    'ndx': ('US', 'IXIC', '^IXIC'), 'hsi': ('HK', 'HSI', '^HSI'),
-    'sse': ('CN', '000001', '000001.SS'), 'szse': ('CN', '399001', '399001.SZ'),
-    'n225': ('JP', 'N225', '^N225'), 'ks11': ('KR', 'KS11', '^KS11'),
-    'sti': ('SG', 'STI', '^STI'),
-}
+from .market_indices import INDEXES as INDEX_IDENTITIES
+
+INDEXES = {key: row[:3] for key, row in INDEX_IDENTITIES.items()}
 CRYPTOS = {
     'BTC': 'BTC-USD', 'ETH': 'ETH-USD', 'SOL': 'SOL-USD', 'BNB': 'BNB-USD',
     'XRP': 'XRP-USD', 'DOGE': 'DOGE-USD', 'ADA': 'ADA-USD', 'LTC': 'LTC-USD',
@@ -55,7 +51,8 @@ def symbol(query, policy=None):
         if query.market == 'KR' and query.code.isdigit():
             return query.code + '.KS', 'EQUITY_OR_ETF'
         raise ValueError('fixed_latest_instrument_unknown')
-    if (query.kind, query.frame, query.adjust, query.session) != ('bars', 'day', 'none', 'REGULAR'):
+    fixed_latest = (query.kind, query.frame, query.adjust, query.session) == ('latest', 'latest', 'none', 'REGULAR')
+    if not fixed_latest and (query.kind, query.frame, query.adjust, query.session) != ('bars', 'day', 'none', 'REGULAR'):
         raise ValueError('yahoo_history_semantics_not_installed')
     if query.instrument == 'index':
         matches = [value[2] for value in INDEXES.values() if value[:2] == (query.market, query.code)]
@@ -201,6 +198,14 @@ def parse(raw, query, *, cursor_in=None, policy=None):
                     fact[field] = str(number(meta[source], positive=field != 'volume'))
                 except (ValueError, TypeError, OverflowError):
                     pass
+        if 'prevClose' not in fact and meta.get('chartPreviousClose') is not None:
+            try:fact['prevClose']=str(number(meta['chartPreviousClose'],positive=True))
+            except (TypeError,ValueError):pass
+        if fact.get('prevClose'):
+            with localcontext() as context:
+                context.prec=160
+                previous=number(fact['prevClose'],positive=True);delta=number(fact['price'],positive=True)-previous
+                fact.update(change=str(delta),changePct=str(delta/previous*100),changeBasis='regular_price_vs_source_chart_previous_close')
         return [fact], [], None
     start, end, next_cursor = page_window(query, cursor_in)
     timestamps = result.get('timestamp', [])

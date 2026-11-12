@@ -1142,6 +1142,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {orderedPnl.map(([m, e], i) => {
               const marketFactor = toUsd(m, 1) * totalFactor;
+              const marketReady = valuationReady || [e.mv,e.pnl,e.cost].every(Number.isFinite);
               const rate = e.cost ? e.pnl / Math.abs(e.cost) : null;
               return (
                 <div
@@ -1175,18 +1176,18 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓盈利</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${e.pnl >= 0 ? "text-up" : "text-down"}`}>
-                        {metricsReady ? signedMoney(e.pnl * marketFactor, totalCurLabel) : "…"}
+                        {marketReady ? signedMoney(e.pnl * marketFactor, totalCurLabel) : "…"}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">盈亏率</span>
                       <strong className={`text-[15px] font-bold tabular-nums ${rate !== null && rate >= 0 ? "text-up" : rate !== null ? "text-down" : "text-faint"}`}>
-                        {metricsReady ? (rate !== null && Number.isFinite(rate) ? `${rate >= 0 ? "+" : ""}${fmtPct(rate)}` : "—") : "…"}
+                        {marketReady ? (rate !== null && Number.isFinite(rate) ? `${rate >= 0 ? "+" : ""}${fmtPct(rate)}` : "—") : "…"}
                       </strong>
                     </div>
                     <div className="flex items-baseline justify-between border-t border-edge pt-2.5">
                       <span className="text-xs text-[#73777f] dark:text-[#a3a8b2]">持仓市值</span>
-                      <strong className="text-sm font-semibold tabular-nums text-ink">{metricsReady ? compactMoney(e.mv * marketFactor, totalCurLabel) : "…"}</strong>
+                      <strong className="text-sm font-semibold tabular-nums text-ink">{marketReady ? compactMoney(e.mv * marketFactor, totalCurLabel) : "…"}</strong>
                     </div>
                   </div>
                 </div>

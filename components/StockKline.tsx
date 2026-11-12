@@ -1,4 +1,5 @@
 "use client";
+import { prepareMarketHistory } from "@/lib/marketHistory";
 import AppModal from "@/components/AppModal";
 import { Capsule } from "@/components/Capsule";
 
@@ -670,7 +671,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
     const key = `${market}:${code}:${need}:${adjust}`;
     setLongRangeLoading(true);
     const periodQuery = need === "daily" ? "" : `&period=${need}`;
-    fetch(`/api/kline/full?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&limit=3200${periodQuery}&adjust=${adjust}`, { signal: controller.signal })
+    prepareMarketHistory([{market,code}],{days:3200,adjust,signal:controller.signal}).then(()=>fetch(`/api/kline/full?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&limit=3200${periodQuery}&adjust=${adjust}`, { signal: controller.signal }))
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((data) => {
         const rows = Array.isArray(data?.items) ? data.items : [];
@@ -753,6 +754,7 @@ export default function StockKline({ market, code, name, height = 420 }: Props) 
           }
         } else {
           const periodQuery = range === "WEEK" ? "&period=week" : range === "MONTH" ? "&period=month" : range === "QUARTER" ? "&period=quarter" : range === "YEAR" ? "&period=year" : "";
+          await prepareMarketHistory([{market:item.market,code:item.code}],{days:3200,adjust:"qfq",signal:controller.signal});
           const resp = await fetch(`/api/kline/full?market=${encodeURIComponent(item.market)}&code=${encodeURIComponent(item.code)}&limit=3200${periodQuery}&adjust=qfq`, { signal: controller.signal });
           const payload = resp.ok ? await resp.json().catch(() => null) : null;
           const rows = Array.isArray(payload?.items) ? payload.items as KlineItem[] : [];

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { showToast } from "@/lib/toast";
 import { Capsule } from "./Capsule";
 import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
 import { clientRequestId } from "@/lib/randomId";
@@ -24,6 +25,8 @@ export default function MarketSourceSettings({ order, onSave, enabled = true, ow
   const [items, setItems] = useState(() => orderOf(order));
   const [results, setResults] = useState<Record<string, Result>>({});
   const [saving, setSaving] = useState(false);
+  const [configuring,setConfiguring]=useState(false);
+  const setupRequest=useRef<string | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const busy = useRef(new Map<string,AbortController>()), mounted = useRef(true), savePending = useRef(false);
@@ -110,13 +113,31 @@ export default function MarketSourceSettings({ order, onSave, enabled = true, ow
       if (mounted.current) setResults(current => ({...current,[key]:{state:"unknown",requestId,message:"检测结果尚未确认"}}));
     } finally { if(busy.current.get(key)===controller)busy.current.delete(key); }
   }
+  async function configure() {
+    if (!enabled || configuring) return;
+    const currentOwner=ownerId, version=context.current;
+    setConfiguring(true);setReadError("");
+    const requestId=setupRequest.current ??=clientRequestId();
+    try {
+      const result=await platformRequest<{requestId:string;state:string}>("/api/fire/market-sources/setup",{method:"POST",headers:{"Content-Type":"application/json",...accountReadHeaders(currentOwner)},body:JSON.stringify({requestId})},20000);
+      if (result.requestId!==requestId || result.state!=="configured") throw Error("配置结果尚未确认");
+      setupRequest.current=null;
+      if (mounted.current && ownerRef.current===currentOwner && context.current===version) {
+        window.dispatchEvent(new CustomEvent("fire:settings-updated"));
+        showToast("行情源已接入");
+      }
+    } catch (error) {
+      if (mounted.current && ownerRef.current===currentOwner && context.current===version) setReadError(error instanceof Error?error.message:"行情源配置失败");
+      if(error instanceof PlatformRequestError && [400,401,403,409,422].includes(error.status ?? 0))setupRequest.current=null;
+    } finally {if(mounted.current)setConfiguring(false);}
+  }
   async function testAll() {
     let cursor = 0; const version=context.current, currentOwner=ownerId;
     const run = async () => { while (mounted.current && enabledRef.current && context.current===version && ownerRef.current===currentOwner && cursor < items.length) await test(items[cursor++]); };
     await Promise.all([run(),run()]);
   }
   return <div className="market-source-settings">
-    <div className="market-source-toolbar"><span role="status">{saving ? "正在保存顺序…" : readError || (!loaded && enabled ? "正在读取上次检测…" : "自动模式按顺序选择可用来源")}</span><div className="market-source-toolbar-actions">{readError && <Capsule size="sm" variant="secondary" type="button" onClick={()=>setReadVersion(value=>value+1)}>重新读取</Capsule>}<Capsule size="sm" variant="secondary" type="button" disabled={!enabled || !loaded || Object.values(results).some(result => result.state === "testing")} onClick={() => void testAll()}>检测全部</Capsule></div></div>
+    <div className="market-source-toolbar"><span role="status">{saving ? "正在保存顺序…" : readError || (!loaded && enabled ? "正在读取上次检测…" : "自动模式按顺序选择可用来源")}</span><div className="market-source-toolbar-actions"><Capsule size="sm" variant="secondary" type="button" disabled={!enabled || configuring} onClick={()=>void configure()}>{configuring?"正在接入…":"接入行情源"}</Capsule>{readError && <Capsule size="sm" variant="secondary" type="button" onClick={()=>setReadVersion(value=>value+1)}>重新读取</Capsule>}<Capsule size="sm" variant="secondary" type="button" disabled={!enabled || !loaded || Object.values(results).some(result => result.state === "testing")} onClick={() => void testAll()}>检测全部</Capsule></div></div>
     <ol className="market-source-list" aria-label="行情源优先顺序" aria-busy={saving}>
       {items.map((key,index) => {
         const source = SOURCES[key], result = results[key];

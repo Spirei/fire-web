@@ -105,7 +105,7 @@ async def read_minute_rows(history, who, market, symbol, *, session, source_revi
 
 
 def mount_legacy_chart_series(app, settings, authority):
-    history = LicensedHistory(authority)
+    history = LicensedHistory(authority,automatic=True)
 
     async def observed(request, who, market, symbol, days, *, sessions=False, minimum_points=2):
         session = "ALL" if market == "US" and (days == 1 or sessions) else "REGULAR"
@@ -321,6 +321,21 @@ def mount_legacy_chart_series(app, settings, authority):
                 who = who or await history_member(request, authority.db, version)
                 if not await app.state.rate_limit(authority.db, "charts:" + who.id, 120, window_seconds=60):
                     raise HTTPException(429, "请求过于频繁，请稍后再试")
+                # POST is explicit observation intent; the same scope checks as
+                # quote registration apply, and collection stays in the Worker.
+                from .market_history_demands import prepare
+                from .market_subscription_writes import subscription_items
+                from .legacy_identity import native_identity
+                from uuid import UUID,uuid4
+                try:
+                    writer=who
+                    if getattr(who,'native_client',False):writer,_=await native_identity(request,authority.db,'portfolio.write')
+                    normalized=subscription_items({'items':[{'market':i['market'],'code':i['code']} for i in items if i['market'] in ('US','HK','CN')]})
+                    await prepare(authority,writer,UUID(request.headers['x-alcor-request-id']) if request.headers.get('x-alcor-request-id') else uuid4(),normalized,5,minute=True)
+                except (HTTPException,ValueError):
+                    # Read-only App grants may consume already observed facts.
+                    # A failed registration never fabricates or replays a fact.
+                    pass
                 values = {}
                 for item in items:
                     try:

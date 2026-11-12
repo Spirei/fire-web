@@ -26,10 +26,11 @@ def reader_from_settings(db):
     return SharedQuotes(authority) if authority.policies else None
 
 
-async def cycle(authority, transport, worker_id):
+async def cycle(authority, transport, worker_id, *, history_turn=False):
     await project_alert_demands(authority)
     await schedule(authority)
-    task = await claim(authority.db, worker_id, kind="market.latest")
+    task = await claim(authority.db, worker_id, kind="market.history") if history_turn else None
+    if task is None:task = await claim(authority.db, worker_id, kind="market.latest")
     if task is None:
         # One bounded historical page only when no current latest observation is due.
         task = await claim(authority.db, worker_id, kind="market.history")
@@ -42,11 +43,13 @@ async def cycle(authority, transport, worker_id):
 async def loop(db, stop, current=lambda: True):
     authority, transport = from_settings(db, reuse_latest=True)
     worker_id = uuid4()
+    cycles=0
     try:
         while not stop.is_set():
             if current():
                 try:
-                    await cycle(authority, transport, worker_id)
+                    await cycle(authority, transport, worker_id,history_turn=cycles%4==3)
+                    cycles+=1
                     from .public_market_worker import cycle as public_cycle
                     await public_cycle(db, worker_id)
                 except Exception:  # noqa: BLE001 -- Keep source errors and credentials out of platform logs.

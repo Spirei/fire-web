@@ -105,7 +105,7 @@ def project(row, policy, market, now, *, include_market_cap=True):
     if legacy_cache_assumption:
         result["legacyRegisteredCached"] = value.get("cached")
     for field in ("requestedSession", "priceField", "sourceTimestampAuthority", "sessionWindowAuthority",
-                  "priceNumberAuthority", "changeBasis", "baselineField", "baselineAt", "baselineState", "underlyingSymbol", "securityStatus", "rangeBasis", "amountRolling24hCurrency", "priceBasis", "sourceSymbol"):
+                  "priceNumberAuthority", "snapshotObservedAt", "changeBasis", "baselineField", "baselineAt", "baselineState", "underlyingSymbol", "securityStatus", "rangeBasis", "amountRolling24hCurrency", "priceBasis", "sourceSymbol"):
         if isinstance(value.get(field), str) and len(value[field]) <= 256:
             result[field] = value[field]
     for field in ("otc", "suspended", "individualSessionTradeTimeKnown", "indexValid", "warrantValid", "optionValid"):
@@ -228,7 +228,7 @@ def project(row, policy, market, now, *, include_market_cap=True):
         }
     result["detailMetrics"] = {
         "currency": CURRENCIES[market],
-        "time": at.isoformat(),
+        "time": value.get("snapshotObservedAt") or at.isoformat(),
         "source": policy.source,
         "turnoverRate": result.get("turnover"),
         "peTtm": result.get("peTtm") if equity else None,
@@ -268,7 +268,7 @@ class BatchQuotes:
     def __init__(self, authority):
         self.authority, self.db = authority, authority.db
 
-    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None):
+    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None):
         if instrument not in (None, "equity", "index", "asset"):
             raise HTTPException(400, "证券类型无效")
         if session not in (None, "REGULAR", "PRE", "AFTER", "OVERNIGHT"):
@@ -352,11 +352,12 @@ class BatchQuotes:
                             raise HTTPException(403, "当前来源许可未覆盖所请求的行情")
                     streams = await (
                         await conn.execute(
-                            "SELECT s.*,c.policy_id FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision WHERE s.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND (%s::uuid IS NULL OR s.source_revision=%s) AND (%s::text IS NULL OR s.query->>'session'=%s) AND (%s::text IS NULL OR s.query->>'instrument'=%s) ORDER BY s.source_revision,s.id",
+                            "SELECT s.*,c.policy_id,t.status AS task_status,t.finished_at AS task_finished_at FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision LEFT JOIN tasks t ON t.id=s.current_task_id WHERE s.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND (%s::uuid IS NULL OR s.source_revision=%s) AND (%s::text IS NULL OR s.query->>'session'=%s) AND (%s::text IS NULL OR s.query->>'instrument'=%s) ORDER BY s.source_revision,s.id",
                             (who.id, market, symbol, source_revision, source_revision, session, session, instrument, instrument),
                         )
                     ).fetchall()
                     candidates = []
+                    cooling_sources=set()
                     integrity_failure = False
                     sources = set()
                     instruments = set()
@@ -376,6 +377,8 @@ class BatchQuotes:
                             retained_policy_ids.add(stream["policy_id"])
                             continue
                         if source_revision is None and source_preference in ("futu","tencent")and market!="ASSET"and approved.source!=source_preference:continue
+                        if stream.get('task_status')=='failed' and stream.get('task_finished_at') and (now-stream['task_finished_at']).total_seconds()<60:
+                            cooling_sources.add(stream['source_revision'])
                         query = query_from(stream["query"])
                         self.authority.validate_query(approved, query)
                         sources.add(stream["source_revision"])
@@ -400,6 +403,9 @@ class BatchQuotes:
                                 continue
                             dto, state = project(fact, approved, market, now, include_market_cap=include_market_cap)
                             if dto:
+                                if market=='US' and preferred_session is not None:
+                                    dto['expectedSession']=preferred_session
+                                    dto['extendedUnavailable']=preferred_session!='REGULAR' and dto.get('session')!=preferred_session
                                 candidates.append((fact, approved, dto, state))
                     # A new explicit authorization must remain usable after an
                     # identity/security change. Old stream rows are retained as
@@ -407,7 +413,20 @@ class BatchQuotes:
                     # may replace/block the currently authorized source.
                     if strict_sources and retained_source and not retained_policy_ids <= current_policy_ids:
                         raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
+                    if preferred_session is not None and market == 'US':
+                        extended = [c for c in candidates if c[0]['contents'].get('requestedSession') == preferred_session and c[2]['session'] == preferred_session]
+                        regular = [c for c in candidates if c[0]['contents'].get('requestedSession', 'REGULAR') == 'REGULAR']
+                        # Never let a retained PRE/AFTER/night observation from a
+                        # previous date replace this cycle's regular observation.
+                        newest_regular = max((c[0]['source_time'] for c in regular), default=None)
+                        extended = [c for c in extended if newest_regular is None or c[0]['source_time'] >= newest_regular]
+                        candidates = extended or regular
+                        chosen = {c[0]['source_revision'] for c in candidates}
+                        sources &= chosen
+                        instruments = set().union(*(source_instruments[r] for r in sources)) if sources else set()
                     if source_revision is None and source_preference == "auto" and market != "ASSET":
+                        usable=[c for c in candidates if c[0]['source_revision'] not in cooling_sources]
+                        if usable:candidates=usable
                         order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
                         for provider in order:
                             prioritized = [c for c in candidates if c[1].source == provider]

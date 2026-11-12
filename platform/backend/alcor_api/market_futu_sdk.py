@@ -127,6 +127,7 @@ def collect(factory, ret_ok, payload, enums):
         raise ValueError('sdk_latest_semantics_invalid')
     context = factory(host=payload["host"], port=payload["port"])
     subscribed = False
+    realtime = []
     try:
         if action == "price_series":
             arguments = {'subscribe_push': False, 'is_first_push': False}
@@ -141,6 +142,19 @@ def collect(factory, ret_ok, payload, enums):
         elif action == "latest":
             ret, frame = context.get_market_snapshot(symbols)
             next_key = None
+            if ret == ret_ok and len(symbols)==1 and symbols[0].startswith('US.') and config['session'] in ('PRE','OVERNIGHT'):
+                # Snapshot update_time is the regular close even while extended
+                # fields change. Obtain an actual source minute clock instead.
+                try:
+                    subscribed_ret,_=context.subscribe(symbols,[enums['SubType'].RT_DATA],subscribe_push=False,is_first_push=False,session=getattr(enums['Session'],'ALL'))
+                    subscribed=subscribed_ret==ret_ok
+                    if subscribed:
+                        rt_ret,rt_frame=context.get_rt_data(symbols[0])
+                        if rt_ret==ret_ok:
+                            observed=records(rt_frame,limit=6000)
+                            realtime=next(([row] for row in reversed(observed) if row.get('is_blank') is False and type(row.get('cur_price')) in (int,float) and row['cur_price']>0),[])
+                except Exception:
+                    realtime=[]
         else:
             cursor = payload.get("cursor")
             if cursor is not None and (not isinstance(cursor, str) or not 1 <= len(cursor) <= 87384):
@@ -178,6 +192,7 @@ def collect(factory, ret_ok, payload, enums):
             raise ValueError("sdk_cursor_invalid")
         return {
             "records": records(frame, limit=6000 if action=='price_series' else 1000),
+            **({"realTimeRecords":realtime} if realtime else {}),
             "nextCursor": base64.b64encode(next_key).decode() if next_key is not None else None,
             "representation": "sdk_json_representation_not_wire_bytes",
             **({'subscriptionScope':'own_temporary_context_requested_symbol_only','subscriptionRelease':'unsubscribe_requested_and_context_closed_opend_retention_may_apply'} if action=='price_series' else {}),

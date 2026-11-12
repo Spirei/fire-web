@@ -120,8 +120,29 @@ async def history_member(request, db, version=None):
 
 
 def mount_legacy_history_bars(app, settings, authority):
-    service = LicensedHistory(authority)
+    service = LicensedHistory(authority,automatic=True)
     app.state.licensed_history = service
+
+    @app.post('/api/kline/prepare')
+    @app.post('/api/v1/kline/prepare')
+    @app.post('/api/v2/kline/prepare')
+    async def prepare_history(request: Request):
+        from .legacy_identity import body
+        from .market_subscription_writes import subscription_items
+        from .market_history_demands import prepare
+        from uuid import UUID
+        assert_native_origin(request,settings)
+        who=await history_member(request,authority.db)
+        if getattr(who,'native_client',False):who,_=await native_identity(request,authority.db,'portfolio.write')
+        raw=await body(request,('requestId','items','days','index','adjust'))
+        if set(raw)-{'requestId','items','days','index','adjust'}:raise HTTPException(400,'历史需求字段无效')
+        try:rid=UUID(str(raw['requestId']))
+        except (ValueError,TypeError,KeyError):raise HTTPException(400,'请求编号无效') from None
+        items=subscription_items({'items':raw.get('items')})
+        for item in items:item['instrument']='index' if raw.get('index') is True else 'asset' if item['market']=='ASSET' else 'equity'
+        result=await prepare(authority,who,rid,items,raw.get('days',330),adjust=raw.get('adjust','none'))
+        versioned=request.url.path.startswith(('/api/v1/','/api/v2/'))
+        return JSONResponse({'code':0,'message':'ok','data':result} if versioned else result,headers={'Cache-Control':'private, no-store'})
 
     @app.get("/api/kline/full")
     async def full(request: Request):

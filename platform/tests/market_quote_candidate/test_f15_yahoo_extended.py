@@ -84,7 +84,7 @@ async def test_yahoo_no_today_pre_point_does_not_invent_regular_price_at_now(mar
     q=Query('latest','US','AAPL',session='PRE');await demand(client,revision,q)
     assert await schedule(authority)==1
     task=await claim(authority.db,uuid4(),kind='market.latest');assert task
-    assert await execute(authority,task,transport)=='observed'
+    assert await execute(authority,task,transport)=='source_outcome_unknown'
     response=await client.post('/api/market/quotes/read',headers={'x-alcor-market-source':revision},json={'items':[{'id':'a','market':'US','code':'AAPL'}],'session':'PRE'})
     assert response.status_code==200 and response.json()['quotes']=={},response.text
     async with app.state.db.connection() as conn:

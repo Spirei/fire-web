@@ -87,9 +87,9 @@ def period_analysis(orders,closes,coverage,start,through):
 
 
 class PortfolioSeries:
-    def __init__(self,db,authority):
+    def __init__(self,db,authority,*,automatic=False):
         self.db,self.authority=db,authority
-        self.history=LicensedHistory(authority)
+        self.history=LicensedHistory(authority,automatic=automatic)
 
     async def read(self,who,*,days=330,account_kind=None,broker_account_id=None,record_id=None,
                    source_revision=None,adjust=None,start=None,through=None,before=None,expected_revision=None,

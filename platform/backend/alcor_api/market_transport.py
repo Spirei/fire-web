@@ -59,6 +59,11 @@ class Transport:
         if target is None or target.fingerprint != policy.target_fingerprint:
             raise ValueError("source_target_unavailable")
         target.validate(self.db.settings.environment)
+        if policy.source == 'eastmoney':
+            from .market_eastmoney_latest import VERSION, fetch, installed
+            if policy.source_version != VERSION or not installed(query) or 'latest' not in policy.purposes:
+                raise ValueError('eastmoney_source_protocol_not_installed')
+            return await fetch(target, query, cursor)
         if policy.source=='tencent':
             from .market_tencent_latest import VERSION,fetch,installed
             if policy.source_version!=VERSION or not installed(query)or 'latest'not in policy.purposes:raise ValueError('tencent_source_protocol_not_licensed')

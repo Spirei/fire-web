@@ -88,12 +88,13 @@ def mount_legacy_portfolio_analysis(app,db,authority):
                 await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
                 bound=Bound(conn,db.settings)
                 # Both material views use one snapshot; neither registers collection.
-                result=await PortfolioSeries(bound,authority).read(who,days=days,order_limit=5000,_snapshot_started=True)
+                result=await PortfolioSeries(bound,authority,automatic=True).read(who,days=days,adjust="none",order_limit=5000,_snapshot_started=True)
                 _,snapshot=await snapshot_in_transaction(conn,who,strict=False)
+                pending=await (await conn.execute("SELECT 1 FROM tasks WHERE owner_id=%s AND kind='market.history' AND status IN ('queued','running') LIMIT 1",(who.id,))).fetchone()
             allowed={row['id'] for row in result['records']}
             closes={rid:[{'d':point['d'],'c':numeric(point['c'])} for point in points] for rid,points in result['closes'].items()}
             orders=[row for row in snapshot['orders'] if row['recordId'] in allowed]
-            output={'closes':closes,'orders':orders,'days':days,'at':int(datetime.now(UTC).timestamp()*1000),
+            output={'closes':closes,'orders':orders,'days':days,'pending':bool(pending),'at':int(datetime.now(UTC).timestamp()*1000),
                     'migration':{'revision':result['revision'],'coverage':result['coverage'],'periodAnalysis':result['periodAnalysis'],
                                  'materialBundleNotHistoricalAssetCurve':True,'pagination':result['pagination']}}
             encoded=json.dumps({'revision':result['revision'],'closes':closes,'orders':orders},sort_keys=True,separators=(',',':'),ensure_ascii=False)
@@ -111,6 +112,28 @@ def mount_legacy_portfolio_analysis(app,db,authority):
 
     @app.get('/api/v2/overview')
     async def overview_v2(request:Request):return await dispatch(request)
+
+    @app.post('/api/v1/portfolio-series/prepare')
+    @app.post('/api/v2/portfolio-series/prepare')
+    async def prepare_series(request:Request):
+        from .legacy_identity import body,native_identity
+        from .market_history_demands import prepare
+        from .security import lock_mutation_identity
+        from uuid import UUID
+        who=await portfolio_member(request,db.settings,db)
+        if getattr(who,'native_client',False):who,_=await native_identity(request,db,'portfolio.write')
+        raw=await body(request,('requestId','days'))
+        if set(raw)!={'requestId','days'}:raise HTTPException(400,'组合历史需求字段无效')
+        try:rid=UUID(str(raw['requestId']))
+        except (ValueError,TypeError):raise HTTPException(400,'请求编号无效') from None
+        if type(raw['days']) is not int or not 1<=raw['days']<=1200:raise HTTPException(400,'组合历史期间无效')
+        async with db.connection() as conn,conn.transaction():
+            await lock_mutation_identity(conn,who,require_admin=False)
+            records=await (await conn.execute("SELECT DISTINCT market,code FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL AND qty>0 AND market IN ('US','HK','CN','JP','KR','SG') ORDER BY market,code LIMIT 101",(who.id,))).fetchall()
+        if len(records)>100:raise HTTPException(409,'组合历史证券超过单次范围')
+        if not records:return JSONResponse({'code':0,'message':'ok','data':{'requestId':str(rid),'state':'empty'}},headers={'Cache-Control':'private, no-store'})
+        result=await prepare(authority,who,rid,[dict(r) for r in records],raw['days'])
+        return JSONResponse({'code':0,'message':'ok','data':result},headers={'Cache-Control':'private, no-store'})
 
     @app.get('/api/v1/portfolio-series')
     async def series_v1(request:Request):return await dispatch(request,series=True)

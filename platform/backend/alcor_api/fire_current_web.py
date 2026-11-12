@@ -39,6 +39,32 @@ async def member(request: Request):
 Member = Annotated[Identity, Depends(member)]
 
 
+def ticker_items(config):
+    from .market_indices import index_identity
+    presentation=config.get('legacyPresentation',{})
+    configured=presentation.get('items') or config.get('items',[])
+    items=[]
+    for item in configured[:20]:
+        identified=index_identity(item.get('market'),item.get('secid',item.get('legacySecid')))
+        if identified:items.append({'id':item['key'],'market':identified[0],'code':identified[1]})
+    return configured,items
+
+
+@router.post('/api/fire/ticker/demand')
+async def ticker_demand(request: Request, who: Member):
+    from .market_subscription_writes import Subscriptions,subscription_items
+    raw=await body(request,('requestId',))
+    if set(raw)!={'requestId'}:raise HTTPException(400,'指数需求字段无效')
+    try:rid=UUID(str(raw['requestId']))
+    except (ValueError,TypeError):raise HTTPException(400,'请求编号无效') from None
+    await budget(request,who,'workspace-ticker-demand',30)
+    _,items=ticker_items(getattr(request.app.state.db.settings,'public_ticker',{}))
+    if not items:return JSONResponse({'requestId':str(rid),'state':'empty'},headers=PRIVATE)
+    normalized=subscription_items({'items':[{'market':i['market'],'code':i['code']} for i in items]})
+    result,_=await Subscriptions(request.app.state.market_authority).mutate(who,rid,normalized,observe=True,source_preference='auto',instrument='index')
+    return JSONResponse(result,headers=PRIVATE)
+
+
 @router.get("/api/fire/ticker")
 async def workspace_ticker(request: Request, who: Member):
     """The private workspace is not an anonymous public redistribution client."""
@@ -48,21 +74,10 @@ async def workspace_ticker(request: Request, who: Member):
     config = getattr(db.settings, "public_ticker", {})
     presentation = config.get("legacyPresentation", {})
     configured = presentation.get("items") or config.get("items", [])
-    # Bind presentation to an exact security. A key or a label is not an
-    # instrument identity, and a numeric exchange prefix is not a PG identifier.
-    installed = {item.get("key"): item for item in config.get("items", []) if isinstance(item, dict)}
-    aliases = {("US", "100.DJIA"): "DJI", ("US", "100.SPX"): "SPX"}
-    items = []
-    for item in configured[:20]:
-        retained = installed.get(item["key"], {})
-        same = retained.get("market") == item.get("market") and retained.get("legacySecid", retained.get("secid")) == item.get("secid")
-        code = retained.get("code") if same and retained.get("instrument", "index") == "index" else None
-        code = code or aliases.get((item.get("market"), item.get("secid"))) or re.sub(r"^\d+\.", "", item.get("secid", ""))
-        if isinstance(code, str) and isinstance(item.get("market"), str):
-            items.append({"id": item["key"], "market": item["market"], "code": code})
+    configured,items=ticker_items(config)
     result = await BatchQuotes(request.app.state.market_authority).read(
         who, items, include_market_cap=False, strict_sources=False, instrument="index",
-        source_preference=getattr(db.settings, "_legacy_quote_source", None),
+        source_preference="auto",
     ) if items else {"quotes": {}}
     output = []
     for item in configured[:20]:

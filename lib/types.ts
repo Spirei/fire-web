@@ -151,35 +151,7 @@ export interface User {
   isTest?: boolean;
 }
 
-export interface Quote {
-  name: string;
-  price: number;
-  change: number;
-  changePct: number;
-  /** 今开（腾讯 f5） */
-  open: number;
-  high: number;
-  low: number;
-  time: string;
-  prevClose?: number;
-  session?: "PRE" | "REGULAR" | "AFTER" | "OVERNIGHT";
-  /** 行情来源：futu=富途 / tencent=腾讯兜底 / yahoo=Yahoo 扩展兜底 */
-  source?: "futu" | "tencent" | "yahoo" | "auto";
-  /** 近期活跃行情池快照；time、source、session 保留源数据。 */
-  cached?: boolean;
-  /** 成交量（腾讯 f36） */
-  volume?: number;
-  /** 成交额（本地货币，腾讯 f37） */
-  amount?: number;
-  /** 市盈率（腾讯 f39） */
-  pe?: number;
-  /** 换手率 %（腾讯 f43） */
-  turnover?: number;
-  /** 总市值（本地货币，腾讯 f44 × 1e8） */
-  marketCap?: number;
-  /** 总股本（富途 issued_shares / 腾讯 f62），市值缺失时用于 价格 × 总股本 估算 */
-  totalShares?: number;
-}
+export type { Quote } from "./quotes";
 
 export interface SearchMatch {
   accountMarket?: string;

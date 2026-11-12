@@ -150,7 +150,8 @@ async def test_worker_closes_the_import_lane_on_retirement_stop_and_failed_cycle
     def configured(db, *, reuse_latest=False):
         assert reuse_latest is True
         return object(),lane
-    async def cycle(*args):
+    async def cycle(*args,history_turn=False):
+        assert isinstance(history_turn,bool)
         stop.set()
         if state=='database_unavailable':raise RuntimeError('controlled unavailable')
     async def public(*args):pass

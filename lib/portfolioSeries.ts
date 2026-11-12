@@ -1,12 +1,14 @@
 "use client";
 
 import type { TradeOrder } from "./types";
+import { prepareMarketHistory } from "./marketHistory";
+import { clientRequestId } from "./randomId";
 import { platformRequest, PlatformRequestError } from "./platformRequest";
 import { PRIVATE_READ_EVENTS, accountReadHeaders, privateReadEpoch, retirePrivateReadContext } from "./privateReadContext";
 import { validObservedDate } from "./observedDate";
 
 export interface SeriesClose { d: string; c: number }
-export interface PortfolioBundle { closes: Record<string, SeriesClose[]>; orders: TradeOrder[]; days: number; at: number }
+export interface PortfolioBundle { closes: Record<string, SeriesClose[]>; orders: TradeOrder[]; days: number; at: number; pending?: boolean }
 export interface PortfolioReadScope { ownerId?: string; signature?: string; signal?: AbortSignal; force?: boolean }
 const TTL = 5 * 60 * 1000;
 type Entry<T> = { value: T; at: number; epoch: number };
@@ -53,7 +55,7 @@ async function readScoped<T>(kind: string, query: string, scope: PortfolioReadSc
     try {
       const value = await load(flight.controller.signal);
       if (flight.controller.signal.aborted || privateReadEpoch() !== epoch || (cacheable && tickets.get(key) !== ticket)) return empty;
-      if (cacheable) {
+      if (cacheable && !(value as {pending?:boolean})?.pending) {
         store.delete(key); store.set(key,{value,at:Date.now(),epoch});
         while (store.size > (kind === "bundle" ? 4 : 12)) store.delete(store.keys().next().value!);
       }
@@ -84,9 +86,18 @@ export function peekPortfolioBundle(days = 330, scope: PortfolioReadScope = {}):
 /** One bounded, account-bound material read; never a reconstructed historical NAV. */
 export async function fetchPortfolioBundle({days = 330, ...scope}: PortfolioReadScope & {days?: number} = {}): Promise<PortfolioBundle | null> {
   return readScoped("bundle",String(days),scope,bundles,null,async signal => {
-    const data = await platformRequest<Partial<PortfolioBundle>>(`/api/v1/portfolio-series?${new URLSearchParams({days:String(days)})}`,{headers:accountReadHeaders(scope.ownerId),signal},20000);
+    await platformRequest("/api/v1/portfolio-series/prepare",{method:"POST",signal,headers:{"Content-Type":"application/json",...accountReadHeaders(scope.ownerId)},body:JSON.stringify({requestId:clientRequestId(),days})},20000);
+    let data = await platformRequest<Partial<PortfolioBundle>>(`/api/v1/portfolio-series?${new URLSearchParams({days:String(days)})}`,{headers:accountReadHeaders(scope.ownerId),signal},20000);
+    for (let retry=0;data?.pending && retry<12;retry++) {
+      await new Promise<void>((resolve,reject)=>{
+        const stop=()=>{clearTimeout(timer);signal.removeEventListener("abort",stop);reject(signal.reason ?? new DOMException("Aborted","AbortError"));};
+        const timer=setTimeout(()=>{signal.removeEventListener("abort",stop);resolve();},2000);
+        if(signal.aborted)stop();else signal.addEventListener("abort",stop,{once:true});
+      });
+      data=await platformRequest<Partial<PortfolioBundle>>(`/api/v1/portfolio-series?${new URLSearchParams({days:String(days)})}`,{headers:accountReadHeaders(scope.ownerId),signal},20000);
+    }
     if (!data?.closes || typeof data.closes !== "object" || Array.isArray(data.closes) || !Array.isArray(data.orders)) throw Error("组合历史格式无效");
-    return {closes:Object.fromEntries(Object.entries(data.closes).map(([id,rows]) => [id,normalizeCloses(rows)])),orders:data.orders,days:Number(data.days)||days,at:Number(data.at)||Date.now()};
+    return {closes:Object.fromEntries(Object.entries(data.closes).map(([id,rows]) => [id,normalizeCloses(rows)])),orders:data.orders,pending:data.pending === true,days:Number(data.days)||days,at:Number(data.at)||Date.now()};
   });
 }
 
@@ -104,7 +115,8 @@ export function normalizeCloses(items: SeriesClose[] | undefined): SeriesClose[]
 export async function fetchBenchmarkKline(market: string, code: string, days = 330, index = false, scope: PortfolioReadScope = {}): Promise<SeriesClose[]> {
   const query = `${market.toUpperCase()}:${code.toUpperCase()}:${days}:${index ? 1 : 0}`;
   return await readScoped("benchmark",query,{...scope,signature:scope.signature || "benchmark"},benchmarks,[],async signal => {
-    const data = await platformRequest<{items:SeriesClose[]}>(`/api/kline/full?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&limit=${days}${index ? "&index=1" : ""}`,{headers:accountReadHeaders(scope.ownerId),signal},20000);
+    await prepareMarketHistory([{market:market.toUpperCase(),code:code.toUpperCase()}],{days,index,ownerId:scope.ownerId,signal});
+    const data = await platformRequest<{items:SeriesClose[]}>(`/api/kline/full?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}&limit=${days}&adjust=none${index ? "&index=1" : ""}`,{headers:accountReadHeaders(scope.ownerId),signal},20000);
     if (!Array.isArray(data?.items)) throw Error("基准历史格式无效");
     return normalizeCloses(data.items);
   }) ?? [];

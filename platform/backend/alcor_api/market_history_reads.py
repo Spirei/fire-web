@@ -11,8 +11,9 @@ from .security import lock_mutation_identity
 
 
 class LicensedHistory:
-    def __init__(self, authority):
+    def __init__(self, authority, *, automatic=False):
         self.authority, self.db = authority, authority.db
+        self.automatic=automatic
 
     async def read(
         self,
@@ -100,4 +101,13 @@ class LicensedHistory:
                 await self.authority.config(conn, owner, revision)
             except HTTPException:
                 retained[str(revision)] = {'sourceRevision': str(revision), 'state': 'retained_unavailable'}
+        if self.automatic and revision is None and len(choices)>1 and all(p.source in ('futu','yahoo','eastmoney','tencent') for p,q in choices.values()):
+            observed={}
+            for key,value in choices.items():
+                if await (await conn.execute('SELECT 1 FROM market_facts WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s LIMIT 1',(owner,key[0],key[1]))).fetchone():observed[key]=value
+            if observed:choices=observed
+            order=getattr(self.db.settings,'_legacy_quote_order',None) or ['futu','tencent','eastmoney','yahoo']
+            for provider in order:
+                selected={key:value for key,value in choices.items() if value[0].source==provider}
+                if selected:choices=selected;break
         return choices, list(retained.values())

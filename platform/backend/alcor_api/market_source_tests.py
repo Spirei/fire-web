@@ -148,6 +148,18 @@ def mount(app, settings, authority, transport, member):
             raise HTTPException(403, "需要管理员权限")
         return who
 
+    @app.post('/api/fire/market-sources/setup')
+    async def configure_sources(request: Request):
+        who=await administrator(request)
+        if not await app.state.rate_limit(db,'market-source-setup:'+who.id,5,window_seconds=60):raise HTTPException(429,'接入请求过于频繁',headers={'Retry-After':'60'})
+        raw=await body(request,('requestId',))
+        if set(raw)!={'requestId'}:raise HTTPException(400,'行情设置字段无效')
+        try:rid=UUID(str(raw['requestId']))
+        except (ValueError,TypeError):raise HTTPException(400,'请求编号无效') from None
+        from .market_source_setup import setup
+        from fastapi.responses import JSONResponse
+        return JSONResponse(await setup(db,authority,who,rid),headers={'Cache-Control':'private, no-store'})
+
     @app.get("/api/fire/market-sources/tests")
     async def retained(request: Request):
         who = await administrator(request)
