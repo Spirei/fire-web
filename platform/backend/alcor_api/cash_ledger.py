@@ -370,7 +370,7 @@ class CashLedger:
             conn, who.id, account_kind, currency, account_id
         ) or not await self.actual_known(conn, who.id, account_kind, currency):
             return result
-        reservations = await pending_reservations(conn, who.id, account_kind, currency, account_id=account_id)
+        reservations = await pending_reservations(conn, who.id, account_kind, currency, account_id=account_id, shared_read=True)
         if not reservations["complete"] or reservations["cash"] is None:
             return result
         total, _attributed, balance = await self.balances(conn, who.id, currency, account_id, account_kind)

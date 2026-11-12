@@ -29,6 +29,53 @@ def protocol(response, version):
     assert isinstance(response.json()['code'], int)
 
 
+async def test_asset_readers_share_current_proof_but_still_exclude_broker_writers(client,admin,app):
+    from alcor_api.broker_accounts import serialize_brokers
+    from source_pure_read_candidate.test_reads import snapshot
+    from test_trading import setup
+    await setup(client,name='Synthetic parallel asset read',qty='2',cost='10')
+    pair,headers=await connect(client)
+    before=await snapshot(app.state.db)
+    # The overview's existing database-backed request budget is operational;
+    # every financial, identity, source, preference and receipt table is checked.
+    before.pop('auth_rate_limits',None)
+    entered=asyncio.Event()
+    async def writer():
+        async with app.state.db.connection() as conn,conn.transaction():
+            entered.set()
+            await serialize_brokers(conn,admin)
+            return True
+    task=None
+    try:
+        async with app.state.db.connection() as conn,conn.transaction():
+            # A real concurrent reader holds the original broker domains and
+            # current grant proof. The HTTP paths must not upgrade either lock.
+            for domain in ('identity-management:','broker-accounts:'):
+                await conn.execute('SELECT pg_advisory_xact_lock_shared(hashtextextended(%s,0))',(domain+admin,))
+            who=identity_from_grant(await authenticate(conn,pair['access_token']),pair['access_token'])
+            await lock_read_identity(conn,who)
+            responses=await asyncio.wait_for(asyncio.gather(*(
+                client.get(path,headers=headers)
+                for path in ('/api/v1/account-assets','/api/v2/account-assets','/api/v2/overview','/api/v2/records')
+            )),8)
+            for response in responses:
+                assert response.status_code==200,response.text
+                protocol(response,1 if '/v1/' in str(response.request.url) else 2)
+            # PostgreSQL may give an already queued writer priority over later
+            # readers; queue it only after checking concurrent read completion.
+            task=asyncio.create_task(writer())
+            await asyncio.wait_for(entered.wait(),3)
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(task),.1)
+        assert await asyncio.wait_for(task,3) is True
+    finally:
+        if task and not task.done():task.cancel()
+        if task:await asyncio.gather(task,return_exceptions=True)
+    after=await snapshot(app.state.db)
+    after.pop('auth_rate_limits',None)
+    assert after==before
+
+
 @pytest.mark.parametrize('version',[1,2])
 async def test_versioned_success_failure_and_no_redirect_share_the_protocol(client, version):
     prefix=f'/api/v{version}'
@@ -98,7 +145,8 @@ async def test_refresh_waits_for_read_proof_and_keeps_the_same_grant(client,admi
             task.cancel(); await asyncio.gather(task,return_exceptions=True)
 
 
-async def test_revocation_between_initial_auth_and_snapshot_cannot_return_old_records(client,admin,app,monkeypatch):
+@pytest.mark.parametrize(('path','code'),[('/api/v2/records',40102),('/api/v2/account-assets',40101),('/api/v2/overview',40101)])
+async def test_revocation_between_initial_auth_and_snapshot_cannot_return_old_records(client,admin,app,monkeypatch,path,code):
     import alcor_api.native_app_auth as native
     pair,headers=await connect(client)
     entered,release=asyncio.Event(),asyncio.Event()
@@ -108,14 +156,14 @@ async def test_revocation_between_initial_auth_and_snapshot_cannot_return_old_re
             entered.set();await release.wait()
         return await original(conn,who,shared=shared)
     monkeypatch.setattr(native,'lock_native_identity',paused)
-    task=asyncio.create_task(client.get('/api/v2/records',headers=headers))
+    task=asyncio.create_task(client.get(path,headers=headers))
     try:
         await asyncio.wait_for(entered.wait(),3)
         async with app.state.db.connection() as conn,conn.transaction():
             await conn.execute('UPDATE identity_app_grants SET revoked_at=clock_timestamp() WHERE id=%s',(pair['grant_id'],))
         release.set()
         result=await asyncio.wait_for(task,5)
-        assert result.status_code==401 and result.json()['code']==40102,result.text
+        assert result.status_code==401 and result.json()['code']==code,result.text
         protocol(result,2)
     finally:
         release.set()

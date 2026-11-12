@@ -116,12 +116,13 @@ class BrokerDelete(InputModel):
     revision: int = Field(ge=1, strict=True)
 
 
-async def serialize_brokers(conn, owner):
-    """All directory writers share this owner lock, including creation and name reservations."""
+async def serialize_brokers(conn, owner, *, shared_read=False):
+    """Same owner domains: explicit readers share; all writers remain exclusive."""
+    function = 'pg_advisory_xact_lock_shared' if shared_read else 'pg_advisory_xact_lock'
     await conn.execute(
-        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("identity-management:" + owner,)
+        f"SELECT {function}(hashtextextended(%s,0))", ("identity-management:" + owner,)
     )
-    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("broker-accounts:" + owner,))
+    await conn.execute(f"SELECT {function}(hashtextextended(%s,0))", ("broker-accounts:" + owner,))
 
 
 async def broker_account(conn, owner, account_id, *, include_deleted=False):

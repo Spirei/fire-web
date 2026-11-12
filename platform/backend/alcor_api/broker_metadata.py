@@ -84,10 +84,14 @@ class BrokerMetadata:
         self.db = db
 
     @asynccontextmanager
-    async def context(self, who, *, connection=None):
+    async def context(self, who, *, connection=None, shared_read=False):
         async with broker_connection(self.db, connection) as conn, conn.transaction():
-            await serialize_brokers(conn, who.id)
-            await lock_mutation_identity(conn, who, require_admin=False)
+            await serialize_brokers(conn, who.id, shared_read=shared_read)
+            if shared_read:
+                from .security import lock_read_identity
+                await lock_read_identity(conn, who, require_admin=False)
+            else:
+                await lock_mutation_identity(conn, who, require_admin=False)
             yield conn
 
     async def versions(self, conn, owner):

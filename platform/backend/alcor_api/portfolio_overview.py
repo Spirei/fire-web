@@ -140,7 +140,7 @@ class PortfolioOverview(LegacyAssetAuthority):
             or us_price not in {"observed", "regular"}
         ):
             raise HTTPException(400, "资产汇总显示参数无效")
-        async with self.context(who) as conn:
+        async with self.context(who,shared_read=True) as conn:
             original = await (
                 await conn.execute(
                     "SELECT id,market,code,revision FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001",
@@ -161,7 +161,7 @@ class PortfolioOverview(LegacyAssetAuthority):
             if exc.status_code in (401, 403):
                 raise
             quoted["readState"] = "unavailable"
-        async with self.context(who) as conn:
+        async with self.context(who,shared_read=True) as conn:
             # Every existing financial writer holds the same owner locks. Quotes
             # are used only when its captured record identity/revision still fits.
             rows = await (

@@ -107,9 +107,11 @@ def normalize(raw):
         raise HTTPException(422, "请核对内部限价委托的数量、费用和版本") from None
 
 
-async def pending_reservations(conn, owner, account_kind, currency, record_id=None, account_id=None, *, account_scope=False, exclude_order_id=None):
-    """Caller holds the shared owner transaction lock. Unknown references never become zero."""
-    await serialize_brokers(conn, owner)
+async def pending_reservations(conn, owner, account_kind, currency, record_id=None, account_id=None, *, account_scope=False, exclude_order_id=None, shared_read=False):
+    """Caller holds the owner transaction lock. Unknown references never become zero."""
+    # Cash/asset reads must not upgrade their shared owner locks here. Existing
+    # financial writers still acquire and retain the default exclusive domains.
+    await serialize_brokers(conn, owner, shared_read=shared_read)
     scoped_account = account_id if account_scope else None
     if account_scope and not scoped_account:raise ValueError('explicit reservation account required')
     rows = await (

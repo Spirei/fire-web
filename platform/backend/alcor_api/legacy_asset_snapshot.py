@@ -82,12 +82,12 @@ async def snapshot(service,who,options):
     if (not isinstance(selected['currency'],str) or len(selected['currency'])!=3 or not selected['currency'].isascii() or not selected['currency'].isupper()
             or selected['costMethod'] not in ('diluted','average_open') or selected['usPrice'] not in ('observed','regular')):
         raise HTTPException(400,'资产显示参数无效')
-    async with service.context(who) as conn:
+    async with service.context(who,shared_read=True) as conn:
         original=await (await conn.execute('SELECT id,market,code,revision FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         if len(original)>10000:raise HTTPException(409,'持仓超过完整读取上限')
     quoted=await configured_quotes(service.market_authority,who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original],regular=selected['usPrice']=='regular')
     fx=await FxWorker(service.db).snapshot(exact=True)
-    async with service.context(who) as conn:
+    async with service.context(who,shared_read=True) as conn:
         rows=await (await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         if [(row['id'],row['market'],row['code'],row['revision']) for row in rows]!=[(row['id'],row['market'],row['code'],row['revision']) for row in original]:
             raise HTTPException(409,'持仓在读取报价期间已变化，请重新读取')

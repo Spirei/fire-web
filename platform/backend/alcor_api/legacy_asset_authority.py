@@ -20,10 +20,10 @@ class LegacyAssetAuthority(BrokerMetadata):
         self.market_authority = market_authority
 
     @asynccontextmanager
-    async def context(self, who):
-        async with super().context(who) as conn:
+    async def context(self, who, *, shared_read=False):
+        async with super().context(who, shared_read=shared_read) as conn:
             if getattr(who,'native_client',False):
-                current=await authenticate(conn,who.native_access_token,lock=True)
+                current=await authenticate(conn,who.native_access_token,lock=not shared_read,shared=shared_read)
                 scopes=getattr(who,'asset_required_scopes',())
                 if current['id']!=who.grant_id or current['user_id']!=who.id or current['client_id']!=CLIENT:
                     raise HTTPException(401,'连接已变化')
@@ -41,7 +41,7 @@ class LegacyAssetAuthority(BrokerMetadata):
         return value,stored
 
     async def instrument(self, who, record_id):
-        async with self.context(who) as conn:
+        async with self.context(who,shared_read=True) as conn:
             record=await self.records.get(conn,who.id,record_id)
             if not record:raise HTTPException(404,'持仓记录不存在')
             declaration,_=await self.declaration(conn,who.id,record)
@@ -88,7 +88,7 @@ class LegacyAssetAuthority(BrokerMetadata):
             return result
 
     async def receipt(self,who,request):
-        async with self.context(who) as conn:
+        async with self.context(who,shared_read=True) as conn:
             result=await (await conn.execute('SELECT result FROM asset_instrument_operations WHERE owner_id=%s AND request_id=%s',(who.id,UUID(str(request))))).fetchone()
             if not result:raise HTTPException(404,'未找到已提交回执')
             return result['result']

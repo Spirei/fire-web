@@ -18,7 +18,7 @@ class CashOverview(BrokerMetadata):
         self.cash = CashLedger(db)
 
     async def state(self, who):
-        async with self.context(who) as conn:
+        async with self.context(who,shared_read=True) as conn:
             return await self.on_connection(conn, who)
 
     async def on_connection(self, conn, who):
@@ -76,7 +76,7 @@ class CashOverview(BrokerMetadata):
                 complete = opened and await scope_status(conn, who.id, kind, currency) and await self.cash.actual_known(
                     conn, who.id, kind, currency,
                 )
-                reservation = await pending_reservations(conn, who.id, kind, currency)
+                reservation = await pending_reservations(conn, who.id, kind, currency, shared_read=True)
                 reservations_known = reservation['complete'] and reservation['cash'] is not None
                 total, allocated, _ = await self.cash.balances(conn, who.id, currency, None, kind)
                 with localcontext() as decimal_context:
