@@ -157,7 +157,7 @@ async def current(authority, conn, task):
     return stream, policy, None
 
 
-def decode(policy, query, raw, *, cursor_in=None):
+def decode(policy, query, raw, *, cursor_in=None, observed_at=None):
     if policy.source=='tencent':
         from .market_tencent_minute import VERSION as MINUTE_VERSION,parse as minute_parse
         if policy.source_version==MINUTE_VERSION:
@@ -200,7 +200,7 @@ def decode(policy, query, raw, *, cursor_in=None):
     if cursor is not None and (not isinstance(cursor, str) or not 1 <= len(cursor) <= 87384):
         raise ValueError("source_cursor_invalid")
     if policy.source == "futu":
-        facts, issues = futu_rows(value, query)
+        facts, issues = futu_rows(value, query, observed_at=observed_at)
     elif policy.fixture:
         if (
             value.get("query") != asdict(query)
@@ -301,13 +301,14 @@ async def execute(authority, task, transport):
             _,_,reason=await current(authority,conn,task)
             if reason=='lost':return reason
             return await stop(conn,db,task,reason or 'source_outcome_unknown')
+    observed_at=authority.clock() if authority.clock else datetime.now(UTC)
     decode_failed=reply_failure is not None
     if reply_failure:
         facts,issues,cursor=[],[reply_failure],None
     else:
         try:
-            facts, issues, cursor = decode(policy, query, raw, cursor_in=job['cursor'])
-            cutoff = (authority.clock() if authority.clock else datetime.now(UTC)) + timedelta(seconds=5)
+            facts, issues, cursor = decode(policy, query, raw, cursor_in=job['cursor'],observed_at=observed_at)
+            cutoff = observed_at + timedelta(seconds=5)
             accepted=[]
             for fact in facts:
                 if source_time(fact['at'],'UTC')>cutoff:
@@ -342,7 +343,7 @@ async def execute(authority, task, transport):
                 raw,
                 digest(raw),
                 Jsonb(issues),
-                authority.clock() if authority.clock else None,
+                observed_at,
             ),
         )
     async with db.connection() as conn,conn.transaction():
@@ -385,13 +386,13 @@ async def execute(authority, task, transport):
         if query.kind != "latest" and cursor is None:
             rows = await (
                 await conn.execute(
-                    "SELECT id,issues,raw_bytes,cursor_in FROM market_source_pages WHERE task_id=%s ORDER BY page_number",
+                    "SELECT id,issues,raw_bytes,cursor_in,observed_at FROM market_source_pages WHERE task_id=%s ORDER BY page_number",
                     (task["id"],),
                 )
             ).fetchall()
             observed_times = set()
             for page_row in rows:
-                page_facts, _, _ = decode(policy, query, bytes(page_row["raw_bytes"]), cursor_in=page_row['cursor_in'])
+                page_facts, _, _ = decode(policy, query, bytes(page_row["raw_bytes"]), cursor_in=page_row['cursor_in'],observed_at=page_row['observed_at'])
                 rejected_times = {
                     issue["at"]
                     for issue in page_row["issues"]

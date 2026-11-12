@@ -26,13 +26,20 @@ async def fetch_page(url, approval):
     parsed = urlsplit(url)
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     approved_target(url, approval, approval["addresses"])
+    # Restore the request shape used by the pre-migration Yahoo chart reader.
+    # These are public content headers, never cookies or authentication.
+    headers={'User-Agent':'Mozilla/5.0','Accept':'application/json'} if (
+        parsed.hostname in ('query1.finance.yahoo.com','query2.finance.yahoo.com')
+        and parsed.path.startswith('/v8/finance/chart/')) else {}
     async with asyncio.timeout(15):
-        pins = approved_target(url, approval, await resolve(parsed.hostname, port))
+        from .market_public_dns import quote_pins
+        pins = quote_pins(url, approval, await resolve(parsed.hostname, port))
         backend = PinnedBackend(parsed.hostname, port, pins)
         async with (
             httpcore.AsyncConnectionPool(network_backend=backend, retries=0, max_connections=1) as pool,
             pool.stream(
-                "GET", url, extensions={"timeout": {"connect": 5, "read": 5, "write": 5, "pool": 5}}
+                "GET", url, **({'headers':headers} if headers else {}),
+                extensions={"timeout": {"connect": 5, "read": 5, "write": 5, "pool": 5}}
             ) as response,
         ):
             raw = bytearray()

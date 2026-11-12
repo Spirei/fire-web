@@ -112,6 +112,40 @@ async def test_explicit_setup_is_owner_bound_durable_and_ticker_get_is_pure(lega
     assert (await legacy.post('/api/fire/market-sources/setup',json={'requestId':str(uuid4()),'url':'http://127.0.0.1'})).status_code==400
 
 
+async def test_setup_upgrades_owned_pins_once_and_dns_rotation_does_not_reset_source_identity(legacy,app,monkeypatch):
+    from alcor_api import market_source_setup as setup
+    from alcor_api.dividend_sources import Target
+    address='8.8.8.8'
+    async def resolve(host,port):return [address]
+    def old_target(*args,**kwargs):kwargs['dns_policy']='pinned';return Target(*args,**kwargs)
+    monkeypatch.setattr(setup,'resolve',resolve)
+    monkeypatch.setattr(setup,'Target',old_target)
+    assert (await legacy.post('/api/fire/market-sources/setup',json={'requestId':str(uuid4())})).status_code==200
+    old_policies={p['id']:p for p in app.state.db.settings.market_data_policies}
+    old_targets=app.state.db.settings.dividend_source_targets
+    assert all(t['dns_policy']=='pinned' for t in old_targets)
+    monkeypatch.setattr(setup,'Target',Target)
+    address='1.1.1.1'
+    rid=str(uuid4())
+    upgraded=await legacy.post('/api/fire/market-sources/setup',json={'requestId':rid})
+    assert upgraded.status_code==200,upgraded.text
+    targets=app.state.db.settings.dividend_source_targets
+    assert all(t['dns_policy']=='public_dns' and t['addresses']==['1.1.1.1'] for t in targets)
+    for policy in app.state.db.settings.market_data_policies:
+        previous=old_policies[policy['id']]
+        assert policy['target_fingerprint']!=previous['target_fingerprint']
+        assert {k:v for k,v in policy.items() if k!='target_fingerprint'}=={k:v for k,v in previous.items() if k!='target_fingerprint'}
+    async with app.state.db.connection() as conn:
+        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==8
+    assert (await legacy.post('/api/fire/market-sources/setup',json={'requestId':rid})).json()==upgraded.json()
+    address='8.8.4.4'
+    repeated=await legacy.post('/api/fire/market-sources/setup',json={'requestId':str(uuid4())})
+    assert repeated.status_code==200,repeated.text
+    assert app.state.db.settings.dividend_source_targets==targets
+    async with app.state.db.connection() as conn:
+        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==8
+
+
 def test_futu_night_uses_real_minute_clock_when_snapshot_keeps_regular_close():
     from alcor_api.market_contract import futu_rows
     q=Query('latest','US','AAPL',session='OVERNIGHT')

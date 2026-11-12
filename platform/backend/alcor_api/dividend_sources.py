@@ -75,12 +75,18 @@ class Target:
     scheme: str = "https"
     allow_plaintext: bool = False
     stale_seconds: int = 259200
+    dns_policy: str = 'pinned'
 
     def validate(self, environment):
         import ipaddress
 
         if self.source not in {"futu", "eastmoney", "yahoo", "coingecko", "tencent"} or not self.approved_access:
             raise ValueError("source_access_unapproved")
+        if self.dns_policy not in ('pinned','public_dns'):
+            raise ValueError('target_dns_policy_invalid')
+        if self.dns_policy=='public_dns':
+            from .market_public_dns import validate_mode
+            validate_mode(self)
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", self.id) or not self.addresses:
             raise ValueError("target_invalid")
         if self.fixture and environment != "test":
@@ -105,7 +111,10 @@ class Target:
 
     @property
     def fingerprint(self):
-        return digest(canonical(asdict(self)).encode())
+        definition=asdict(self)
+        # Existing operator-pinned targets keep their exact pre-upgrade identity.
+        if self.dns_policy=='pinned':definition.pop('dns_policy')
+        return digest(canonical(definition).encode())
 
     @property
     def budget_key(self):
@@ -130,6 +139,7 @@ class Target:
             "target": [self.scheme, self.host, self.port, self.path(symbol)],
             "addresses": list(self.addresses),
             "allow_plaintext": self.allow_plaintext,
+            **({'dnsPolicy':'public_fixed_quote_host'} if self.dns_policy=='public_dns' else {}),
         }
 
 

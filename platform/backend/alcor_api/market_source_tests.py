@@ -83,7 +83,7 @@ async def probe_markets(authority, transport, policy):
                         row['session']='REGULAR'
                     else:
                         original, _ = await reader.read(policy, query, None)
-                        facts, _, _ = decode(policy, query, original)
+                        facts, _, _ = decode(policy, query, original,observed_at=datetime.now(UTC))
                         fact = facts[-1] if facts else {}
                         price = float(fact["price"]) if fact.get("price") is not None else None
                         stamp = datetime.fromisoformat(fact["at"]) if fact.get("at") else None

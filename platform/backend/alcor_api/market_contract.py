@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, localcontext
 from zoneinfo import ZoneInfo
 
@@ -320,22 +320,40 @@ def _latest_snapshot(row, query, stamp):
     return result
 
 
-def latest_realtime(payload,query,symbol):
+def latest_realtime(payload,query,symbol,observed_at=None):
     if query.market!='US' or query.session not in ('PRE','OVERNIGHT'):
         raise ValueError('source_extended_clock_unavailable')
     rows=payload.get('realTimeRecords')
-    if not isinstance(rows,list) or len(rows)!=1 or not isinstance(rows[0],dict):
+    if not isinstance(rows,list) or not 1<=len(rows)<=4:
         raise ValueError('source_extended_clock_unavailable')
-    row=rows[0]
-    if row.get('code')!=symbol or row.get('is_blank') is not False:
-        raise ValueError('source_extended_identity_or_blank')
-    stamp=source_time(row.get('time'),ZONES['US']);local=stamp.astimezone(ZoneInfo(ZONES['US']))
-    minute=local.hour*60+local.minute
-    if not (240<=minute<570 if query.session=='PRE' else minute>=1200 or minute<240):
-        raise ValueError('source_minute_outside_requested_session')
+    # The caller supplies the immutable transport observation clock, including
+    # on replay. Never consult wall time or use it as the source trade time.
+    if (len(rows)>1 and observed_at is None
+            or observed_at is not None and (not isinstance(observed_at,datetime) or observed_at.tzinfo is None)):
+        raise ValueError('source_observation_clock_required')
+    candidates=[]
+    for row in rows:
+        try:
+            if not isinstance(row,dict) or row.get('code')!=symbol or row.get('is_blank') is not False:
+                continue
+            stamp=source_time(row.get('time'),ZONES['US']);local=stamp.astimezone(ZoneInfo(ZONES['US']))
+            minute=local.hour*60+local.minute
+            if not (240<=minute<570 if query.session=='PRE' else minute>=1200 or minute<240):
+                continue
+            if observed_at is not None and stamp>observed_at+timedelta(seconds=5):
+                continue
+            price=number(row.get('cur_price'),positive=True);baseline=number(row.get('last_close'),positive=True)
+            candidates.append((stamp,row,price,baseline))
+        except (ValueError,TypeError,KeyError):
+            continue
+    if not candidates:raise ValueError('source_extended_clock_unavailable')
+    stamp=max(candidate[0] for candidate in candidates)
+    newest=[candidate for candidate in candidates if candidate[0]==stamp]
+    if len({(candidate[2],candidate[3]) for candidate in newest})!=1:
+        raise ValueError('source_extended_same_time_ambiguous')
+    stamp,row,price,baseline=newest[0]
     with localcontext() as context:
         context.prec=160
-        price=number(row.get('cur_price'),positive=True);baseline=number(row.get('last_close'),positive=True)
         change=price-baseline
         result={'at':stamp.isoformat(),'name':row.get('name') if isinstance(row.get('name'),str) else '',
             'price':str(price),'prevClose':str(baseline),'change':str(change),'changePct':str(change/baseline*100),
@@ -348,7 +366,7 @@ def latest_realtime(payload,query,symbol):
     return result
 
 
-def futu_rows(payload, query):
+def futu_rows(payload, query, *, observed_at=None):
     """Normalize the real SDK records representation; an invalid row never becomes zero."""
     query.validate()
     if (
@@ -385,9 +403,12 @@ def futu_rows(payload, query):
             }
             if query.kind == "latest":
                 used_realtime=False
-                try:fact.update(latest_snapshot(row, query, stamp))
+                try:
+                    if query.session in ('PRE','OVERNIGHT') and observed_at is not None and stamp>observed_at+timedelta(seconds=5):
+                        raise ValueError('source_future_snapshot')
+                    fact.update(latest_snapshot(row, query, stamp))
                 except ValueError:
-                    fact.update(latest_realtime(payload,query,symbol));fact['snapshotObservedAt']=stamp.isoformat();used_realtime=True
+                    fact.update(latest_realtime(payload,query,symbol,observed_at));fact['snapshotObservedAt']=stamp.isoformat();used_realtime=True
                 metrics = snapshot_metrics(row)
                 if query.session != 'REGULAR':
                     fact['regularSnapshotMetrics'] = {key:metrics.pop(key) for key in

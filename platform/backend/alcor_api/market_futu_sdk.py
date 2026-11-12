@@ -152,7 +152,9 @@ def collect(factory, ret_ok, payload, enums):
                         rt_ret,rt_frame=context.get_rt_data(symbols[0])
                         if rt_ret==ret_ok:
                             observed=records(rt_frame,limit=6000)
-                            realtime=next(([row] for row in reversed(observed) if row.get('is_blank') is False and type(row.get('cur_price')) in (int,float) and row['cur_price']>0),[])
+                            # Keep a small candidate tail. A next-minute point
+                            # must not hide the latest already observed point.
+                            realtime=[row for row in observed if row.get('is_blank') is False and type(row.get('cur_price')) in (int,float) and row['cur_price']>0][-4:]
                 except Exception:
                     realtime=[]
         else:

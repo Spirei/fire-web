@@ -40,7 +40,7 @@ async def setup(db, authority, who, request_id):
             raise HTTPException(503,'行情源地址暂时无法核对')
         identifier='quotes-'+provider+'-'+sha256(who.id.encode()).hexdigest()[:20]
         family=provider.split('-',1)[0]
-        target=Target(identifier,family,host,443,addresses,approved_access=True)
+        target=Target(identifier,family,host,443,addresses,approved_access=True,dns_policy='public_dns')
         policy=Policy(identifier,family,version,identifier,target.fingerprint,who.id,'market-settings-v1',purposes,markets)
         if provider=='tencent':
             from dataclasses import replace
@@ -64,13 +64,28 @@ async def setup(db, authority, who, request_id):
             # Preserve any already configured, usable provider and its approval.
             selected=None
             if policy['source_version']=='tencent-minute-v1':
-                old=await (await conn.execute('SELECT revision FROM market_source_configs WHERE owner_id=%s AND policy_id=%s AND policy_fingerprint=%s',(who.id,policy['id'],Policy(**policy).fingerprint))).fetchone()
-                if old:
-                    try:selected=(old['revision'],(await authority.config(conn,who.id,old['revision']))[1])
+                previous=await (await conn.execute('SELECT revision FROM market_source_configs WHERE owner_id=%s AND policy_id=%s ORDER BY revision LIMIT 1001',(who.id,policy['id']))).fetchall()
+                if len(previous)>1000:raise HTTPException(503,'当前分时来源超过核对范围')
+                active=[]
+                for old in previous:
+                    try:
+                        old_policy=(await authority.config(conn,who.id,old['revision']))[1]
+                        if old_policy.source_version==policy['source_version']:active.append((old['revision'],old_policy))
                     except HTTPException:pass
+                if len(active)>1:raise HTTPException(409,'当前分时来源不唯一，请先核对配置')
+                if active:selected=active[0]
             else:selected=await selection(authority,conn,who,policy['source'])
             if selected:
-                chosen.append((None,selected[0]));continue
+                prior_policy=selected[1]
+                prior_target=next((t for t in targets if t.get('id')==prior_policy.target_id),None)
+                managed=(prior_policy.id==policy['id'] and prior_policy.source_version==policy['source_version']
+                    and prior_target is not None and all(prior_target.get(k)==target[k] for k in ('id','source','host','port','scheme','allow_plaintext','fixture')))
+                if not managed or prior_target.get('dns_policy','pinned')=='public_dns':
+                    chosen.append((None,selected[0]));continue
+                # Explicit setup upgrades only this owner's generated fixed host;
+                # preserve its licensed purposes, markets and symbol declarations.
+                policy=asdict(prior_policy)
+                policy['target_fingerprint']=Target(**target).fingerprint
             targets=[t for t in targets if t.get('id')!=target['id']]+[target]
             policies=[p for p in policies if p.get('id')!=policy['id']]+[policy]
             chosen.append((policy['id'],None))
