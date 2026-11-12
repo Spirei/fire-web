@@ -12,7 +12,7 @@ import httpcore
 
 from .dividend_sources import LIMIT, canonical, request
 from .fx_provider_parser import approved_target
-from .fx_provider_transport import PinnedBackend, resolve
+from .fx_provider_transport import resolve
 
 
 class ResponseFailure(ValueError):
@@ -34,7 +34,8 @@ async def fetch_page(url, approval):
     async with asyncio.timeout(15):
         from .market_public_dns import quote_pins
         pins = quote_pins(url, approval, await resolve(parsed.hostname, port))
-        backend = PinnedBackend(parsed.hostname, port, pins)
+        from .market_quote_proxy import quote_backend
+        backend = await quote_backend(url, pins, resolver=resolve)
         async with (
             httpcore.AsyncConnectionPool(network_backend=backend, retries=0, max_connections=1) as pool,
             pool.stream(

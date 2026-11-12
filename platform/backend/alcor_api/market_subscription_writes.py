@@ -60,16 +60,8 @@ class Subscriptions:
             cooling = set()
             if len(items) == 1:
                 item = items[0]
-                failed = await (await conn.execute("""SELECT DISTINCT s.source_revision
-                    FROM market_streams s JOIN tasks t ON t.id=s.current_task_id
-                    JOIN market_data_jobs j ON j.task_id=t.id
-                    WHERE s.owner_id=%s AND s.source_revision=ANY(%s)
-                    AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s
-                    AND s.query->>'instrument'=%s AND t.status='failed'
-                    AND j.last_source_error IN ('source_outcome_unknown','source_pagination_unclosed')
-                    AND t.finished_at>clock_timestamp()-interval '60 seconds'""",
-                    (who.id,approved,item['market'],item['code'],self.query(item,instrument,session).instrument))).fetchall()
-                cooling = {row['source_revision'] for row in failed}
+                from .market_source_failures import recent_failed_sources
+                cooling = await recent_failed_sources(conn, who.id, approved, item['market'], item['code'], self.query(item,instrument,session).instrument)
             usable = [revision for revision in approved if revision not in cooling] or approved
             for provider in order:
                 prioritized = [r for r in usable if families[r] == provider]
@@ -130,10 +122,14 @@ class Subscriptions:
                             changed=await (await conn.execute("UPDATE tasks t SET status=CASE WHEN t.status='running' THEN 'cancel_requested' ELSE 'cancelled' END,finished_at=CASE WHEN t.status='queued' THEN clock_timestamp() ELSE t.finished_at END FROM market_data_jobs j WHERE j.task_id=t.id AND j.owner_id=%s AND j.stream_id=%s AND t.status IN ('queued','running') RETURNING t.id,t.status",(who.id,stream_id))).fetchall()
                             for task in changed:await conn.execute("INSERT INTO task_events(task_id,phase) VALUES(%s,%s)",(task["id"],task["status"]))
             result={"requestId":str(request_id),"status":"accepted","revoked":remove,"affectedStreams":len(streams),"collection":"worker_pending" if not remove else "client_demands_revoked","subscriptions":None,"observation":observe,"legacyClientIdempotency":not legacy_generated,"receiptId":str(request_id)}
-            try:result.update(await PoolReads(bound).on_connection(conn,who,strict_sources=True))
-            except HTTPException as exc:
-                if not remove:raise
-                # A source/other lease's unavailable read must not roll back a
-                # completed owner cancellation. Retain the exact accepted receipt.
-                result["projectionError"]={"status":exc.status_code,"message":str(exc.detail)}
+            if not observe:
+                # Automatic quote/index observation needs its own accepted
+                # receipt, not an unrelated legacy equity-list projection.
+                # Explicit subscription commands keep their strict old DTO.
+                try:result.update(await PoolReads(bound).on_connection(conn,who,strict_sources=True))
+                except HTTPException as exc:
+                    if not remove:raise
+                    # A source/other lease's unavailable read must not roll back a
+                    # completed owner cancellation. Retain the exact accepted receipt.
+                    result["projectionError"]={"status":exc.status_code,"message":str(exc.detail)}
             return await self.authority.save_receipt(conn,who.id,request_id,operation,result),False

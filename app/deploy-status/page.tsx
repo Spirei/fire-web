@@ -2,7 +2,7 @@
 
 import "./deploy-status.css";
 
-import { DeploymentCommand } from "@/lib/deploymentCommand";
+import { DeploymentCommand, deploymentPending } from "@/lib/deploymentCommand";
 import PasswordInput from "@/components/PasswordInput";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -72,7 +72,7 @@ const formatTime = (value: string) => `${new Intl.DateTimeFormat("zh-CN", {
   hour12: false
 }).format(new Date(value))} 香港时间`;
 const RUNS_PER_PAGE = 5;
-type ContainerUpdateState = "idle" | "triggering" | "watching" | "restarting" | "healthy" | "unchanged" | "failed";
+type ContainerUpdateState = "idle" | "triggering" | "watching" | "healthy" | "failed";
 type AutoUpdateSchedule = { key: string; deadline: number; triggered: boolean };
 
 type HeatView = "day" | "week" | "month" | "total";
@@ -179,7 +179,6 @@ function UpdateHeatmap({ counts }: { counts: Record<string, number> }) {
   );
 }
 
-const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 const AUTO_UPDATE_DELAY_MS = 5 * 60 * 1000;
 const AUTO_UPDATE_STORAGE_KEY = "fire:deploy-auto-update";
 const readApiJson = async <T extends Record<string, unknown>>(response: Response): Promise<T> => {
@@ -222,7 +221,7 @@ export default function DeployStatusPage() {
     save: new DeploymentCommand("/api/deploy-status/config", "PUT", "/api/deploy-status/config/receipts"),
     disconnect: new DeploymentCommand("/api/deploy-status/config", "DELETE", "/api/deploy-status/config/receipts"),
     publish: new DeploymentCommand("/api/deploy-status", "POST", "/api/deploy-status/builds"),
-    update: new DeploymentCommand("/api/deploy-status/container-update", "POST", "/api/deploy-status/requests", true),
+    update: new DeploymentCommand("/api/deploy-status/container-update", "POST", "/api/deploy-status/requests"),
   }), []);
   const [release, setRelease] = useState<Record<string,string> | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
@@ -243,6 +242,7 @@ export default function DeployStatusPage() {
         repository?: string; error?: string; release?: Record<string,string> | null; runs?: Run[]; imageProgress?: ImageProgress | null;
         source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
         packageName?: string; workflowRunCount?: number; checkedAt?: string; heatmap?: Record<string, number>;
+        updateRequests?: Array<Record<string, unknown>>;
       }>(response);
       if (controller.signal.aborted) return;
       const changedRepository = !!loadedRepository.current && loadedRepository.current !== data.repository;
@@ -260,6 +260,14 @@ export default function DeployStatusPage() {
       setSourceVersion(data.source || null);
       setImageVersion(data.image || null);
       setRuntimeVersion(data.runtime || null);
+      const updates = Array.isArray(data.updateRequests) ? data.updateRequests : [];
+      const update = updates.find(item => item.request_id === commands.update.requestId)
+        || updates.find(item => deploymentPending(item.status));
+      if (update && commands.update.observe(update)) {
+        const pending = deploymentPending(update.status);
+        setContainerUpdateState(pending ? "watching" : update.status === "succeeded" ? "healthy" : "failed");
+        setNotice(pending ? "正在核对原更新请求与运行版本" : update.status === "succeeded" ? "目标容器与后台服务已就绪，版本校验通过" : "原更新请求已结束，请核对结果");
+      }
       setPackageName(data.packageName || "fire-web");
       if (typeof data.workflowRunCount === "number") setWorkflowRunCount(data.workflowRunCount);
       else if (changedRepository || data.configured === false) setWorkflowRunCount(0);
@@ -267,7 +275,7 @@ export default function DeployStatusPage() {
       setError([data.sourceError, data.releaseError, data.heatmapError].filter(Boolean).join("；"));
     } catch (err) { if (!controller.signal.aborted) { setNotice(""); setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); } }
     finally { if (loadController.current === controller) { setRefreshing(false); setHasLoaded(true); } }
-  }, []);
+  }, [commands]);
   const loadUpdater = useCallback(async () => {
     try {
       const response = await fetch("/api/deploy-status/container-update", { cache: "no-store" });
@@ -281,7 +289,7 @@ export default function DeployStatusPage() {
     }
   }, []);
   const currentMainCheck = observedCheck?.sha === sourceVersion?.sha ? observedCheck : runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
-  const refreshInterval = (imageProgress && imageProgress.status !== "completed") || (sourceVersion && (!currentMainCheck || currentMainCheck.status !== "completed")) ? 10000 : 60000;
+  const refreshInterval = commands.update.pending || (imageProgress && imageProgress.status !== "completed") || (sourceVersion && (!currentMainCheck || currentMainCheck.status !== "completed")) ? 10000 : 60000;
   const refreshIntervalRef = useRef(refreshInterval);
   refreshIntervalRef.current = refreshInterval;
   useEffect(() => {
@@ -343,7 +351,7 @@ export default function DeployStatusPage() {
     finally { setTriggering(false); }
   };
   const updateContainer = async () => {
-    if (containerUpdateState === "triggering" || containerUpdateState === "watching" || containerUpdateState === "restarting") return;
+    if (containerUpdateState === "triggering") return;
     if (autoUpdateKeyRef.current) {
       try { localStorage.setItem(AUTO_UPDATE_STORAGE_KEY, JSON.stringify({ key: autoUpdateKeyRef.current, deadline: autoUpdateDeadline, triggered: true })); } catch { /* storage unavailable */ }
     }
@@ -351,42 +359,19 @@ export default function DeployStatusPage() {
     setAutoUpdateSeconds(null);
     setContainerUpdateState("triggering"); setNotice(""); setError("");
     try {
-      if (!release) throw new Error("尚未读取到已发布的镜像，请刷新核对");
-      const data = await commands.update.execute({ release });
+      if (!release && !commands.update.pending) throw new Error("尚未读取到已发布的镜像，请刷新核对");
+      const data = await commands.update.execute(release ? { release } : {});
       if (["failed", "rejected"].includes(String(data.status))) throw new Error("更新未完成，请核对原请求");
-      setContainerUpdateState("watching");
+      setContainerUpdateState(deploymentPending(data.status) ? "watching" : data.status === "succeeded" ? "healthy" : "failed");
       setNotice(typeof data.message === "string" ? data.message : "更新请求已记录，正在核对运行版本");
-      const targetSha = imageVersion?.latestSuccessfulSha || "";
-      let sawRestart = false;
-      for (let attempt = 0; attempt < 18; attempt += 1) {
-        await sleep(2000);
-        try {
-          const health = await fetch(`/api/health?deployCheck=${Date.now()}`, { cache: "no-store" });
-          if (!health.ok) throw new Error("unhealthy");
-          const healthPayload = await readApiJson<{ data?: { buildSha?: string } }>(health);
-          const runningSha = healthPayload.data?.buildSha || "unknown";
-          if (targetSha && runningSha === targetSha) {
-            setContainerUpdateState("healthy");
-            setNotice("群晖已运行目标镜像，版本校验通过");
-            void load();
-            return;
-          }
-        } catch {
-          sawRestart = true;
-          setContainerUpdateState("restarting");
-          setNotice("检测到 Alcor 正在重启，正在等待健康恢复…");
-        }
-      }
-      setContainerUpdateState(sawRestart ? "failed" : "unchanged");
-      if (sawRestart) setError("目标版本尚未确认，可重试并查看 fire 与 fire-updater 日志");
-      else setNotice("运行版本尚未变更，可再次点击重试");
+      void load();
     } catch (err) {
-      setContainerUpdateState("failed");
-      setError(err instanceof Error ? err.message : "无法触发群晖更新");
+      setContainerUpdateState(commands.update.pending ? "watching" : "failed");
+      setError(commands.update.pending ? "更新结果尚未确认，请核对原请求" : err instanceof Error ? err.message : "无法触发群晖更新");
     }
   };
-  const containerBusy = containerUpdateState === "triggering" || containerUpdateState === "watching" || containerUpdateState === "restarting";
-  const containerButtonLabel = containerUpdateState === "triggering" ? "正在通知…" : containerUpdateState === "watching" ? "等待重启…" : containerUpdateState === "restarting" ? "健康恢复中…" : containerUpdateState === "healthy" ? "容器已更新" : containerUpdateState === "unchanged" ? "已是最新" : "更新群晖";
+  const containerBusy = containerUpdateState === "triggering" || commands.update.pending;
+  const containerButtonLabel = containerUpdateState === "triggering" ? "正在核对…" : "核对更新";
   const manualPublishActive = runs.some((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "workflow_dispatch" || run.event === "schedule") && run.status !== "completed");
   const imageAlreadyBuilt = Boolean(imageVersion?.matchesMain);
   const publishBusy = triggering || manualPublishActive;
@@ -506,7 +491,7 @@ export default function DeployStatusPage() {
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
             <button onClick={() => void triggerPublish()} disabled={publishDisabled} title={publishTitle} className="deploy-publish inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-blue-600 bg-blue-600 px-3.5 py-2.5 font-semibold text-white shadow-sm shadow-blue-600/15 transition hover:border-blue-500 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950 dark:shadow-none dark:hover:border-blue-300 dark:hover:bg-blue-300"><span className={`h-2.5 w-2.5 rounded-full ${imageState.dot}`} /><IconPackageExport aria-hidden="true" className={publishBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{publishDisabled ? publishLabel : imageState.label}</button>
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
-            <button onClick={() => void updateContainer()} disabled={!canUpdateContainer || containerBusy} title={!updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "Watchtower 在线，容器已运行最新镜像" : "Watchtower 在线，可拉取最新 GHCR 镜像并重启 Alcor"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${updaterDot}`} /><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : updaterReason === "正在检查更新服务" ? "服务检测中" : !updaterAvailable ? "服务离线" : runtimeVersion?.matchesImage ? "容器已是最新" : "有新镜像"}</button>
+            <button onClick={() => void updateContainer()} disabled={(!canUpdateContainer && !commands.update.pending) || containerUpdateState === "triggering"} title={commands.update.pending ? "仅核对原更新请求与运行版本" : !updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "Watchtower 在线，容器已运行最新镜像" : "Watchtower 在线，可拉取最新 GHCR 镜像并重启 Alcor"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${updaterDot}`} /><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : updaterReason === "正在检查更新服务" ? "服务检测中" : !updaterAvailable ? "服务离线" : runtimeVersion?.matchesImage ? "容器已是最新" : "有新镜像"}</button>
           </div>
           {autoUpdateSeconds !== null && <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-300">镜像已构建成功，将在 {Math.floor(autoUpdateSeconds / 60)} 分 {String(autoUpdateSeconds % 60).padStart(2, "0")} 秒后自动更新容器</p>}
         </section>

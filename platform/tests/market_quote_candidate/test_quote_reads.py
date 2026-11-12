@@ -64,11 +64,14 @@ async def old_login(client):
     assert response.status_code==200,response.text
 
 
-async def test_three_actual_old_route_envelopes_and_gzip_match_observed_PG_quote(quoted):
+async def test_three_actual_old_route_envelopes_and_gzip_match_observed_PG_quote(quoted,monkeypatch):
     root=os.environ.get('ALCOR_MARKET_LEGACY_ROOT')
     if not root:pytest.skip('Explicit read-only source required')
     evidence=json.loads((HERE/'source-evidence.json').read_text())
     for name,wanted in evidence['source_sha256'].items():assert hashlib.sha256((Path(root)/name).read_bytes()).hexdigest()==wanted
+    # The fixture is a regular-session observation. Freeze the request clock's
+    # session so the old envelope oracle is independent of the machine's time.
+    monkeypatch.setattr('alcor_api.legacy_quote_api.requested_session',lambda:'REGULAR')
     client,app,_authority,transport,_revision,headers,_source=quoted
     await old_login(client)
     requested=body(*[{'id':str(index),'market':'US','code':'AAPL'} for index in range(15)])
@@ -78,6 +81,7 @@ async def test_three_actual_old_route_envelopes_and_gzip_match_observed_PG_quote
     expected.update(providerCacheState='source_declared',otc=None,suspended=None,
                     individualSessionTradeTimeKnown=None,indexValid=None,warrantValid=None,optionValid=None)
     expected['dayStatsExact']={'open':'110','high':'130','low':'90','prevClose':'100','volume':'0','amount':'1000'}
+    expected.update(expectedSession='REGULAR',extendedUnavailable=False)
     expected['detailMetrics']={'currency':'USD','time':AT.isoformat(),'source':'controlled_market',
                                'turnoverRate':None,'peTtm':None,'pe':None,'marketCap':None,'dividendYieldTtm':None}
     raw=await asyncio.to_thread(subprocess.check_output,['node',str(HERE/'run_quote_golden.cjs'),root],input=json.dumps({'body':requested,'quotesBySymbol':{'US:AAPL':expected},'acceptEncoding':'gzip;q=1'}),text=True)
@@ -205,6 +209,95 @@ async def test_reconfirmed_same_policy_after_identity_change_uses_only_new_facts
     assert observed.json()['quotes']['known']['price']==125
     explicit_old=await client.post('/api/quotes',json=body(),headers={'x-alcor-market-source':old_revision})
     assert explicit_old.status_code==403
+
+
+async def test_reconfirmed_alternative_without_new_stream_does_not_block_current_quote(quoted):
+    client,app,authority,transport,_revision,headers,_source=quoted
+    original=authority.policies[0]
+    alternative=replace(original,id='alternative',source='controlled_alternative',license_revision='alternative-v1')
+    authority.policies+=(alternative,)
+    configured=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':'alternative'})
+    old_revision=configured.json()['revision']
+    await demand(client,old_revision)
+    await schedule(authority)
+    task=await claim(app.state.db,uuid4());assert task
+    assert await execute(authority,task,transport)=='observed'
+    authority.policies=(original,replace(alternative,license_revision='alternative-v2'))
+    renewed=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':'alternative'})
+    assert renewed.status_code==200,renewed.text
+    app.state.db.settings._legacy_quote_source='auto'
+    app.state.db.settings._legacy_quote_order=['controlled_market','controlled_alternative']
+    response=await client.post('/api/v2/quotes',json=body(),headers=headers)
+    assert response.status_code==200,response.text
+    assert response.json()['data']['quotes']['known']['price']==120
+    async with app.state.db.connection() as conn:
+        assert (await (await conn.execute('SELECT count(*) AS n FROM market_streams WHERE source_revision=%s',(renewed.json()['revision'],))).fetchone())['n']==0
+    explicit_old=await client.post('/api/v2/quotes',json=body(),headers={**headers,'x-alcor-market-source':old_revision})
+    assert explicit_old.status_code==403
+    # Merely editing a license without explicitly reconfirming it is still a rejection.
+    authority.policies=(original,replace(alternative,license_revision='alternative-v3'))
+    assert (await client.post('/api/v2/quotes',json=body(),headers=headers)).status_code==403
+
+
+async def test_latest_failure_cools_provider_after_rescheduling_and_new_success_recovers(quoted):
+    from types import SimpleNamespace
+    from alcor_api.market_subscription_writes import Subscriptions
+    client,app,authority,transport,revision,_headers,_source=quoted
+    original=authority.policies[0]
+    authority.clock=lambda:datetime.now(UTC)
+    authority.policies+=(replace(original,id='backup',source='controlled_backup',license_revision='backup-v1'),)
+    backup=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':'backup'})
+    assert backup.status_code==200,backup.text
+    app.state.db.settings._legacy_quote_order=['controlled_market','controlled_backup']
+    collect=transport.read
+    async def refused(*_):raise ValueError('synthetic_source_refused')
+    transport.read=refused
+    async with app.state.db.connection() as conn:
+        await conn.execute('UPDATE market_streams SET next_due=clock_timestamp() WHERE source_revision=%s',(revision,))
+    task=await claim(app.state.db,uuid4());assert task
+    assert await execute(authority,task,transport)=='source_outcome_unknown'
+    await demand(client,revision,expected=1)
+    async with app.state.db.connection() as conn:
+        await conn.execute('UPDATE market_streams SET next_due=clock_timestamp() WHERE source_revision=%s',(revision,))
+    assert await schedule(authority)==1
+    # The source's current task is queued now, but its real recent failure remains.
+    async with app.state.db.connection() as conn:
+        owner=(await(await conn.execute("SELECT id FROM users WHERE username='MarketReader'")).fetchone())['id']
+        selected=await Subscriptions(authority).source(conn,SimpleNamespace(id=owner),[{'market':'US','code':'AAPL'}],None,'auto')
+        assert str(selected)==backup.json()['revision']
+    transport.read=collect
+    task=await claim(app.state.db,uuid4());assert task
+    assert await execute(authority,task,transport)=='observed'
+    async with app.state.db.connection() as conn:
+        selected=await Subscriptions(authority).source(conn,SimpleNamespace(id=owner),[{'market':'US','code':'AAPL'}],None,'auto')
+        assert str(selected)==revision
+
+
+async def test_quote_and_index_observation_do_not_roll_back_for_unrelated_retired_equity(quoted):
+    client,app,authority,transport,_revision,_headers,_source=quoted
+    original=authority.policies[0]
+    backup=replace(original,id='current-backup',source='controlled_backup',license_revision='backup-current')
+    authority.policies+=(backup,)
+    configured=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':backup.id})
+    assert configured.status_code==200,configured.text
+    authority.policies=(replace(original,license_revision='not-reconfirmed'),backup)
+    app.state.db.settings._legacy_quote_source='auto'
+    app.state.db.settings._legacy_quote_order=['controlled_backup']
+    app.state.db.settings.public_ticker={'items':[{'key':'dji','market':'US','secid':'100.DJIA'}]}
+    await old_login(client)
+    calls=transport.calls
+    response=await client.post('/api/quotes',json=body({'id':'new','market':'US','code':'MSFT'}))
+    assert response.status_code==200,response.text
+    assert response.headers['x-alcor-quote-tracked']=='true'
+    assert response.json()['quotes']=={}
+    receipt=await client.get(response.headers['x-alcor-operation-receipt'])
+    assert receipt.status_code==200 and receipt.json()['affectedStreams']==1
+    index=await client.post('/api/fire/ticker/demand',json={'requestId':str(uuid4())})
+    assert index.status_code==200,index.text
+    assert index.json()['affectedStreams']==1 and index.json()['observation'] is True
+    assert transport.calls==calls,'intent must not synchronously collect or borrow another security'
+    rejected=await client.post('/api/quotes',json=body())
+    assert rejected.status_code==403,'unconfirmed original source still cannot supply the old AAPL quote'
 
 
 async def test_ambiguous_request_ids_and_missing_securities_do_not_borrow_other_quotes(quoted):

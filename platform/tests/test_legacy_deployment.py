@@ -294,6 +294,23 @@ async def test_durable_build_and_update_commands_only_dispatch_fake_targets_once
         P + "/container-update", json=command | {"release": release.model_dump() | {"version": "9.9.9"}}
     )
     assert changed.status_code == 409 and len(wakes) == 1
+    # A fresh page can resume the accepted request from its private status read.
+    # Another administrator's pending request must never appear in that projection.
+    await create_user(app.state.settings, "DeploymentPeer", "Synthetic9Pass", role="admin")
+    peer_request = uuid4()
+    async with db.connection() as conn:
+        peer = await (await conn.execute("SELECT id FROM users WHERE username='DeploymentPeer'")).fetchone()
+        await conn.execute(
+            "INSERT INTO deployment_requests(id,owner_id,request_id,image,version,revision,schema_hash,status) "
+            "VALUES(%s,%s,%s,%s,%s,%s,%s,'unknown')",
+            (uuid4(), peer['id'], peer_request, release.image, release.version, release.revision, release.schema_hash),
+        )
+    observed = await legacy.get(P)
+    assert observed.status_code == 200, observed.text
+    requests = observed.json()["updateRequests"]
+    assert [item["request_id"] for item in requests] == [command["request_id"]]
+    assert requests[0]["status"] == "running" and requests[0]["revision"] == release.revision
+    assert str(peer_request) not in observed.text and len(wakes) == 1
 
 
 async def test_status_rechecks_current_admin_after_provider_read(legacy, app, db, monkeypatch, admin):

@@ -199,6 +199,7 @@ def mount_legacy_deployment(app, settings, db):
                 "matchesImage": state["matches_release"] if runtime_sha and release_sha else None,
                 "matchesMain": state["runtime_ready"] and runtime_sha == source_sha if runtime_sha and source_sha else None,
             },
+            "updateRequests": [deployments.public_receipt(row) for row in state["receipts"]],
             "checkedAt": state["checked_at"],
             "configured": state["configured"],
             "sourceError": state["source_error"],

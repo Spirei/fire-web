@@ -27,6 +27,10 @@ def public_probe_failure(error):
         return {'reason':'source_timeout','message':'来源响应超时'}
     if isinstance(error, ResponseFailure) and error.status != 200:
         return {'reason':'source_http_error','message':f'来源返回 HTTP {error.status}'}
+    if isinstance(error, httpcore.ProxyError):
+        return {'reason':'source_proxy_error','message':'行情代理连接未完成'}
+    if isinstance(error, ValueError) and str(error)=='quote_proxy_configuration_invalid':
+        return {'reason':'source_proxy_configuration','message':'行情代理配置无效'}
     if isinstance(error, httpcore.NetworkError):
         return {'reason':'source_network_error','message':'来源网络连接失败'}
     if isinstance(error, ValueError) and str(error) in {'address_not_approved','target_not_approved','source_target_unavailable','source_target_changed'}:

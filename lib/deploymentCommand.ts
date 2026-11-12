@@ -1,12 +1,23 @@
 import { clientRequestId } from "@/lib/randomId";
 import { PlatformRequestError, platformRequest } from "@/lib/platformRequest";
 
+export const deploymentPending = (status: unknown) => ["queued", "running", "unknown", "dispatching"].includes(String(status));
+
 /** An ambiguous write is resolved by its original receipt, never by another write. */
 export class DeploymentCommand {
   private id?: string;
   private running?: Promise<Record<string, unknown>>;
-  constructor(private path: string, private method: string, private receipts: string, private retryAfterReceipt = false) {}
+  constructor(private path: string, private method: string, private receipts: string) {}
   get pending() { return Boolean(this.id); }
+  get requestId() { return this.id; }
+  /** Restore only an authenticated server receipt; never replace an in-flight UUID. */
+  observe(data: Record<string, unknown>) {
+    if (typeof data.request_id !== "string" || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(data.request_id)
+      || !["queued", "running", "unknown", "dispatching", "submitted", "succeeded", "failed", "rejected", "cancelled"].includes(String(data.status))
+      || this.id && this.id !== data.request_id) return false;
+    this.id = deploymentPending(data.status) ? data.request_id : undefined;
+    return true;
+  }
   execute<T extends Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {
     return (this.running ??= this.perform(body).finally(() => { this.running = undefined; })) as Promise<T>;
   }
@@ -21,9 +32,8 @@ export class DeploymentCommand {
       if (this.path.endsWith('/config') ? typeof data.repository !== 'string' || typeof data.revision !== 'string' || typeof data.hasToken !== 'boolean' : typeof data.status !== 'string' || data.request_id !== id) {
         throw Error("操作结果尚未确认，请稍后核对");
       }
-      // Explicit container retries may create a new request after a valid receipt.
-      // Lost responses still recover the original UUID before another notification.
-      if (this.retryAfterReceipt || !["queued", "running", "unknown", "dispatching"].includes(String(data.status))) this.id = undefined;
+      if (this.path.endsWith('/config')) this.id = undefined;
+      else if (!this.observe(data)) throw Error("操作结果尚未确认，请稍后核对");
       return data;
     } catch (error) {
       if (!recovering && error instanceof PlatformRequestError && [400,401,403,409,422,429].includes(error.status ?? 0)) this.id = undefined;

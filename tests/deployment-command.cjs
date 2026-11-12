@@ -5,17 +5,30 @@ const {DeploymentCommand}=load('deploymentCommand'),original=global.fetch;
 global.fetch=async()=>Response.json({error:'changed'},{status:409});await assert.rejects(cmd.execute({revision:null}));assert(!cmd.pending);
 for (const state of ['running','unknown']) {
   calls=[];
+  let updateId;
   global.fetch=async(url,init={})=>{
     calls.push({url,init});
-    return Response.json({status:state,request_id:JSON.parse(init.body).request_id});
+    if(init.method)updateId=JSON.parse(init.body).request_id;
+    return Response.json({status:state,request_id:updateId});
   };
-  const update=new DeploymentCommand('/container-update','POST','/requests',true);
+  const update=new DeploymentCommand('/container-update','POST','/requests');
   await update.execute({release:{revision:'target'}});
-  assert(!update.pending);
+  assert(update.pending);
   await update.execute({release:{revision:'target'}});
   assert.equal(calls.length,2);
-  assert(calls.every(call=>call.init.method==='POST'));
-  assert.notEqual(JSON.parse(calls[0].init.body).request_id,JSON.parse(calls[1].init.body).request_id);
+  assert.equal(calls[0].init.method,'POST');
+  assert.equal(calls[1].url,'/requests/'+updateId);
+  assert(!calls[1].init.method);
+  // A refreshed page restores its own durable receipt instead of notifying again.
+  const restored=new DeploymentCommand('/container-update','POST','/requests');
+  assert(restored.observe({status:state,request_id:updateId}));
+  await restored.execute({release:{revision:'new-preview'}});
+  assert.equal(calls[2].url,'/requests/'+updateId);
+  assert(!calls[2].init.method);
+  assert(!restored.observe({status:'unknown',request_id:'not-a-uuid'}));
+  assert(!restored.observe({status:'unknown',request_id:'22222222-2222-4222-8222-222222222222'}));
+  assert(restored.observe({status:'succeeded',request_id:updateId}));
+  assert(!restored.pending);
 }
 calls=[];
 let recoveredId;
@@ -25,11 +38,11 @@ global.fetch=async(url,init={})=>{
   assert.equal(url,'/requests/'+recoveredId);
   return Response.json({status:'unknown',request_id:recoveredId});
 };
-const update=new DeploymentCommand('/container-update','POST','/requests',true);
+const update=new DeploymentCommand('/container-update','POST','/requests');
 await assert.rejects(update.execute({release:{revision:'target'}}));
 assert(update.pending);
 await update.execute({release:{revision:'different-preview'}});
-assert(!update.pending);
+assert(update.pending);
 assert.equal(calls.length,2);
 assert(!calls[1].init.method);
 let unblock;
@@ -38,7 +51,8 @@ global.fetch=(url,init={})=>{
   calls.push({url,init});
   return new Promise(resolve=>{unblock=()=>resolve(Response.json({status:'running',request_id:JSON.parse(init.body).request_id}));});
 };
-const first=update.execute({release:{revision:'target'}}),second=update.execute({release:{revision:'target'}});
+const concurrent=new DeploymentCommand('/container-update','POST','/requests');
+const first=concurrent.execute({release:{revision:'target'}}),second=concurrent.execute({release:{revision:'target'}});
 assert.equal(calls.length,1);
 unblock();
 await Promise.all([first,second]);

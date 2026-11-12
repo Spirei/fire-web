@@ -295,6 +295,7 @@ class BatchQuotes:
                 raise HTTPException(403, "账号权限已变化")
             policies = {}
             unavailable_policies = set()
+            configured_policies = None
 
             async def policy(revision):
                 if revision in unavailable_policies:
@@ -414,7 +415,26 @@ class BatchQuotes:
                     # evidence, but neither their quotes nor their failed grant
                     # may replace/block the currently authorized source.
                     if strict_sources and retained_source and not retained_policy_ids <= current_policy_ids:
-                        raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
+                        # A provider can be explicitly reconfirmed before this
+                        # security has a stream in its new revision (for example
+                        # after the managed DNS-policy upgrade). Check its actual
+                        # owner authorization, not the presence of another stream.
+                        if configured_policies is None:
+                            configured_policies = []
+                            rows = await (await conn.execute('SELECT revision FROM market_source_configs WHERE owner_id=%s ORDER BY revision LIMIT 1001', (who.id,))).fetchall()
+                            if len(rows)>1000:raise HTTPException(503,'当前来源版本超过核对范围')
+                            for row in rows:
+                                try:configured_policies.append(await policy(row['revision']))
+                                except HTTPException:continue
+                        from .market_subscription_writes import Subscriptions
+                        confirmed = set(current_policy_ids)
+                        for candidate in configured_policies:
+                            if candidate.id not in retained_policy_ids - confirmed:continue
+                            try:self.authority.validate_query(candidate, Subscriptions.query({'market':market,'code':symbol},query_instrument,session or preferred_session,candidate))
+                            except (HTTPException,ValueError):continue
+                            confirmed.add(candidate.id)
+                        if not retained_policy_ids <= confirmed:
+                            raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
                     if preferred_session is not None and market == 'US':
                         extended = [c for c in candidates if c[0]['contents'].get('requestedSession') == preferred_session and c[2]['session'] == preferred_session]
                         regular = [c for c in candidates if c[0]['contents'].get('requestedSession', 'REGULAR') == 'REGULAR']
@@ -427,6 +447,8 @@ class BatchQuotes:
                         sources &= chosen
                         instruments = set().union(*(source_instruments[r] for r in sources)) if sources else set()
                     if source_revision is None and source_preference == "auto" and market != "ASSET":
+                        from .market_source_failures import recent_failed_sources
+                        cooling_sources |= await recent_failed_sources(conn,who.id,sources,market,symbol,query_instrument or 'equity')
                         usable=[c for c in candidates if c[0]['source_revision'] not in cooling_sources]
                         if usable:candidates=usable
                         order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
