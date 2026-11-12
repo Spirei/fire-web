@@ -31,7 +31,7 @@ import { SiteSettingsCommand } from "@/lib/siteSettingsCommand";
 import { platformRequest } from "@/lib/platformRequest";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
-import { applyQuoteBatches, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot, selectQuoteRecords } from "@/lib/quoteBatches";
+import { applyQuoteBatches, hasLoadedQuote, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot, selectQuoteRecords } from "@/lib/quoteBatches";
 import SettingsWindow from "@/components/SettingsWindow";
 import { ensureStockIcons, primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
@@ -425,7 +425,7 @@ export default function RecordsApp({
     if (options?.initialOnly && initialQuoteLoadRef.current) return;
     const activeMarkets = activeQuoteMarkets(records.map((record) => record.market));
     const quoteRecords = selectQuoteRecords(records,activeTabRef.current).filter((record) => record.code.trim() && (
-      options?.force || !initialQuoteLoadRef.current || !loadedQuoteKeysRef.current.has(quoteInstrumentKey(record)) || (!options?.missingOnly && activeMarkets.has(record.market.toUpperCase()))
+      options?.force || !initialQuoteLoadRef.current || !hasLoadedQuote(record, quotesRef.current, loadedQuoteKeysRef.current) || (!options?.missingOnly && activeMarkets.has(record.market.toUpperCase()))
     ));
     // 首次进入拉取全部市场的收盘快照；后续仅轮询当前处于盘前/盘中/盘后的市场。
     if (quoteRecords.length === 0) return;

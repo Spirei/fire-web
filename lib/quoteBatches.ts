@@ -14,6 +14,12 @@ export function quoteInstrumentKey(item: Item): string {
   return JSON.stringify([item.id, item.market.toUpperCase(), normalizeMarketCode(item.market.toUpperCase(), item.code)]);
 }
 
+/** A withdrawn quote is missing even if this security loaded earlier. */
+export function hasLoadedQuote(item: Item, quotes: Record<string, Quote>, loaded: Set<string>): boolean {
+  const quote = quotes[item.id];
+  return loaded.has(quoteInstrumentKey(item)) && !!quote && Number.isFinite(quote.price) && quote.price > 0;
+}
+
 /** 首帧快照也必须匹配证券；同一记录换代码后不能恢复原证券价格。 */
 export function restoreQuoteSnapshot(quotes: Record<string, Quote>, instruments: Record<string, string> | undefined, current: Item[]): Record<string, Quote> {
   const restored: Record<string, Quote> = Object.create(null);
