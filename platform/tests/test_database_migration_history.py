@@ -13,7 +13,8 @@ from test_database_migration_preparation import migration_source
 from test_database_migration_conversion import add_source
 
 
-async def test_original_history_is_visible_atomic_and_deduplicated(client,db,settings,pg,migration_source,monkeypatch):
+@pytest.mark.parametrize('complete_read_model', [False, True])
+async def test_original_history_is_visible_atomic_and_deduplicated(client,db,settings,pg,migration_source,monkeypatch,complete_read_model):
     config,revision=migration_source;dsn=pg.get_uri(database=config['database']);add_source(dsn)
     with psycopg.connect(dsn) as c:
         c.execute('''CREATE TABLE ledger.trade_orders(id text,user_id text,record_id text,market text,code text,name text,side text,status text,qty numeric,price numeric,fees numeric,amount numeric,realized_pnl numeric,position_qty_after numeric,position_cost_after numeric,broker text,note text,traded_at text,created_at text,position_qty_before numeric,position_cost_before numeric,order_no text,order_type text,trigger_price numeric,tif text,expires_at text,session text,trigger_status text,settlement_currency text,settlement_amount numeric)''')
@@ -22,6 +23,15 @@ async def test_original_history_is_visible_atomic_and_deduplicated(client,db,set
         ('original-pending','source-owner','position','US','TEST','Source security','sell','pending',1,200,0,200,NULL,2,100,'Original broker','','2020-01-02T00:00:00Z','2020-01-02T00:00:00Z',2,100,'pending-number','limit')""")
         c.execute('CREATE TABLE ledger.fund_transactions(id text,user_id text,currency text,type text,amount numeric,direction integer,note text,occurred_at text,created_at text)')
         c.execute("""INSERT INTO ledger.fund_transactions VALUES('fund-order-original-fill','source-owner','USD','adjustment',123.000000000000000001,1,'source trade cash','2020-01-01T00:00:00Z','2020-01-01T00:00:00Z'),('fund-original-adjustment','source-owner','USD','adjustment',8.000000000000000001,1,'original global adjustment','2020-01-02T00:00:00Z','2020-01-02T00:00:00Z')""")
+        if complete_read_model:
+            from alcor_api.legacy_order_projection import REQUIRED_TABLES
+            from alcor_api.source_snapshot import TABLES
+            for name in REQUIRED_TABLES:
+                if name in ('records','trade_orders'):
+                    continue
+                columns=[psycopg.sql.SQL('{} {}').format(psycopg.sql.Identifier(key),psycopg.sql.SQL('bigint' if key=='revision' else 'text')) for key in TABLES[name][0].split()]
+                c.execute(psycopg.sql.SQL('CREATE TABLE ledger.{} ({})').format(psycopg.sql.Identifier(name),psycopg.sql.SQL(',').join(columns)))
+            c.execute("INSERT INTO ledger.app_asset_order_versions VALUES('original-fill',7),('original-pending',8)")
     p=await client.post('/api/fire/database-migration/preparations',json={'request_id':str(uuid4()),'source_revision':revision});assert p.status_code==202,p.text
     t=await claim(db,uuid4());await prepare(db,t)
     cv=await client.post('/api/fire/database-migration/preparations/'+str(t['id'])+'/conversion',json={'request_id':str(uuid4()),'source_owner':'source-owner','timezone':'Asia/Shanghai','account_kinds':{'old-account':'real'},'market_accounts':{'US':'old-account'}});assert cv.status_code==202,cv.text
@@ -104,20 +114,37 @@ async def test_original_history_is_visible_atomic_and_deduplicated(client,db,set
         assert mixed.status_code==200,mixed.text
         value=mixed.json()['data']
         assert value['count']==3 and len(value['items'])==3
-        assert value['source']=='platform_native_and_registered_history'
-        assert value['executionModel']=='registered_history_and_atomic_internal_orders'
+        assert value['source']==('local_trade_ledger' if complete_read_model else 'platform_native_and_registered_history')
+        assert value['executionModel']==('atomic_internal_orders' if complete_read_model else 'registered_history_and_atomic_internal_orders')
         assert value['settlesPendingOrders'] is False
         history_rows=[row for row in value['items'] if row['executionModel']=='source_registered_history']
         assert {row['id'] for row in history_rows}=={'original-fill','original-pending'}
         assert all(row['cancellable'] is False and row['apiManaged'] is False and row['historyLocked'] is True for row in history_rows)
         assert all(row['historicalCoverageKnown'] is False for row in history_rows)
+        if complete_read_model:
+            assert all(row['identityMatches'] is True and row['recordRevision']>0 for row in history_rows)
+            assert all(row['originalReadModel']=='sealed_legacy_internal_book_v1' for row in history_rows)
+            assert {row['revision'] for row in history_rows}=={7,8}
+            assert all(row['originalExecutionModel']=='legacy_internal_orders' for row in history_rows)
+            assert all(row['brokerAccountId'] is None and row['brokerAccountIdSource']=='unavailable' for row in history_rows)
+            original_fill=next(row for row in history_rows if row['status']=='filled')
+            assert original_fill['filledQty']==1 and original_fill['executedPrice']>0
+            selected=await client.get(f'/api/v{version}/account-assets/orders?scope=all&status=all&recordId='+original_fill['recordId'],headers=headers)
+            assert selected.status_code==200,selected.text
+            assert {row['id'] for row in selected.json()['data']['items']}=={'original-fill','original-pending'}, 'current account association cannot hide historical record orders'
+            denied=await client.post(f'/api/v{version}/account-assets/orders/cancellations',headers=headers,json={})
+            assert denied.status_code==403 and denied.json()['code']==40301, 'discovery does not grant cancellation to a read-only connection'
         internal=next(row for row in value['items'] if row['executionModel']=='owner_recorded_fill')
         assert internal['identityMatches'] is True and internal['recordId']==native_record['id']
         assert internal['positionQtyBefore']==0 and internal['positionQtyAfter']==2
         if version==2:
             import os
             from pathlib import Path
-            if os.environ.get('ALCOR_NATIVE_ORDER_CAPTURE'):
+            if os.environ.get('ALCOR_NATIVE_ORDER_CAPTURE') and complete_read_model:
                 output=Path(os.environ['ALCOR_NATIVE_ORDER_CAPTURE'])
                 output.write_text(mixed.text);output.chmod(0o600)
+                config=await client.get('/api/v2/auth/config')
+                assert config.status_code==200
+                output.with_name(output.stem+'-config.json').write_text(config.text)
+                output.with_name(output.stem+'-config.json').chmod(0o600)
     assert await economic(db,running['owner_id'])==before_read

@@ -56,7 +56,7 @@ def fee_transport(value,detailed):
     return row
 
 
-async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,strict=True,exact=False,scope_record_id=None,scope_account_id=None):
+async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,strict=True,exact=False,scope_record_id=None,scope_account_id=None,registered_order_read_model=False):
     scope_record=None
     if scope_record_id is not None and scope_account_id is not None:
         raise HTTPException(400,'记录与账户范围不能混用')
@@ -65,7 +65,8 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
     elif scope_record_id is not None:
         if not isinstance(scope_record_id,str) or not 1<=len(scope_record_id)<=200:raise HTTPException(400,'须明确本人记录范围')
         scope_record=await(await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND id=%s AND deleted_at IS NULL',(who.id,scope_record_id))).fetchone()
-        if not scope_record or not scope_record['broker_account_id']:raise HTTPException(404,'本人已归属账户记录不存在')
+        if not scope_record or (not scope_record['broker_account_id'] and not registered_order_read_model):
+            raise HTTPException(404,'本人已归属账户记录不存在')
         from .scope_coverage import require_record
         await require_record(conn,who.id,scope_record_id)
     scoped_account=scope_record['broker_account_id'] if scope_record else scope_account_id
@@ -185,8 +186,11 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
           'identityMatches':True,'accountMarket':record['account_market'] or record['market'],'accountCurrency':order['currency'],'settlementCurrency':None,'settlementAmount':None,
           'qty':order['quantity'],'price':order['limit_price'],'fees':order['fees'],'amount':order['quantity']*order['limit_price'],'orderType':intent.get('orderType') if intent else None,'orderPrice':order['limit_price'],'executedPrice':None,'filledQty':0,'filledQtySource':'atomic_order_status','continuousExecution':False,'executionStatus':'自动执行未启用' if order['status']=='pending' else None,'executionModel':'internal_pending','parentOrderId':None,'attachmentRole':None,'attachments':None,'attachmentInputsAvailable':False,'tif':intent.get('tif') if intent else None,'expiresAt':intent.get('expiresAt') if intent else None,'session':intent.get('session') if intent else None,'triggerPrice':(intent.get('triggerPrice') or intent.get('priceExact')) if intent and intent.get('orderType') in ('trigger_buy','trigger_sell','rebound_buy','rebound_sell') else intent.get('triggerPrice') if intent else None,'triggerStatus':None,'realizedPnl':None,'positionQtyBefore':None,'positionQtyAfter':None,'positionCostBefore':None,'positionCostAfter':None,'tradedAt':order['created_at'],'createdAt':order['created_at'],'broker':by_broker.get(order['account_id'],{}).get('name'),'note':order['note'],'currentPrice':None,'currentPriceSource':'unavailable','currentPriceAt':None,'currentRecordBrokerAccountId':order['account_id'],'brokerAccountId':order['account_id'],'brokerAccountIdSource':'recorded_order_entry','feeSource':'estimated_not_actual_paid','feeBreakdown':None,'feeBreakdownSource':'unavailable','cancellable':order['status']=='pending'})
     from .database_migration_history import registered_orders
-    historical=await registered_orders(conn,who.id)
-    historical=[row for row in historical if (scope_record_id is None or row['recordId']==scope_record_id) and (scoped_account is None or row['brokerAccountId']==scoped_account)]
+    historical=await registered_orders(conn,who.id,native_records=rows if registered_order_read_model else None)
+    historical=[row for row in historical
+        if (scope_record_id is None or row['recordId']==scope_record_id)
+        and (scoped_account is None or (registered_order_read_model and scope_record_id is not None)
+             or row['brokerAccountId']==scoped_account)]
     missing_context=[row['id'] for row in orders if not row.get('registrationContextKnown')]
     if strict and missing_context:raise HTTPException(409,'旧交易协议需要原委托上下文；当前成交未登记此事实，请使用可表达未知的客户端')
     currencies={row['currency'] for row in state['openings']}|{row['currency'] for row in state['cash']}

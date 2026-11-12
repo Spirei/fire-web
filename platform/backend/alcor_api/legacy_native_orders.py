@@ -13,6 +13,7 @@ from .fx_provider_parser import unique
 from .internal_orders import InternalOrders, fingerprint, order_dto
 from .legacy_identity import assert_native_origin, native_identity
 from .legacy_optional_credentials import credentials_present
+from .legacy_order_projection import READ_MODEL
 from .legacy_trading_snapshot import TIME_ZONES, fee_transport, scalar, snapshot_in_transaction
 from .profile_http import bounded_body
 from .security import lock_mutation_identity, lock_read_identity
@@ -23,7 +24,7 @@ class NativeOrders(InternalOrders):
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
             await lock_read_identity(conn,who,require_admin=False)
-            _, snapshot = await snapshot_in_transaction(conn,who,strict=False,scope_record_id=record_id)
+            _, snapshot = await snapshot_in_transaction(conn,who,strict=False,scope_record_id=record_id,registered_order_read_model=True)
             now = datetime.now(UTC)
             items, unknown_dates = [], []
             for item in snapshot['orders']:
@@ -42,8 +43,11 @@ class NativeOrders(InternalOrders):
                 if status != 'all' and item['status'] != status or scope == 'today' and not today:
                     continue
                 items.append(item)
+            unverified_history=(len({row['id'] for row in items})!=len(items) or any(
+                row.get('executionModel')=='source_registered_history' and row.get('originalReadModel')!=READ_MODEL
+                for row in items))
             return scalar({'accountId':who.id,'asOf':now,'scope':scope,'status':status,'recordId':record_id,
-                'source':'platform_native_and_registered_history' if any(row.get('executionModel')=='source_registered_history' for row in items) else 'local_trade_ledger','executionModel':'registered_history_and_atomic_internal_orders' if any(row.get('executionModel')=='source_registered_history' for row in items) else 'atomic_internal_orders','items':items,'count':len(items),
+                'source':'platform_native_and_registered_history' if unverified_history else 'local_trade_ledger','executionModel':'registered_history_and_atomic_internal_orders' if unverified_history else 'atomic_internal_orders','items':items,'count':len(items),
                 'settlesPendingOrders':False,'dateBasis':'exchange_local_calendar_date','timeZones':TIME_ZONES,
                 'unknownDateOrderIds':unknown_dates,'supportedStatuses':['pending','filled','cancelled','expired'],
                 'rejectedOrdersAvailable':False,'partialFillsAvailable':False})

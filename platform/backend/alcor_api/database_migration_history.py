@@ -162,11 +162,14 @@ async def execute(db,task,*,finalize=True):
     finally:await old.rollback();await old.close()
 
 
-async def registered_orders(conn,owner):
-    rows=await(await conn.execute('SELECT originals FROM database_migration_history_imports WHERE owner_id=%s ORDER BY created_at,request_id',(owner,))).fetchall()
+async def registered_orders(conn,owner,*,native_records=None):
+    from .legacy_order_projection import native_fields
+
+    rows=await(await conn.execute('SELECT originals,source_sha256,source_instance,source_owner FROM database_migration_history_imports WHERE owner_id=%s ORDER BY created_at,request_id',(owner,))).fetchall()
     output=[]
     for stored in rows:
         packet=stored['originals'];maps=packet['maps']
+        projection=native_fields(stored,native_records) if native_records is not None else None
         for row in packet['orders']:
             normalized=packet['normalized_orders'][row['id']];rid=maps['records'][row['record_id']]
             numeric=lambda key:Decimal(row[key]) if row.get(key) is not None else None
@@ -183,6 +186,9 @@ async def registered_orders(conn,owner):
                 'note':row.get('note') or '', 'orderType':row.get('order_type'),'triggerPrice':numeric('trigger_price'),'tif':row.get('tif'),'expiresAt':row.get('expires_at'),'session':row.get('session'),
                 'registrationContextKnown':row.get('order_type') is not None,'executionModel':'source_registered_history','brokerExecution':False,'cancellable':False,'apiManaged':False,'historyLocked':True,'revision':int(normalized['version']) if normalized['version'].isdigit() else 1,
                 'sourceInstance':packet['source_instance'],'sourceOwner':packet['source_owner'],'historicalCoverageKnown':False})
+            if projection is not None:
+                output[-1]['migrationMappedBrokerAccountId']=output[-1]['brokerAccountId']
+                output[-1].update(projection[row['id']])
     return output
 
 

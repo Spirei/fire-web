@@ -81,6 +81,11 @@ async def test_native_snapshot_keeps_verified_original_cash_when_quotes_and_fx_a
         assert contract['features']['cash_price_independent'] is True
         assert contract['features']['cash_valuation']=='recorded_cash_ledger_price_independent'
         assert contract['features']['today_orders'] is False
+        assert contract['orders_version']==1 and contract['orders_path']==root+'/account-assets/orders'
+        assert contract['cancel_orders_path']==root+'/account-assets/orders/cancellations'
+        assert contract['order_revision_field']=='revision' and contract['cancel_scope']=='orders.cancel'
+        assert contract['features']['all_orders'] is True and contract['features']['batch_cancel_pending'] is True
+        assert contract['order_filters']==['all','pending','filled','cancelled','rejected','expired']
         result=await client.get(root+'/account-assets?currency=HKD',headers=headers)
         assert result.status_code==200,result.text
         assert result.json()['message']=='ok'

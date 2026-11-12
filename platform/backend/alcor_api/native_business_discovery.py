@@ -29,7 +29,12 @@ def discovery(version):
             'snapshot_revision_field': 'snapshotRevision', 'record_collection_revision_field': 'collectionRevision',
             'request_id_field': 'requestId', 'idempotency': 'reject-duplicate-query-original',
             'automatic_mutation_replay': False,
+            'orders_version': 1, 'orders_path': base + '/account-assets/orders',
+            'cancel_orders_path': base + '/account-assets/orders/cancellations',
+            'order_revision_field': 'revision', 'cancel_scope': 'orders.cancel',
+            'order_filters': ['all', 'pending', 'filled', 'cancelled', 'rejected', 'expired'],
             'features': {
+                'all_orders': True, 'batch_cancel_pending': True,
                 'cash_by_currency': True, 'cash_price_independent': True,
                 'cash_valuation': 'recorded_cash_ledger_price_independent', 'cash_by_market': False,
                 'today_orders': False, 'order_reads_settle': False,
