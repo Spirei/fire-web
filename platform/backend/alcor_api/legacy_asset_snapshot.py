@@ -58,6 +58,12 @@ def position_state(row, record):
     return 'catalog'
 
 
+def needs_position_quote(row):
+    return (decimal(row['qty']) not in (None,Decimal(0))
+            or bool(row.get('trade_tip_id') or row.get('position_transfer_id'))
+            or row.get('_holding_source')=='official')
+
+
 async def averages(conn,owner,records,actual):
     ids=[record['id'] for record in records]
     if not ids:return {},{}
@@ -95,9 +101,11 @@ async def snapshot(service,who,options):
             or selected['costMethod'] not in ('diluted','average_open') or selected['usPrice'] not in ('observed','regular')):
         raise HTTPException(400,'资产显示参数无效')
     async with service.context(who,shared_read=True) as conn:
-        original=await (await conn.execute('SELECT id,market,code,revision FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
+        original=await (await conn.execute('''SELECT r.id,r.market,r.code,r.revision,r.qty,r.trade_tip_id,r.position_transfer_id,a.holding_source AS _holding_source
+            FROM portfolio_records r LEFT JOIN broker_accounts a ON a.owner_id=r.owner_id AND a.id=r.broker_account_id AND a.deleted_at IS NULL
+            WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY r.id LIMIT 10001''',(who.id,))).fetchall()
         if len(original)>10000:raise HTTPException(409,'持仓超过完整读取上限')
-    quoted=await configured_quotes(service.market_authority,who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original],regular=selected['usPrice']=='regular')
+    quoted=await configured_quotes(service.market_authority,who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original if needs_position_quote(row)],regular=selected['usPrice']=='regular')
     fx=await FxWorker(service.db).snapshot(exact=True)
     async with service.context(who,shared_read=True) as conn:
         rows=await (await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
@@ -113,6 +121,9 @@ async def snapshot(service,who,options):
         head=await (await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
         accounts=await (await conn.execute('SELECT id,account_kind,holding_source FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL',(who.id,))).fetchall()
         accounts={row['id']:row for row in accounts}
+        if any(row['_holding_source']!=(accounts.get(current['broker_account_id']) or {}).get('holding_source')
+               for row,current in zip(original,rows,strict=True)):
+            raise HTTPException(409,'持仓来源在读取报价期间已变化，请重新读取')
         now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
         from .legacy_identity import public_profile
         owner=await public_profile(conn,who.id,scope='portfolio.read')

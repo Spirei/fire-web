@@ -28,7 +28,8 @@ def load_fire_settings():
     validate_database_target(os.environ["FIRE_DATABASE_URL"])
     # Fire has one infrastructure authority: its server environment.
     overrides = {"connections_from_environment": True, "deployment_checks_workflow": "docker-publish.yml"}
-    overrides["public_upload_root"] = ROOT.parent / "public" / "uploads"
+    if not os.environ.get("FIRE_PUBLIC_UPLOAD_ROOT"):
+        overrides["public_upload_root"] = ROOT.parent / "public" / "uploads"
     if "FIRE_BUILD_SHA" in os.environ:
         overrides["source_revision"] = os.environ["FIRE_BUILD_SHA"]
     for name, field in Settings.model_fields.items():

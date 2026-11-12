@@ -1,6 +1,6 @@
-# Fire
+# Alcor
 
-Fire 是网页、App 接入和后台管理的统一平台。网页使用 Next.js，内置业务后端使用 FastAPI 和原生 PostgreSQL；Redis 保存可重建缓存，独立 Worker 执行任务。当前实现使用 PostgreSQL；未来可根据收益、迁移成本和数据一致性评估其他数据库，不保留已经退出的 SQLite 兼容链。
+Alcor 是网页、App 接入和后台管理的统一平台。网页使用 Next.js，内置业务后端使用 FastAPI 和原生 PostgreSQL；Redis 保存可重建缓存，独立 Worker 执行任务。当前实现使用 PostgreSQL；未来可根据收益、迁移成本和数据一致性评估其他数据库，不保留已经退出的 SQLite 兼容链。
 
 ## 获取与配置
 
@@ -30,6 +30,8 @@ npm start -- --port 3001
 ```
 
 端口可配置。`FIRE_PUBLIC_ORIGIN` 是浏览器实际访问地址，须包含非标准端口。`FIRE_PYTHON` 指向安装后端依赖的 Python。Fire 自动创建私有 Unix socket 并管理内置后端的进程，不对外暴露额外后端端口。`FIRE_WORKER=on` 启用独立 Worker；隔离验收时保持关闭，按需单独验证任务执行。
+
+未指定 `FIRE_PYTHON` 时优先使用当前后端 `platform/.venv`，没有虚拟环境才使用系统 `python3`。私有配置与密钥不能提交到 Git。需要独立行情设置的本地验收使用隔离数据库；不得通过更改线上数据库的环境身份来启动本地 HTTP 服务，也不要向同一个实例同时启动第二个行情 Worker。
 
 ## 管理
 

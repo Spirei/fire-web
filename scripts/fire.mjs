@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import http from "node:http";
 import nextEnv from "@next/env";
+import { pythonExecutable } from "./fire-runtime.mjs";
 const root = path.resolve(import.meta.dirname, "..");
 const [mode, ...args] = process.argv.slice(2);
 if (mode !== "test-backend") nextEnv.loadEnvConfig(root, mode === "dev");
@@ -14,10 +15,10 @@ if (process.platform === "darwin" && !process.env.DYLD_FALLBACK_LIBRARY_PATH) {
   );
   if (cairo.length) process.env.DYLD_FALLBACK_LIBRARY_PATH = cairo.join(":");
 }
-const python = process.env.FIRE_PYTHON || "python3";
 const backend = path.resolve(
   process.env.FIRE_PLATFORM_ROOT || path.join(root, "platform"),
 );
+const python = pythonExecutable(backend);
 if (!fs.existsSync(path.join(backend, "backend/alcor_api/main.py")))
   throw new Error("Fire 内置后端源码缺失");
 if (

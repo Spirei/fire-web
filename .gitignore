@@ -4,7 +4,7 @@ node_modules/
 out/
 dist/
 /tools/model-optimizer/output/
-.next-dev/
+.next-dev
 .next-dev.oldbak/
 .next-qa/
 *.tsbuildinfo

@@ -13,8 +13,9 @@ from test_trading import setup as trading_setup
 SCOPES='portfolio.read portfolio.write cash.read positions.read assets.read'
 
 
-async def test_native_assets_do_not_turn_watchlist_catalogs_into_current_holdings(client,db,admin):
+async def test_native_assets_do_not_turn_watchlist_catalogs_into_current_holdings(client,db,admin,monkeypatch):
     from alcor_api.portfolio_records import PortfolioRecords
+    from alcor_api import legacy_asset_snapshot
     from test_portfolio_records import create
 
     _account,holding=await trading_setup(client,name='Synthetic current holdings',qty='2',cost='10')
@@ -26,6 +27,12 @@ async def test_native_assets_do_not_turn_watchlist_catalogs_into_current_holding
         result=await create(service,admin,code='AAPL',qty=None,cost=None,source=origin)
         directory.append(result['record']['id'])
     headers=bearer(await grant(db,admin,'portfolio.read'))
+    quoted=[]
+    original_quotes=legacy_asset_snapshot.configured_quotes
+    async def scoped_quotes(authority,who,items,**options):
+        quoted.append({item['id'] for item in items})
+        return await original_quotes(authority,who,items,**options)
+    monkeypatch.setattr(legacy_asset_snapshot,'configured_quotes',scoped_quotes)
     before=await business_snapshot(db)
     for version in (1,2):
         response=await client.get(f'/api/v{version}/account-assets',headers=headers)
@@ -40,10 +47,11 @@ async def test_native_assets_do_not_turn_watchlist_catalogs_into_current_holding
         assert sum(m['positionCount'] for m in data['markets'])==1
         assert data['summary']['holdingsComplete'] is True
     assert await business_snapshot(db)==before
+    assert quoted==[{holding['id']},{holding['id']}]
 
 
 def test_unknown_quantity_with_current_position_evidence_stays_incomplete():
-    from alcor_api.legacy_asset_snapshot import position_state
+    from alcor_api.legacy_asset_snapshot import position_state, needs_position_quote
 
     for proof in ({'officialObservation':{'reportDate':'2026-11-12'}},
                   {'transferObservation':{'checkpointId':'proof'}}):
@@ -52,6 +60,11 @@ def test_unknown_quantity_with_current_position_evidence_stays_incomplete():
     assert position_state({}, {'qty':'0'})=='closed'
     assert position_state({}, {'qty':'2'})=='open'
     assert position_state({}, {'qty':None,'source':'snapshot'})=='catalog'
+    assert needs_position_quote({'qty':None,'_holding_source':'official'}) is True
+    assert needs_position_quote({'qty':None,'trade_tip_id':'current-checkpoint'}) is True
+    assert needs_position_quote({'qty':None,'position_transfer_id':'checked-transfer'}) is True
+    assert needs_position_quote({'qty':None,'_holding_source':'manual'}) is False
+    assert needs_position_quote({'qty':'0','_holding_source':'manual'}) is False
 
 
 async def test_native_snapshot_keeps_verified_original_cash_when_quotes_and_fx_are_missing(client,db,admin):

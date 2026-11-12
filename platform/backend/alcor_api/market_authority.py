@@ -23,7 +23,7 @@ from .market_contract import (
     code as normalized_code,
 )
 from .native_app_auth import active_grant, authenticate
-from .security import lock_mutation_identity
+from .security import lock_mutation_identity, lock_read_identity
 
 
 @dataclass(frozen=True)
@@ -139,8 +139,12 @@ class Authority:
         ).fetchone():
             raise HTTPException(401, "读取授权已变化")
 
-    async def owner_lock(self, conn, who):
-        await lock_mutation_identity(conn, who, require_admin=False)
+    async def owner_lock(self, conn, who, *, shared_identity=False):
+        # Observation only renews quote intent. Keep its current write-scope
+        # proof, but do not take UPDATE on the native account/grant and block
+        # independent account reads. Source/intent mutations stay serialized.
+        identity_lock = lock_read_identity if shared_identity else lock_mutation_identity
+        await identity_lock(conn, who, require_admin=False)
         await conn.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("market-owner:" + who.id,)
         )
@@ -289,7 +293,7 @@ class Authority:
             raise HTTPException(400, "需求版本无效")
         principal = str(getattr(who, "grant_id", None) or "web:" + who.token_hash)
         async with self.db.connection() as conn, conn.transaction():
-            await self.owner_lock(conn, who)
+            await self.owner_lock(conn, who, shared_identity=observed and not remove)
             prior = await self.receipt(conn, who.id, request_id, operation)
             if prior:
                 return prior

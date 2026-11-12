@@ -42,6 +42,11 @@ def test_current_fire_configuration_does_not_inherit_independent_api(fire_env, m
     assert settings.mail_password is None
 
 
+def test_current_fire_upload_root_can_use_explicit_operator_directory(fire_env, monkeypatch, tmp_path):
+    monkeypatch.setenv("FIRE_PUBLIC_UPLOAD_ROOT", str(tmp_path))
+    assert load_fire_settings().public_upload_root == tmp_path
+
+
 def test_uuid_required_zero_rejected_and_secret_values_hidden(fire_env, monkeypatch):
     monkeypatch.delenv("FIRE_INSTANCE_ID")
     with pytest.raises(ValueError, match="FIRE_INSTANCE_ID"):
