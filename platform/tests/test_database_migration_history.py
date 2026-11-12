@@ -67,6 +67,20 @@ async def test_original_history_is_visible_atomic_and_deduplicated(client,db,set
     assert visible.json()['data']['count']==2
     funds=await client.get('/api/v1/funds?recordsOnly=1');assert funds.status_code==200,funds.text
     assert funds.json()['data']['pagination']['total']==2 and len(funds.json()['data']['transactions'])==2
+    # Imported source records have no confirmed account binding. Material
+    # history remains visible without converting it into new financial postings.
+    async with db.connection() as c:
+        links=await (await c.execute('SELECT id,broker_account_id FROM portfolio_records WHERE owner_id=%s',(running['owner_id'],))).fetchall()
+        assert links
+        await c.execute('UPDATE portfolio_records SET broker_account_id=NULL WHERE owner_id=%s AND broker_account_id IS NOT NULL',(running['owner_id'],))
+    before=(await client.get('/api/records')).json()
+    bundle=await client.get('/api/v1/portfolio-series?days=330',headers=headers)
+    assert bundle.status_code==200,bundle.text
+    assert {row['id'] for row in bundle.json()['orders']}=={'original-fill','original-pending'}
+    assert all(row['executionModel']=='source_registered_history' for row in bundle.json()['orders'])
+    async with db.connection() as c:
+        for table in ('trade_ledger','cash_ledger_entries','internal_orders'):
+            assert (await (await c.execute('SELECT count(*) n FROM '+table)).fetchone())['n']==0
     assert (await client.get('/api/records')).json()==before
     await history(db,running)
     assert (await client.post(prefix+'/history',json=command)).json()['id']==result.json()['id']

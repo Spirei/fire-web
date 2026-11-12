@@ -26,5 +26,9 @@ function load(name){if(cache.has(name))return cache.get(name);const exports={};c
  const changed=await readWorkspaceTicker({items:[{key:'index',label:'Different security',market:'US',secid:'100.SPX'}],interval:5},new AbortController().signal);assert.equal(changed.items[0].price,null,'same presentation key must not borrow a different security');
  const connect=registeredPnlCalendar([{...base,market:'HK',currency:'HKD',settlementCurrency:'CNY'}],{USD:1,HKD:8},2026,10);assert.equal(connect.days.find(c=>c?.day===3).pnl,123.45/8,'original realized currency is not the cash settlement currency');
  let batchMarkets=[];network=async(url,init)=>{const b=JSON.parse(init.body);batchMarkets.push([...new Set(b.items.map(r=>r.market))]);return Response.json({quotes:{}})};await readQuoteBatches([{id:'us',market:'US',code:'AAPL'},{id:'hk',market:'HK',code:'00700'},{id:'cn',market:'CN',code:'600019'}]);assert.equal(batchMarkets.length,3);assert(batchMarkets.every(markets=>markets.length===1));
+ const allSecurities=Array.from({length:114},(_,i)=>({id:String(i),market:'US',code:'SYM'+i,qty:i<19?1:0}));
+ const scoped=load('quoteBatches').selectQuoteRecords;
+ assert.equal(scoped(allSecurities,'assets').length,19,'asset analysis must not renew 95 unrelated watchlist demands');
+ assert.equal(scoped(allSecurities,'holdings').length,19);assert.equal(scoped(allSecurities,'watchlist').length,114,'whole-watchlist sorting keeps its full quote scope');
  console.log('PASS migration reads: HTML recovery, permission/no replay, market cap, registered realized calendar, missing FX and private ticker');
 })().catch(error=>{console.error(error);process.exitCode=1});

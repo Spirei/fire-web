@@ -88,7 +88,7 @@ def mount_legacy_portfolio_analysis(app,db,authority):
                 await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
                 bound=Bound(conn,db.settings)
                 # Both material views use one snapshot; neither registers collection.
-                result=await PortfolioSeries(bound,authority,automatic=True).read(who,days=days,adjust="none",order_limit=5000,_snapshot_started=True)
+                result=await PortfolioSeries(bound,authority,automatic=True).read(who,days=days,order_limit=5000,_snapshot_started=True,include_unassigned_material=True)
                 _,snapshot=await snapshot_in_transaction(conn,who,strict=False)
                 pending=await (await conn.execute("SELECT 1 FROM tasks WHERE owner_id=%s AND kind='market.history' AND status IN ('queued','running') LIMIT 1",(who.id,))).fetchone()
             allowed={row['id'] for row in result['records']}

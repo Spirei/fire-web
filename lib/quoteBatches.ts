@@ -2,6 +2,12 @@ import type { Quote, StockRecord } from "./types";
 import { normalizeMarketCode } from "./marketCode";
 
 type Item = Pick<StockRecord, "id" | "market" | "code">;
+/** Asset views need held securities; watchlist sorting needs its complete list.
+ * Both scopes use the same quote pool, source selection and observation DTOs. */
+export function selectQuoteRecords(records: StockRecord[], view: string): StockRecord[] {
+  return records.filter(record => view === "watchlist" || Number(record.qty) > 0);
+}
+
 export interface QuoteBatchResult { quotes: Record<string, Quote>; completed: Set<string> }
 
 export function quoteInstrumentKey(item: Item): string {

@@ -107,7 +107,7 @@ class Subscriptions:
                     item_revision = revision or await self.source(conn,who,[item],None,source_preference,instrument,session)
                     _, selected_policy = await self.authority.config(conn,who.id,item_revision)
                     desired = self.query(item,instrument,session,selected_policy)
-                    rows=await (await conn.execute("SELECT * FROM market_streams WHERE owner_id=%s AND source_revision=%s AND query->>'kind'='latest' AND query->>'market'=%s AND query->>'code'=%s AND query->>'instrument'=%s AND query->>'session'=%s FOR UPDATE",(who.id,item_revision,item["market"],item["code"],desired.instrument,desired.session))).fetchall()
+                    rows=await (await conn.execute("SELECT * FROM market_streams WHERE owner_id=%s AND source_revision=%s AND query->>'kind'='latest' AND query->>'market'=%s AND query->>'code'=%s AND query->>'instrument'=%s AND (%s::text IS NULL OR query->>'session'=%s) FOR UPDATE",(who.id,item_revision,item["market"],item["code"],desired.instrument,desired.session if session is not None else None,desired.session))).fetchall()
                     if len(rows)>1:raise HTTPException(409,"该证券存在多个采集口径，请先明确需求范围")
                     query=query_from(rows[0]["query"]) if rows else desired
                     old=await (await conn.execute("SELECT revision FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s",(who.id,rows[0]["id"],principal))).fetchone() if rows else None

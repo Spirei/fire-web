@@ -7,7 +7,7 @@ import VisibilityIcon from "@/components/VisibilityIcon";
 import { usePnlCalendarState } from "@/lib/usePnlCalendarState";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
-import { privateReadEpoch, recordsReadSignature } from "@/lib/privateReadContext";
+import { accountReadHeaders, privateReadEpoch, recordsReadSignature } from "@/lib/privateReadContext";
 import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
 import { useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
@@ -299,6 +299,20 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   }, [positions.length, savedAssetMarket, savedHoldingsMarket, savedPnlMarket, assetMarket, holdingsMarket, pnlMarket, setAssetMarket, setHoldingsMarket, setPnlMarket]);
   const [pnlExpanded, setPnlExpanded] = useState(false);
   const [orders, setOrders] = useState<TradeOrder[]>([]);
+  // Historical orders are independent from licensed price history. A missing
+  // benchmark or bar must not erase the owner's recorded order calendar.
+  useEffect(() => {
+    if (!foreground || !ownerId) return;
+    const controller=new AbortController(),epoch=privateReadEpoch();
+    void platformRequest<{orders:TradeOrder[]}>("/api/v1/orders?scope=all&limit=5000",{signal:controller.signal,headers:accountReadHeaders(ownerId)},20000).then(data=>{
+      if(controller.signal.aborted || epoch!==privateReadEpoch())return;
+      if(!Array.isArray(data?.orders))throw Error("历史订单格式无效");
+      setOrders(data.orders);
+    }).catch(error=>{
+      if(!controller.signal.aborted && epoch===privateReadEpoch() && error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0))setOrders([]);
+    });
+    return ()=>controller.abort();
+  },[ownerId,signature,readRevision,foreground]);
 
   // 模块顺序：拖动手柄调整后写回 site_settings.assetAnalysisOrder（左右两栏各一组）
   const [moduleOrder, setModuleOrder] = useState<{ left: string[]; right: string[] }>(() => mergeModuleOrder(initialModuleOrder));
@@ -683,7 +697,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
       const benchmarkItems = benchItems;
       const fetchedOrdersAll: TradeOrder[] = bundle?.orders ?? [];
       if (fetchedOrdersAll.some(order => order.executionModel === "source_registered_history" && order.historicalCoverageKnown !== true)) {
-        setOrders(fetchedOrdersAll);
+        if(bundle)setOrders(fetchedOrdersAll);
         trendRef.current=[];setTrend([]);setRecordCloses(Object.fromEntries(positionRows.map(row => [row.record.id, row.items])));setTrendLoading(false);
         try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* storage unavailable */ }
         return;
@@ -696,7 +710,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
       if (benchmarkItems.length > 0) benchmarkRef.current = { key: benchKey, items: benchmarkItems };
       const nextRecordCloses = Object.fromEntries(positionRows.map((row) => [row.record.id, row.items]));
       setRecordCloses(nextRecordCloses);
-      setOrders(fetchedOrdersAll);
+      if(bundle)setOrders(fetchedOrdersAll);
       const fetchedOrders = fetchedOrdersAll.filter((order) => order.status === "filled");
 
       // 使用所有行情日期，但每个标的在自己的首个有效行情之前以首个收盘价回填。
@@ -850,7 +864,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     })().catch(error => {
       if (cancelled || controller.signal.aborted) return;
       if (error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
-        trendRef.current=[]; setTrend([]); setRecordCloses({}); setOrders([]); benchmarkRef.current={key:benchKey,items:[]};
+        trendRef.current=[]; setTrend([]); setRecordCloses({}); benchmarkRef.current={key:benchKey,items:[]};
       }
       setTrendLoading(false);
     });

@@ -101,6 +101,9 @@ class LicensedHistory:
                 await self.authority.config(conn, owner, revision)
             except HTTPException:
                 retained[str(revision)] = {'sourceRevision': str(revision), 'state': 'retained_unavailable'}
+        if self.automatic and adjust is None:
+            raw={key:value for key,value in choices.items() if value[1].adjust=='none'}
+            if raw:choices=raw
         if self.automatic and revision is None and len(choices)>1 and all(p.source in ('futu','yahoo','eastmoney','tencent') for p,q in choices.values()):
             observed={}
             for key,value in choices.items():

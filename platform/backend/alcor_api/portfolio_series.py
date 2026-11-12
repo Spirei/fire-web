@@ -93,7 +93,7 @@ class PortfolioSeries:
 
     async def read(self,who,*,days=330,account_kind=None,broker_account_id=None,record_id=None,
                    source_revision=None,adjust=None,start=None,through=None,before=None,expected_revision=None,
-                   order_offset=0,order_limit=500,_snapshot_started=False):
+                   order_offset=0,order_limit=500,_snapshot_started=False,include_unassigned_material=False):
         if type(days) is not int or not 60<=days<=1200 or type(order_offset) is not int or not 0<=order_offset<=5000 or type(order_limit) is not int or not 1<=order_limit<=5000:
             raise HTTPException(400,'期间或分页范围无效')
         if account_kind not in (None,'real','simulated') or adjust not in (None,'none','qfq','hfq'):
@@ -118,8 +118,8 @@ class PortfolioSeries:
             if broker_account_id and not any(row['id']==broker_account_id and row['account_kind']==account_kind for row in accounts):
                 raise HTTPException(404,'所选本人账户或账本不存在')
             selected=[row['id'] for row in accounts if row['account_kind']==account_kind and (not broker_account_id or row['id']==broker_account_id)]
-            records=await(await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND broker_account_id=ANY(%s::text[]) AND (%s::text IS NULL OR id=%s) ORDER BY id LIMIT 201',
-                (who.id,selected,record_id,record_id))).fetchall()
+            records=await(await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND (broker_account_id=ANY(%s::text[]) OR %s AND broker_account_id IS NULL) AND (%s::text IS NULL OR id=%s) ORDER BY id LIMIT 201',
+                (who.id,selected,include_unassigned_material,record_id,record_id))).fetchall()
             if len(records)>200:raise HTTPException(409,'本次超过200个证券，请按账户或证券缩小范围')
             if record_id and not records:raise HTTPException(404,'本人所选证券不存在')
             await attach_openings(conn,who.id,records)
@@ -160,7 +160,7 @@ class PortfolioSeries:
                             'amendmentId':str(root['_latest_amendment']['id']) if root.get('_latest_amendment') else None,
                             'positionTransferId':str(record['position_transfer_id']) if record.get('position_transfer_id') else None}}))
                 public_records.append(packed({'id':rid,'market':record['market'],'code':record['code'],'name':record['name'],
-                    'brokerAccountId':record['broker_account_id'],'accountKind':account_kind,'currentQuantity':record['qty'],
+                    'brokerAccountId':record['broker_account_id'],'accountKind':account_kind if record['broker_account_id'] else None,'currentQuantity':record['qty'],
                     'currentQuantityAuthority':'current_registered_record_not_a_historical_opening','revision':record['revision'],'deleted':record['deleted_at'] is not None}))
                 # Retain real prices for cleared names with observed fills as well as current holdings.
                 if record['deleted_at'] is not None or not history and (record['qty'] is None or record['qty']<=0):continue
