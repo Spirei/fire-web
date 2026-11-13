@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 
 from .market_contract import CURRENCIES, ZONES, code, digest
+from .market_history_evidence import bounded_history_read, load_history_evidence, verify_history_evidence
 from .market_history_reads import LicensedHistory
 from .security import lock_mutation_identity
 
@@ -18,6 +19,7 @@ class HistoryService(LicensedHistory):
         if not actor or actor['role'] != who.role:
             raise HTTPException(403, '读取身份或权限已变化')
 
+    @bounded_history_read
     async def read_chart(self, who, market, symbol, *, frame='day', adjust='none', session='REGULAR', instrument='equity',
                          kind='bars', mode='bars', source_revision=None, start=None, through=None, limit=3000,
                          before=None, expected_revision=None):
@@ -41,6 +43,7 @@ class HistoryService(LicensedHistory):
             raise HTTPException(400, '历史窗口、口径、来源或续页参数无效') from None
         requested = {'kind':kind,'market':market,'code':symbol,'frame':frame,'adjust':adjust,'session':session,
                      'instrument':instrument,'mode':mode,'start':start,'through':through}
+        requested_revision = revision
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
             await self.authorize(conn, who)
@@ -77,40 +80,49 @@ class HistoryService(LicensedHistory):
                 (who.id,revision,series,begin,begin,end,end,prior,prior,mode=='bars',ZONES[market],selected_dates,limit+1))).fetchall()
             more = len(rows)>limit
             rows = list(reversed(rows[:limit]))
-            from .market_history_evidence import verify_history_rows
-            await verify_history_rows(conn, who.id, revision, rows, policy)
-            facts = []
-            now = self.authority.clock() if self.authority.clock else datetime.now(UTC)
-            for row in rows:
-                value = row['contents']
-                try:
-                    stamp = datetime.fromisoformat(value['at'])
-                    if (stamp.tzinfo is None or stamp!=row['source_time'] or stamp>now+timedelta(seconds=5)
-                            or value.get('source')!=policy.source or value.get('sourceVersion')!=policy.source_version
-                            or value.get('currency')!=CURRENCIES[market] or value.get('session')!=session):
-                        raise ValueError()
-                except (ValueError, TypeError, KeyError):
-                    raise HTTPException(503, '真实历史事实的来源、时间或口径无法核对') from None
-                facts.append({**value,'factId':str(row['id']),'pageId':str(row['page_id']),'revision':row['sequence']})
-            windows = [{'from':row['window_from'].isoformat(),'through':row['window_through'].isoformat(),
-                        'assurance':row['assurance'],'pointCount':row['point_count'],'taskId':str(row['task_id']),
-                        'pageIds':[str(value) for value in row['page_ids']]} for row in coverage[:1000]]
-            from .market_indicators import calculate_indicators
-            indicators = calculate_indicators(facts,price_field='price' if kind=='price_series' else 'c')
-            if indicators is not None:
-                indicators['windowScope'] = 'returned_page_only'
-            return {'query':requested,'sourceRevision':str(revision),'revision':current,'licenseRevision':policy.license_revision,
-                    'timezone':ZONES[market],'facts':facts,'state':'observed' if facts else 'unknown','indicators':indicators,
-                    'coverage':{'assurance':windows[0]['assurance'] if windows else 'unknown','windows':windows,
-                                'windowListPartial':len(coverage)>1000,'fullBusinessHistoryVerified':False,'assuranceScope':'individual_recorded_windows_only',
-                                'requestedObservedDates':5 if mode=='five-day' else 1 if mode=='all-day' else None,
-                                'observedDateCount':len(selected_dates) if mode!='bars' else None,
-                                'partial':more or not windows or kind=='price_series' or any('_partial_records' in row['assurance'] for row in windows) or mode=='five-day' and len(selected_dates)<5,
-                                'calendarCompletenessVerified':False,'corporateActionContinuityVerified':False,'missingPointsFilled':False},
-                    'availableRange':{'from':head['first'].isoformat() if head['first'] else None,'through':head['last'].isoformat() if head['last'] else None,
-                                      'observedLocalDates':selected_dates},
-                    'windowBasis':'observed_market_local_dates','pagination':{'before':rows[0]['source_time'].isoformat() if more and rows else None,'hasMore':more},
-                    'retainedSources':retained,'automaticCollection':False}
+            evidence = await load_history_evidence(conn, who.id, revision, rows)
+        await verify_history_evidence(who.id, revision, evidence, policy)
+        async with self.db.connection() as conn, conn.transaction():
+            await self.authorize(conn, who)
+            selected, _ = await self.choices(conn, who.id, market, symbol, frame=frame, adjust=adjust,
+                instrument=instrument, session=session, kind=kind, revision=requested_revision)
+            if len(selected) > 1:
+                raise HTTPException(409, '存在多个真实来源，请明确来源版本')
+            candidate = selected.get((revision, series)) if len(selected) == 1 else None
+            if candidate is None or candidate[0].fingerprint != policy.fingerprint:
+                raise HTTPException(403, '历史来源展示许可或口径已变化，请撤下旧数据')
+        facts = []
+        now = self.authority.clock() if self.authority.clock else datetime.now(UTC)
+        for row in rows:
+            value = row['contents']
+            try:
+                stamp = datetime.fromisoformat(value['at'])
+                if (stamp.tzinfo is None or stamp!=row['source_time'] or stamp>now+timedelta(seconds=5)
+                        or value.get('source')!=policy.source or value.get('sourceVersion')!=policy.source_version
+                        or value.get('currency')!=CURRENCIES[market] or value.get('session')!=session):
+                    raise ValueError()
+            except (ValueError, TypeError, KeyError):
+                raise HTTPException(503, '真实历史事实的来源、时间或口径无法核对') from None
+            facts.append({**value,'factId':str(row['id']),'pageId':str(row['page_id']),'revision':row['sequence']})
+        windows = [{'from':row['window_from'].isoformat(),'through':row['window_through'].isoformat(),
+                    'assurance':row['assurance'],'pointCount':row['point_count'],'taskId':str(row['task_id']),
+                    'pageIds':[str(value) for value in row['page_ids']]} for row in coverage[:1000]]
+        from .market_indicators import calculate_indicators
+        indicators = calculate_indicators(facts,price_field='price' if kind=='price_series' else 'c')
+        if indicators is not None:
+            indicators['windowScope'] = 'returned_page_only'
+        return {'query':requested,'sourceRevision':str(revision),'revision':current,'licenseRevision':policy.license_revision,
+                'timezone':ZONES[market],'facts':facts,'state':'observed' if facts else 'unknown','indicators':indicators,
+                'coverage':{'assurance':windows[0]['assurance'] if windows else 'unknown','windows':windows,
+                            'windowListPartial':len(coverage)>1000,'fullBusinessHistoryVerified':False,'assuranceScope':'individual_recorded_windows_only',
+                            'requestedObservedDates':5 if mode=='five-day' else 1 if mode=='all-day' else None,
+                            'observedDateCount':len(selected_dates) if mode!='bars' else None,
+                            'partial':more or not windows or kind=='price_series' or any('_partial_records' in row['assurance'] for row in windows) or mode=='five-day' and len(selected_dates)<5,
+                            'calendarCompletenessVerified':False,'corporateActionContinuityVerified':False,'missingPointsFilled':False},
+                'availableRange':{'from':head['first'].isoformat() if head['first'] else None,'through':head['last'].isoformat() if head['last'] else None,
+                                  'observedLocalDates':selected_dates},
+                'windowBasis':'observed_market_local_dates','pagination':{'before':rows[0]['source_time'].isoformat() if more and rows else None,'hasMore':more},
+                'retainedSources':retained,'automaticCollection':False}
 
     async def original(self, who, page_id, revision):
         try:

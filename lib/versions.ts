@@ -8244,7 +8244,7 @@ export const V0_1_81_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_82_ENTRY: VersionEntry = {
   ...V0_1_81_ENTRY,
   version: "v0.1.82", date: "2026-11-13", summary: "稳定共享行情与当前持仓读取",
   software: V0_1_81_ENTRY.software.map(item => ({...item,version:"v0.1.82"})),
@@ -8277,10 +8277,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_82_ENTRY,
+  version: "v0.1.83", date: "2026-11-14", summary: "历史走势不再阻塞资产与行情读取",
+  software: V0_1_82_ENTRY.software.map(item => ({...item,version:"v0.1.83"})),
+  changes: [
+    {kind:"fix",title:"历史原件核对不再阻塞资产读取",desc:"分时与日 K 的原件核对移到有上限的后台计算，计算期间退还数据库连接；未变原件复用有内存上限的解析指纹索引，继续逐次核对真实字节摘要与事实引用。返回前重新核对当前连接、来源许可与展示口径，取消请求不提前释放仍在计算的容量。Web、v1、v2 与维护历史接口共用处理，容量不足按原等待时间返回，避免立刻改口径再次读取；不更改 App 协议或补造行情。"},
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_82_ENTRY,
   V0_1_81_ENTRY,
   V0_1_80_ENTRY,
   V0_1_79_ENTRY,

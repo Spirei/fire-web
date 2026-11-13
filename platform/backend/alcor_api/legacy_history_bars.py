@@ -234,6 +234,7 @@ def mount_legacy_history_bars(app, settings, authority):
                 headers=headers,
             )
         except HTTPException as exc:
+            headers.update(exc.headers or {})
             if exc.status_code in (401, 403):
                 headers["X-Alcor-Retire-Context"] = "true"
             return JSONResponse({"error": str(exc.detail)}, status_code=exc.status_code, headers=headers)

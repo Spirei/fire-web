@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from .market_authority import query_from
 from .market_contract import ZONES, code, series_fingerprint
+from .market_history_evidence import bounded_history_read
 from .native_app_auth import CLIENT
 from .security import lock_read_identity
 
@@ -16,6 +17,19 @@ class LicensedHistory:
         self.authority, self.db = authority, authority.db
         self.automatic=automatic
 
+    async def authorize_history_read(self, conn, who):
+        await lock_read_identity(conn, who, require_admin=False)
+        actor = await (await conn.execute("SELECT role FROM users WHERE id=%s", (who.id,))).fetchone()
+        if not actor or actor["role"] != who.role:
+            raise HTTPException(403, "账号权限已变化")
+        if getattr(who, "native_client", False):
+            grant = await (await conn.execute(
+                "SELECT client_id FROM identity_app_grants WHERE id=%s", (who.grant_id,)
+            )).fetchone()
+            if not grant or grant["client_id"] != CLIENT:
+                raise HTTPException(401, "客户端连接已变化")
+
+    @bounded_history_read
     async def read(
         self,
         who,
@@ -37,20 +51,10 @@ class LicensedHistory:
             revision = UUID(str(source_revision)) if source_revision is not None else None
         except (ValueError, TypeError, AttributeError) as exc:
             raise HTTPException(400, "历史代码或来源版本无效") from exc
+        requested_revision = revision
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            await lock_read_identity(conn, who, require_admin=False)
-            actor = await (await conn.execute("SELECT role FROM users WHERE id=%s", (who.id,))).fetchone()
-            if not actor or actor["role"] != who.role:
-                raise HTTPException(403, "账号权限已变化")
-            if getattr(who, "native_client", False):
-                grant = await (
-                    await conn.execute(
-                        "SELECT client_id FROM identity_app_grants WHERE id=%s", (who.grant_id,)
-                    )
-                ).fetchone()
-                if not grant or grant["client_id"] != CLIENT:
-                    raise HTTPException(401, "客户端连接已变化")
+            await self.authorize_history_read(conn, who)
 
             choices, retained = await self.choices(conn, who.id, market, symbol, frame=frame, adjust=adjust,
                                                    instrument=instrument, session=session, kind=kind, revision=revision)
@@ -71,9 +75,23 @@ class LicensedHistory:
             ).fetchall()
             if not rows:
                 raise HTTPException(503, "该口径历史尚无已采集记录")
-            from .market_history_evidence import verify_history_rows
-            await verify_history_rows(conn, who.id, revision, rows, policy)
-            return list(reversed(rows)), policy, query, str(revision)
+            from .market_history_evidence import load_history_evidence, verify_history_evidence
+            evidence = await load_history_evidence(conn, who.id, revision, rows)
+        # Decoding overlapping RT originals can inspect tens of thousands of
+        # facts. It must own neither a pool connection nor identity locks.
+        await verify_history_evidence(who.id, revision, evidence, policy)
+        # An old repeatable-read snapshot cannot authorize a reply after the
+        # CPU await: recheck the current identity, license and source selection.
+        async with self.db.connection() as conn, conn.transaction():
+            await self.authorize_history_read(conn, who)
+            current, retained = await self.choices(conn, who.id, market, symbol, frame=frame, adjust=adjust,
+                instrument=instrument, session=session, kind=kind, revision=requested_revision)
+            if not current and retained:
+                raise HTTPException(403, "历史原件仍保留，但当前来源展示许可不可用，请撤下旧数据")
+            selected = current.get((revision, fingerprint)) if len(current) == 1 else None
+            if selected is None or selected[0].fingerprint != policy.fingerprint:
+                raise HTTPException(409, "历史来源或展示口径已变化，请重新读取")
+        return list(reversed(rows)), policy, query, str(revision)
 
     async def choices(self, conn, owner, market, symbol, *, frame, adjust, instrument, session, kind, revision=None):
         streams = await (await conn.execute("""SELECT DISTINCT ON(source_revision,query->>'adjust') * FROM market_streams WHERE owner_id=%s

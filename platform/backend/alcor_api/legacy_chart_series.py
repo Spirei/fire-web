@@ -101,7 +101,7 @@ async def read_minute_rows(history, who, market, symbol, *, session, source_revi
     try:
         return await history.read(who, market, symbol, **arguments)
     except HTTPException as exc:
-        if exc.status_code != 503:
+        if exc.status_code != 503 or (exc.headers or {}).get('Retry-After'):
             raise
     return await history.read(who, market, symbol, kind="price_series", **arguments)
 
@@ -220,6 +220,7 @@ def mount_legacy_chart_series(app, settings, authority):
                 {"code": 0, "message": "ok", "data": value} if version else value, headers=headers
             )
         except HTTPException as exc:
+            headers.update(exc.headers or {})
             if exc.status_code in (401, 403):
                 headers["X-Alcor-Retire-Context"] = "true"
             return JSONResponse(
@@ -389,6 +390,7 @@ def mount_legacy_chart_series(app, settings, authority):
                     headers["Content-Encoding"] = "gzip"
             return Response(raw, media_type="application/json", headers=headers)
         except HTTPException as exc:
+            headers.update(exc.headers or {})
             if exc.status_code in (401, 403):
                 headers["X-Alcor-Retire-Context"] = "true"
             return JSONResponse(
