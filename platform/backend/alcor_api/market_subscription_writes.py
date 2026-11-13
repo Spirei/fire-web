@@ -88,6 +88,15 @@ class Subscriptions:
         if instrument is not None:operation['instrument']=instrument
         if session is not None:operation['session']=session
         async with self.db.connection() as conn,conn.transaction():
+            if observe and legacy_generated and not remove:
+                # An immutable accepted receipt needs current credential proof,
+                # not the Worker's exclusive source/intent mutation lock.
+                from .security import lock_read_identity
+                await lock_read_identity(conn,who,require_admin=False)
+                user=await (await conn.execute('SELECT role FROM users WHERE id=%s',(who.id,))).fetchone()
+                if not user or user['role']!=who.role:raise HTTPException(403,'账号权限已变化')
+                previous=await self.authority.receipt(conn,who.id,request_id,operation)
+                if previous:return previous,True
             await self.authority.owner_lock(conn,who,shared_identity=observe and not remove)
             user=await (await conn.execute("SELECT role FROM users WHERE id=%s",(who.id,))).fetchone()
             if not user or user["role"]!=who.role:raise HTTPException(403,"账号权限已变化")

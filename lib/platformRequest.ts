@@ -2,6 +2,7 @@
 export class PlatformRequestError extends Error {
   status?: number;
   reauthentication = false;
+  transient = false;
 }
 
 function message(value: unknown): string {
@@ -23,7 +24,9 @@ export async function platformRequest<T>(path: string, init: RequestInit = {}, t
   else parent?.addEventListener("abort", cancel, { once: true });
   const headers = new Headers(init.headers);
   if (conditional) headers.set("if-none-match", conditional.etag);
-  const timer = setTimeout(() => controller.abort(new Error(reading ? "读取超时，请重试" : "请求超时，请核对结果后再操作")), timeoutMs);
+  const timeout = new PlatformRequestError(reading ? "读取超时，请重试" : "请求超时，请核对结果后再操作");
+  timeout.transient = reading;
+  const timer = setTimeout(() => controller.abort(timeout), timeoutMs);
   let stop: (() => void) | undefined;
   const aborted = new Promise<never>((_, reject) => {
     stop = () => reject(controller.signal.reason ?? new DOMException("请求已取消", "AbortError"));
@@ -38,7 +41,11 @@ export async function platformRequest<T>(path: string, init: RequestInit = {}, t
         response = await fetch(path, { cache: "no-store", ...init, headers, signal: controller.signal });
       } catch (error) {
         if (controller.signal.aborted) throw controller.signal.reason;
-        if (error instanceof TypeError) throw new Error(reading ? "网络连接中断，请重试" : "网络连接中断，请核对结果后再操作");
+        if (error instanceof TypeError) {
+          const unavailable = new PlatformRequestError(reading ? "网络连接中断，请重试" : "网络连接中断，请核对结果后再操作");
+          unavailable.transient = reading;
+          throw unavailable;
+        }
         throw error;
       }
       if (response.status === 204) return undefined as T;
@@ -52,6 +59,7 @@ export async function platformRequest<T>(path: string, init: RequestInit = {}, t
         const error = new PlatformRequestError(data == null ? "服务暂时不可用，请稍后核对结果" : message(data));
         error.status = response.status;
         error.reauthentication = response.headers.get("x-alcor-reauthentication") === "required";
+        error.transient = reading && !error.reauthentication && [429, 500, 502, 503, 504].includes(response.status);
         throw error;
       }
       return data as T;

@@ -6,6 +6,19 @@ from test_cash_ledger import command, submit
 from test_legacy_devices import bearer, grant
 
 
+async def test_funds_read_failure_never_claims_an_unconfirmed_write(client, admin, db, monkeypatch):
+    from alcor_api.legacy_fund_sources import LegacyFunds
+    async def unavailable(*_args, **_kwargs):
+        raise TimeoutError('Synthetic unavailable read')
+    monkeypatch.setattr(LegacyFunds, 'read', unavailable)
+    headers = bearer(await grant(db, admin, 'portfolio.read'))
+    for version in (1, 2):
+        response = await client.get(f'/api/v{version}/funds?limit=1', headers=headers)
+        assert response.status_code == 500 and response.json()['code'] == 50001
+        assert response.json()['message'] == '资金暂时无法读取，请重试'
+        assert 'x-alcor-operation-receipt' not in response.headers
+
+
 async def test_native_funds_replay_search_and_retirement_preserve_originals(client, admin, db):
     await submit(client, command(None, amount='100'))
     headers = bearer(await grant(db, admin, 'portfolio.read portfolio.write cash.read'))

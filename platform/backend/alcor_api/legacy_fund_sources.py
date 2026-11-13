@@ -368,7 +368,8 @@ def mount_legacy_fund_sources(app, rate_limit):
                 headers['X-Alcor-Retire-Context'] = 'true'
             return JSONResponse({'code': getattr(exc, 'business_code', exc.status_code * 100 + 1), 'message': str(exc.detail)}, status_code=exc.status_code, headers=headers)
         except Exception:  # noqa: BLE001 -- legacy boundary never exposes credentials, SQL or source data
-            return JSONResponse({'code': 50001, 'message': '资金结果未确认，请查询原UUID回执'}, status_code=500, headers=headers)
+            message = '资金暂时无法读取，请重试' if request.method == 'GET' else '资金结果未确认，请查询原UUID回执'
+            return JSONResponse({'code': 50001, 'message': message}, status_code=500, headers=headers)
 
     @app.get('/api/v1/funds')
     async def read_v1(request: Request):

@@ -1,8 +1,8 @@
 "use client";
 import { Capsule, IconButton } from "@/components/Capsule";
 
-import { platformRequest } from "@/lib/platformRequest";
-import { accountReadHeaders } from "@/lib/privateReadContext";
+import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
+import { accountReadHeaders, privateReadEpoch } from "@/lib/privateReadContext";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import { usePrivateReadRevision } from "@/lib/usePrivateReadRevision";
 import { convertAccountAmount } from "@/lib/accountCash";
@@ -46,6 +46,7 @@ function RecordChip({ tone, children }: { tone: RecordAction | "code" | "auto"; 
 const EMPTY: Record<Currency, number|null> = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, null])) as Record<Currency, number|null>;
 const EMPTY_SUMMARY: Record<Currency, Summary> = Object.fromEntries(FUND_CURRENCIES.map((code) => [code, { openingAsset: null, cashNetFlow: null, stockNetFlow: null, otherNetFlow: null }])) as Record<Currency, Summary>;
 const RECORD_PAGE_SIZE = 30;
+const BALANCE_RETAIN_MS = 5 * 60_000;
 
 export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrides, onBalancesChange }: { ownerId?: string; holdingAssets: Record<Currency, number|null>; balanceOverrides?: Partial<Record<Currency, number|null>>; onBalancesChange: (balances: Record<Currency, number|null>, cardCash: Record<string, number|null>) => void }) {
   const rates = useRates();
@@ -73,7 +74,9 @@ export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrid
   const readRevision = usePrivateReadRevision();
   const [readError,setReadError] = useState("");
   const balanceRequest=useRef<{controller:AbortController;promise:Promise<void>}|null>(null);
+  const balanceReceiptAt=useRef<number|null>(null);
   useLayoutEffect(() => {
+    balanceReceiptAt.current=null;
     balanceRequest.current?.controller.abort(); balanceRequest.current=null;
     recordsRequest.current?.controller.abort(); recordsRequest.current=null;
     recordsCache.current.clear(); setTransactions([]); setRecordsTotal(0); setRecordsLoading(false);
@@ -85,7 +88,8 @@ export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrid
     if (balanceRequest.current && !force) return balanceRequest.current.promise;
     balanceRequest.current?.controller.abort();
     const controller=new AbortController();
-    const active=()=>!controller.signal.aborted && balanceRequest.current?.controller===controller;
+    const epoch=privateReadEpoch();
+    const active=()=>!controller.signal.aborted && balanceRequest.current?.controller===controller && privateReadEpoch()===epoch;
     const promise=(async()=>{
       try {
         const json=await platformRequest<{code:number;data:{balances:Record<string,number|null>;cardCash?:Record<string,number|null>;summaries?:Record<Currency,Summary>}}>("/api/v1/funds?limit=1",{signal:controller.signal,headers:accountReadHeaders(ownerId)},10000);
@@ -94,11 +98,17 @@ export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrid
         recordsCache.current.clear(); setRecordsReadVersion(value=>value+1);
         const next={...EMPTY,...json.data.balances};
         const cash=json.data.cardCash ?? {USD:null};
+        balanceReceiptAt.current=Date.now();
         setBalances(next); setSummaries({...EMPTY_SUMMARY,...json.data.summaries}); setReadError(""); onBalancesChange(next,cash);
       } catch (error) {
         if (!active()) return;
-        setBalances(EMPTY); setSummaries(EMPTY_SUMMARY); setTransactions([]); recordsCache.current.clear();
-        setReadError(error instanceof Error?error.message:"资金暂时无法读取"); onBalancesChange(EMPTY,{USD:null});
+        const last=balanceReceiptAt.current,now=Date.now();
+        if (!(last!==null && now>=last && now-last<=BALANCE_RETAIN_MS && error instanceof PlatformRequestError && error.transient)) {
+          balanceReceiptAt.current=null;
+          setBalances(EMPTY); setSummaries(EMPTY_SUMMARY); setTransactions([]); recordsCache.current.clear();
+          onBalancesChange(EMPTY,{USD:null});
+        }
+        setReadError(error instanceof Error?error.message:"资金暂时无法读取");
       } finally { if(balanceRequest.current?.controller===controller)balanceRequest.current=null; }
     })();
     balanceRequest.current={controller,promise}; return promise;
@@ -137,7 +147,13 @@ export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrid
   useEffect(() => {
     if (!foreground) return;
     void load();
-    const refresh = () => void load(true);
+    const refresh = () => {
+      // A confirmed financial change retires the old cash scope. A failed
+      // background read alone does not erase the last accepted same-scope book.
+      balanceReceiptAt.current=null;
+      setBalances(EMPTY); setSummaries(EMPTY_SUMMARY); onBalancesChange(EMPTY,{USD:null});
+      void load(true);
+    };
     window.addEventListener("fire:orders-updated", refresh);
     window.addEventListener("fire:funds-updated", refresh);
     return () => {
@@ -145,7 +161,7 @@ export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrid
       window.removeEventListener("fire:funds-updated", refresh);
       balanceRequest.current?.controller.abort(); recordsRequest.current?.controller.abort();
     };
-  }, [load,foreground,readRevision]);
+  }, [load,foreground,readRevision,onBalancesChange]);
   useEffect(() => {
     if (foreground && recordsOpen) void loadRecords(currency, recordsPage, debouncedQuery);
   }, [currency, debouncedQuery, loadRecords, recordsOpen, recordsPage,foreground,readRevision,recordsReadVersion]);

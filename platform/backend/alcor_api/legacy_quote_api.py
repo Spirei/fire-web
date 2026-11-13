@@ -4,7 +4,7 @@ import asyncio
 import gzip
 import json
 import re
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import HTTPException, Request, Response
 
@@ -94,11 +94,16 @@ def mount_legacy_quote_reads(app,settings,authority):
                                 writer,_=await native_identity(request,authority.db,"portfolio.write")
                             identifier=request.headers.get("x-alcor-request-id")
                             generated=identifier is None
-                            identifier=uuid4() if generated else UUID(identifier)
-                            headers["X-Alcor-Request-Id"]=str(identifier)
                             selected=request.headers.get("x-alcor-market-source")
                             selected=UUID(selected) if selected else None
                             normalized=subscription_items({"items":[{"market":item["market"],"code":item["code"]} for item in items]})
+                            if generated:
+                                from .market_observation_receipts import generated_observation_id
+                                identifier=await generated_observation_id(authority,writer,normalized,selected=selected,
+                                    session=selected_session,source_preference=getattr(settings,"_legacy_quote_source",None))
+                            else:
+                                identifier=UUID(identifier)
+                            headers["X-Alcor-Request-Id"]=str(identifier)
                             operation_started=True
                             tracked,_=await Subscriptions(authority).mutate(writer,identifier,normalized,selected=selected,observe=True,legacy_generated=generated,source_preference=getattr(settings,"_legacy_quote_source",None),session=selected_session)
                             tracking={"tracked":True,"requestId":str(identifier),"receiptId":str(identifier),"legacyClientIdempotency":tracked.get("legacyClientIdempotency",not generated),
