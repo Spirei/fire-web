@@ -1,11 +1,12 @@
 """Owner/license/period-isolated reads of already observed PG history. No source IO."""
 
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
 from .market_authority import query_from
-from .market_contract import code, series_fingerprint
+from .market_contract import ZONES, code, series_fingerprint
 from .native_app_auth import CLIENT
 from .security import lock_read_identity
 
@@ -114,6 +115,14 @@ class LicensedHistory:
             if kind=='price_series' and times:
                 newest=max(times.values())
                 choices={key:value for key,value in choices.items() if times.get(key)==newest}
+            elif kind=='bars' and frame=='day' and times:
+                # Daily providers timestamp the same market day differently.
+                # Compare observed local dates, then retain configured source
+                # preference. Older partial backfill must not hide a newer
+                # licensed series; no rows from different sources are merged.
+                days={key:stamp.astimezone(ZoneInfo(ZONES[market])).date() for key,stamp in times.items()}
+                newest=max(days.values())
+                choices={key:value for key,value in choices.items() if days.get(key)==newest}
             order=getattr(self.db.settings,'_legacy_quote_order',None) or ['futu','tencent','eastmoney','yahoo']
             for provider in order:
                 selected={key:value for key,value in choices.items() if value[0].source==provider}

@@ -97,3 +97,46 @@ async def test_chart_pool_portfolio_and_asset_reads_share_redis_but_login_keeps_
     finally:
         app.state.cache.client = None
         await cache.aclose()
+
+
+async def test_native_history_uses_shared_read_budget_and_backoff_without_count_writes(client,admin,app,private_redis):
+    from alcor_api.native_app_auth import issue_grant
+
+    database=app.state.db
+    async with database.connection() as conn,conn.transaction():
+        user=await(await conn.execute('SELECT * FROM users WHERE id=%s',(admin,))).fetchone()
+        pair=await issue_grant(conn,user,'portfolio.read','Synthetic history budget')
+    headers={'authorization':'Bearer '+pair['access_token']}
+    cache=Redis(unix_socket_path=str(private_redis),password=PASSWORD)
+
+    async def attempts():
+        async with database.connection() as conn:
+            return (await(await conn.execute('SELECT coalesce(sum(attempts),0) AS n FROM auth_rate_limits')).fetchone())['n']
+
+    app.state.cache.client=cache
+    try:
+        before=await attempts()
+        for version in (1,2):
+            response=await client.get(f'/api/v{version}/stock-detail?market=US&code=AAPL&view=history',headers=headers)
+            assert response.status_code==503 and response.json()['code']==50002,response.text
+            assert response.headers['retry-after']=='30'
+            assert response.headers['x-alcor-api-version']==str(version)
+        assert await attempts()==before
+        # Both compatibility paths enforce the original same-owner/global limits.
+        assert len(await cache.keys('alcor:*:read-budget:*'))==2
+        for _ in range(58):
+            assert await app.state.read_rate_limit(database,'stock-detail:'+admin,60,window_seconds=60)
+        denied=await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history',headers=headers)
+        assert denied.status_code==429 and denied.json()['code']==42901
+        assert denied.headers['retry-after']=='60' and await attempts()==before
+        # A real Redis failure reuses the existing database admission path.
+        app.state.cache.client=None
+        fallback=await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history',headers=headers)
+        assert fallback.status_code==503 and fallback.headers['retry-after']=='30'
+        assert await attempts()==before+2
+        invalid=await client.get('/api/v2/stock-detail?market=US&code=AAPL',headers={'authorization':'Bearer fat_invalid'})
+        assert invalid.status_code==401 and invalid.headers['x-alcor-retire-context']=='true'
+        assert await attempts()==before+2
+    finally:
+        app.state.cache.client=None
+        await cache.aclose()

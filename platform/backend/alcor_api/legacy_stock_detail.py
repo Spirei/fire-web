@@ -91,7 +91,7 @@ def observed_caps(cap, currency, rates):
 
 
 def mount_legacy_stock_detail(app, settings, authority):
-    history, fx = LicensedHistory(authority), FxWorker(authority.db)
+    history, fx = LicensedHistory(authority, automatic=True), FxWorker(authority.db)
 
     async def execute(request, version):
         headers = {
@@ -116,10 +116,10 @@ def mount_legacy_stock_detail(app, settings, authority):
             if market not in ("US", "HK", "CN", "JP", "KR"):
                 raise HTTPException(400, "暂不支持该市场")
             who = who or await history_member(request, authority.db, version)
-            if not await app.state.rate_limit(
+            if not await app.state.read_rate_limit(
                 authority.db, "stock-detail:" + who.id, 60, window_seconds=60
-            ) or not await app.state.rate_limit(authority.db, "stock-detail-global", 300, window_seconds=60):
-                raise HTTPException(429, "请求过于频繁，请稍后再试")
+            ) or not await app.state.read_rate_limit(authority.db, "stock-detail-global", 300, window_seconds=60):
+                raise HTTPException(429, "请求过于频繁，请稍后再试", headers={"Retry-After":"60"})
             history_only = request.query_params.get("view") == "history"
             limit = 320
             if history_only:
@@ -192,6 +192,10 @@ def mount_legacy_stock_detail(app, settings, authority):
                 }
             return JSONResponse({"code": 0, "message": "ok", "data": data}, headers=headers)
         except HTTPException as exc:
+            if exc.headers:
+                headers.update(exc.headers)
+            if exc.status_code == 503:
+                headers.setdefault("Retry-After", "30")
             if exc.status_code in (401, 403):
                 headers["X-Alcor-Retire-Context"] = "true"
             return JSONResponse(

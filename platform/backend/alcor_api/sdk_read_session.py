@@ -11,6 +11,10 @@ from time import monotonic
 
 
 class LatestSDKSession:
+    argument = '--latest-stream'
+    protocol = b'{"ready":true,"protocol":"futu-read-v1"}\n'
+    actions = frozenset({'latest', 'futu.test', 'futu.quota'})
+
     def __init__(self, script=None, *, timeout=12, startup_timeout=45, maximum=128):
         self.script = script or Path(__file__).with_name('market_futu_sdk.py')
         self.timeout, self.startup_timeout, self.maximum = timeout, startup_timeout, maximum
@@ -37,7 +41,7 @@ class LatestSDKSession:
         try:
             async with asyncio.timeout(self.startup_timeout):
                 raw=await process.stdout.readline()
-                if raw!=b'{"ready":true,"protocol":"futu-read-v1"}\n':
+                if raw != self.protocol:
                     raise ValueError('sdk_startup_protocol_invalid')
         except BaseException:
             if process.returncode is None:
@@ -51,11 +55,17 @@ class LatestSDKSession:
             await self.stop()
 
     async def retire_idle(self):
+        # Maintenance must not make the latest loop await an active historical
+        # SDK request. The request itself updates last_used before releasing.
+        if self.lock.locked():
+            return
         async with self.lock:
             if self.process is not None and monotonic()-self.last_used >= 90:
                 await self.stop()
 
     async def read(self, payload, *, startup_wait=False):
+        if payload.get('action') not in self.actions:
+            raise ValueError('sdk_stream_action_invalid')
         target = (payload['host'], payload['port'])
         # Waiting for this lane is bounded too. A waiting observer must not kill
         # another observer's active request if it times out before acquiring it.
@@ -67,7 +77,7 @@ class LatestSDKSession:
                             or self.target != target or self.reads >= self.maximum):
                         await self.stop()
                         self.process = await asyncio.create_subprocess_exec(
-                            sys.executable, '-I', str(self.script), '--latest-stream',
+                            sys.executable, '-I', str(self.script), self.argument,
                             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.DEVNULL, limit=131073,
                             env={'PATH':'/usr/bin:/bin','PYTHONIOENCODING':'utf-8',
@@ -111,3 +121,11 @@ class LatestSDKSession:
 
 class SDKReadRejected(ValueError):
     pass
+
+
+class HistorySDKSession(LatestSDKSession):
+    """A separate bounded history importer, never a latest-protocol expansion."""
+
+    argument = '--history-stream'
+    protocol = b'{"ready":true,"protocol":"futu-history-read-v1"}\n'
+    actions = frozenset({'history'})

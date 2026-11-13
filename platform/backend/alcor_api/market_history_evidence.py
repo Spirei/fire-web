@@ -16,9 +16,27 @@ async def verify_history_rows(conn, owner, revision, rows, policy):
         grouped.setdefault(row['page_id'], []).append(row)
     if len(grouped) > 256:
         raise HTTPException(503, '历史原件核对超过分页预算')
+    pages = None
+    if len(grouped) > 1:
+        identifiers = list(grouped)
+        # Bound bytes before fetching bodies; 256 individually valid pages can
+        # still exceed the total proof budget. The caller holds repeatable read.
+        size = await (await conn.execute('''SELECT COALESCE(sum(octet_length(raw_bytes)),0) AS bytes
+            FROM market_source_pages WHERE owner_id=%s AND source_revision=%s AND id=ANY(%s)''',
+            (owner, revision, identifiers))).fetchone()
+        if size['bytes'] > 64 * 1024 * 1024:
+            raise HTTPException(503, '历史事实与保留原件无法核对')
+        retained = await (await conn.execute('''SELECT p.*,s.id AS source_stream_id,s.source_revision AS stream_revision,
+            s.query AS source_query,t.owner_id AS task_owner
+            FROM market_source_pages p JOIN market_data_jobs j ON j.task_id=p.task_id AND j.owner_id=p.owner_id
+            JOIN market_streams s ON s.id=j.stream_id AND s.owner_id=j.owner_id
+            JOIN tasks t ON t.id=p.task_id AND t.owner_id=p.owner_id
+            WHERE p.id=ANY(%s) AND p.owner_id=%s AND p.source_revision=%s''',
+            (identifiers, owner, revision))).fetchall()
+        pages = {page['id']: page for page in retained}
     total_bytes = 0
     for page_id, facts in grouped.items():
-        page = await (await conn.execute('''SELECT p.*,s.id AS source_stream_id,s.source_revision AS stream_revision,
+        page = pages.get(page_id) if pages is not None else await (await conn.execute('''SELECT p.*,s.id AS source_stream_id,s.source_revision AS stream_revision,
             s.query AS source_query,t.owner_id AS task_owner
             FROM market_source_pages p JOIN market_data_jobs j ON j.task_id=p.task_id AND j.owner_id=p.owner_id
             JOIN market_streams s ON s.id=j.stream_id AND s.owner_id=j.owner_id

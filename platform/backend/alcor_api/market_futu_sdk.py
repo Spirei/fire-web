@@ -251,7 +251,8 @@ def collect(factory, ret_ok, payload, enums):
 
 
 def main():
-    streaming = sys.argv[1:] == ['--latest-stream']
+    history_stream = sys.argv[1:] == ['--history-stream']
+    streaming = sys.argv[1:] == ['--latest-stream'] or history_stream
     payload = None if streaming else json.load(sys.stdin)
     startup = time.perf_counter()
     with contextlib.redirect_stdout(sys.stderr):
@@ -268,7 +269,8 @@ def main():
         if streaming:
             # Import reuse only: every request gets its own quote context, its
             # actual response and the existing bounded scalar conversion.
-            sys.__stdout__.write('{"ready":true,"protocol":"futu-read-v1"}\n')
+            protocol = 'futu-history-read-v1' if history_stream else 'futu-read-v1'
+            sys.__stdout__.write(json.dumps({'ready':True,'protocol':protocol},separators=(',',':'))+'\n')
             sys.__stdout__.flush()
             for _ in range(128):
                 line = sys.stdin.buffer.readline(16386)
@@ -278,8 +280,9 @@ def main():
                     raise ValueError('sdk_request_too_large_or_incomplete')
                 try:
                     request = json.loads(line)
-                    if not isinstance(request,dict) or request.get('action') not in {'latest','futu.test','futu.quota'}:
-                        raise ValueError('sdk_latest_stream_only')
+                    allowed = {'history'} if history_stream else {'latest','futu.test','futu.quota'}
+                    if not isinstance(request,dict) or request.get('action') not in allowed:
+                        raise ValueError('sdk_stream_action_invalid')
                     request_started = time.perf_counter()
                     value = collect(OpenQuoteContext, RET_OK, request,
                                     {'AuType':AuType,'KLType':KLType,'Session':Session,'SubType':SubType})

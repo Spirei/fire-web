@@ -117,7 +117,8 @@ async def claim(db, worker, *, kind=None):
               AND d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp())
               AND (d.origin='price.alert' OR d.hot_until>clock_timestamp())) THEN 0 ELSE 1 END ELSE 2 END,
               s.next_due,t.id FOR UPDATE OF t SKIP LOCKED LIMIT 1)
-            UPDATE tasks t SET status='running',lease_owner=%s,lease_version=lease_version+1,lease_until=clock_timestamp()+interval '30 seconds',attempts=attempts+1,
+            UPDATE tasks t SET status='running',lease_owner=%s,lease_version=lease_version+1,
+            lease_until=clock_timestamp()+make_interval(secs=>CASE WHEN t.kind='market.history' THEN 90 ELSE 30 END),attempts=attempts+1,
             started_at=COALESCE(started_at,clock_timestamp()) FROM candidate c WHERE t.id=c.id RETURNING t.*""",
                 (kind, kind, worker),
             )
@@ -352,26 +353,27 @@ async def execute(authority, task, transport):
         if reason:return await stop(conn,db,task,reason)
         if decode_failed or query.kind=='latest' and not facts:return await stop(conn,db,task,'source_outcome_unknown')
         changed = False
-        for fact in facts:
-            at = source_time(fact["at"], "UTC")
-            result = await (
-                await conn.execute(
+        if facts:
+            # One page remains one permission-checked transaction. Psycopg's
+            # bounded pipeline removes one network wait per fact without
+            # changing deduplication, immutable source pages or commit durability.
+            async with conn.cursor() as writer:
+                await writer.executemany(
                     """INSERT INTO market_facts(owner_id,source_revision,series_fingerprint,stream_id,page_id,id,source_time,contents,fingerprint)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(owner_id,source_revision,series_fingerprint,fingerprint) DO NOTHING RETURNING id""",
-                    (
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(owner_id,source_revision,series_fingerprint,fingerprint) DO NOTHING""",
+                    [(
                         task["owner_id"],
                         stream["source_revision"],
                         series_fingerprint(query),
                         stream["id"],
                         page_id,
                         uuid4(),
-                        at,
+                        source_time(fact["at"], "UTC"),
                         Jsonb(fact),
                         digest(fact),
-                    ),
+                    ) for fact in facts],
                 )
-            ).fetchone()
-            changed = changed or result is not None
+                changed = writer.rowcount > 0
         if changed:
             await conn.execute(
                 "INSERT INTO market_cache_generations(owner_id) VALUES(%s) ON CONFLICT(owner_id) DO UPDATE SET generation=market_cache_generations.generation+1",

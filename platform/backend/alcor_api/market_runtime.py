@@ -11,14 +11,16 @@ from .market_transport import Transport
 from .market_worker import claim, execute, schedule
 
 
-def from_settings(db, *, reuse_latest=False):
+def from_settings(db, *, reuse_latest=False, reuse_history=False):
     def policies():
         return tuple(Policy(**raw) for raw in getattr(db.settings, "market_data_policies", []))
 
     def targets():
         return tuple(Target(**raw) for raw in getattr(db.settings, "dividend_source_targets", []))
 
-    return Authority(db, policies(), policy_provider=policies), Transport(db, target_provider=targets, reuse_latest=reuse_latest)
+    return Authority(db, policies(), policy_provider=policies), Transport(
+        db, target_provider=targets, reuse_latest=reuse_latest, reuse_history=reuse_history,
+    )
 
 
 def reader_from_settings(db):
@@ -40,14 +42,14 @@ async def cycle(authority, transport, worker_id, *, history_turn=False):
     }
 
 
-async def batch_cycle(authority, transport, worker_id, *, history_turn=False, maximum=20):
+async def batch_cycle(authority, transport, worker_id, *, history_turn=False, maximum=20, allow_history=True):
     """Lease a bounded set of independent reads; every result keeps its own proof."""
     if type(maximum) is not int or not 1 <= maximum <= 20:
         raise ValueError("market_worker_batch_invalid")
     await project_alert_demands(authority)
     await schedule(authority)
     tasks = []
-    if history_turn:
+    if allow_history and history_turn:
         historical = await claim(authority.db, worker_id, kind="market.history")
         if historical:
             tasks.append(historical)
@@ -56,7 +58,7 @@ async def batch_cycle(authority, transport, worker_id, *, history_turn=False, ma
         if latest is None:
             break
         tasks.append(latest)
-    if not tasks:
+    if allow_history and not tasks:
         historical = await claim(authority.db, worker_id, kind="market.history")
         if historical:
             tasks.append(historical)
@@ -70,17 +72,46 @@ async def batch_cycle(authority, transport, worker_id, *, history_turn=False, ma
     return bool(tasks)
 
 
+async def history_cycle(authority, transport, worker_id):
+    """At most one original historical page, with the same lease and proof checks."""
+    task = await claim(authority.db, worker_id, kind='market.history')
+    if task is None:
+        return False
+    await execute(authority, task, transport)
+    return True
+
+
+async def pause(stop, progressed):
+    if progressed:
+        await asyncio.sleep(0)
+    else:
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=1)
+        except TimeoutError:
+            pass
+
+
 async def loop(db, stop, current=lambda: True):
-    authority, transport = from_settings(db, reuse_latest=True)
+    authority, transport = from_settings(db, reuse_latest=True, reuse_history=True)
     worker_id = uuid4()
-    cycles=0
+
+    async def history_lane():
+        while not stop.is_set():
+            progressed = False
+            if current():
+                try:
+                    progressed = await history_cycle(authority, transport, worker_id)
+                except Exception:  # noqa: BLE001 -- Never expose private provider details.
+                    logging.getLogger('alcor.worker').warning('market_history_cycle_unavailable')
+            await pause(stop, progressed)
+
+    historical = asyncio.create_task(history_lane())
     try:
         while not stop.is_set():
             progressed = False
             if current():
                 try:
-                    progressed = await batch_cycle(authority, transport, worker_id,history_turn=cycles%4==3)
-                    cycles+=1
+                    progressed = await batch_cycle(authority, transport, worker_id, allow_history=False)
                     from .public_market_worker import cycle as public_cycle
                     await public_cycle(db, worker_id)
                 except Exception:  # noqa: BLE001 -- Keep source errors and credentials out of platform logs.
@@ -88,12 +119,8 @@ async def loop(db, stop, current=lambda: True):
             else:
                 await transport.close()
             await transport.retire_idle()
-            if progressed:
-                await asyncio.sleep(0)
-                continue
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=1)
-            except TimeoutError:
-                pass
+            await pause(stop, progressed)
     finally:
+        historical.cancel()
+        await asyncio.gather(historical, return_exceptions=True)
         await transport.close()

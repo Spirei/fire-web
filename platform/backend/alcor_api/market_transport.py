@@ -20,7 +20,7 @@ from .market_contract import collection_purpose, installed_bar_semantics, instal
 class Transport:
     fixture = False
 
-    def __init__(self, db, targets=(), *, target_provider=None, controlled_http=None, reuse_latest=False):
+    def __init__(self, db, targets=(), *, target_provider=None, controlled_http=None, reuse_latest=False, reuse_history=False):
         self.db, self.targets, self.target_provider = (
             db,
             {target.id: target for target in targets},
@@ -30,20 +30,24 @@ class Transport:
         self.http_limit = asyncio.Semaphore(6)
         if self.controlled_http and db.settings.environment != "test":
             raise ValueError("controlled_source_outside_test")
-        from .sdk_read_session import LatestSDKSession
+        from .sdk_read_session import HistorySDKSession, LatestSDKSession
         from .market_latest_batch import LatestBatch
         self.latest_session = LatestSDKSession()
+        self.history_session = HistorySDKSession()
         self.latest_batch = LatestBatch(self.latest_session)
         self.reuse_latest = reuse_latest
+        self.reuse_history = reuse_history
 
     async def close(self):
         await self.latest_batch.close()
         await self.latest_session.close()
+        await self.history_session.close()
         from .market_latest_batch import LatestBatch
         self.latest_batch = LatestBatch(self.latest_session)
 
     async def retire_idle(self):
         await self.latest_session.retire_idle()
+        await self.history_session.retire_idle()
 
     async def read(self, policy, query, cursor):
         if policy.fixture:
@@ -122,6 +126,12 @@ class Transport:
                 'action':'latest', 'host':pins[0], 'port':target.port,
                 'symbols':[symbol], 'query':asdict(query), 'cursor':cursor,
             })
+            return raw, 'sdk_json_representation_not_wire_bytes'
+        if history and query.kind == 'bars' and self.reuse_history:
+            raw = await self.history_session.read({
+                'action':'history', 'host':pins[0], 'port':target.port,
+                'symbols':[symbol], 'query':asdict(query), 'cursor':cursor,
+            }, startup_wait=True)
             return raw, 'sdk_json_representation_not_wire_bytes'
         process = await asyncio.create_subprocess_exec(
             sys.executable,

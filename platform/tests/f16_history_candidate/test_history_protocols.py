@@ -97,3 +97,70 @@ async def test_history_fact_without_original_evidence_is_rejected_by_old_and_can
         response = await client.get(path,headers=headers if path.startswith('/api/kline/') else {})
         assert response.status_code == 503,response.text
     assert transport.calls == 4
+
+
+async def test_legacy_default_history_uses_one_current_authorized_source_and_preserves_explicit_choice(market):  # noqa: F811
+    client,app,authority,_,_=market
+    base=authority.policies[0]
+    authority.policies=(replace(base,id='futu',source='futu',source_version='futu-sdk-records-v1'),
+                        replace(base,id='backup',source='eastmoney'))
+    revisions={}
+    q=Query('bars','US','AAPL','day','qfq',start='2026-10-20',through='2026-10-21')
+    class Sources:
+        fixture=True
+        calls=0
+        futu_day='20'
+        async def read(self,policy,query,cursor):
+            self.calls+=1
+            if policy.source=='futu':
+                return canonical({'records':[{'code':'US.AAPL','time_key':f'2026-10-{self.futu_day} 00:00:00',
+                    'open':10,'high':12,'low':9,'close':10}],'nextCursor':None}).encode(),'controlled_sdk_body'
+            return canonical({'query':asdict(query),'licenseRevision':policy.license_revision,
+                'facts':[{'at':'2026-10-21T14:00:00+00:00','o':'10','h':'12','l':'9','c':'11','currency':'USD','session':query.session}],
+                'nextCursor':None}).encode(),'controlled_source_body'
+    source=Sources()
+    for policy in authority.policies:
+        response=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':policy.id})
+        assert response.status_code==200,response.text
+        revisions[policy.id]=response.json()['revision']
+        await demand(client,revisions[policy.id],q)
+    assert await schedule(authority)==2
+    for _ in range(2):
+        task=await claim(authority.db,uuid4(),kind='market.history')
+        assert await execute(authority,task,source)=='complete'
+    async with app.state.db.connection() as conn,conn.transaction():
+        user=await(await conn.execute("SELECT * FROM users WHERE username='MarketReader'")).fetchone()
+        pair=await issue_grant(conn,user,'portfolio.read','Synthetic source fallback')
+    headers={'authorization':'Bearer '+pair['access_token']}
+    for version in (1,2):
+        path=f'/api/v{version}/stock-detail?market=US&code=AAPL&view=history'
+        response=await client.get(path,headers=headers)
+        assert response.status_code==200,response.text
+        assert response.headers['x-alcor-market-source']==revisions['backup']
+        assert [row['c'] for row in response.json()['data']['kline']]==[11]
+        explicit=await client.get(path,headers={**headers,'x-alcor-market-source':revisions['futu']})
+        assert explicit.status_code==200,explicit.text
+        assert [row['c'] for row in explicit.json()['data']['kline']]==[10]
+        missing=await client.get(path,headers={**headers,'x-alcor-market-source':str(uuid4())})
+        assert missing.status_code==404,missing.text
+    # Canonical explicit-selection clients retain their ambiguity contract.
+    canonical_response=await client.get('/api/market/history?market=US&code=AAPL&frame=day&adjust=qfq')
+    assert canonical_response.status_code==409,canonical_response.text
+    assert source.calls==2
+    # Once both sources have the same observed market date, configured Futu
+    # precedence wins even though Yahoo-style timestamps can be later that day.
+    source.futu_day='21'
+    await demand(client,revisions['futu'],q,expected=1)
+    assert await schedule(authority)==1
+    assert await execute(authority,await claim(authority.db,uuid4(),kind='market.history'),source)=='complete'
+    response=await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history',headers=headers)
+    assert response.status_code==200,response.text
+    assert response.headers['x-alcor-market-source']==revisions['futu']
+    # Removing the live licence never authorizes reuse of the retained originals.
+    authority.policies=tuple(p for p in authority.policies if p.id!='futu')
+    response=await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history',headers=headers)
+    assert response.status_code==200 and response.headers['x-alcor-market-source']==revisions['backup']
+    refused=await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history',
+        headers={**headers,'x-alcor-market-source':revisions['futu']})
+    assert refused.status_code==403 and refused.headers['x-alcor-retire-context']=='true'
+    assert source.calls==3
