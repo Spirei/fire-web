@@ -8,7 +8,7 @@ from .dividend_sources import Target
 from .market_alert_reader import SharedQuotes, project_alert_demands
 from .market_authority import Authority, Policy
 from .market_transport import Transport
-from .market_worker import claim, execute, schedule
+from .market_worker import claim, claim_batch, execute, schedule
 
 
 def from_settings(db, *, reuse_latest=False, reuse_history=False):
@@ -53,11 +53,8 @@ async def batch_cycle(authority, transport, worker_id, *, history_turn=False, ma
         historical = await claim(authority.db, worker_id, kind="market.history")
         if historical:
             tasks.append(historical)
-    while len(tasks) < maximum:
-        latest = await claim(authority.db, worker_id, kind="market.latest")
-        if latest is None:
-            break
-        tasks.append(latest)
+    if len(tasks) < maximum:
+        tasks.extend(await claim_batch(authority.db, worker_id, kind='market.latest', maximum=maximum-len(tasks)))
     if allow_history and not tasks:
         historical = await claim(authority.db, worker_id, kind="market.history")
         if historical:

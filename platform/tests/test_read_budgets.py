@@ -52,6 +52,48 @@ async def test_failed_cache_backs_off_and_connection_replacement_rechecks():
     assert await limits.allow('read', 2, 60, fallback)
 
 
+async def test_ping_only_acl_falls_back_and_instance_counter_acl_avoids_pg(private_redis):
+    from redis.exceptions import NoPermissionError
+    from alcor_api.request_timing import begin, finish
+
+    control = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
+    client = Redis(unix_socket_path=str(private_redis), username='cache-user', password=PASSWORD)
+    instance = uuid4()
+    handle, calls = SimpleNamespace(client=client), []
+    async def fallback():
+        calls.append(True)
+        return True
+    try:
+        assert await client.ping()
+        timing, token = begin()
+        try:
+            assert await ReadBudgets(handle, instance).allow('synthetic-read', 2, 60, fallback)
+            assert b'read_admission_pg;' in timing.header()
+        finally:
+            finish(timing, token)
+        assert calls == [True]
+        await control.execute_command('ACL', 'SETUSER', 'cache-user', 'resetkeys',
+            f'~alcor:{instance}:read-budget:*', '+eval', '+incr', '+ttl', '+expire')
+        timing, token = begin()
+        try:
+            assert await ReadBudgets(handle, instance).allow('synthetic-read', 2, 60, fallback)
+            header = timing.header()
+            assert b'read_admission_redis;' in header and b'read_admission_pg;' not in header
+            assert b'synthetic-read' not in header and str(instance).encode() not in header
+        finally:
+            finish(timing, token)
+        assert calls == [True]
+        try:
+            await client.incr('unrelated-application:key')
+        except NoPermissionError:
+            pass
+        else:
+            raise AssertionError('Counter credentials escaped their instance namespace')
+    finally:
+        await client.aclose()
+        await control.aclose()
+
+
 async def test_chart_pool_portfolio_and_asset_reads_share_redis_but_login_keeps_pg(client, admin, app, private_redis):
     cache = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
     database = app.state.db

@@ -106,6 +106,14 @@ async def schedule(authority, limit=100):
 
 
 async def claim(db, worker, *, kind=None):
+    tasks = await claim_batch(db, worker, kind=kind, maximum=1)
+    return tasks[0] if tasks else None
+
+
+async def claim_batch(db, worker, *, kind=None, maximum=20):
+    """Commit one bounded lease set before any provider IO; retain each task's proof."""
+    if type(maximum) is not int or not 1 <= maximum <= 20:
+        raise ValueError('market_worker_batch_invalid')
     async with db.connection() as conn, conn.transaction():
         return await (
             await conn.execute(
@@ -116,13 +124,13 @@ async def claim(db, worker, *, kind=None):
               SELECT 1 FROM market_demands d WHERE d.owner_id=s.owner_id AND d.stream_id=s.id
               AND d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp())
               AND (d.origin='price.alert' OR d.hot_until>clock_timestamp())) THEN 0 ELSE 1 END ELSE 2 END,
-              s.next_due,t.id FOR UPDATE OF t SKIP LOCKED LIMIT 1)
+              s.next_due,t.id FOR UPDATE OF t SKIP LOCKED LIMIT %s)
             UPDATE tasks t SET status='running',lease_owner=%s,lease_version=lease_version+1,
             lease_until=clock_timestamp()+make_interval(secs=>CASE WHEN t.kind='market.history' THEN 90 ELSE 30 END),attempts=attempts+1,
             started_at=COALESCE(started_at,clock_timestamp()) FROM candidate c WHERE t.id=c.id RETURNING t.*""",
-                (kind, kind, worker),
+                (kind, kind, maximum, worker),
             )
-        ).fetchone()
+        ).fetchall()
 
 
 async def current(authority, conn, task):

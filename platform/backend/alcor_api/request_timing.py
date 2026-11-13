@@ -6,7 +6,8 @@ from time import perf_counter
 from psycopg import AsyncConnection
 
 _current = ContextVar('request_timing', default=None)
-PHASES = {'pool_wait', 'db_guard', 'sql_execute', 'catalogue', 'json_encode'}
+PHASES = {'pool_wait', 'db_guard', 'sql_execute', 'catalogue', 'json_encode',
+          'read_admission_redis', 'read_admission_pg'}
 
 
 class RequestTiming:

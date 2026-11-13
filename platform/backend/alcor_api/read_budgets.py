@@ -6,6 +6,8 @@ from time import monotonic
 
 from redis.exceptions import RedisError
 
+from .request_timing import measure
+
 SCRIPT = """
 local n = redis.call('INCR', KEYS[1])
 if n == 1 or redis.call('TTL', KEYS[1]) < 0 then
@@ -28,12 +30,14 @@ class ReadBudgets:
             try:
                 # No URL, security token, account name or financial data is cached.
                 bucket = hashlib.sha256(str(key).encode()).hexdigest()
-                async with asyncio.timeout(1):
-                    value = await client.eval(SCRIPT, 1, f'alcor:{self.instance_id}:read-budget:{bucket}', window_seconds)
+                with measure('read_admission_redis'):
+                    async with asyncio.timeout(1):
+                        value = await client.eval(SCRIPT, 1, f'alcor:{self.instance_id}:read-budget:{bucket}', window_seconds)
                 if type(value) is not int or value < 1:
                     raise ValueError('Invalid read counter')
                 self.failed_client, self.retry_at = None, 0
                 return value <= maximum
             except (RedisError, OSError, TimeoutError, ValueError):
                 self.failed_client, self.retry_at = client, monotonic()+30
-        return await fallback()
+        with measure('read_admission_pg'):
+            return await fallback()

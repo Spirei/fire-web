@@ -138,7 +138,13 @@ async def test_real_worker_batch_is_bounded_and_awaits_all_failed_and_successful
 
     async def claim(_db, _worker, *, kind):
         calls.append(kind)
-        return tasks.pop(0) if kind == 'market.latest' and tasks else None
+        return None
+
+    async def claim_batch(_db, _worker, *, kind, maximum):
+        calls.append(kind)
+        selected=tasks[:maximum]
+        del tasks[:maximum]
+        return selected
 
     async def execute(_authority, task, _transport):
         nonlocal running, maximum, completed
@@ -151,7 +157,8 @@ async def test_real_worker_batch_is_bounded_and_awaits_all_failed_and_successful
             raise ValueError('controlled_provider_failure')
         return 'observed'
 
-    for name, value in (('project_alert_demands', noop), ('schedule', noop), ('claim', claim), ('execute', execute)):
+    for name, value in (('project_alert_demands', noop), ('schedule', noop), ('claim', claim),
+                        ('claim_batch', claim_batch), ('execute', execute)):
         monkeypatch.setattr(runtime, name, value)
     authority = SimpleNamespace(db=None)
     while await runtime.batch_cycle(authority, None, uuid4(), history_turn=True):
