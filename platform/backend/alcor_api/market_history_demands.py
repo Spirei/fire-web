@@ -10,13 +10,17 @@ from .market_contract import Query, canonical, digest
 from .market_worker import Bound
 
 
-async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust='none'):
+async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust='none',observation=False):
     if type(days) is not int or not 1<=days<=3300:raise HTTPException(400,'历史期间无效')
     if adjust not in ('none','qfq','hfq'):raise HTTPException(400,'历史复权口径无效')
     if not isinstance(items,list) or not 1<=len(items)<=100:raise HTTPException(400,'历史证券数量无效')
     rid=UUID(str(request_id));operation={'action':'history.prepare','items':items,'days':days,'minute':minute,'adjust':adjust}
     async with authority.db.connection() as conn,conn.transaction():
-        await authority.owner_lock(conn,who)
+        # Automatic chart observation renews source demand. Hold the current
+        # write scope with shared identity proof, like quote observation; the
+        # source/intent lock still serializes mutations. Explicit preparation
+        # keeps its original exclusive native identity lock.
+        await authority.owner_lock(conn,who,shared_identity=observation)
         prior=await authority.receipt(conn,who.id,rid,operation)
         if prior:return prior
         bound=Authority(Bound(conn,authority.db.settings),policy_provider=authority.policy_provider,policies=authority.policies)

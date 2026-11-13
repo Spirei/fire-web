@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from redis.asyncio import Redis
 from redis.exceptions import ConnectionError
 
@@ -181,4 +182,64 @@ async def test_native_history_uses_shared_read_budget_and_backoff_without_count_
         assert await attempts()==before+2
     finally:
         app.state.cache.client=None
+        await cache.aclose()
+
+
+@pytest.mark.parametrize('version', [1, 2])
+async def test_native_intraday_reads_keep_shared_limits_without_pg_counter_writes(client, admin, app, private_redis, version):
+    from alcor_api.native_app_auth import authenticate, issue_grant
+
+    database = app.state.db
+    async with database.connection() as conn, conn.transaction():
+        user = await (await conn.execute('SELECT * FROM users WHERE id=%s', (admin,))).fetchone()
+        pair = await issue_grant(conn, user, 'portfolio.read', 'Synthetic intraday budget')
+        grant = await authenticate(conn, pair['access_token'])
+    headers = {'authorization': 'Bearer ' + pair['access_token']}
+    cache = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
+
+    async def attempts():
+        async with database.connection() as conn:
+            return (await (await conn.execute('SELECT coalesce(sum(attempts),0) AS n FROM auth_rate_limits')).fetchone())['n']
+
+    app.state.cache.client = cache
+    try:
+        before = await attempts()
+        for path in ('chart-series?market=US&code=AAPL&days=1', 'kline-sessions?market=US&code=AAPL'):
+            response = await client.get(f'/api/v{version}/' + path, headers=headers)
+            assert response.status_code == 503 and response.json()['code'] == 50002, response.text
+            assert response.headers['x-alcor-api-version'] == str(version)
+        web = await client.get('/api/kline/session-day?market=US&code=AAPL')
+        assert web.status_code == 503, web.text
+        charts = f'/api/v{version}/charts'
+        body = {'items': [{'id': 'synthetic-row', 'market': 'US', 'code': 'AAPL'}]}
+        response = await client.post(charts, json=body, headers=headers)
+        assert response.status_code == 200 and response.json()['data']['charts'] == {}, response.text
+        assert response.headers['x-alcor-chart-state'] == 'partial'
+        assert await attempts() == before
+        assert len(await cache.keys('alcor:*:read-budget:*')) == 5
+
+        # The two GET aliases use one owner counter; POST keeps its own IP,
+        # global and owner limits. A cache hit never bypasses admission.
+        for _ in range(87):
+            assert await app.state.read_rate_limit(database, 'chart-series:' + admin, 90, window_seconds=60)
+        denied = await client.get(f'/api/v{version}/chart-series?market=US&code=AAPL&days=1', headers=headers)
+        assert denied.status_code == 429 and denied.json()['code'] == 42901
+        for _ in range(119):
+            assert await app.state.read_rate_limit(database, 'charts:' + admin, 120, window_seconds=60)
+        denied = await client.post(charts, json=body, headers=headers)
+        assert denied.status_code == 429 and denied.json()['code'] == 42901
+        assert await attempts() == before
+
+        # Redis absence returns to the same durable budget rather than allowing
+        # unlimited reads. No history or current price is fabricated.
+        app.state.cache.client = None
+        fallback = await client.get(f'/api/v{version}/chart-series?market=US&code=AAPL&days=1', headers=headers)
+        assert fallback.status_code == 503 and await attempts() == before + 2
+        async with database.connection() as conn:
+            await conn.execute('UPDATE identity_app_grants SET revoked_at=clock_timestamp() WHERE id=%s', (grant['id'],))
+        revoked = await client.get(f'/api/v{version}/kline-sessions?market=US&code=AAPL', headers=headers)
+        assert revoked.status_code == 401 and revoked.headers['x-alcor-retire-context'] == 'true'
+        assert await attempts() == before + 2
+    finally:
+        app.state.cache.client = None
         await cache.aclose()

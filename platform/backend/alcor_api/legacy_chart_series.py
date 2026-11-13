@@ -158,9 +158,9 @@ def mount_legacy_chart_series(app, settings, authority):
             if not re.fullmatch(r"[A-Z0-9._-]{1,40}", symbol):
                 raise HTTPException(400, "股票代码不合法")
             who = who or await history_member(request, authority.db, version)
-            if not await app.state.rate_limit(
+            if not await app.state.read_rate_limit(
                 authority.db, "chart-series:" + who.id, 90, window_seconds=60
-            ) or not await app.state.rate_limit(authority.db, "chart-series-global", 500, window_seconds=60):
+            ) or not await app.state.read_rate_limit(authority.db, "chart-series-global", 500, window_seconds=60):
                 raise HTTPException(429, "请求过于频繁，请稍后重试")
             points, source, revision = await observed(
                 request, who, market, symbol, days, sessions=mode == "sessions",
@@ -264,9 +264,9 @@ def mount_legacy_chart_series(app, settings, authority):
         try:
             assert_native_origin(request, settings)
             client = request.client.host if request.client else "unknown"
-            if not await app.state.rate_limit(
+            if not await app.state.read_rate_limit(
                 authority.db, "charts-ip:" + client, 120, window_seconds=60
-            ) or not await app.state.rate_limit(authority.db, "charts-global", 600, window_seconds=60):
+            ) or not await app.state.read_rate_limit(authority.db, "charts-global", 600, window_seconds=60):
                 raise HTTPException(429, "请求过于频繁，请稍后再试")
             who = (
                 await history_member(request, authority.db, version)
@@ -321,7 +321,7 @@ def mount_legacy_chart_series(app, settings, authority):
                         raise HTTPException(400, "重复走势编号对应不同证券")
                     identities[item["id"]] = identity
                 who = who or await history_member(request, authority.db, version)
-                if not await app.state.rate_limit(authority.db, "charts:" + who.id, 120, window_seconds=60):
+                if not await app.state.read_rate_limit(authority.db, "charts:" + who.id, 120, window_seconds=60):
                     raise HTTPException(429, "请求过于频繁，请稍后再试")
                 # POST is explicit observation intent; the same scope checks as
                 # quote registration apply, and collection stays in the Worker.
@@ -333,7 +333,7 @@ def mount_legacy_chart_series(app, settings, authority):
                     writer=who
                     if getattr(who,'native_client',False):writer,_=await native_identity(request,authority.db,'portfolio.write')
                     normalized=subscription_items({'items':[{'market':i['market'],'code':i['code']} for i in items if i['market'] in ('US','HK','CN')]})
-                    await prepare(authority,writer,UUID(request.headers['x-alcor-request-id']) if request.headers.get('x-alcor-request-id') else uuid4(),normalized,5,minute=True)
+                    await prepare(authority,writer,UUID(request.headers['x-alcor-request-id']) if request.headers.get('x-alcor-request-id') else uuid4(),normalized,5,minute=True,observation=True)
                 except (HTTPException,ValueError):
                     # Read-only App grants may consume already observed facts.
                     # A failed registration never fabricates or replays a fact.
