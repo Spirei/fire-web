@@ -3,7 +3,7 @@ import hashlib
 import io
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from PIL import Image
@@ -40,13 +40,20 @@ async def test_recognition_candidate_replay_current_permission_and_private_origi
         calls.append(prepared)
         return raw,200,True
     monkeypatch.setattr(app.state.card_recognition,'fetch',fetch)
-    rid = str(uuid4())
+    # Receipt identifiers may contain the same digits as synthetic private fields.
+    rid = '00000000-0000-4000-8000-000000000999'
     response = await upload(client,rid)
     assert response.status_code == 200, response.text
     data = response.json()
     assert data['state'] == 'recognized' and data['financialWrites'] is False
     assert set(data['card']) == {'name','bank','region','type','brand','level'}
-    assert '4111111111111111' not in response.text and '999' not in response.text
+    assert data['requestId'] == rid
+    assert str(UUID(data['sourcePageId'])) == data['sourcePageId']
+    assert data['inputSha256'] == hashlib.sha256(image()).hexdigest()
+    # Validate opaque receipts separately; scan all remaining output for leaks.
+    projected = json.dumps({key:value for key,value in data.items()
+        if key not in {'requestId','sourcePageId','inputSha256'}})
+    assert all(private not in projected for private in ('4111111111111111','123','999'))
     assert (await upload(client,rid)).json() == data and len(calls) == 1
     page = await client.get(ROOT+'/originals/'+data['sourcePageId'])
     assert page.content == raw
