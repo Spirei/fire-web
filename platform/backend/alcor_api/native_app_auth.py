@@ -51,9 +51,25 @@ async def issue_grant(conn,user,scope,device_name,passkey_id=None,preserve_grant
 
 
 async def active_grant(conn,grant_id,*,lock=False,shared=False):
+    predicate,params='g.id=%s',(grant_id,)
+    if lock or shared:
+        # Sync and broker readers already hold the owner before their grant.
+        # A joined FOR UPDATE can instead lock g first and then wait for u,
+        # deadlocking those readers. Establish the same explicit row order for
+        # every native proof, including token rotation and consent operations.
+        mode='SHARE' if shared else 'UPDATE'
+        owner=await(await conn.execute(
+            'SELECT id FROM users WHERE id=(SELECT user_id FROM identity_app_grants WHERE id=%s) FOR '+mode,
+            (grant_id,),
+        )).fetchone()
+        if not owner:return None
+        # The first lookup is only a lock target, never authorization. Reject
+        # a changed relationship instead of locking an unverified second owner.
+        predicate+=' AND g.user_id=%s'
+        params+=(owner['id'],)
     row=await (await conn.execute('''SELECT g.*,u.username,u.email,u.password_hash,u.role,u.active,u.session_version AS current_version,
         g.expires_at>clock_timestamp() AND g.created_at+interval '90 days'>clock_timestamp() AS valid
-        FROM identity_app_grants g JOIN users u ON u.id=g.user_id WHERE g.id=%s'''+(' FOR SHARE OF g,u' if shared else ' FOR UPDATE OF g,u' if lock else ''),(grant_id,))).fetchone()
+        FROM identity_app_grants g JOIN users u ON u.id=g.user_id WHERE '''+predicate+(' FOR SHARE OF g,u' if shared else ' FOR UPDATE OF g,u' if lock else ''),params)).fetchone()
     if not row or not row['valid'] or row['revoked_at'] or not row['active'] or row['session_version']!=row['current_version']:return None
     user={**row,'id':row['user_id']}
     if row['security_stamp']!=await security_stamp(conn,user):return None

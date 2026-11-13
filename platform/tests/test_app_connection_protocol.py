@@ -155,6 +155,55 @@ async def test_refresh_waits_for_read_proof_and_keeps_the_same_grant(client,admi
             task.cancel(); await asyncio.gather(task,return_exceptions=True)
 
 
+async def test_account_signal_and_native_grant_writer_cannot_invert_owner_locks(client,admin,app):
+    """Reproduce the production user-SHARE/grant-UPDATE lock cycle on real PG."""
+    from alcor_api.account_signals import guard
+    from account_sync_candidate.test_account_signals import hashes
+
+    pair,_=await connect(client)
+    db=app.state.db
+    async with db.connection() as conn:
+        who=identity_from_grant(await authenticate(conn,pair['access_token']),pair['access_token'])
+    before=await hashes(db)
+    writer_started=asyncio.Event()
+    writer_pid=None
+
+    async def write_proof():
+        nonlocal writer_pid
+        async with db.connection() as conn,conn.transaction():
+            writer_pid=(await(await conn.execute('SELECT pg_backend_pid() AS pid')).fetchone())['pid']
+            writer_started.set()
+            return await authenticate(conn,pair['access_token'],lock=True)
+
+    task=None
+    try:
+        async with db.connection() as reader,reader.transaction():
+            # AccountSignals.guard holds the owner before requesting the grant.
+            # Pause at that real boundary while a second authorization starts.
+            await reader.execute('SELECT id FROM users WHERE id=%s FOR SHARE',(admin,))
+            task=asyncio.create_task(write_proof())
+            await asyncio.wait_for(writer_started.wait(),3)
+            async with db.connection() as observer:
+                async with asyncio.timeout(3):
+                    while True:
+                        state=await(await observer.execute(
+                            'SELECT wait_event_type FROM pg_stat_activity WHERE pid=%s',(writer_pid,),
+                        )).fetchone()
+                        if state and state['wait_event_type']=='Lock':break
+                        await asyncio.sleep(.01)
+            # A grant-first writer would own the grant while waiting for this
+            # owner's SHARE lock, deadlocking this actual sync guard.
+            await asyncio.wait_for(guard(reader,who),3)
+            if task.done():assert task.exception() is None
+            assert not task.done()
+        grant=await asyncio.wait_for(task,3)
+        assert grant['id']==pair['grant_id'] and grant['user_id']==admin
+    finally:
+        if task and not task.done():task.cancel()
+        if task:await asyncio.gather(task,return_exceptions=True)
+    assert await hashes(db)==before
+
+
 @pytest.mark.parametrize(('path','code'),[('/api/v2/records',40102),('/api/v2/account-assets',40101),('/api/v2/overview',40101)])
 async def test_revocation_between_initial_auth_and_snapshot_cannot_return_old_records(client,admin,app,monkeypatch,path,code):
     import alcor_api.native_app_auth as native
