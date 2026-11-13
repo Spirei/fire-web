@@ -517,6 +517,18 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
         if data is not None and data.get('client_id') != CLIENT:
             raise LegacyError(400, 40002, '请求参数无效')
         token = request.headers.get('authorization', '').removeprefix('Bearer ')
+        if data is None:
+            # An existing consent is a read. Hold the same current owner/grant
+            # proof as asset readers instead of waiting for an exclusive lock.
+            async with db.connection() as conn, conn.transaction():
+                grant = await authenticate(conn, token, shared=True)
+                known = await (await conn.execute('SELECT 1 FROM identity_app_consents WHERE user_id=%s AND client_id=%s', (grant['user_id'], CLIENT))).fetchone()
+                if known:
+                    user = {**grant, 'id': grant['user_id'], 'session_version': grant['current_version']}
+                    return {'apiVersion': 2, 'version': 1, 'client_id': CLIENT, 'user_id': user['id'], 'grant_id': grant['id'], **await consent_descriptor(conn, user)}
+            # Older accounts may need the original durable consent bootstrap.
+            # Release shared locks first, then reauthenticate exclusively; never
+            # upgrade concurrent readers or create consent without its old lock.
         async with db.connection() as conn, conn.transaction():
             grant = await authenticate(conn, token, lock=True)
             user = {**grant, 'id': grant['user_id'], 'session_version': grant['current_version']}

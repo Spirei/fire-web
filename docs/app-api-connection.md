@@ -135,4 +135,6 @@ Yahoo 的行情与历史通过 YAML 的 `fire.environment` 直接配置 `STOCKLO
 
 该读取返回 `sourceAuthority=sealed_legacy_registered_book_with_platform_postings`、`sourceOrdersReplayed=false`、`actualBrokerBalanceClaimed=false`，仍保留历史覆盖未知。`cash.sourceRevision` 将封存来源、原生流水、卡现金和个人账本版本纳入资产快照；原币 `sourceComplete` 与换算 `complete` 分开，缺汇率不能撤下已核实原币。此说明字段不是旧 App 门控条件，也不替代已有能力声明；App 原模型继续沿已有字段解码。`account-assets/cash`、交易快照、现金核对、预览与写命令不消费该展示证明，其当前严格权限、期初、CAS 与金额依据不变。
 
+`GET /api/v2/auth/consent` 与 `/api/client/consent` 对已保存授权采用当前账户、连接的共享锁，并在响应事务内核对安全状态；不缓存授权。若旧账户确实缺少持久授权记录，释放读事务后重新认证、获取原排他锁并初始化；并发首次读取不升级共享锁。POST 授权保存、令牌更新与撤销仍按原事务互斥。
+
 最新报价一次读取有界证券来源，再按本人／行情流／来源版本的源时间索引读取最后观察；每请求最多一百只、最多一万条来源流，超限拒绝而不截断为完整。每个观察仍逐项核对当前来源许可、协议、证券、时段、原件指标和缓存状态，不复用授权缓存，不跨证券混价。缺失或撤销按原合同处理；Web、v1、v2 共用该服务，不更改 App 地址或版本。
