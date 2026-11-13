@@ -18,6 +18,31 @@ async def wait_started(event):
     assert time.monotonic() - began < .25, 'Original decoding blocked the HTTP event loop'
 
 
+async def test_web_and_app_reads_survive_busy_automatic_collection_lock(market):  # noqa: F811
+    client, app, _, _, transport, _ = await seeded(market)
+    from alcor_api.native_app_auth import issue_grant
+
+    async with app.state.db.connection() as conn, conn.transaction():
+        user = await (await conn.execute("SELECT * FROM users WHERE username='MarketReader'")).fetchone()
+        grant = await issue_grant(conn, user, 'portfolio.read portfolio.write', 'Synthetic quote contention')
+    headers = {'authorization': 'Bearer ' + grant['access_token']}
+    body = {'items': [{'id': 'same-security', 'market': 'US', 'code': 'AAPL'}]}
+    async with app.state.db.connection() as conn, conn.transaction():
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('market-owner:' + user['id'],))
+        before = await (await conn.execute('SELECT count(*) AS n FROM market_data_operations')).fetchone()
+        async with asyncio.timeout(1.5):
+            for prefix, auth in [('/api', {}), ('/api/v2', headers)]:
+                charts = await client.post(prefix + '/charts', json=body, headers=auth)
+                assert charts.status_code == 200, charts.text
+                payload = charts.json()['data'] if auth else charts.json()
+                assert [point['price'] for point in payload['charts']['same-security']['points']] == [10, 11]
+                quotes = await client.post(prefix + '/quotes', json=body, headers=auth)
+                assert quotes.status_code == 200, quotes.text
+                assert quotes.headers['x-alcor-quote-tracked'] == 'false'
+        assert await (await conn.execute('SELECT count(*) AS n FROM market_data_operations')).fetchone() == before
+    assert transport.calls == 4
+
+
 @pytest.mark.parametrize('entry', ['native', 'canonical'])
 async def test_native_history_proof_releases_connection_and_does_not_block_ready(market, monkeypatch, entry):  # noqa: F811 -- imported pytest fixtures
     client, app, _authority, _revision, source, headers = await seeded(market)

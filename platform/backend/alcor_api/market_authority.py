@@ -139,14 +139,22 @@ class Authority:
         ).fetchone():
             raise HTTPException(401, "读取授权已变化")
 
-    async def owner_lock(self, conn, who, *, shared_identity=False):
+    async def owner_lock(self, conn, who, *, shared_identity=False, opportunistic=False):
         # Observation only renews quote intent. Keep its current write-scope
         # proof, but do not take UPDATE on the native account/grant and block
         # independent account reads. Source/intent mutations stay serialized.
         identity_lock = lock_read_identity if shared_identity else lock_mutation_identity
         await identity_lock(conn, who, require_admin=False)
+        key = "market-owner:" + who.id
+        if opportunistic:
+            row = await (await conn.execute(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended(%s,0)) AS acquired", (key,),
+            )).fetchone()
+            if not row["acquired"]:
+                raise HTTPException(503, "行情采集登记繁忙，请稍后重试")
+            return
         await conn.execute(
-            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("market-owner:" + who.id,)
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (key,)
         )
 
     async def config(self, conn, owner, revision):

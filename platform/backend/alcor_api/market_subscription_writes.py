@@ -97,7 +97,10 @@ class Subscriptions:
                 if not user or user['role']!=who.role:raise HTTPException(403,'账号权限已变化')
                 previous=await self.authority.receipt(conn,who.id,request_id,operation)
                 if previous:return previous,True
-            await self.authority.owner_lock(conn,who,shared_identity=observe and not remove)
+            await self.authority.owner_lock(
+                conn, who, shared_identity=observe and not remove,
+                opportunistic=observe and legacy_generated and not remove,
+            )
             user=await (await conn.execute("SELECT role FROM users WHERE id=%s",(who.id,))).fetchone()
             if not user or user["role"]!=who.role:raise HTTPException(403,"账号权限已变化")
             previous=await self.authority.receipt(conn,who.id,request_id,operation)

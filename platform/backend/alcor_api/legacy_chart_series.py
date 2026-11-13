@@ -334,7 +334,11 @@ def mount_legacy_chart_series(app, settings, authority):
                     writer=who
                     if getattr(who,'native_client',False):writer,_=await native_identity(request,authority.db,'portfolio.write')
                     normalized=subscription_items({'items':[{'market':i['market'],'code':i['code']} for i in items if i['market'] in ('US','HK','CN')]})
-                    await prepare(authority,writer,UUID(request.headers['x-alcor-request-id']) if request.headers.get('x-alcor-request-id') else uuid4(),normalized,5,minute=True,observation=True)
+                    identifier = request.headers.get('x-alcor-request-id')
+                    await prepare(
+                        authority, writer, UUID(identifier) if identifier else uuid4(), normalized, 5,
+                        minute=True, observation=True, opportunistic=not identifier,
+                    )
                 except (HTTPException,ValueError):
                     # Read-only App grants may consume already observed facts.
                     # A failed registration never fabricates or replays a fact.

@@ -31,7 +31,12 @@ async def test_repeated_generated_posts_reuse_original_receipt_without_more_writ
         while_worker_is_committing = await asyncio.wait_for(client.post('/api/quotes', json=body()), timeout=2)
         assert while_worker_is_committing.status_code == 200
         assert while_worker_is_committing.headers['x-alcor-request-id'] == first.headers['x-alcor-request-id']
-    monkeypatch.setattr('alcor_api.market_observation_receipts.observation_bucket', lambda _at: 101)
+        monkeypatch.setattr('alcor_api.market_observation_receipts.observation_bucket', lambda _at: 101)
+        new_bucket = await asyncio.wait_for(client.post('/api/quotes', json=body()), timeout=1)
+        assert new_bucket.status_code == 200, new_bucket.text
+        assert new_bucket.json()['quotes'] == first.json()['quotes']
+        assert new_bucket.headers['x-alcor-quote-tracked'] == 'false'
+        assert await hashes(app) == before
     renewed = await client.post('/api/quotes', json=body())
     assert renewed.headers['x-alcor-request-id'] != first.headers['x-alcor-request-id']
     assert await hashes(app) != before
@@ -53,6 +58,23 @@ async def test_explicit_uuids_and_different_native_connections_are_independent(m
         before = await hashes(app)
         replay = await client.post('/api/v2/quotes', json=body(), headers={**headers, 'x-alcor-request-id': identifier})
         assert replay.json() == response.json() and await hashes(app) == before
+
+
+async def test_busy_collection_does_not_hide_observed_app_quote(quoted, monkeypatch):
+    import asyncio
+
+    client, app, _, transport, revision, _, _ = quoted
+    monkeypatch.setattr('alcor_api.legacy_quote_api.requested_session', lambda: 'REGULAR')
+    headers = {**await token(app, 'portfolio.read portfolio.write'), 'x-alcor-market-source': revision}
+    async with app.state.db.connection() as conn, conn.transaction():
+        owner = (await (await conn.execute("SELECT id FROM users WHERE username='MarketReader'")).fetchone())['id']
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('market-owner:' + owner,))
+        reply = await asyncio.wait_for(client.post('/api/v2/quotes', json=body(), headers=headers), timeout=1)
+        assert reply.status_code == 200, reply.text
+        assert reply.headers['x-alcor-quote-tracked'] == 'false'
+        quote = reply.json()['data']['quotes']['known']
+        assert quote['price'] == 120 and quote['source'] == 'controlled_market'
+    assert transport.calls == 1
 
 
 async def test_source_security_and_cancellation_changes_do_not_reuse_old_generated_id(market, monkeypatch):
