@@ -137,6 +137,10 @@ class LegacyFunds:
 
     async def state_on_connection(self, conn, who):
         overview = await self.overview.on_connection(conn, who)
+        from .legacy_registered_cash import read_registered_cash
+        registered = await read_registered_cash(conn, who, self.db.settings, overview)
+        if registered is not None:
+            return registered.dto
         scopes = {}
         for book in overview['books']:
             for row in book['currencies']:
@@ -162,10 +166,10 @@ class LegacyFunds:
                 'unboundLegacyGlobalCashIncluded': False, 'accountKindsCombined': False}
 
     async def read(self, who, query):
-        async with self.funds.context(who) as conn:
+        async with self.funds.context(who, shared_read=True) as conn:
             if query.get('balancesOnly') == '1':
                 state = await self.state_on_connection(conn, who)
-                return {key: state[key] for key in ('balances', 'cardCash')} | {'cardCashCoverageKnown': False}
+                return {key: state[key] for key in ('balances', 'cardCash')} | {'cardCashCoverageKnown': state['cardCashCoverageKnown']}
             limit, offset, currency, text = paging(query)
             joins = """ FROM cash_ledger_entries e LEFT JOIN fund_sources f ON f.owner_id=e.owner_id AND f.cash_entry_id=e.id
                 LEFT JOIN trade_ledger t ON t.owner_id=e.owner_id AND t.id=e.source_trade_id

@@ -118,6 +118,9 @@ async def snapshot(service,who,options):
         actual={row['id']:await actual_record_dto(conn,who.id,row) for row in rows}
         average,cleared=await averages(conn,who.id,rows,actual)
         overview=await CashOverview(service.db).on_connection(conn,who)
+        from .legacy_registered_cash import read_registered_cash
+        registered=await read_registered_cash(conn,who,service.db.settings,overview)
+        registered_cash=registered.dto if registered is not None else None
         head=await (await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
         accounts=await (await conn.execute('SELECT id,account_kind,holding_source FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL',(who.id,))).fetchall()
         accounts={row['id']:row for row in accounts}
@@ -180,13 +183,17 @@ async def snapshot(service,who,options):
             active=[row for row in values if row['active']]
             scoped_books=[book for book in overview['books'] if book['currencies']]
             kinds.update(book['accountKind'] for book in scoped_books)
+            if registered_cash is not None:kinds.add(registered_cash['accountKind'])
             separated=len(kinds)>1 or 'unknown' in kinds
             total_market=None if separated else complete_sum([money[row['recordId']][0] for row in active])
             total_cost=None if separated else complete_sum([money[row['recordId']][1] for row in active])
             cash_rows=scoped_books[0]['currencies'] if len(scoped_books)==1 and not separated else []
             source_complete=bool(cash_rows) and all(row['complete'] and row['ownerBalance'] is not None for row in cash_rows)
             cash_values={row['currency']:decimal(row['ownerBalance']) for row in cash_rows}
-            cash_total=complete_sum([convert(amount,currency,selected['currency'],fx['rates']) for currency,amount in cash_values.items()]) if source_complete else None
+            if registered_cash is not None and not separated:
+                source_complete=registered_cash['sourceComplete']
+                cash_values=registered.exact_balances
+            cash_total=complete_sum([Decimal(0) if amount==0 else convert(amount,currency,selected['currency'],fx['rates']) for currency,amount in cash_values.items()]) if source_complete else None
             cash_complete=source_complete and cash_total is not None
             asset_total=total_market+cash_total if total_market is not None and cash_total is not None else None
             for row in active:
@@ -210,7 +217,9 @@ async def snapshot(service,who,options):
                 'unconvertedCurrencies':sorted({row['currency'] or 'UNKNOWN:'+row['market'] for row in active if money[row['recordId']][0] is None})},
             'cash':{'nativeBalancesByCurrency':{key:display(value) for key,value in cash_values.items()} if source_complete else None,
                     'sourceComplete':source_complete,'complete':cash_complete,'source':'recorded_cash_ledger',
-                    'sourceAuthority':'platform_owner_kind_posted_cash_ledger','valuationIndependent':True,'marketAllocationAvailable':False},
+                    'sourceRevision':registered_cash['snapshotRevision'] if registered_cash is not None and not separated else overview['snapshotRevision'],
+                    'sourceAuthority':registered_cash['sourceAuthority'] if registered_cash is not None and not separated else 'platform_owner_kind_posted_cash_ledger','valuationIndependent':True,'marketAllocationAvailable':False,
+                    'actualBrokerBalanceClaimed':False},
             'todayOrders':{'items':[],'count':0,'available':False,'emptyReason':'snapshot_orders_not_included',
                     'dateBasis':'exchange_local_calendar_date','timeZones':ZONES,'unknownDateOrderIds':[],'settlesPendingOrders':False},
             'unavailable':['account_day_pnl','position_day_pnl','today_orders','derivatives','underlying_merge'],

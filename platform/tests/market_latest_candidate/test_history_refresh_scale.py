@@ -9,12 +9,12 @@ from uuid import uuid4
 from alcor_api.market_authority import Authority
 from alcor_api.market_contract import Query, canonical
 from alcor_api.market_runtime import history_cycle
-from alcor_api.market_worker import claim, schedule
+from alcor_api.market_worker import claim, claim_batch, execute, schedule
 
 from .test_market_authority import demand, market, market_settings  # noqa: F401
 
 
-async def test_current_19_history_pages_resume_without_replay_or_financial_changes(market,record_property):
+async def test_current_19_history_pages_resume_without_replay_or_financial_changes(market,record_property,monkeypatch):
     client,app,authority,_,revision=market
     start=date(2018,1,1)
     through=start+timedelta(days=3199)
@@ -83,3 +83,47 @@ async def test_current_19_history_pages_resume_without_replay_or_financial_chang
     record_property('raw_bytes',source.raw_bytes)
     record_property('seconds',round(elapsed,3))
     record_property('isolated_http_read_3200_seconds',round(read_elapsed,3))
+
+    # The production directory currently retains about 60k historical facts.
+    # Latest reads must use their own index instead of rescanning that history
+    # once for each stream; collect every latest value from an actual source page.
+    class Latest:
+        fixture=True
+        calls=0
+        async def read(self,policy,query,cursor):
+            self.calls+=1
+            price=100+int(query.code[3:])
+            raw=canonical({'query':asdict(query),'licenseRevision':policy.license_revision,
+                'facts':[{'at':datetime.now(UTC).isoformat(),'price':str(price),'currency':'USD',
+                          'session':'REGULAR','cached':False,'prevClose':str(price-1)}],'nextCursor':None}).encode()
+            return raw,'controlled_source_body'
+    latest=Latest()
+    for i in range(19):await demand(client,revision,Query('latest','US',f'SYN{i:03}'))
+    assert await schedule(authority)==19
+    tasks=await claim_batch(app.state.db,uuid4(),maximum=20)
+    assert len(tasks)==19
+    for task in tasks:assert await execute(authority,task,latest)=='observed'
+    from alcor_api.request_timing import TimedConnection
+    statements=[];original_execute=TimedConnection.execute
+    async def recorded(conn,query,params=None,**options):
+        if isinstance(query,str) and ('JOIN unnest' in query and 'market_streams' in query or 'CROSS JOIN LATERAL' in query and 'market_facts' in query):
+            statements.append(query)
+        return await original_execute(conn,query,params,**options)
+    monkeypatch.setattr(TimedConnection,'execute',recorded)
+    began=monotonic()
+    current=await client.post('/api/market/quotes/read',json={'items':[
+        {'id':str(i),'market':'US','code':f'SYN{i:03}'} for i in range(19)],'includeMarketCap':False})
+    latest_elapsed=monotonic()-began
+    assert current.status_code==200,current.text
+    assert {int(k):v['price'] for k,v in current.json()['quotes'].items()}=={i:100+i for i in range(19)}
+    assert len(statements)==2 and latest.calls==19 and len(source.calls)==608
+    async with app.state.db.connection() as conn:
+        await conn.execute('ANALYZE market_facts')
+        selected=await(await conn.execute("SELECT owner_id,stream_id,source_revision FROM market_facts WHERE contents ? 'price' LIMIT 1")).fetchone()
+        plan=await(await conn.execute('''EXPLAIN (FORMAT JSON) SELECT * FROM market_facts
+            WHERE owner_id=%s AND stream_id=%s AND source_revision=%s
+            ORDER BY source_time DESC,sequence DESC LIMIT 1''',tuple(selected.values()))).fetchone()
+        assert 'market_fact_stream_window' in str(plan)
+        assert (await(await conn.execute('SELECT count(*) AS n FROM market_facts')).fetchone())['n']==60819
+    record_property('latest_http_read_19_seconds',round(latest_elapsed,3))
+    record_property('latest_lookup_statements',len(statements))

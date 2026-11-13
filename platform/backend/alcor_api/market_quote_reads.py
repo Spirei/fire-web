@@ -339,6 +339,38 @@ class BatchQuotes:
                 normalized[item["id"]] = symbol
             for identifier in ambiguous:
                 states[identifier] = {"state": "ambiguous_request_id"}
+            # Resolve the bounded request in two PG statements instead of one
+            # stream lookup per security and one fact lookup per retained stream.
+            pairs = sorted({value for key,value in normalized.items() if key not in ambiguous})
+            if len(pairs)>100:
+                raise HTTPException(400, "单次最多查询 100 只")
+            grouped_streams = {}
+            latest_facts = {}
+            if pairs:
+                all_streams = await (await conn.execute("""SELECT s.*,c.policy_id,t.status AS task_status,t.finished_at AS task_finished_at
+                    FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision
+                    JOIN unnest(%s::text[],%s::text[]) requested(market,code)
+                      ON s.query->>'market'=requested.market AND s.query->>'code'=requested.code
+                    LEFT JOIN tasks t ON t.id=s.current_task_id
+                    WHERE s.owner_id=%s AND s.query->>'kind'='latest'
+                      AND (%s::uuid IS NULL OR s.source_revision=%s)
+                      AND (%s::text IS NULL OR s.query->>'session'=%s)
+                      AND (%s::text IS NULL OR s.query->>'instrument'=%s)
+                      AND (NOT %s OR s.query->>'instrument'=CASE WHEN requested.market='ASSET' THEN 'asset' ELSE 'equity' END)
+                    ORDER BY s.source_revision,s.id LIMIT 10001""",
+                    ([p[0] for p in pairs],[p[1] for p in pairs],who.id,source_revision,source_revision,
+                     session,session,instrument,instrument,legacy_instruments and instrument is None))).fetchall()
+                if len(all_streams)>10000:
+                    raise HTTPException(503, "行情来源目录超过完整读取预算")
+                for stream in all_streams:
+                    grouped_streams.setdefault((stream['query']['market'],stream['query']['code']),[]).append(stream)
+                if all_streams:
+                    facts = await (await conn.execute("""SELECT f.* FROM unnest(%s::uuid[],%s::uuid[]) requested(id,revision)
+                        CROSS JOIN LATERAL (SELECT * FROM market_facts
+                            WHERE owner_id=%s AND stream_id=requested.id AND source_revision=requested.revision
+                            ORDER BY source_time DESC,sequence DESC LIMIT 1) f""",
+                        ([s['id'] for s in all_streams],[s['source_revision'] for s in all_streams],who.id))).fetchall()
+                    latest_facts = {fact['stream_id']:fact for fact in facts}
             resolved = {}
             snapshot_pages = {}
             for identifier, (market, symbol) in normalized.items():
@@ -353,12 +385,7 @@ class BatchQuotes:
                             raise HTTPException(403, "当前来源许可未覆盖所请求的行情")
                     query_instrument=instrument
                     if legacy_instruments and query_instrument is None:query_instrument='asset' if market=='ASSET' else 'equity'
-                    streams = await (
-                        await conn.execute(
-                            "SELECT s.*,c.policy_id,t.status AS task_status,t.finished_at AS task_finished_at FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision LEFT JOIN tasks t ON t.id=s.current_task_id WHERE s.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND (%s::uuid IS NULL OR s.source_revision=%s) AND (%s::text IS NULL OR s.query->>'session'=%s) AND (%s::text IS NULL OR s.query->>'instrument'=%s) ORDER BY s.source_revision,s.id",
-                            (who.id, market, symbol, source_revision, source_revision, session, session, query_instrument, query_instrument),
-                        )
-                    ).fetchall()
+                    streams = grouped_streams.get(cache_key, [])
                     candidates = []
                     cooling_sources=set()
                     integrity_failure = False
@@ -389,12 +416,7 @@ class BatchQuotes:
                         source_instruments.setdefault(stream["source_revision"], set()).add(query.instrument)
                         current_policy_ids.add(approved.id)
                         instruments.add(query.instrument)
-                        fact = await (
-                            await conn.execute(
-                                "SELECT * FROM market_facts WHERE owner_id=%s AND stream_id=%s AND source_revision=%s ORDER BY source_time DESC,sequence DESC LIMIT 1",
-                                (who.id, stream["id"], stream["source_revision"]),
-                            )
-                        ).fetchone()
+                        fact = latest_facts.get(stream['id'])
                         if fact:
                             try:
                                 fact = await with_snapshot_metrics(

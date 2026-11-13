@@ -76,8 +76,9 @@ async def session(request: Request, who: Member):
 async def funds(request: Request, who: Member):
     from .legacy_fund_sources import LegacyFunds
 
-    async with request.app.state.db.connection() as conn, conn.transaction():
-        return await LegacyFunds(request.app.state.db).state_on_connection(conn, who)
+    service = LegacyFunds(request.app.state.db)
+    async with service.funds.context(who, shared_read=True) as conn:
+        return await service.state_on_connection(conn, who)
 
 
 @router.get("/system/overview", response_model=OverviewOut)
