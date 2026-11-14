@@ -42,7 +42,8 @@ def bounded_history_read(function):
     async def admitted(*args, **kwargs):
         gate = _gate('_alcor_history_read_gate', 4)
         try:
-            await asyncio.wait_for(gate.acquire(), 3)
+            with measure("history_admission"):
+                await asyncio.wait_for(gate.acquire(), 3)
         except TimeoutError:
             raise HTTPException(503, '历史读取繁忙，请稍后重试', headers={'Retry-After': '1'}) from None
         jobs = []

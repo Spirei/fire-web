@@ -9,6 +9,7 @@ from .market_authority import query_from
 from .market_contract import ZONES, code, series_fingerprint
 from .market_history_evidence import bounded_history_read
 from .native_app_auth import CLIENT
+from .request_timing import measure
 from .security import lock_read_identity
 
 
@@ -41,6 +42,7 @@ class LicensedHistory:
         instrument="equity",
         session="REGULAR",
         kind="bars",
+        minute_series_fallback=False,
         source_revision=None,
         limit=3300,
     ):
@@ -52,12 +54,35 @@ class LicensedHistory:
         except (ValueError, TypeError, AttributeError) as exc:
             raise HTTPException(400, "历史代码或来源版本无效") from exc
         requested_revision = revision
+
+        async def select(conn):
+            async def candidates(candidate_kind):
+                return await self.choices(
+                    conn, who.id, market, symbol, frame=frame, adjust=adjust,
+                    instrument=instrument, session=session, kind=candidate_kind,
+                    revision=requested_revision,
+                )
+
+            choices, retained = await candidates(kind)
+            if minute_series_fallback and not retained and len(choices) <= 1:
+                preferred = next(iter(choices), None)
+                if preferred is not None:
+                    has_facts = await (await conn.execute(
+                        """SELECT EXISTS(SELECT 1 FROM market_facts
+                        WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s) AS observed""",
+                        (who.id, *preferred),
+                    )).fetchone()
+                    if has_facts["observed"]:
+                        return choices, retained
+                return await candidates("price_series")
+            return choices, retained
+
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            await self.authorize_history_read(conn, who)
-
-            choices, retained = await self.choices(conn, who.id, market, symbol, frame=frame, adjust=adjust,
-                                                   instrument=instrument, session=session, kind=kind, revision=revision)
+            with measure("history_authorize"):
+                await self.authorize_history_read(conn, who)
+            with measure("history_select"):
+                choices, retained = await select(conn)
             if not choices:
                 if retained:
                     raise HTTPException(403, "历史原件仍保留，但当前来源展示许可不可用，请撤下旧数据")
@@ -76,16 +101,18 @@ class LicensedHistory:
             if not rows:
                 raise HTTPException(503, "该口径历史尚无已采集记录")
             from .market_history_evidence import load_history_evidence, verify_history_evidence
-            evidence = await load_history_evidence(conn, who.id, revision, rows)
+            with measure("history_evidence_load"):
+                evidence = await load_history_evidence(conn, who.id, revision, rows)
         # Decoding overlapping RT originals can inspect tens of thousands of
         # facts. It must own neither a pool connection nor identity locks.
         await verify_history_evidence(who.id, revision, evidence, policy)
         # An old repeatable-read snapshot cannot authorize a reply after the
         # CPU await: recheck the current identity, license and source selection.
         async with self.db.connection() as conn, conn.transaction():
-            await self.authorize_history_read(conn, who)
-            current, retained = await self.choices(conn, who.id, market, symbol, frame=frame, adjust=adjust,
-                instrument=instrument, session=session, kind=kind, revision=requested_revision)
+            with measure("history_authorize"):
+                await self.authorize_history_read(conn, who)
+            with measure("history_select"):
+                current, retained = await select(conn)
             if not current and retained:
                 raise HTTPException(403, "历史原件仍保留，但当前来源展示许可不可用，请撤下旧数据")
             selected = current.get((revision, fingerprint)) if len(current) == 1 else None

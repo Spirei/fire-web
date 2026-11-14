@@ -21,6 +21,7 @@ from .market_contract import CURRENCIES, ZONES, number
 from .market_contract import code as security_code
 from .market_history_reads import LicensedHistory
 from .profile_http import bounded_body
+from .request_timing import measure
 
 
 def minute_points(rows, policy, query, days, now=None, *, session_day=False):
@@ -98,14 +99,10 @@ def sample_points(points, target=60):
 
 async def read_minute_rows(history, who, market, symbol, *, session, source_revision):
     """Read OHLC closes or independently licensed RT observations; never convert RT to bars."""
-    arguments = {"frame": "minute", "adjust": "none", "session": session,
-                 "source_revision": source_revision, "limit": 16001}
-    try:
-        return await history.read(who, market, symbol, **arguments)
-    except HTTPException as exc:
-        if exc.status_code != 503 or (exc.headers or {}).get('Retry-After'):
-            raise
-    return await history.read(who, market, symbol, kind="price_series", **arguments)
+    return await history.read(
+        who, market, symbol, frame="minute", adjust="none", session=session,
+        source_revision=source_revision, limit=16001, minute_series_fallback=True,
+    )
 
 
 def mount_legacy_chart_series(app, settings, authority):
@@ -119,7 +116,8 @@ def mount_legacy_chart_series(app, settings, authority):
         )
         if len(rows) > 16000:
             raise HTTPException(503, "分时原始记录超过读取预算")
-        points = minute_points(rows, policy, query, days, authority.clock() if authority.clock else None, session_day=sessions)
+        with measure("history_assemble"):
+            points = minute_points(rows, policy, query, days, authority.clock() if authority.clock else None, session_day=sessions)
         if len(points) < minimum_points:
             raise HTTPException(503, "尚无足够的真实分时观察点")
         return points, policy.source, revision

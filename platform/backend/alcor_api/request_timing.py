@@ -7,7 +7,8 @@ from psycopg import AsyncConnection
 
 _current = ContextVar('request_timing', default=None)
 PHASES = {'pool_wait', 'db_guard', 'sql_execute', 'catalogue', 'json_encode',
-          'read_admission_redis', 'read_admission_pg', 'history_proof', 'history_proof_wait'}
+          'read_admission_redis', 'read_admission_pg', 'history_proof', 'history_proof_wait',
+          'history_authorize', 'history_select', 'history_evidence_load', 'history_assemble', 'history_admission'}
 
 
 class RequestTiming:
