@@ -383,6 +383,12 @@ def mount_legacy_chart_series(app, settings, authority):
                     except HTTPException as exc:
                         if exc.status_code in (401, 403, 409):
                             raise
+                        retry_after = (exc.headers or {}).get("Retry-After")
+                        if exc.status_code == 503 and retry_after:
+                            if not values:
+                                raise
+                            headers["Retry-After"] = retry_after
+                            break
                 data = {"charts": values}
                 headers["X-Alcor-Chart-State"] = "observed" if len(values) == len(identities) else "partial"
             raw = json.dumps(

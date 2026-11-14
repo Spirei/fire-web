@@ -220,3 +220,33 @@ async def test_full_history_admission_returns_original_retry_header_without_load
     finally:
         for _ in range(4):
             gate.release()
+
+
+@pytest.mark.parametrize('partial', [False, True])
+async def test_chart_batch_returns_capacity_backoff_without_losing_observed_points(market, monkeypatch, partial):
+    from fastapi import HTTPException
+    from alcor_api import legacy_chart_series
+
+    client, _, _, _, _, headers = await seeded(market)
+    read = legacy_chart_series.read_minute_rows
+    calls = []
+
+    async def limited(history, who, market_name, symbol, **kwargs):
+        calls.append(symbol)
+        if symbol == 'MSFT':
+            raise HTTPException(503, '历史读取繁忙', headers={'Retry-After': '1'})
+        return await read(history, who, market_name, symbol, **kwargs)
+
+    monkeypatch.setattr(legacy_chart_series, 'read_minute_rows', limited)
+    symbols = (['AAPL'] if partial else []) + ['MSFT', 'NVDA']
+    reply = await client.post('/api/v2/charts', headers=headers, json={
+        'items': [{'id': symbol, 'market': 'US', 'code': symbol} for symbol in symbols],
+    })
+    assert reply.headers['retry-after'] == '1'
+    assert calls == symbols[:-1]
+    if partial:
+        assert reply.status_code == 200
+        assert reply.headers['x-alcor-chart-state'] == 'partial'
+        assert [point['price'] for point in reply.json()['data']['charts']['AAPL']['points']] == [10, 11]
+    else:
+        assert reply.status_code == 503
