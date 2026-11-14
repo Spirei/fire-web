@@ -321,7 +321,7 @@ def _latest_snapshot(row, query, stamp):
 
 
 def latest_realtime(payload,query,symbol,observed_at=None):
-    if query.market!='US' or query.session not in ('PRE','OVERNIGHT'):
+    if query.market!='US' or query.session not in ('PRE','AFTER','OVERNIGHT'):
         raise ValueError('source_extended_clock_unavailable')
     rows=payload.get('realTimeRecords')
     if not isinstance(rows,list) or not 1<=len(rows)<=4:
@@ -338,7 +338,12 @@ def latest_realtime(payload,query,symbol,observed_at=None):
                 continue
             stamp=source_time(row.get('time'),ZONES['US']);local=stamp.astimezone(ZoneInfo(ZONES['US']))
             minute=local.hour*60+local.minute
-            if not (240<=minute<570 if query.session=='PRE' else minute>=1200 or minute<240):
+            in_session = {
+                'PRE': 240 <= minute < 570,
+                'AFTER': 960 < minute < 1200,
+                'OVERNIGHT': minute >= 1200 or minute < 240,
+            }
+            if not in_session[query.session]:
                 continue
             if observed_at is not None and stamp>observed_at+timedelta(seconds=5):
                 continue

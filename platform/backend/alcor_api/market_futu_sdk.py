@@ -179,7 +179,7 @@ def collect(factory, ret_ok, payload, enums):
             snapshot, skipped = snapshot_records(context, ret_ok, symbols)
             ret = ret_ok
             next_key = None
-            if symbols[0].startswith('US.') and config['session'] in ('PRE','OVERNIGHT'):
+            if symbols[0].startswith('US.') and config['session'] in ('PRE','AFTER','OVERNIGHT'):
                 # Snapshot update_time is the regular close even while extended
                 # fields change. Obtain an actual source minute clock instead.
                 try:

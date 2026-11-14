@@ -78,3 +78,17 @@ def test_sdk_keeps_only_four_real_candidates_without_more_source_reads():
         {'Session':SimpleNamespace(ALL='all'),'SubType':SimpleNamespace(RT_DATA='minute')})
     assert payload['realTimeRecords']==rows[2:6] and context.closed
     assert context.calls==[('snapshot',['US.AAPL']),('subscribe',['US.AAPL']),('minute','US.AAPL'),('unsubscribe',['US.AAPL'])]
+
+
+def test_after_hours_uses_observed_minute_when_snapshot_only_has_regular_clock():
+    query = Query('latest', 'US', 'AAPL', session='AFTER')
+    observed = datetime(2026, 11, 11, 21, 6, 20, tzinfo=UTC)
+    snapshot = {**SNAPSHOT, 'update_time': '2026-11-11 15:59:00', 'after_price': 999}
+    after = {**POINT, 'time': '2026-11-11 16:06:00'}
+    rows = [after, {**after, 'time': '2026-11-11 16:07:00'}, POINT]
+    facts, issues = futu_rows({'records': [snapshot], 'realTimeRecords': rows}, query, observed_at=observed)
+    assert not issues and len(facts) == 1
+    quote = facts[0]
+    assert (quote['session'], quote['at']) == ('AFTER', '2026-11-11T21:06:00+00:00')
+    assert (quote['price'], quote['prevClose'], quote['change']) == ('355.9', '355.63', '0.27')
+    assert quote['priceField'] == 'rt_data.cur_price'
