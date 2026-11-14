@@ -857,7 +857,7 @@ export default function AssetPnlAnalysis({
             </section>
 
             <PnlCalendar
-              title={registeredCalendar ? "已登记盈亏日历" : "收益日历"}
+              title="盈亏日历"
               className="mt-5 card p-5"
               days={calDays}
               yearSummary={yearSummary}

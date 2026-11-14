@@ -66,7 +66,7 @@ const root=path.resolve(__dirname,'..');
   await page.evaluate(()=>{window.rateMode='hold';window.dispatchEvent(new Event('fire:settings-updated'));});await page.waitForFunction(()=>typeof window.releaseRates==='function');
   assert((await page.locator('.asset-account-metrics').innerText()).includes('25.00'),'asset-analysis holding valuation survives ordinary settings revalidation before FX returns');
   await page.evaluate(()=>{window.rateMode='ready';window.releaseRates();});await page.waitForFunction(()=>document.querySelector('.asset-account-card').textContent.includes('75.00'));
-  const sections=['账户资产','账户总览','持仓分布','资金系统','收益日历'];for(const text of sections)assert((await page.getByText(text,{exact:true}).count())>0,text+' module renders');
+  const sections=['账户资产','账户总览','持仓分布','资金系统','盈亏日历'];for(const text of sections)assert((await page.getByText(text,{exact:true}).count())>0,text+' module renders');
   await page.setViewportSize({width:1630,height:1000});
   const sizes=await page.evaluate(()=>{const q=s=>document.querySelector(s).getBoundingClientRect().width;return{page:q('.asset-analysis-page'),left:q('.asset-analysis-split>aside'),right:q('.asset-analysis-split>main')}});
   assert(sizes.page>1100&&sizes.left>=340&&sizes.right>700,'right side gains space without shrinking the left');

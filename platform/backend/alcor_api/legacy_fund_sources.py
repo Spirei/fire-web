@@ -145,6 +145,12 @@ class LegacyFunds:
         for book in overview['books']:
             for row in book['currencies']:
                 scopes.setdefault(row['currency'], []).append((book['accountKind'], row))
+        # One grouped statement for every currency; the old loop issued one
+        # query per currency and made the cash figures arrive late.
+        grouped_rows = await (await conn.execute("SELECT e.account_kind,e.currency,coalesce(f.origin_type,e.kind) AS kind,coalesce(sum(e.amount),0) AS amount FROM cash_ledger_entries e LEFT JOIN fund_sources f ON f.owner_id=e.owner_id AND f.cash_entry_id=e.id WHERE e.owner_id=%s AND affects_owner AND reversal_entry_id IS NULL AND NOT EXISTS(SELECT 1 FROM fund_sources f JOIN fund_source_retirements x ON x.owner_id=f.owner_id AND x.source_id=f.id WHERE f.owner_id=e.owner_id AND f.cash_entry_id=e.id) GROUP BY e.account_kind,e.currency,coalesce(f.origin_type,e.kind)", (who.id,))).fetchall()
+        grouped = {}
+        for row in grouped_rows:
+            grouped.setdefault((row['account_kind'], row['currency']), []).append(row)
         balances, summaries = {}, {}
         for currency in CURRENCIES:
             candidates = scopes.get(currency, [])
@@ -152,11 +158,10 @@ class LegacyFunds:
             balances[currency] = legacy_amount(selected['ownerBalance']) if selected and selected['complete'] else None
             summaries[currency] = dict.fromkeys(('openingAsset', 'cashNetFlow', 'stockNetFlow', 'otherNetFlow'))
             if selected and selected['complete']:
-                rows = await (await conn.execute("SELECT coalesce(f.origin_type,e.kind) AS kind,coalesce(sum(e.amount),0) AS amount FROM cash_ledger_entries e LEFT JOIN fund_sources f ON f.owner_id=e.owner_id AND f.cash_entry_id=e.id WHERE e.owner_id=%s AND e.account_kind=%s AND e.currency=%s AND affects_owner AND reversal_entry_id IS NULL AND NOT EXISTS(SELECT 1 FROM fund_sources f JOIN fund_source_retirements x ON x.owner_id=f.owner_id AND x.source_id=f.id WHERE f.owner_id=e.owner_id AND f.cash_entry_id=e.id) GROUP BY coalesce(f.origin_type,e.kind)", (who.id, candidates[0][0], currency))).fetchall()
                 with localcontext() as ctx:
                     ctx.prec = 80
                     values = {'openingAsset': Decimal(0), 'cashNetFlow': Decimal(0), 'stockNetFlow': Decimal(0), 'otherNetFlow': Decimal(0)}
-                    for row in rows:
+                    for row in grouped.get((candidates[0][0], currency), []):
                         key = 'openingAsset' if row['kind'] == 'opening' else 'cashNetFlow' if row['kind'] in ('external_deposit', 'external_withdrawal', 'deposit', 'withdrawal') else 'stockNetFlow' if row['kind'] in ('trade_buy', 'trade_sell', 'trade_dividend', 'fee_correction', 'trade_correction') else 'otherNetFlow'
                         values[key] += row['amount']
                     summaries[currency] = {key: legacy_amount(value) for key, value in values.items()}

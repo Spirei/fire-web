@@ -5,8 +5,12 @@ import { platformRequest } from "./platformRequest";
 /** A signed-in workspace uses its own licensed observations, never the anonymous
  * redistribution endpoint. This read does not create a source or collect data. */
 export async function readWorkspaceTicker(config: TickerConfig, signal: AbortSignal) {
-  await platformRequest("/api/fire/ticker/demand",{method:"POST",signal,headers:{"Content-Type":"application/json"},body:JSON.stringify({requestId:clientRequestId()})},10000);
+  // Registering the demand only schedules collection; it is not needed to read
+  // the observations already stored. Awaiting it first made the index prices
+  // stay at "--" for the whole registration round-trip.
+  const demand = platformRequest("/api/fire/ticker/demand",{method:"POST",signal,headers:{"Content-Type":"application/json"},body:JSON.stringify({requestId:clientRequestId()})},10000).catch(() => undefined);
   const data = await platformRequest<{items:{key:string;market:string;secid:string;price?:number;change?:number;changePct?:number;observedAt?:string;source?:string;session?:string;sourceRevision?:string;displayStale?:boolean;cached?:boolean}[]}>("/api/fire/ticker", {signal},10000);
+  void demand;
   const numeric = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
   return {items:config.items.map(item => {
     const quote = data.items?.find(observation => observation.key === item.key && observation.market === item.market && observation.secid === item.secid);

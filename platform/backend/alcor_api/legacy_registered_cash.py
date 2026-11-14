@@ -4,6 +4,8 @@ import asyncio
 import json
 import math
 import threading
+from collections import OrderedDict
+from copy import deepcopy
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
 
@@ -22,6 +24,32 @@ REGION_CURRENCY = {'中国内地':'CNY','中国香港':'HKD','中国台湾':'TWD
     '日本':'JPY','韩国':'KRW','新加坡':'SGD','英国':'GBP','德国':'EUR','爱尔兰':'EUR','澳大利亚':'AUD','加拿大':'CAD'}
 SUMMARY_FIELDS = ('openingAsset','cashNetFlow','stockNetFlow','otherNetFlow')
 _files = threading.BoundedSemaphore(2)
+# Imported sealed originals are insert-only; re-parsing their JSON and
+# re-validating the sealed book on every funds read made cash values appear
+# seconds late. Key by the sealed fingerprints (a new import changes the key).
+# The archive manifest and the current card/cash evidence are still read and
+# verified on every request.
+_cache_limit = 64
+_books = OrderedDict()
+
+
+def _cache_key(owner, original):
+    archive = original.get('archive') or {}
+    return (owner, original['source_owner'], original['source_instance'], original['source_sha256'],
+            archive.get('archive_task'), archive.get('archive_attempt'))
+
+
+def _cached_ordered(cache, key, value=None):
+    if value is not None:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > _cache_limit:
+            cache.popitem(last=False)
+        return value
+    cached = cache.get(key)
+    if cached is not None:
+        cache.move_to_end(key)
+    return cached
 
 
 @dataclass(frozen=True)
@@ -198,7 +226,13 @@ async def _read_registered_cash(conn, who, settings, overview):
     if len(stored) != 1:
         return None
     try:
-        original = stored[0]; book = book_from_original(original)
+        original = stored[0]
+        key = _cache_key(who.id, original)
+        cached_book = _cached_ordered(_books, key)
+        if cached_book is None:
+            cached_book = _cached_ordered(_books, key, book_from_original(original))
+        # The cached book is shared by concurrent readers and is mutated below.
+        book = deepcopy(cached_book)
         duplicate = await (await conn.execute('''SELECT 1 FROM financial_import_links WHERE owner_id=%s
             AND source_instance=%s AND source_owner=%s AND object_kind IN ('cash','order') LIMIT 1''',
             (who.id,original['source_instance'],original['source_owner']))).fetchone()

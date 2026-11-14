@@ -163,6 +163,14 @@ function AccountOverviewValue({ value, hidden, pending = false, forceCompact = f
   return <span ref={hostRef} className="relative block min-w-0 max-w-full overflow-hidden whitespace-nowrap" title={!pending && !hidden ? full : undefined}>{content}<span ref={measureRef} aria-hidden className="pointer-events-none absolute left-0 top-0 invisible whitespace-nowrap">{full}</span></span>;
 }
 
+/** 素材库图标可能指向已清理文件：加载失败时回退名称首字母，避免出现破图。 */
+function StockIconAvatar({ src, name }: { src?: string; name: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (src && !failed) return <img src={src} alt="" onError={() => setFailed(true)} className="h-7 w-7 rounded-full object-cover" />;
+  return <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{name.slice(0, 1)}</i>;
+}
+
 function isoDate(value: Date) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -1034,7 +1042,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     const displayPnl = toDisplay(record, pnl);
     if (key === "identity") {
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
-      return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic">{record.name.slice(0, 1)}</i>}<EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
+      return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none"><StockIconAvatar src={icon} name={record.name} /><EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
     }
     if (key === "marketValue") return Number.isFinite(displayMarketValue) ? compactMoney(displayMarketValue) : Number.isFinite(price * qty) ? <>{fmtMoney(price * qty, marketMeta(record.market).currency)}</> : "—";
     if (key === "cost") return <>{fmtNumMarket(cost, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
@@ -1149,7 +1157,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
               return <div key={record.id} className="grid grid-cols-[48px_minmax(0,1fr)_110px] items-center border-t border-edge px-4 py-3 text-xs transition-colors first:border-t-0 hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]">
                 <span className="font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="relative flex-none">{icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{record.name.slice(0, 1)}</i>}<EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span>
+                  <span className="relative flex-none"><StockIconAvatar src={icon} name={record.name} /><EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span>
                   <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quotes[record.id]} quotes={quotes} /></small></span>
                 </span>
                 <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>
@@ -1218,7 +1226,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
         </div>
         <div id="asset-calendar" {...moduleDragProps("right", "calendar")} className={moduleWrapperClass("right", "calendar")} style={{ order: moduleOrderIndex("right", "calendar") }}>
           <PnlCalendar
-            title={registeredCalendar ? "已登记盈亏日历" : "收益日历"}
+            title="盈亏日历"
             className="card p-5"
             days={calendarDays}
             yearSummary={calendarYear}

@@ -5,6 +5,7 @@ source meaning. This is history evidence, never proof of broker execution or pai
 """
 import asyncio
 import hashlib
+from collections import OrderedDict
 from datetime import UTC,datetime
 from decimal import Decimal
 from uuid import UUID,uuid4
@@ -192,22 +193,45 @@ async def registered_orders(conn,owner,*,native_records=None):
     return output
 
 
+# Imported originals are immutable sealed packets, but re-parsing every packet
+# on each funds read kept the cash card empty for seconds after refresh.
+_registered_funds_cache = OrderedDict()
+_REGISTERED_FUNDS_LIMIT = 32
+
+
+def _registered_funds_for(data):
+    output=[]
+    orders={row['id']:row for row in data['orders']}
+    for row in data['funds']:
+        original_id=row['id'];order_id=original_id[len('fund-order-'):] if original_id.startswith('fund-order-') else None
+        order=orders.get(order_id);mapped=data['normalized_orders'].get(order_id)
+        amount=Decimal(row['amount']) if row.get('amount') is not None else None
+        # The original automatic projection is displayed once. It is never
+        # added again to canonical cash postings or recreated from the fill.
+        output.append({'id':original_id,'currency':row['currency'],'type':row['type'],'amount':float(amount) if amount is not None else None,
+            'registeredAmount':str(amount) if amount is not None else None,'direction':int(row['direction']) if row.get('direction') is not None else None,
+            'note':row.get('note') or '', 'occurredAt':observed_time(row.get('occurred_at'),data['timezone']),'createdAt':observed_time(row.get('created_at'),data['timezone']),
+            'sourceOrderId':order_id,'stockCode':order.get('code') if order else None,'stockName':order.get('name') if order else None,'stockMarket':order.get('market') if order else None,
+            'accountKind':mapped['accountKind'] if mapped else 'unknown','accountId':data['maps']['accounts'].get(mapped['sourceAccountId']) if mapped else None,
+            'amountAuthority':'source_registered_unverified','actualFeeKnown':mapped['feeAuthority'] in ('owner_recorded','broker_reported') if mapped else None,
+            'independentDeletionSupported':False,'cashPosted':False,'sourceInstance':data['source_instance']})
+    return output
+
+
 async def registered_funds(conn,owner):
-    stored=await(await conn.execute('SELECT originals FROM database_migration_history_imports WHERE owner_id=%s ORDER BY created_at,request_id',(owner,))).fetchall()
+    stored=await(await conn.execute('SELECT originals,request_id,source_sha256 FROM database_migration_history_imports WHERE owner_id=%s ORDER BY created_at,request_id',(owner,))).fetchall()
     output=[]
     for batch in stored:
-        data=batch['originals'];orders={row['id']:row for row in data['orders']}
-        for row in data['funds']:
-            original_id=row['id'];order_id=original_id[len('fund-order-'):] if original_id.startswith('fund-order-') else None
-            order=orders.get(order_id);mapped=data['normalized_orders'].get(order_id)
-            amount=Decimal(row['amount']) if row.get('amount') is not None else None
-            # The original automatic projection is displayed once. It is never
-            # added again to canonical cash postings or recreated from the fill.
-            output.append({'id':original_id,'currency':row['currency'],'type':row['type'],'amount':float(amount) if amount is not None else None,
-                'registeredAmount':str(amount) if amount is not None else None,'direction':int(row['direction']) if row.get('direction') is not None else None,
-                'note':row.get('note') or '', 'occurredAt':observed_time(row.get('occurred_at'),data['timezone']),'createdAt':observed_time(row.get('created_at'),data['timezone']),
-                'sourceOrderId':order_id,'stockCode':order.get('code') if order else None,'stockName':order.get('name') if order else None,'stockMarket':order.get('market') if order else None,
-                'accountKind':mapped['accountKind'] if mapped else 'unknown','accountId':data['maps']['accounts'].get(mapped['sourceAccountId']) if mapped else None,
-                'amountAuthority':'source_registered_unverified','actualFeeKnown':mapped['feeAuthority'] in ('owner_recorded','broker_reported') if mapped else None,
-                'independentDeletionSupported':False,'cashPosted':False,'sourceInstance':data['source_instance']})
+        key=(owner,str(batch['request_id']),batch['source_sha256'])
+        rows=_registered_funds_cache.get(key)
+        if rows is None:
+            rows=_registered_funds_for(batch['originals'])
+            _registered_funds_cache[key]=rows
+            while len(_registered_funds_cache)>_REGISTERED_FUNDS_LIMIT:
+                _registered_funds_cache.popitem(last=False)
+        else:
+            _registered_funds_cache.move_to_end(key)
+        # Cached rows are read-only projections; callers sort and filter into
+        # new lists without mutating the rows.
+        output.extend(rows)
     return output

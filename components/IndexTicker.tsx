@@ -111,7 +111,7 @@ function TickerChip({ item }: { item: TickerItem }) {
   // 昨收 = 现价 − 涨跌额（接口给的是今日涨跌额）；拿不到就不画基准线
   const baseline = item.price != null && item.change != null ? item.price - item.change : null;
   return (
-    <div className="ticker-item flex max-w-full items-center gap-2.5 rounded-2xl px-3 py-2" title={item.price === null ? `${item.label}：当前来源暂无可用报价` : [item.label,item.retained || item.displayStale ? "缓存报价" : "",item.source,item.observedAt].filter(Boolean).join(" · ")}>
+    <div className="ticker-item flex max-w-full items-center gap-2.5 rounded-2xl px-3 py-2 transition-colors duration-200 hover:bg-brand-hover" title={item.price === null ? `${item.label}：当前来源暂无可用报价` : [item.label,item.retained || item.displayStale ? "缓存报价" : "",item.source,item.observedAt].filter(Boolean).join(" · ")}>
       <span className="group/icon relative flex-none">
         <MarketIcon market={item.market} size={22} title="" />
         <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-edge bg-white px-2 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-[0_6px_18px_rgba(10,14,25,.14)] transition-all duration-150 group-hover/icon:opacity-100 dark:bg-[#1c2433] dark:text-[#e7ebf1]">
@@ -152,9 +152,13 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
   const [intervalSec, setIntervalSec] = useState(5);
   // 轮询间隔由服务端按「是否有市场在交易」给出：开市 60 秒，全部收市 5 分钟兜底
   const pollSec = useRef(60);
+  // 新登记的需求要等 Worker 采到第一条观察；在最初几轮用短间隔接上，
+  // 不要让指数价格一直停留在 "--" 直到下一次 60 秒轮询。
+  const earlyRetries = useRef(0);
   const [idx, setIdx] = useState(0);
 
   useLayoutEffect(() => {
+    earlyRetries.current = 0;
     setItems(configuration?.items.map(unquoted) ?? []);
     const cached = readTickerCache(cacheKey);
     if (!cached) return;
@@ -183,6 +187,9 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
           setItems(data.items);
           if (typeof data.interval === "number" && data.interval >= 3) setIntervalSec(data.interval);
           if (typeof data.pollSec === "number" && data.pollSec >= 30) pollSec.current = data.pollSec;
+          if (data.items.some((item: { price?: number | null }) => item.price == null)) {
+            if (earlyRetries.current < 6) { earlyRetries.current += 1; pollSec.current = 3; }
+          } else earlyRetries.current = 0;
           try { sessionStorage.setItem(cacheKey, JSON.stringify({ items: data.items, interval: data.interval, pollSec: data.pollSec, readAt: Date.now() })); } catch { /* quota */ }
         }
       } catch (error) {
@@ -196,7 +203,7 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
     }
     const polling = startVisiblePolling({ read: load, interval: () => pollSec.current * 1000 });
     const onSettings = () => {
-      ++generation; setItems(current => current.map(unquoted));
+      ++generation; earlyRetries.current = 0; setItems(current => current.map(unquoted));
       try { sessionStorage.removeItem(cacheKey); } catch { /* optional cache */ }
       void polling.refresh();
     };
