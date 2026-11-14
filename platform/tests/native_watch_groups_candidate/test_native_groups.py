@@ -26,7 +26,7 @@ async def initialize(client,headers):
 
 async def hashes(db):
     async with db.connection() as conn,conn.transaction():result=await tables_and_hashes(conn)
-    # Legacy GET can fall back to its PG abuse-throttle counter. It must not seed,
+    # Legacy GET shares its PG abuse-throttle counter with writes. It must not seed,
     # migrate, touch receipts/preferences/records or change any business table.
     # Delayed observability flushes are independent of the read route, including
     # under concurrent regression load. These are not preferences or receipts.

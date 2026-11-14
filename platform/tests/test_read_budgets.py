@@ -186,7 +186,9 @@ async def test_native_history_uses_shared_read_budget_and_backoff_without_count_
 
 
 async def test_native_alert_list_uses_redis_and_keeps_database_fallback(client, admin, app, private_redis):
-    from alcor_api.native_app_auth import issue_grant
+    import asyncio
+
+    from alcor_api.native_app_auth import authenticate, identity_from_grant, issue_grant, lock_native_identity
 
     db = app.state.db
     async with db.connection() as conn, conn.transaction():
@@ -202,9 +204,14 @@ async def test_native_alert_list_uses_redis_and_keeps_database_fallback(client, 
     app.state.cache.client = cache
     try:
         before = await attempts()
-        for version in (1, 2):
-            response = await client.get(f'/api/v{version}/price-alerts', headers=headers)
-            assert response.status_code == 200, response.text
+        async with db.connection() as conn, conn.transaction():
+            token = pair['access_token']
+            who = identity_from_grant(await authenticate(conn, token), token, 'portfolio.read')
+            await lock_native_identity(conn, who, shared=True)
+            async with asyncio.timeout(1.5):
+                for version in (1, 2):
+                    response = await client.get(f'/api/v{version}/price-alerts', headers=headers)
+                    assert response.status_code == 200, response.text
         assert await attempts() == before
         assert len(await cache.keys('alcor:*:read-budget:*')) == 1
         app.state.cache.client = None

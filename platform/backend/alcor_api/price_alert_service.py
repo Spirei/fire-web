@@ -11,7 +11,7 @@ from psycopg.types.json import Jsonb
 from .business_notifications import append, inbox
 from .native_app_auth import active_grant, authenticate
 from .price_alert_contract import ACTIONS, CHANNELS, millis, rule, uuid
-from .security import lock_mutation_identity
+from .security import lock_mutation_identity, lock_read_identity
 
 
 def stamp(raw):
@@ -45,7 +45,7 @@ class Alerts:
     async def authorize_read(self, conn, who):
         # Read locks fence actor revocation through the final private projection.
         # They never initialize notification collections or enqueue work.
-        await lock_mutation_identity(conn, who, require_admin=False)
+        await lock_read_identity(conn, who, require_admin=False)
         if getattr(who, "native_client", False):
             grant = await authenticate(conn, who.native_access_token, "portfolio.read")
             if grant["user_id"] != who.id or grant["id"] != who.grant_id:
@@ -63,7 +63,6 @@ class Alerts:
     async def snapshot(self, who):
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            await lock_mutation_identity(conn, who, require_admin=False)
             await self.authorize_read(conn, who)
             return await self._snapshot(conn, who.id)
 
@@ -146,7 +145,6 @@ class Alerts:
             raise HTTPException(400, "请求编号无效") from exc
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            await lock_mutation_identity(conn, who, require_admin=False)
             await self.authorize_read(conn, who)
             row = await (
                 await conn.execute(
