@@ -264,11 +264,13 @@ def mount_legacy_chart_series(app, settings, authority):
             headers["X-Alcor-API-Version"] = str(version)
         try:
             assert_native_origin(request, settings)
-            client = request.client.host if request.client else "unknown"
-            if not await app.state.read_rate_limit(
+            # On the private Unix socket there is no client IP. Do not turn
+            # the per-IP limit into a lower global limit or trust client headers.
+            client = request.client.host if request.client else None
+            if (client and not await app.state.read_rate_limit(
                 authority.db, "charts-ip:" + client, 120, window_seconds=60
-            ) or not await app.state.read_rate_limit(authority.db, "charts-global", 600, window_seconds=60):
-                raise HTTPException(429, "请求过于频繁，请稍后再试")
+            )) or not await app.state.read_rate_limit(authority.db, "charts-global", 600, window_seconds=60):
+                raise HTTPException(429, "请求过于频繁，请稍后再试", headers={"Retry-After": "60"})
             who = (
                 await history_member(request, authority.db, version)
                 if "authorization" in request.headers
@@ -323,7 +325,7 @@ def mount_legacy_chart_series(app, settings, authority):
                     identities[item["id"]] = identity
                 who = who or await history_member(request, authority.db, version)
                 if not await app.state.read_rate_limit(authority.db, "charts:" + who.id, 120, window_seconds=60):
-                    raise HTTPException(429, "请求过于频繁，请稍后再试")
+                    raise HTTPException(429, "请求过于频繁，请稍后再试", headers={"Retry-After": "60"})
                 # POST is explicit observation intent; the same scope checks as
                 # quote registration apply, and collection stays in the Worker.
                 from .market_history_demands import prepare

@@ -281,3 +281,24 @@ async def test_native_intraday_reads_keep_shared_limits_without_pg_counter_write
     finally:
         app.state.cache.client = None
         await cache.aclose()
+
+
+async def test_unix_gateway_chart_requests_do_not_share_a_fake_ip_budget(client, admin, app, monkeypatch):
+    import httpx
+
+    keys = []
+
+    async def admit(db, key, maximum, *, window_seconds):
+        keys.append((key, maximum))
+        return True
+
+    monkeypatch.setattr(app.state, 'read_rate_limit', admit)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, client=None), base_url=str(client.base_url),
+        headers=client.headers, cookies=client.cookies,
+    ) as unix_client:
+        response = await unix_client.post('/api/charts', json={
+            'items': [{'id': 'fixture', 'market': 'US', 'code': 'AAPL'}],
+        })
+    assert response.status_code == 200, response.text
+    assert keys == [('charts-global', 600), ('charts:' + admin, 120)]
