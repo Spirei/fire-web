@@ -105,15 +105,41 @@ class Alerts:
             else {**row, **await self.bindings.state(conn, owner, row["channel"])}
             for row in channels
         ]
+        jobs = {}
+        if rows:
+            for job in await (
+                await conn.execute(
+                    """SELECT DISTINCT ON (j.rule_id) j.rule_id,j.monitoring_state,t.status
+                    FROM price_alert_jobs j JOIN tasks t ON t.id=j.task_id
+                    JOIN price_alert_rules r ON r.owner_id=j.owner_id AND r.id=j.rule_id AND r.revision=j.rule_revision
+                    WHERE j.owner_id=%s AND r.deleted_at IS NULL
+                    ORDER BY j.rule_id,t.created_at DESC""",
+                    (owner,),
+                )
+            ).fetchall():
+                jobs[job["rule_id"]] = job
+        live_user, live_subscriptions = None, None
+        if any(row["state"] == "enabled" for row in rows):
+            # One authority snapshot for every enabled rule; grants are still
+            # checked per subscription below.
+            live_user = await (
+                await conn.execute("SELECT active,session_version FROM users WHERE id=%s", (owner,))
+            ).fetchone()
+            live_subscriptions = {}
+            for subscription in await (
+                await conn.execute(
+                    "SELECT * FROM price_alert_subscriptions WHERE owner_id=%s AND revoked_at IS NULL",
+                    (owner,),
+                )
+            ).fetchall():
+                live_subscriptions.setdefault(subscription["rule_id"], []).append(subscription)
         rule_views = []
         for row in rows:
-            live = row["state"] != "enabled" or await active_subscriptions(conn, row, lock=False)
-            job = await (
-                await conn.execute(
-                    "SELECT j.monitoring_state,t.status FROM price_alert_jobs j JOIN tasks t ON t.id=j.task_id WHERE j.owner_id=%s AND j.rule_id=%s AND j.rule_revision=%s",
-                    (owner, row["id"], row["revision"]),
-                )
-            ).fetchone()
+            live = row["state"] != "enabled" or await active_subscriptions(
+                conn, row, lock=False, user=live_user,
+                subscriptions=(live_subscriptions or {}).get(row["id"], []),
+            )
+            job = jobs.get(row["id"])
             status = (
                 row["state"]
                 if live and (not job or job["status"] not in {"cancelled", "failed"})
@@ -406,21 +432,23 @@ class Alerts:
         await conn.execute("INSERT INTO task_events(task_id,phase) VALUES(%s,'queued')", (task_id,))
 
 
-async def active_subscriptions(conn, row, *, lock=True):
-    user = await (
-        await conn.execute(
-            "SELECT active,session_version FROM users WHERE id=%s" + (" FOR SHARE" if lock else ""),
-            (row["owner_id"],),
-        )
-    ).fetchone()
+async def active_subscriptions(conn, row, *, lock=True, user=None, subscriptions=None):
+    if user is None:
+        user = await (
+            await conn.execute(
+                "SELECT active,session_version FROM users WHERE id=%s" + (" FOR SHARE" if lock else ""),
+                (row["owner_id"],),
+            )
+        ).fetchone()
     if not user or not user["active"]:
         return False
-    subscriptions = await (
-        await conn.execute(
-            "SELECT * FROM price_alert_subscriptions WHERE owner_id=%s AND rule_id=%s AND revoked_at IS NULL",
-            (row["owner_id"], row["id"]),
-        )
-    ).fetchall()
+    if subscriptions is None:
+        subscriptions = await (
+            await conn.execute(
+                "SELECT * FROM price_alert_subscriptions WHERE owner_id=%s AND rule_id=%s AND revoked_at IS NULL",
+                (row["owner_id"], row["id"]),
+            )
+        ).fetchall()
     for subscription in subscriptions:
         if subscription["session_version"] != user["session_version"]:
             continue

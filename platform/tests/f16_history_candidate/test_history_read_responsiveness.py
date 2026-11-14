@@ -250,3 +250,33 @@ async def test_chart_batch_returns_capacity_backoff_without_losing_observed_poin
         assert [point['price'] for point in reply.json()['data']['charts']['AAPL']['points']] == [10, 11]
     else:
         assert reply.status_code == 503
+
+
+async def test_repeated_automatic_chart_observation_reuses_one_receipt(market, monkeypatch):  # noqa: F811
+    client, app, _authority, revision, _source, _headers = await seeded(
+        market,
+        purposes=(
+            'latest', 'bars.day', 'bars.minute.ALL', 'bars.minute.REGULAR',
+            'price_series.minute.ALL', 'price_series.minute.REGULAR',
+        ),
+    )
+    from alcor_api.native_app_auth import issue_grant
+
+    async with app.state.db.connection() as conn:
+        user = await (await conn.execute("SELECT * FROM users WHERE username='MarketReader'")).fetchone()
+        grant = await issue_grant(conn, user, 'portfolio.read portfolio.write', 'Synthetic chart observation')
+    headers = {'authorization': 'Bearer ' + grant['access_token'], 'x-alcor-market-source': revision}
+    import alcor_api.market_observation_receipts as receipts
+
+    monkeypatch.setattr(receipts, 'observation_bucket', lambda at: 0)
+    async with app.state.db.connection() as conn:
+        before = (await (await conn.execute('SELECT count(*) AS n FROM market_data_operations')).fetchone())['n']
+    body = {'items': [{'id': 'same', 'market': 'US', 'code': 'AAPL'}]}
+    for _ in range(2):
+        reply = await client.post('/api/v2/charts', headers=headers, json=body)
+        assert reply.status_code == 200, reply.text
+    async with app.state.db.connection() as conn:
+        after = (await (await conn.execute('SELECT count(*) AS n FROM market_data_operations')).fetchone())['n']
+    # One prepare call stores its parent receipt and the child demand receipt;
+    # the second automatic request must reuse the parent instead of adding two.
+    assert after - before == 2, 'the automatic chart receipt is reused within the bucket'

@@ -332,15 +332,27 @@ def mount_legacy_chart_series(app, settings, authority):
                 from .market_history_demands import prepare
                 from .market_subscription_writes import subscription_items
                 from .legacy_identity import native_identity
-                from uuid import UUID,uuid4
+                from uuid import UUID
                 try:
                     writer=who
                     if getattr(who,'native_client',False):writer,_=await native_identity(request,authority.db,'portfolio.write')
                     normalized=subscription_items({'items':[{'market':i['market'],'code':i['code']} for i in items if i['market'] in ('US','HK','CN')]})
-                    identifier = request.headers.get('x-alcor-request-id')
+                    raw_identifier = request.headers.get('x-alcor-request-id')
+                    generated = raw_identifier is None
+                    if generated:
+                        from .market_observation_receipts import generated_history_observation_id
+                        # Repeated automatic chart refreshes within the bucket
+                        # reuse the accepted receipt instead of walking every
+                        # item through the registration loop again.
+                        identifier = generated_history_observation_id(
+                            writer, normalized, days=5, minute=True, adjust='none',
+                            at=datetime.now(UTC),
+                        )
+                    else:
+                        identifier = UUID(raw_identifier)
                     await prepare(
-                        authority, writer, UUID(identifier) if identifier else uuid4(), normalized, 5,
-                        minute=True, observation=True, opportunistic=not identifier,
+                        authority, writer, identifier, normalized, 5,
+                        minute=True, observation=True, opportunistic=generated,
                     )
                 except (HTTPException, ValueError, LockNotAvailable, QueryCanceled, PoolTimeout, TooManyRequests):
                     # Read-only App grants may consume already observed facts.

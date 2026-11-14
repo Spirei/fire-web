@@ -10,9 +10,9 @@ from market_latest_candidate.test_market_authority import demand, market, market
 from psycopg.types.json import Jsonb
 
 
-async def seeded(market):  # noqa: F811
+async def seeded(market, *, purposes=None):  # noqa: F811
     client, app, authority, _, _ = market
-    authority.policies = (replace(authority.policies[0], purposes=('latest', 'bars.day', 'bars.minute.ALL', 'bars.minute.REGULAR')),)
+    authority.policies = (replace(authority.policies[0], purposes=purposes or ('latest', 'bars.day', 'bars.minute.ALL', 'bars.minute.REGULAR')),)
     source = await client.post('/api/market/sources', json={'request_id':str(uuid4()),'policy_id':'fixture'})
     assert source.status_code == 200, source.text
     revision = source.json()['revision']

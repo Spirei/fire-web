@@ -6,16 +6,24 @@ MIGRATION = "0085_site_settings.sql"
 
 
 async def installed(conn):
+    # Applied migrations and table existence cannot change on a live pooled
+    # connection; cache the answer on the connection instead of querying it on
+    # every registration/discovery read.
+    cached = getattr(conn, "_alcor_site_registration_installed", None)
+    if cached is not None:
+        return cached
     row = await (
         await conn.execute(
             "SELECT EXISTS(SELECT 1 FROM public.schema_migrations WHERE name=%s) AS installed", (MIGRATION,)
         )
     ).fetchone()
     if row["installed"]:
+        setattr(conn, "_alcor_site_registration_installed", True)
         return True
     relation = await (await conn.execute("SELECT to_regclass('public.site_settings') AS relation")).fetchone()
     if relation["relation"] is not None:
         raise HTTPException(503, "站点配置结构与迁移记录不一致")
+    setattr(conn, "_alcor_site_registration_installed", False)
     return False
 
 

@@ -288,14 +288,15 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
 
     async def native_config_operation(version: int, request: Request, response: Response):
         assert_native_origin(request, settings)
+        from .native_business_discovery import discovery as business_discovery
+        from .native_identity_capabilities import email_verification_availability, native_email_registration_discovery
+        # One checkout serves the whole identity/mail discovery; these reads
+        # share the same snapshot and do not authorize any write.
         async with db.connection() as conn:
             config = await (await conn.execute('SELECT * FROM identity_passkey_config WHERE singleton=true')).fetchone()
-        value = discovery(version, config)
-        from .native_business_discovery import discovery as business_discovery
-        value.update(business_discovery(version))
-        from .native_identity_capabilities import email_verification_availability, native_email_registration_discovery
-        async with db.connection() as conn:
             mail_availability = await email_verification_availability(conn, settings)
+            value = discovery(version, config)
+            value.update(business_discovery(version))
             value['security']['email_verification_delivery'] = mail_availability
             value['native_login']['email_registration'] = await native_email_registration_discovery(conn, settings, mail_availability)
         value['security']['password_recovery_supported'] = True

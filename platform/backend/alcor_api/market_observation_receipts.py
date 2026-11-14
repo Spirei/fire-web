@@ -4,7 +4,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
 
-from .market_contract import digest
+from .market_contract import canonical, digest
 
 
 def observation_bucket(at):
@@ -76,3 +76,13 @@ async def generated_observation_id(authority, who, items, *, selected=None, sess
     # labels an uncommitted intent accepted, changes source time, or renews it
     # from the Worker. Every HTTP quote still checks current identity/license.
     return uuid5(NAMESPACE_URL, 'alcor:generated-quote-observation:1:' + digest(scope))
+
+
+def generated_history_observation_id(who, items, *, days, minute, adjust, at):
+    """Coalesce automatic chart registration without touching explicit IDs."""
+    principal = str(getattr(who, 'grant_id', None) or 'web:' + who.token_hash)
+    scope = {
+        'owner': who.id, 'principal': principal, 'items': items, 'days': days,
+        'minute': minute, 'adjust': adjust, 'bucket': observation_bucket(at),
+    }
+    return uuid5(NAMESPACE_URL, 'alcor:generated-history-observation:1:' + digest(canonical(scope)))
