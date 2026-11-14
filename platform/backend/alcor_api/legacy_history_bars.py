@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+from psycopg.errors import LockNotAvailable
 
 from .card_preferences import JS_WHITESPACE
 from .legacy_identity import OLD_COOKIE, WEB_COOKIE, assert_native_origin, native_identity, web_identity
@@ -142,7 +143,10 @@ def mount_legacy_history_bars(app, settings, authority):
         except (ValueError,TypeError,KeyError):raise HTTPException(400,'请求编号无效') from None
         items=subscription_items({'items':raw.get('items')})
         for item in items:item['instrument']='index' if raw.get('index') is True else 'asset' if item['market']=='ASSET' else 'equity'
-        result=await prepare(authority,who,rid,items,raw.get('days',330),adjust=raw.get('adjust','none'),minute=raw.get('minute',False))
+        try:
+            result=await prepare(authority,who,rid,items,raw.get('days',330),adjust=raw.get('adjust','none'),minute=raw.get('minute',False))
+        except LockNotAvailable:
+            raise HTTPException(503,'历史采集登记繁忙，请稍后使用原请求编号重试',headers={'Retry-After':'3'}) from None
         versioned=request.url.path.startswith(('/api/v1/','/api/v2/'))
         return JSONResponse({'code':0,'message':'ok','data':result} if versioned else result,headers={'Cache-Control':'private, no-store'})
 

@@ -11,6 +11,25 @@ from test_legacy_devices import bearer, grant
 
 
 @pytest.mark.parametrize('version', [1, 2])
+async def test_history_prepare_lock_timeout_can_retry_same_receipt(client, db, admin, version):
+    pair = await grant(db, admin, 'portfolio.read portfolio.write')
+    headers = bearer(pair)
+    path = f'/api/v{version}/kline/prepare'
+    identifier = str(uuid4())
+    payload = {'requestId': identifier, 'items': [{'market': 'US', 'code': 'AAPL'}],
+               'days': 5, 'minute': True}
+    async with db.connection() as conn, conn.transaction():
+        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('market-owner:' + str(admin),))
+        busy = await client.post(path, headers=headers, json=payload)
+        assert busy.status_code == 503 and busy.headers['retry-after'] == '3', busy.text
+        assert busy.json()['code'] == 50001
+    saved = await client.post(path, headers=headers, json=payload)
+    assert saved.status_code == 200 and saved.json()['data']['requestId'] == identifier, saved.text
+    repeated = await client.post(path, headers=headers, json=payload)
+    assert repeated.status_code == 200 and repeated.json() == saved.json(), repeated.text
+
+
+@pytest.mark.parametrize('version', [1, 2])
 async def test_chart_observation_shares_asset_identity_but_explicit_prepare_keeps_write_lock(client, db, admin, app, private_redis, version):
     pair = await grant(db, admin, 'portfolio.read portfolio.write cash.read')
     headers = bearer(pair)
