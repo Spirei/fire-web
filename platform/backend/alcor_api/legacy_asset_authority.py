@@ -33,12 +33,27 @@ class LegacyAssetAuthority(BrokerMetadata):
 
     async def declaration(self, conn, owner, record):
         stored=await (await conn.execute('SELECT v.* FROM asset_instrument_heads h JOIN asset_instrument_versions v ON v.owner_id=h.owner_id AND v.id=h.version_id WHERE h.owner_id=%s AND h.record_id=%s',(owner,record['id']))).fetchone()
+        return self.project_declaration(record, stored), stored
+
+    async def declarations(self, conn, owner, records):
+        if not records:
+            return {}
+        rows = await (await conn.execute(
+            """SELECT v.*,h.record_id AS head_record_id FROM asset_instrument_heads h
+            JOIN asset_instrument_versions v ON v.owner_id=h.owner_id AND v.id=h.version_id
+            WHERE h.owner_id=%s AND h.record_id=ANY(%s)""",
+            (owner, [record["id"] for record in records]),
+        )).fetchall()
+        return {row["head_record_id"]: row for row in rows}
+
+    @staticmethod
+    def project_declaration(record, stored):
         matches=bool(stored and (stored['market'],stored['code'])==(record['market'],record['code']))
         value={'kind':stored['kind'] if matches else 'unknown','listingStatus':stored['listing_status'] if matches else 'unknown',
                'multiplier':1 if matches and stored['kind']!='unknown' else None,'underlyingRecordId':None,
                'source':'owner_declared' if matches else 'unavailable','revision':stored['revision'] if stored else 0,
                'identityMatches':matches,'updatedAt':iso(stored['created_at']) if stored else None}
-        return value,stored
+        return value
 
     async def instrument(self, who, record_id):
         async with self.context(who,shared_read=True) as conn:

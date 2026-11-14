@@ -28,7 +28,8 @@ def mount(app, service):
         from .security import digest
 
         write = request.method != "GET"
-        if not await app.state.rate_limit(
+        admit = app.state.rate_limit if write else app.state.read_rate_limit
+        if not await admit(
             service.db,
             digest(category + (":write:" if write else ":read:") + who.id),
             60 if write else 180,

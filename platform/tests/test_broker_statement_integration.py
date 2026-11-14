@@ -51,6 +51,18 @@ async def test_official_statement_full_synthetic_lifecycle(client, admin, db, se
     assert row["qty"] == "2" and row["cost"] == "10" and row["price"] == "12"
     assert row["registeredQty"] is None and row["costAuthority"] == "official_reported_cost_basis"
     assert row["officialObservation"]["reportDate"] == "2026-01-31"
+    # The shared snapshot uses the batch projection. Compare it with the
+    # original per-record projection against the same bill and ownership.
+    from alcor_api.actual_projection import actual_record_dto, actual_records_dto
+    async with db.connection() as conn, conn.transaction():
+        saved = await (await conn.execute(
+            "SELECT * FROM portfolio_records WHERE owner_id=%s AND broker_account_id=%s",
+            (admin, identifier),
+        )).fetchall()
+        assert saved
+        assert await actual_records_dto(conn, admin, saved) == {
+            item["id"]: await actual_record_dto(conn, admin, item) for item in saved
+        }
     cash_response = await client.get("/api/cash/accounts/" + identifier)
     assert cash_response.status_code == 200, cash_response.text
     cash = {r["currency"]: r for r in cash_response.json()["currencies"]}

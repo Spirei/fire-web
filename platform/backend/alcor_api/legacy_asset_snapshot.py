@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
-from .actual_projection import actual_record_dto, confirmed_actual_fees
+from .actual_projection import actual_records_dto, confirmed_actual_fees
 from .broker_metadata import fingerprint
 from .cash_overview import CashOverview
 from .fee_repair_model import replay
@@ -111,11 +111,16 @@ async def snapshot(service,who,options):
         rows=await (await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         if [(row['id'],row['market'],row['code'],row['revision']) for row in rows]!=[(row['id'],row['market'],row['code'],row['revision']) for row in original]:
             raise HTTPException(409,'持仓在读取报价期间已变化，请重新读取')
+        policies = {}
         for state in quoted['quoteStates'].values():
-            if state.get('sourceRevision'):
-                _,policy=await service.market_authority.config(conn,who.id,state['sourceRevision'])
-                if policy.license_revision!=state['licenseRevision']:raise HTTPException(403,'报价来源许可已变化')
-        actual={row['id']:await actual_record_dto(conn,who.id,row) for row in rows}
+            revision = state.get('sourceRevision')
+            if revision:
+                if revision not in policies:
+                    _, policies[revision] = await service.market_authority.config(conn, who.id, revision)
+                if policies[revision].license_revision != state['licenseRevision']:
+                    raise HTTPException(403, '报价来源许可已变化')
+        actual = await actual_records_dto(conn, who.id, rows)
+        declarations = await service.declarations(conn, who.id, rows)
         average,cleared=await averages(conn,who.id,rows,actual)
         overview=await CashOverview(service.db).on_connection(conn,who)
         from .legacy_registered_cash import read_registered_cash
@@ -134,7 +139,10 @@ async def snapshot(service,who,options):
         with localcontext() as context:
             context.prec=80
             for row in rows:
-                rid=row['id'];record=actual[rid];declaration,stored=await service.declaration(conn,who.id,row)
+                rid = row['id']
+                record = actual[rid]
+                stored = declarations.get(rid)
+                declaration = service.project_declaration(row, stored)
                 basis='legacy_record_unit' if stored is None else 'owner_declared_unit' if declaration['identityMatches'] and declaration['kind']!='unknown' else 'unavailable'
                 known=basis!='unavailable';qty=decimal(record['qty']);diluted=decimal(record['cost'])
                 quote=quoted['quotes'].get(rid);state=quoted['quoteStates'].get(rid,{})

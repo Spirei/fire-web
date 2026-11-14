@@ -51,6 +51,10 @@ async def latest_official(conn, owner, account_id):
             (owner, account_id),
         )
     ).fetchone()
+    return await official_account_report(conn, owner, account)
+
+
+async def official_account_report(conn, owner, account):
     if not account:
         raise HTTPException(503, "账户归属暂时无法核对")
     if account["holding_source"] != "official":
@@ -60,7 +64,7 @@ async def latest_official(conn, owner, account_id):
     report = await (
         await conn.execute(
             "SELECT * FROM broker_statement_imports WHERE owner_id=%s AND account_id=%s ORDER BY to_date DESC,created_at DESC,id DESC LIMIT 1",
-            (owner, account_id),
+            (owner, account["id"]),
         )
     ).fetchone()
     if report and report["account_kind"] != account["account_kind"]:
@@ -72,6 +76,10 @@ async def official_record(conn, owner, row):
     if not row["broker_account_id"]:
         return None
     current = await latest_official(conn, owner, row["broker_account_id"])
+    return await project_official_record(conn, owner, row, current)
+
+
+async def project_official_record(conn, owner, row, current):
     if current is None:
         return None
     report = current["report"]

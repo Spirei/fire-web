@@ -185,6 +185,37 @@ async def test_native_history_uses_shared_read_budget_and_backoff_without_count_
         await cache.aclose()
 
 
+async def test_native_alert_list_uses_redis_and_keeps_database_fallback(client, admin, app, private_redis):
+    from alcor_api.native_app_auth import issue_grant
+
+    db = app.state.db
+    async with db.connection() as conn, conn.transaction():
+        user = await (await conn.execute('SELECT * FROM users WHERE id=%s', (admin,))).fetchone()
+        pair = await issue_grant(conn, user, 'portfolio.read', 'Synthetic alert budget')
+    headers = {'authorization': 'Bearer ' + pair['access_token']}
+    cache = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
+
+    async def attempts():
+        async with db.connection() as conn:
+            return (await (await conn.execute('SELECT coalesce(sum(attempts),0) AS n FROM auth_rate_limits')).fetchone())['n']
+
+    app.state.cache.client = cache
+    try:
+        before = await attempts()
+        for version in (1, 2):
+            response = await client.get(f'/api/v{version}/price-alerts', headers=headers)
+            assert response.status_code == 200, response.text
+        assert await attempts() == before
+        assert len(await cache.keys('alcor:*:read-budget:*')) == 1
+        app.state.cache.client = None
+        response = await client.get('/api/v2/price-alerts', headers=headers)
+        assert response.status_code == 200, response.text
+        assert await attempts() == before + 1
+    finally:
+        app.state.cache.client = None
+        await cache.aclose()
+
+
 @pytest.mark.parametrize('version', [1, 2])
 async def test_native_intraday_reads_keep_shared_limits_without_pg_counter_writes(client, admin, app, private_redis, version):
     from alcor_api.native_app_auth import authenticate, issue_grant

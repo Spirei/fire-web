@@ -13,7 +13,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from .actual_projection import actual_record_dto, confirmed_actual_fees
+from .actual_projection import actual_records_dto, confirmed_actual_fees
 from .cash_overview import CashOverview
 from .fee_repair_model import replay
 from .fx_reference import FxWorker
@@ -182,7 +182,7 @@ class PortfolioOverview(LegacyAssetAuthority):
                 raise HTTPException(409, "账户范围超出完整读取预算")
             by_account = {r["id"]: r for r in accounts}
             before = {r["id"]: r for r in original}
-            actual = {row["id"]: await actual_record_dto(conn, who.id, row) for row in rows}
+            actual = await actual_records_dto(conn, who.id, rows)
             economic = await economics(conn, who.id, rows)
             cash = await CashOverview(self.db).on_connection(conn, who)
             fx = await FxWorker(TransactionDB(self.db, conn)).snapshot(exact=True)

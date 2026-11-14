@@ -21,6 +21,34 @@ async def first_unknown_revision(conn,owner,record):
 
 
 async def actual_record_dto(conn,owner,row):
+    return await _actual_record_dto(conn, owner, row)
+
+
+async def actual_records_dto(conn, owner, rows):
+    """Reuse fee and account evidence within the caller's asset read transaction."""
+    if not rows:
+        return {}
+    from .broker_statement_projection import official_account_report
+
+    record_ids = [row["id"] for row in rows]
+    unknown = {row["record_id"] for row in await (await conn.execute(
+        "SELECT DISTINCT t.record_id FROM trade_ledger t WHERE t.owner_id=%s AND t.record_id=ANY(%s) AND "
+        + PENDING_FEE_SQL, (owner, record_ids),
+    )).fetchall()}
+    account_ids = sorted({row["broker_account_id"] for row in rows if row["broker_account_id"]})
+    accounts = {row["id"]: row for row in await (await conn.execute(
+        "SELECT id,account_kind,holding_source,deleted_at FROM broker_accounts WHERE owner_id=%s AND id=ANY(%s)",
+        (owner, account_ids),
+    )).fetchall()} if account_ids else {}
+    reports = {}
+    for account_id in account_ids:
+        reports[account_id] = await official_account_report(conn, owner, accounts.get(account_id))
+    return {row["id"]: await _actual_record_dto(
+        conn, owner, row, unknown_fee=row["id"] in unknown, reports=reports,
+    ) for row in rows}
+
+
+async def _actual_record_dto(conn, owner, row, *, unknown_fee=None, reports=None):
     result=record_dto(row)
     if row.get('position_transfer_id') is not None:
         from .position_transfer_checkpoint import verify_current
@@ -48,10 +76,15 @@ async def actual_record_dto(conn,owner,row):
         if row.get('trade_tip_id') is None:
             result['positionAuthority']='owner_recorded_transfer'
             result['costAuthority']='registered_transfer_unit_cost'
-    if await first_unknown_revision(conn,owner,row['id']) is not None:
+    if unknown_fee is None:
+        unknown_fee = await first_unknown_revision(conn, owner, row["id"]) is not None
+    if unknown_fee:
         result.update(registeredCost=result['cost'],cost=None,costKnown=False)
-    from .broker_statement_projection import official_record
-    official = await official_record(conn, owner, row)
+    from .broker_statement_projection import official_record, project_official_record
+    if reports is None:
+        official = await official_record(conn, owner, row)
+    else:
+        official = await project_official_record(conn, owner, row, reports.get(row["broker_account_id"]))
     if official is not None:
         result.update(registeredQty=record_dto(row)['qty'],
                       registeredCost=record_dto(row)['cost'],
