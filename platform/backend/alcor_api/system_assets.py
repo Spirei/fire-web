@@ -18,6 +18,13 @@ from .security import lock_mutation_identity
 from .shared_attachment_media import open_original, stage
 from .system_asset_codec import FOLDERS, KINDS, asset_name, image_bytes
 
+# System icons and flags repeat across pages. Cache the resolved immutable
+# version row; every upload/replacement clears the map, so a new or removed
+# version is never masked by a stale entry.
+_public_cache = {}
+_PUBLIC_TTL = 30.0
+_PUBLIC_SHA_TTL = 300.0
+
 
 @dataclass(frozen=True)
 class PreparedOriginal:
@@ -282,6 +289,7 @@ class SystemAssets:
             "INSERT INTO system_asset_paths(public_path,current_version) VALUES(%s,%s) ON CONFLICT(public_path) DO UPDATE SET current_version=excluded.current_version,updated_at=clock_timestamp()",
             (path, version),
         )
+        _public_cache.clear()
         return {
             "kind": kind,
             "url": path + "?sha256=" + served_sha,
@@ -301,26 +309,37 @@ class SystemAssets:
             raise HTTPException(400, "无效的素材路径")
         if sha is not None and not re.fullmatch("[a-f0-9]{64}", sha):
             raise HTTPException(400, "无效的素材摘要")
-        async with self.context() as conn:
-            if sha:
-                row = await (
-                    await conn.execute(
-                        "SELECT * FROM system_asset_versions WHERE public_path=%s AND served_sha256=%s ORDER BY created_at,id LIMIT 1",
-                        (path, sha),
-                    )
-                ).fetchone()
-            else:
-                row = await (
-                    await conn.execute(
-                        "SELECT v.* FROM system_asset_paths p JOIN system_asset_versions v ON v.id=p.current_version WHERE p.public_path=%s",
-                        (path,),
-                    )
-                ).fetchone()
-            if not row:
-                raise HTTPException(404, "素材不存在")
-            return row, await open_original(
-                self.db.settings, {"sha256": row["served_sha256"], "byte_length": row["served_size"]}
+        cache_key = (str(self.db.settings.instance_id), path, sha)
+        now = time.monotonic()
+        cached = _public_cache.get(cache_key)
+        if cached is not None and cached[0] > now:
+            row = cached[1]
+        else:
+            async with self.context() as conn:
+                if sha:
+                    row = await (
+                        await conn.execute(
+                            "SELECT * FROM system_asset_versions WHERE public_path=%s AND served_sha256=%s ORDER BY created_at,id LIMIT 1",
+                            (path, sha),
+                        )
+                    ).fetchone()
+                else:
+                    row = await (
+                        await conn.execute(
+                            "SELECT v.* FROM system_asset_paths p JOIN system_asset_versions v ON v.id=p.current_version WHERE p.public_path=%s",
+                            (path,),
+                        )
+                    ).fetchone()
+                if not row:
+                    raise HTTPException(404, "素材不存在")
+            if len(_public_cache) > 4096:
+                _public_cache.clear()
+            _public_cache[cache_key] = (
+                now + (_PUBLIC_SHA_TTL if sha is not None else _PUBLIC_TTL), row,
             )
+        return row, await open_original(
+            self.db.settings, {"sha256": row["served_sha256"], "byte_length": row["served_size"]}
+        )
 
     async def original(self, who, identifier):
         async with self.context(who) as conn:

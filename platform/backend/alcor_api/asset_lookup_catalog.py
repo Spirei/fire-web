@@ -3,6 +3,7 @@
 import hashlib
 import json
 from contextlib import asynccontextmanager
+from time import monotonic
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -12,6 +13,15 @@ from .admin_attachments import iso
 from .asset_lookup_contract import image_key, lookup_codes, manifest
 from .security import lock_mutation_identity
 from .shared_attachment_media import open_original
+
+# Stable image keys are read repeatedly by icon grids. Registry writes clear
+# this map; card fallback rows stay uncached so card deletion is immediate.
+_original_cache = {}
+_ORIGINAL_TTL = 5.0
+
+
+def invalidate_original_cache():
+    _original_cache.clear()
 
 
 class AssetCatalog:
@@ -558,28 +568,38 @@ class AssetCatalog:
             }
 
     async def original(self, key):
-        async with self.context() as conn:
-            row = await (
-                await conn.execute(
-                    """SELECT v.* FROM asset_catalog_image_keys k JOIN asset_catalog_entries e ON e.id=k.asset_id
-                JOIN system_asset_versions v ON v.id=CASE WHEN k.variant='light' THEN e.light_version ELSE e.dark_version END
-                WHERE k.key=%s AND v.kind='asset' AND NOT EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL) """,
-                    (key,),
-                )
-            ).fetchone()
-            if not row:
-                # Card publication remains owned by its original PG index. The
-                # stable key is a derived projection, never a copied catalog row.
+        cache_key = (str(self.db.settings.instance_id), key)
+        cached = _original_cache.get(cache_key)
+        if cached is not None and cached[0] > monotonic():
+            row = cached[1]
+        else:
+            async with self.context() as conn:
                 row = await (
                     await conn.execute(
-                        """SELECT v.* FROM card_catalog_public_index c JOIN system_asset_versions v ON v.id=c.image_version
-                    WHERE c.deleted_at IS NULL AND c.image_version IS NOT NULL
-                    AND c.asset_lookup_key=%s LIMIT 1""",
+                        """SELECT v.* FROM asset_catalog_image_keys k JOIN asset_catalog_entries e ON e.id=k.asset_id
+                    JOIN system_asset_versions v ON v.id=CASE WHEN k.variant='light' THEN e.light_version ELSE e.dark_version END
+                    WHERE k.key=%s AND v.kind='asset' AND NOT EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL) """,
                         (key,),
                     )
                 ).fetchone()
+                primary = row is not None
                 if not row:
-                    raise HTTPException(404, "素材不存在")
-            return row, await open_original(
-                self.db.settings, {"sha256": row["served_sha256"], "byte_length": row["served_size"]}
-            )
+                    # Card publication remains owned by its original PG index. The
+                    # stable key is a derived projection, never a copied catalog row.
+                    row = await (
+                        await conn.execute(
+                            """SELECT v.* FROM card_catalog_public_index c JOIN system_asset_versions v ON v.id=c.image_version
+                        WHERE c.deleted_at IS NULL AND c.image_version IS NOT NULL
+                        AND c.asset_lookup_key=%s LIMIT 1""",
+                            (key,),
+                        )
+                    ).fetchone()
+                    if not row:
+                        raise HTTPException(404, "素材不存在")
+            if primary:
+                if len(_original_cache) > 2048:
+                    _original_cache.clear()
+                _original_cache[cache_key] = (monotonic() + _ORIGINAL_TTL, row)
+        return row, await open_original(
+            self.db.settings, {"sha256": row["served_sha256"], "byte_length": row["served_size"]}
+        )

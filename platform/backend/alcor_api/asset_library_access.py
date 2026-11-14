@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+from time import monotonic
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -11,12 +12,30 @@ from psycopg.types.json import Jsonb
 from .profile_http import bounded_body
 from .security import COOKIE, administrator, identity, lock_mutation_identity
 
+# The material policy is public and changes only through the admin endpoint
+# below. A short in-process cache keeps page-load image bursts from checking
+# out a database connection for every icon; saves invalidate it immediately.
+_ACCESS_TTL = 5.0
+_access_cache = None
+
 
 async def read_access(conn):
     row = await (await conn.execute('SELECT revision,registered,guest FROM asset_library_access WHERE singleton')).fetchone()
     if row is None:
         raise HTTPException(503, '素材权限尚未初始化')
     return dict(row)
+
+
+async def cached_read_access(db):
+    global _access_cache
+    key = str(db.settings.instance_id)
+    cached = _access_cache
+    if cached is not None and cached[0] == key and cached[1] > monotonic():
+        return dict(cached[2])
+    async with db.connection() as conn:
+        value = await read_access(conn)
+    _access_cache = (key, monotonic() + _ACCESS_TTL, dict(value))
+    return value
 
 
 async def material_member(request, db):
@@ -33,8 +52,7 @@ async def material_member(request, db):
 
 
 async def assert_material_read(request, db):
-    async with db.connection() as conn:
-        policy = await read_access(conn)
+    policy = await cached_read_access(db)
     if policy['guest']:
         return policy
     try:
@@ -51,8 +69,7 @@ def mount_material_access(app, db):
 
     @app.get('/api/asset-library/access')
     async def public_access():
-        async with db.connection() as conn:
-            return JSONResponse(await read_access(conn), headers=headers)
+        return JSONResponse(await cached_read_access(db), headers=headers)
 
     @app.get('/api/admin/asset-library/access')
     async def admin_access(request: Request):
@@ -95,6 +112,8 @@ def mount_material_access(app, db):
                 return JSONResponse(prior['result'],headers=headers)
             if old['revision'] != raw['expectedRevision']: raise HTTPException(409,'素材权限已变化，请重新读取')
             await conn.execute('UPDATE asset_library_access SET revision=revision+1,registered=%s,guest=%s WHERE singleton',(raw['registered'],raw['guest']))
+            global _access_cache
+            _access_cache = None
             result={'requestId':str(uid),**await read_access(conn)}
             await conn.execute('INSERT INTO asset_library_access_operations(actor_id,request_id,fingerprint,result) VALUES(%s,%s,%s,%s)',(who.id,uid,fp,Jsonb(result)))
             await conn.execute("INSERT INTO audit_events(actor_id,action,target_id,request_id) VALUES(%s,'asset-library.access','public-materials',%s)",(who.id,uid))

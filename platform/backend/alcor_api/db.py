@@ -44,7 +44,10 @@ class Database:
                 min_size=settings.pool_min_size,
                 max_size=settings.pool_size,
                 timeout=3,
-                max_waiting=20,
+                # A page loads many icons at once; let a short burst queue
+                # instead of returning TooManyRequests immediately. The
+                # per-checkout timeout still bounds the wait.
+                max_waiting=100,
                 max_lifetime=settings.pool_max_lifetime,
                 max_idle=settings.pool_max_idle,
                 kwargs={

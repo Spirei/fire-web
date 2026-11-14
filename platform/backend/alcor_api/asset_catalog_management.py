@@ -289,6 +289,8 @@ class AssetManagement:
                 broker_markets=broker_markets,
             )
             await self.event(conn, who, request_id, aid, action, before, result["asset"], result)
+            from .asset_lookup_catalog import invalidate_original_cache
+            invalidate_original_cache()
             return result
 
     async def event(self, conn, who, request_id, aid, kind, before, after, result):
@@ -382,6 +384,8 @@ class AssetManagement:
             await conn.execute("UPDATE asset_catalog_scope SET revision=revision+1")
             await conn.execute("INSERT INTO asset_catalog_operations(actor_id,request_id,fingerprint,result) VALUES(%s,%s,%s,%s)", (who.id, request_id, fp, Jsonb(result)))
             await self.event(conn, who, request_id, aid, result['kind'], dict(row) if row else None, None, result)
+            from .asset_lookup_catalog import invalidate_original_cache
+            invalidate_original_cache()
             return result
 
     async def web_icons(self, kind, selected):
