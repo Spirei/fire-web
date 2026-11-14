@@ -29,6 +29,9 @@ async def install(client, db, owner):
 @pytest.mark.parametrize('cancel', [False, True])
 async def test_source_configuration_remains_coherent_while_another_connection_revalidates(client, db, admin, cancel):
     policy = await install(client, db, admin)
+    # Force the paused reader through the full decrypt path instead of the
+    # steady-state signature fast path.
+    object.__setattr__(db.settings, '_private_runtime_actors', None)
     entered, release = asyncio.Event(), asyncio.Event()
 
     class Paused:
@@ -62,6 +65,7 @@ async def test_source_configuration_remains_coherent_while_another_connection_re
 
 async def test_slow_older_configuration_cannot_replace_a_newer_saved_revision(client, db, admin):
     policy=await install(client,db,admin)
+    object.__setattr__(db.settings, '_private_runtime_actors', None)
     entered,release=asyncio.Event(),asyncio.Event()
 
     class Paused:

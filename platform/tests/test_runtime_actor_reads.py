@@ -35,8 +35,17 @@ async def test_runtime_groups_batch_actor_reads_but_recheck_every_checkout(monke
         async def fetchall(self):
             return states
 
+    class Signature:
+        async def fetchone(self):
+            return {'revision': 7, 'actors': [
+                [state['id'], state['active'], state['role'], state['deleted_at']]
+                for state in sorted(states, key=lambda item: item['id'])
+            ]}
+
     class Connection:
-        async def execute(self, statement, params):
+        async def execute(self, statement, params=None):
+            if statement.startswith('SELECT s.revision,'):
+                return Signature()
             assert statement == 'SELECT id,active,role,deleted_at FROM users WHERE id=ANY(%s)'
             assert params == ([owner, other] if mixed else [owner],), 'deduplicate actors across all six groups'
             calls.append(statement)
@@ -52,7 +61,7 @@ async def test_runtime_groups_batch_actor_reads_but_recheck_every_checkout(monke
     else:
         states[0].update({'active': False} if invalid == 'inactive' else {'role': 'user'} if invalid == 'demoted' else {'deleted_at': 'synthetic-deletion'})
     result = await runtime.load_runtime_on_connection(Connection(), settings)
-    assert len(calls) == 2, 'no authorization snapshot is reused across checkouts'
+    assert len(calls) == 2, 'every checkout rechecks the current approver state'
     affected = {row['group_name'] for row in rows if row['actor_id'] == owner}
     assert set(decrypted) == set(runtime.GROUP_FIELDS) - affected, 'only currently authorized actors may decrypt their groups'
     assert set(result['unavailable']) == affected
@@ -76,3 +85,21 @@ async def test_real_runtime_overlay_stops_after_actor_demotion_and_recovers(clie
     async with db.connection():
         assert db.settings.worker_poll_seconds == 2 and db.settings.lease_seconds == 60
         assert not db.settings._private_runtime_unavailable
+
+
+async def test_pool_checkout_reuses_identity_and_schema_guard(db):
+    from alcor_api import request_timing
+
+    await db.pool.resize(1, 1)
+    timing, token = request_timing.begin()
+    try:
+        async with db.connection():
+            pass
+        first = timing.statements
+        async with db.connection():
+            pass
+        second = timing.statements - first
+    finally:
+        request_timing.finish(timing, token)
+    assert first >= 3, 'the first checkout verifies identity, schema and approvers'
+    assert second == 1, 'later checkouts only recheck the approver signature'

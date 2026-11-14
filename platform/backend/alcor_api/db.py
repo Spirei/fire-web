@@ -76,17 +76,27 @@ class Database:
                 elapsed('pool_wait', started)
                 acquired = True
                 with measure('db_guard'):
-                    await verify_identity(conn, self.settings)
-                    versions = await (await conn.execute("SELECT name,sha256 FROM schema_migrations")).fetchall()
-                    if (
-                        not self.expected_migrations
-                        or {r["name"]: r["sha256"] for r in versions} != self.expected_migrations
-                    ):
-                        raise TargetMismatch("Database schema does not match this application release")
-                    if "0131_private_runtime_settings.sql" in self.expected_migrations:
+                    # A pooled connection never changes its database target; the
+                    # identity and applied-schema checks run once per physical
+                    # connection instead of on every checkout. A new connection
+                    # (including one created after a pool replacement) re-verifies.
+                    names = getattr(conn, "_alcor_schema_names", None)
+                    if names is None:
+                        await verify_identity(conn, self.settings)
+                        versions = await (
+                            await conn.execute("SELECT name,sha256 FROM schema_migrations")
+                        ).fetchall()
+                        names = frozenset(row["name"] for row in versions)
+                        if (
+                            not self.expected_migrations
+                            or {r["name"]: r["sha256"] for r in versions} != self.expected_migrations
+                        ):
+                            raise TargetMismatch("Database schema does not match this application release")
+                        setattr(conn, "_alcor_schema_names", names)
+                    if "0131_private_runtime_settings.sql" in names:
                         from .private_runtime_settings import load_runtime_on_connection
 
-                        await load_runtime_on_connection(conn, self.settings)
+                        await load_runtime_on_connection(conn, self.settings, installed=True)
                 yield conn
         finally:
             if not acquired:

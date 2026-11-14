@@ -630,12 +630,55 @@ def disable_group(settings,group,fields=(),targets=()):
     elif group=='scheduling':assign(settings,'worker_poll_seconds',1);assign(settings,'lease_seconds',30)
 
 
-async def load_runtime_on_connection(conn,settings):
+async def runtime_approver_signature(conn):
+    """Recheck the current revision and every approval owner in one statement."""
+    row=await (await conn.execute(
+        """SELECT s.revision,
+        (SELECT coalesce(jsonb_agg(jsonb_build_array(a.actor_id,u.active,u.role,u.deleted_at) ORDER BY a.actor_id),'[]'::jsonb)
+         FROM (SELECT DISTINCT v.actor_id FROM private_runtime_heads h
+               JOIN private_runtime_versions v ON v.id=h.current_version) a
+         JOIN users u ON u.id=a.actor_id) AS actors
+        FROM private_runtime_scope s WHERE s.singleton"""
+    )).fetchone()
+    if not row:return None
+    return row['revision'],row['actors']
+
+
+async def load_runtime_on_connection(conn,settings,*,installed=True):
     # No new connection, key creation, provider IO, or mutation is permitted here.
+    if not installed:return {'revision':0,'changed':False,'unavailable':{}}
+    # The encrypted overlays only need reloading when the revision or an
+    # approver's authority changed. The signature query is the per-checkout
+    # authorization recheck; it replaces three sequential guard statements.
+    signature=await runtime_approver_signature(conn)
+    if (
+        signature is not None
+        and signature[0]==getattr(settings,'_private_runtime_revision',None)
+        and signature[1]==getattr(settings,'_private_runtime_actors',None)
+    ):
+        return {'revision':signature[0],'changed':False,
+                'unavailable':dict(getattr(settings,'_private_runtime_unavailable',None) or {})}
+    result=await _load_runtime_full(conn,settings)
+    # A slow reader may have skipped publication because a newer revision is
+    # already live; only cache the approver snapshot that revision belongs to.
+    if signature is not None and getattr(settings,'_private_runtime_revision',None)==signature[0]:
+        object.__setattr__(settings,'_private_runtime_actors',signature[1])
+    else:
+        current=await runtime_approver_signature(conn)
+        if current is not None and getattr(settings,'_private_runtime_revision',None)==current[0]:
+            object.__setattr__(settings,'_private_runtime_actors',current[1])
+        else:
+            object.__setattr__(settings,'_private_runtime_actors',None)
+    return result
+
+
+async def _load_runtime_full(conn,settings):
     from types import SimpleNamespace
     service=PrivateRuntimeSettings(SimpleNamespace(settings=settings));base=base_snapshot(settings)
     revision,rows,failures=await service.rows(conn)
-    if not rows and not failures:return {'revision':revision,'changed':False,'unavailable':{}}
+    if not rows and not failures:
+        object.__setattr__(settings,'_private_runtime_revision',revision)
+        return {'revision':revision,'changed':False,'unavailable':{}}
     before=hashlib.sha256(canonical(primitive({group:{key:getattr(settings,SMTP_MAP.get(key,key),None) for key in values if key in SOURCE_FIELDS or key in SMTP_MAP or key in ('business_notification_targets','worker_poll_seconds','lease_seconds')} for group,values in base.items()})).encode()).hexdigest()
     # Validate a detached candidate. Resetting the shared Settings before an
     # awaited owner check briefly removed live sources/FX from other requests.
