@@ -26,12 +26,26 @@ async def initialize(client,headers):
 
 async def hashes(db):
     async with db.connection() as conn,conn.transaction():result=await tables_and_hashes(conn)
-    # Legacy GET retains its real PG abuse-throttle counter. It must not seed,
+    # Legacy GET can fall back to its PG abuse-throttle counter. It must not seed,
     # migrate, touch receipts/preferences/records or change any business table.
     # Delayed observability flushes are independent of the read route, including
     # under concurrent regression load. These are not preferences or receipts.
     telemetry = REQUEST_TELEMETRY_TABLES | {"auth_rate_limits"}
     return {name: row for name, row in result.items() if name not in telemetry}
+
+
+async def test_native_list_can_share_an_inflight_read_identity(client, db, admin):
+    from alcor_api.native_app_auth import authenticate, identity_from_grant, lock_native_identity
+
+    headers, pair = await native(db, admin)
+    await initialize(client, headers)
+    async with db.connection() as conn, conn.transaction():
+        token = pair['access_token']
+        who = identity_from_grant(await authenticate(conn, token), token, 'portfolio.read')
+        await lock_native_identity(conn, who, shared=True)
+        reply = await asyncio.wait_for(client.get('/api/v2/watch-groups', headers=headers), timeout=1)
+        assert reply.status_code == 200, reply.text
+        assert len(reply.json()['data']['groups']) == 6
 
 
 @pytest.mark.parametrize('version',[1,2])

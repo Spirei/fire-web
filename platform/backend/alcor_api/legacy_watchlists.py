@@ -41,8 +41,9 @@ def mount_legacy_watchlists(app, settings, db, rate_limit):
     async def member(request, write=False):
         who = await portfolio_member(request, settings, db, write=write)
         address = request.client.host if request.client else "unknown"
+        admit = rate_limit if write else app.state.read_rate_limit
         for key, maximum in ((digest("watch-groups:" + address), 60 if write else 120), ("watch-groups-global", 300)):
-            if not await rate_limit(db, key, maximum, window_seconds=60):
+            if not await admit(db, key, maximum, window_seconds=60):
                 raise LegacyError(429, 42901, "请求过于频繁，请稍后再试")
         return who
 

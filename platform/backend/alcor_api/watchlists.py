@@ -57,10 +57,10 @@ class WatchGroups:
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             if authorization is not None:
-                from .security import lock_mutation_identity
+                from .security import lock_read_identity
                 if authorization.id != owner:
                     raise HTTPException(403, "账号不匹配")
-                await lock_mutation_identity(conn, authorization, require_admin=False)
+                await lock_read_identity(conn, authorization, require_admin=False)
             user = await (await conn.execute("SELECT active,role FROM users WHERE id=%s", (owner,))).fetchone()
             if not user or not user["active"]:
                 raise HTTPException(403, "账号不可用")
