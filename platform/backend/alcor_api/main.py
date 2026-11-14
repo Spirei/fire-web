@@ -269,6 +269,12 @@ def create_app(settings: Settings | None = None):
     @app.exception_handler(TooManyRequests)
     async def database_busy(request, exc):
         # A bounded pool protects the database; contention must remain recoverable.
+        log.warning(
+            "database_busy type=%s route=%s request_id=%s",
+            type(exc).__name__,
+            getattr(request.scope.get("route"), "path", None) or "[unmatched]",
+            getattr(request.state, "request_id", ""),
+        )
         response = await http_error(request, HTTPException(503, "服务繁忙，请稍后重试"))
         response.headers.update({'Retry-After':'3','Cache-Control':'no-store'})
         return response
@@ -276,8 +282,9 @@ def create_app(settings: Settings | None = None):
     @app.exception_handler(Exception)
     async def unexpected(request, exc):
         log.warning(
-            "request_failed type=%s request_id=%s",
+            "request_failed type=%s route=%s request_id=%s",
             type(exc).__name__,
+            getattr(request.scope.get("route"), "path", None) or "[unmatched]",
             getattr(request.state, "request_id", ""),
         )
         return error(request, 503, "service_unavailable", "服务暂时不可用，请稍后核对结果")

@@ -20,7 +20,7 @@ async def test_history_prepare_lock_timeout_can_retry_same_receipt(client, db, a
                'days': 5, 'minute': True}
     async with db.connection() as conn, conn.transaction():
         await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('market-owner:' + str(admin),))
-        busy = await client.post(path, headers=headers, json=payload)
+        busy = await asyncio.wait_for(client.post(path, headers=headers, json=payload), 1)
         assert busy.status_code == 503 and busy.headers['retry-after'] == '3', busy.text
         assert busy.json()['code'] == 50001
     saved = await client.post(path, headers=headers, json=payload)

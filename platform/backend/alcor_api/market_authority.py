@@ -151,7 +151,7 @@ class Authority:
                 "SELECT pg_try_advisory_xact_lock(hashtextextended(%s,0)) AS acquired", (key,),
             )).fetchone()
             if not row["acquired"]:
-                raise HTTPException(503, "行情采集登记繁忙，请稍后重试")
+                raise HTTPException(503, "行情采集登记繁忙，请稍后重试", headers={"Retry-After": "3"})
             return
         await conn.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (key,)
@@ -330,13 +330,12 @@ class Authority:
             ).fetchone()
             if (old["revision"] if old else 0) != expected_revision:
                 raise HTTPException(409, "行情需求已变化，请重新核对")
-            existing_active = await (
+            if query.kind == "latest" and not old and not remove and not await (
                 await conn.execute(
                     "SELECT 1 FROM market_demands WHERE owner_id=%s AND stream_id=%s AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>clock_timestamp()) LIMIT 1",
                     (who.id, stream["id"]),
                 )
-            ).fetchone()
-            if not old and not remove and not existing_active:
+            ).fetchone():
                 count = await (
                     await conn.execute(
                         """SELECT count(DISTINCT (s.query->>'market',s.query->>'code',s.query->>'instrument')) AS n FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id
@@ -345,7 +344,7 @@ class Authority:
                     )
                 ).fetchone()
                 same_security=await (await conn.execute("SELECT 1 FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id WHERE d.owner_id=%s AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp() AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND s.query->>'instrument'=%s LIMIT 1",(who.id,query.market,query.code,query.instrument))).fetchone()
-                if query.kind == "latest" and count["n"] >= 256 and not same_security:
+                if count["n"] >= 256 and not same_security:
                     raise HTTPException(409, "最多保留256个行情订阅")
             user = await (
                 await conn.execute("SELECT session_version FROM users WHERE id=%s", (who.id,))

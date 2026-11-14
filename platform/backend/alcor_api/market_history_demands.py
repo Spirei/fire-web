@@ -20,7 +20,10 @@ async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust=
         # write scope with shared identity proof, like quote observation; the
         # source/intent lock still serializes mutations. Explicit preparation
         # keeps its original exclusive native identity lock.
-        await authority.owner_lock(conn,who,shared_identity=observation,opportunistic=observation and opportunistic)
+        await authority.owner_lock(
+            conn, who, shared_identity=observation,
+            opportunistic=not observation or opportunistic,
+        )
         prior=await authority.receipt(conn,who.id,rid,operation)
         if prior:return prior
         bound=Authority(Bound(conn,authority.db.settings),policy_provider=authority.policy_provider,policies=authority.policies)

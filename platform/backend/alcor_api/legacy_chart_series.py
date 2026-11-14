@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from psycopg.errors import LockNotAvailable, QueryCanceled
+from psycopg_pool import PoolTimeout, TooManyRequests
 
 from .card_preferences import JS_WHITESPACE
 from .legacy_history_bars import history_member, legacy_number
@@ -341,7 +343,7 @@ def mount_legacy_chart_series(app, settings, authority):
                         authority, writer, UUID(identifier) if identifier else uuid4(), normalized, 5,
                         minute=True, observation=True, opportunistic=not identifier,
                     )
-                except (HTTPException,ValueError):
+                except (HTTPException, ValueError, LockNotAvailable, QueryCanceled, PoolTimeout, TooManyRequests):
                     # Read-only App grants may consume already observed facts.
                     # A failed registration never fabricates or replays a fact.
                     pass
