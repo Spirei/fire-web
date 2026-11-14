@@ -20,6 +20,7 @@ import { showToast } from "@/lib/toast";
 import { HoldingColumnManager, HoldingColumnsButton, useHoldingColumns } from "@/components/HoldingColumnManager";
 import { HOLDING_COLUMN_LABELS, type HoldingColumnKey } from "@/lib/holdingColumns";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { ensureStockIcon } from "@/lib/useAssetIcons";
 import { CURRENCIES, CURRENCY_SYMBOLS, useCurrencyDisplayUnit, useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
 import { emptyFundBalances, type FundCurrency } from "@/lib/fundCurrencies";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
@@ -163,11 +164,32 @@ function AccountOverviewValue({ value, hidden, pending = false, forceCompact = f
   return <span ref={hostRef} className="relative block min-w-0 max-w-full overflow-hidden whitespace-nowrap" title={!pending && !hidden ? full : undefined}>{content}<span ref={measureRef} aria-hidden className="pointer-events-none absolute left-0 top-0 invisible whitespace-nowrap">{full}</span></span>;
 }
 
-/** 素材库图标可能指向已清理文件：加载失败时回退名称首字母，避免出现破图。 */
-function StockIconAvatar({ src, name }: { src?: string; name: string }) {
+/**
+ * 素材地址可能来自旧缓存或刚被替换：首次加载失败时先用重试参数绕过失败的
+ * 缓存请求，并强制重新读取该股票的当前素材地址；新地址或重试可用时继续显示
+ * 真实图标，只有确实仍不可用才回退名称首字母。
+ */
+function StockIconAvatar({ src, name, market, code }: { src?: string; name: string; market: string; code: string }) {
+  const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  if (src && !failed) return <img src={src} alt="" onError={() => setFailed(true)} className="h-7 w-7 rounded-full object-cover" />;
+  const retryKey = useRef(0);
+  useEffect(() => { setAttempt(0); setFailed(false); }, [src]);
+  const retryable = Boolean(src && !/^(data|blob):/i.test(src));
+  const source = src && attempt > 0 && retryable ? `${src}${src.includes("?") ? "&" : "?"}_alcor_retry=${retryKey.current}` : src;
+  if (source && !failed) {
+    return <img
+      src={source}
+      alt=""
+      onError={() => {
+        if (attempt === 0) {
+          retryKey.current = Date.now();
+          setAttempt(1);
+          void ensureStockIcon(market.toUpperCase(), code.toUpperCase(), true);
+        } else setFailed(true);
+      }}
+      className="h-7 w-7 rounded-full object-cover"
+    />;
+  }
   return <i className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray not-italic text-ink-2">{name.slice(0, 1)}</i>;
 }
 
@@ -1042,7 +1064,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     const displayPnl = toDisplay(record, pnl);
     if (key === "identity") {
       const icon = stockIcons[`${record.market.toUpperCase()}:${record.code.toUpperCase()}`];
-      return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none"><StockIconAvatar src={icon} name={record.name} /><EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
+      return <span className="flex min-w-[150px] items-center gap-2"><span className="relative flex-none"><StockIconAvatar src={icon} name={record.name} market={record.market} code={record.code} /><EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span><span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quote} quotes={quotes} /></small></span></span>;
     }
     if (key === "marketValue") return Number.isFinite(displayMarketValue) ? compactMoney(displayMarketValue) : Number.isFinite(price * qty) ? <>{fmtMoney(price * qty, marketMeta(record.market).currency)}</> : "—";
     if (key === "cost") return <>{fmtNumMarket(cost, record.market)}{isStockConnect(record) && <small className="ml-1 text-faint">HKD</small>}</>;
@@ -1157,7 +1179,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
               return <div key={record.id} className="grid grid-cols-[48px_minmax(0,1fr)_110px] items-center border-t border-edge px-4 py-3 text-xs transition-colors first:border-t-0 hover:bg-bg-gray/60 dark:hover:bg-[#1b2230]">
                 <span className="font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="relative flex-none"><StockIconAvatar src={icon} name={record.name} /><EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span>
+                  <span className="relative flex-none"><StockIconAvatar src={icon} name={record.name} market={record.market} code={record.code} /><EtfDoubleBadge market={record.market} code={record.code} name={record.name} /></span>
                   <span className="min-w-0"><b className="block truncate">{record.name}</b><small className="mt-0.5 flex min-w-0 items-center gap-1.5 text-muted"><MarketCodeBadge market={record.market} code={record.code} /><span className="truncate">{record.code}</span><StockConnectBadge variant="label" market={record.market} accountMarket={record.accountMarket} /><QuoteRowHint market={record.market} quote={quotes[record.id]} quotes={quotes} /></small></span>
                 </span>
                 <span className={`text-right font-bold tabular-nums ${pnl >= 0 ? "text-up" : "text-down"}`}>{pnl >= 0 ? "+" : "−"}{compactMoney(Math.abs(pnl))}</span>

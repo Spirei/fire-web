@@ -36,7 +36,10 @@ type HookOptions = {
 
 const ALL_TYPES: AssetType[] = ["stock", "market", "flag", "broker", "crypto", "metal"];
 const CACHE_TTL = 5 * 60 * 1000;
-const CACHE_VERSION = 4;
+// Stock icon URLs carry a content version. A stale cached URL can outlive the
+// file it points to, so bumping this discards old stock icon maps instead of
+// rendering their now-missing images.
+const CACHE_VERSION = 5;
 const cache = new Map<AssetType, { assets: Asset[]; at: number }>();
 const inflight = new Map<AssetType, Promise<void>>();
 const listeners = new Set<() => void>();
@@ -116,8 +119,8 @@ export function ensureStockIcons(pairs: Array<{ market: string; code: string }>,
 }
 
 /** 个股详情 / 划过卡片按需补一张素材库图标，不拉 3000+ 全量。 */
-export function ensureStockIcon(market: string, code: string) {
-  return ensureStockIcons([{ market, code }]);
+export function ensureStockIcon(market: string, code: string, force = false) {
+  return ensureStockIcons([{ market, code }], force);
 }
 
 export function primeStockIconCache(icons: Record<string, string>) {
@@ -271,11 +274,12 @@ function loadLocalType(type: AssetType): { assets: Asset[]; at: number } | null 
     // 兼容旧版仅保存数组的分类型缓存；时间记为 0，展示后立即后台刷新。
     const list = Array.isArray(parsed) ? parsed : parsed.assets;
     if (!Array.isArray(list)) return null;
+    const fresh = !Array.isArray(parsed) && parsed.version === CACHE_VERSION;
+    // Stock icons are fetched by exact keys, so an obsolete cached URL would
+    // never be replaced by the normal refresh path. Drop it and use fresh data.
+    if (type === "stock" && !fresh) return null;
     const assets = list.filter((asset) => asset.type === type);
-    return {
-      assets,
-      at: Array.isArray(parsed) || parsed.version !== CACHE_VERSION ? 0 : Number(parsed.at) || 0
-    };
+    return { assets, at: fresh ? Number((parsed as { at?: number }).at) || 0 : 0 };
   } catch {
     return null;
   }

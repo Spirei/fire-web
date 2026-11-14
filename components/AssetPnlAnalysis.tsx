@@ -18,7 +18,7 @@ import PnlTrendChart, { type PnlTrendPoint } from "@/components/PnlTrendChart";
 import PnlCalendar from "@/components/PnlCalendar";
 import MarketIcon from "@/components/MarketIcon";
 import CurrencyFlag from "@/components/CurrencyFlag";
-import { useAssetIcons } from "@/lib/useAssetIcons";
+import { ensureStockIcon, useAssetIcons } from "@/lib/useAssetIcons";
 import { getMarketBadge } from "@/lib/marketBadge";
 import { useMarketBadge, useMarketBadgeVisible } from "@/lib/useMarketBadge";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -113,12 +113,27 @@ function ClosedBadge() {
 }
 
 function PnlStockIcon({ src, name, market, code }: { src?: string; name: string; market: string; code: string }) {
+  const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
+  const retryKey = useRef(0);
 
-  useEffect(() => setFailed(false), [src]);
+  useEffect(() => { setAttempt(0); setFailed(false); }, [src]);
 
+  const retryable = Boolean(src && !/^(data|blob):/i.test(src));
+  const source = src && attempt > 0 && retryable ? `${src}${src.includes("?") ? "&" : "?"}_alcor_retry=${retryKey.current}` : src;
   return <span className="relative flex-none">
-    {!src || failed ? <span className="grid h-8 w-8 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted">{name.slice(0, 1) || "?"}</span> : <img src={src} alt="" onError={() => setFailed(true)} className="h-8 w-8 rounded-full object-cover" />}
+    {!source || failed ? <span className="grid h-8 w-8 place-items-center rounded-full bg-bg-gray text-xs font-bold text-muted">{name.slice(0, 1) || "?"}</span> : <img
+      src={source}
+      alt=""
+      onError={() => {
+        if (attempt === 0) {
+          retryKey.current = Date.now();
+          setAttempt(1);
+          void ensureStockIcon(market.toUpperCase(), code.toUpperCase(), true);
+        } else setFailed(true);
+      }}
+      className="h-8 w-8 rounded-full object-cover"
+    />}
     <EtfDoubleBadge market={market} code={code} name={name} />
   </span>;
 }

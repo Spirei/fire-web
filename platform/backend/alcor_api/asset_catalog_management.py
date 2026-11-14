@@ -425,6 +425,14 @@ class AssetManagement:
                         asset = await self.legacy_directory.project(row, budget)
                     else:
                         asset = await self.catalog.project(conn, row, cache, budget)
+                        # A registered entry can outlive its verified image bytes.
+                        # The legacy public original is still the same licensed
+                        # material, so prefer it over showing a broken/empty icon.
+                        if not asset["imageUrl"] and self.legacy_directory is not None:
+                            candidates = await self.legacy_directory.matching(kind, market, [code])
+                            candidates = [r for r in candidates if r["id"] not in removed]
+                            if candidates:
+                                asset = await self.legacy_directory.project(candidates[0], budget)
                     if not asset["imageUrl"]:
                         continue
                     if kind == "stock":
