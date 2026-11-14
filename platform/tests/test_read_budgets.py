@@ -292,7 +292,12 @@ async def test_unix_gateway_chart_requests_do_not_share_a_fake_ip_budget(client,
         keys.append((key, maximum))
         return True
 
+    async def admit_many(db, checks, *, window_seconds):
+        keys.extend(checks)
+        return True
+
     monkeypatch.setattr(app.state, 'read_rate_limit', admit)
+    monkeypatch.setattr(app.state, 'read_rate_limits', admit_many)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app, client=None), base_url=str(client.base_url),
         headers=client.headers, cookies=client.cookies,
@@ -302,3 +307,46 @@ async def test_unix_gateway_chart_requests_do_not_share_a_fake_ip_budget(client,
         })
     assert response.status_code == 200, response.text
     assert keys == [('charts-global', 600), ('charts:' + admin, 120)]
+
+
+async def test_many_redis_budgets_use_one_eval(private_redis):
+    client = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
+    calls = []
+
+    async def fallback():
+        calls.append(True)
+        return True
+
+    try:
+        handle = SimpleNamespace(client=client)
+        limits = ReadBudgets(handle, uuid4())
+        checks = (('synthetic-many-a', 2), ('synthetic-many-b', 2))
+        assert await limits.allow_many(checks, 60, fallback)
+        # The second counter exceeds its own smaller budget; the first still has room.
+        assert not await limits.allow_many((('synthetic-many-a', 5), ('synthetic-many-b', 1)), 60, fallback)
+        assert not calls
+        assert len(await client.keys('alcor:*:read-budget:*')) == 2
+    finally:
+        await client.aclose()
+
+
+async def test_many_budget_failure_uses_one_database_fallback():
+    class Broken:
+        def __init__(self):
+            self.calls = 0
+
+        async def eval(self, *args):
+            self.calls += 1
+            raise ConnectionError('synthetic unavailable')
+
+    handle = SimpleNamespace(client=Broken())
+    checks = (('synthetic-many-a', 2), ('synthetic-many-b', 2))
+    fallbacks = []
+
+    async def fallback():
+        fallbacks.append(checks)
+        return False
+
+    limits = ReadBudgets(handle, uuid4())
+    assert not await limits.allow_many(checks, 60, fallback)
+    assert handle.client.calls == 1 and fallbacks == [checks]

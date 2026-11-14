@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     migration_dir: Path = ROOT / "migrations"
     inventory_file: Path = ROOT / "contracts/migration-register.json"
     capability_file: Path = ROOT / "contracts/api-capabilities.json"
-    pool_size: int = 5
+    pool_size: int = 10
     pool_min_size: int = 0
     pool_max_lifetime: int = 1800
     pool_max_idle: int = 600

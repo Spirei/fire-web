@@ -269,6 +269,7 @@ async def test_bounded_quote_throttle_has_retry_hint_without_retiring_app_connec
     _,headers=await connect(client)
     async def denied(*args,**kwargs): return False
     monkeypatch.setattr(app.state,'read_rate_limit',denied)
+    monkeypatch.setattr(app.state,'read_rate_limits',denied)
     response=await client.post('/api/v2/quotes',headers=headers,json={'items':[{'market':'US','code':'AAPL'}]})
     assert response.status_code==429 and response.json()['code']==42901
     assert response.headers['retry-after']=='60'

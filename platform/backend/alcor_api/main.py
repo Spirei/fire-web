@@ -65,6 +65,50 @@ async def rate_limit(db, key, maximum, *, window_seconds=900):
     return row["attempts"] <= maximum
 
 
+async def rate_limits(db, checks, *, window_seconds=900):
+    """Increment several independent budgets in one connection and one round-trip.
+
+    Callers that enforce a per-client and a global budget used to check out a
+    pooled connection twice; under contention either checkout could spend the
+    whole pool timeout, turning one request into several seconds of waiting.
+    """
+    # A duplicated bucket would make ON CONFLICT update the same row twice in
+    # one statement; keep the first occurrence.
+    checks = tuple(dict.fromkeys(checks))
+    if not checks:
+        return True
+    if not isinstance(window_seconds, int) or not 1 <= window_seconds <= 86400:
+        raise ValueError('Invalid authentication budget window')
+    keys, maxima = [], []
+    for key, maximum in checks:
+        if type(maximum) is not int or maximum < 1:
+            raise ValueError('Invalid authentication budget')
+        keys.append(key)
+        maxima.append(maximum)
+    async with db.connection() as conn:
+        rows = await (
+            await conn.execute(
+                """
+            WITH requested(bucket,maximum) AS (
+              SELECT * FROM unnest(%s::text[],%s::int[])
+            ), attempt AS (SELECT clock_timestamp() AS at),
+            updated AS (
+              INSERT INTO auth_rate_limits (bucket,window_start,attempts)
+              SELECT bucket,at,1 FROM requested,attempt
+              ON CONFLICT (bucket) DO UPDATE SET
+                attempts=CASE WHEN auth_rate_limits.window_start<excluded.window_start-make_interval(secs => %s) THEN 1 ELSE auth_rate_limits.attempts+1 END,
+                window_start=CASE WHEN auth_rate_limits.window_start<excluded.window_start-make_interval(secs => %s) THEN excluded.window_start ELSE auth_rate_limits.window_start END
+              RETURNING bucket,attempts
+            )
+            SELECT requested.bucket,updated.attempts<=requested.maximum AS allowed
+            FROM requested JOIN updated USING(bucket)
+        """,
+                (keys, maxima, window_seconds, window_seconds),
+            )
+        ).fetchall()
+    return len(rows) == len(checks) and all(row["allowed"] for row in rows)
+
+
 class BodyBudget:
     def __init__(self, app):
         self.app = app
@@ -165,11 +209,19 @@ def create_app(settings: Settings | None = None):
     app.state.db, app.state.settings, app.state.cache = db, settings, cache
     app.state.connections = connections
     app.state.rate_limit = rate_limit
+    app.state.rate_limits = rate_limits
     from .read_budgets import ReadBudgets
     read_budgets = ReadBudgets(cache, settings.instance_id)
     async def read_rate_limit(database, key, maximum, *, window_seconds=900):
         return await read_budgets.allow(key, maximum, window_seconds, lambda: app.state.rate_limit(database, key, maximum, window_seconds=window_seconds))
+    async def read_rate_limits(database, checks, *, window_seconds=900):
+        checks = tuple(checks)
+        return await read_budgets.allow_many(
+            checks, window_seconds,
+            lambda: app.state.rate_limits(database, checks, window_seconds=window_seconds),
+        )
     app.state.read_rate_limit = read_rate_limit
+    app.state.read_rate_limits = read_rate_limits
     app.state.request_observations = observations
     app.state.request_activity = request_activity
     mount_request_activity(app, db)
@@ -539,7 +591,7 @@ def create_app(settings: Settings | None = None):
     from .legacy_record_writes import mount_legacy_record_writes
     mount_legacy_record_writes(app, settings, db)
     from .legacy_watchlists import mount_legacy_watchlists
-    mount_legacy_watchlists(app, settings, db, rate_limit)
+    mount_legacy_watchlists(app, settings, db, rate_limit, rate_limits)
 
     from .fx_api import mount_rates
     app.state.reference_rates = mount_rates(app, settings, db)
@@ -569,9 +621,14 @@ def create_app(settings: Settings | None = None):
         trusted_origin(request)
         address = request.client.host if request.client else "unknown"
         # Do not trust a caller-controlled X-Forwarded-For header for the authentication budget.
-        ip_ok = await rate_limit(db, digest("ip:" + address), 50)
-        user_ok = await rate_limit(db, digest("login:" + data.login.strip().lower()), 12)
-        if not ip_ok or not user_ok:
+        admitted = await rate_limits(
+            db,
+            (
+                (digest("ip:" + address), 50),
+                (digest("login:" + data.login.strip().lower()), 12),
+            ),
+        )
+        if not admitted:
             raise HTTPException(429, "尝试次数过多，请稍后再试")
         async with db.connection() as conn:
             rows = await (

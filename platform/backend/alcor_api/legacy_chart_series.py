@@ -158,9 +158,11 @@ def mount_legacy_chart_series(app, settings, authority):
             if not re.fullmatch(r"[A-Z0-9._-]{1,40}", symbol):
                 raise HTTPException(400, "股票代码不合法")
             who = who or await history_member(request, authority.db, version)
-            if not await app.state.read_rate_limit(
-                authority.db, "chart-series:" + who.id, 90, window_seconds=60
-            ) or not await app.state.read_rate_limit(authority.db, "chart-series-global", 500, window_seconds=60):
+            if not await app.state.read_rate_limits(
+                authority.db,
+                (("chart-series:" + who.id, 90), ("chart-series-global", 500)),
+                window_seconds=60,
+            ):
                 raise HTTPException(429, "请求过于频繁，请稍后重试")
             points, source, revision = await observed(
                 request, who, market, symbol, days, sessions=mode == "sessions",
@@ -267,9 +269,8 @@ def mount_legacy_chart_series(app, settings, authority):
             # On the private Unix socket there is no client IP. Do not turn
             # the per-IP limit into a lower global limit or trust client headers.
             client = request.client.host if request.client else None
-            if (client and not await app.state.read_rate_limit(
-                authority.db, "charts-ip:" + client, 120, window_seconds=60
-            )) or not await app.state.read_rate_limit(authority.db, "charts-global", 600, window_seconds=60):
+            checks = ([("charts-ip:" + client, 120)] if client else []) + [("charts-global", 600)]
+            if not await app.state.read_rate_limits(authority.db, checks, window_seconds=60):
                 raise HTTPException(429, "请求过于频繁，请稍后再试", headers={"Retry-After": "60"})
             who = (
                 await history_member(request, authority.db, version)

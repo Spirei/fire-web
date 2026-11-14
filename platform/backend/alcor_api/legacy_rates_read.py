@@ -2,6 +2,7 @@
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
+from psycopg_pool import PoolTimeout, TooManyRequests
 
 from .activity_api import legacy_activity_user
 from .legacy_identity import assert_native_origin, native_identity
@@ -45,6 +46,10 @@ async def read_snapshot(request, version, settings, db, service):
         return JSONResponse(
             value if version is None else {"code": 0, "message": "ok", "data": value}, headers=headers
         )
+    except (PoolTimeout, TooManyRequests):
+        # A saturated database pool is a bounded service condition: keep the
+        # global 503 + Retry-After instead of relabeling it as an FX failure.
+        raise
     except Exception:  # noqa: BLE001 -- old snapshot errors are a fixed, secret-free upstream response
         message = "获取汇率失败，请稍后重试"
         return JSONResponse(

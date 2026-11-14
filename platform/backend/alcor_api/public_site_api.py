@@ -71,7 +71,7 @@ def mount_public_site(app,db):
     async def ticker(request:Request):
         try:
             address=request.client.host if request.client else 'unknown'
-            if not await app.state.read_rate_limit(db,digest('public-ticker:'+address),60,window_seconds=60) or not await app.state.read_rate_limit(db,'public-ticker-global',300,window_seconds=60):raise HTTPException(429,'请求过于频繁，请稍后再试')
+            if not await app.state.read_rate_limits(db,((digest('public-ticker:'+address),60),('public-ticker-global',300)),window_seconds=60):raise HTTPException(429,'请求过于频繁，请稍后再试')
             result=await service.ticker()
             return JSONResponse(result,status_code=503 if result['state']=='unavailable' else 200,headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
         except HTTPException as exc:return error(exc)

@@ -175,9 +175,14 @@ def mount_legacy_history_bars(app, settings, authority):
         try:
             assert_native_origin(request, settings)
             client = request.client.host if request.client else "unknown"
-            if not await app.state.read_rate_limit(
-                authority.db, "kline-full-ip:" + client, 300, window_seconds=60
-            ) or not await app.state.read_rate_limit(authority.db, "kline-full-global", 600, window_seconds=60):
+            if not await app.state.read_rate_limits(
+                authority.db,
+                (
+                    ("kline-full-ip:" + client, 300),
+                    ("kline-full-global", 600),
+                ),
+                window_seconds=60,
+            ):
                 raise HTTPException(429, "请求过于频繁，请稍后再试")
             who = await history_member(request, authority.db) if "authorization" in request.headers else None
             market = request.query_params.get("market", "").strip(JS_WHITESPACE).upper()

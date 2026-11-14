@@ -116,9 +116,14 @@ def mount_legacy_stock_detail(app, settings, authority):
             if market not in ("US", "HK", "CN", "JP", "KR"):
                 raise HTTPException(400, "暂不支持该市场")
             who = who or await history_member(request, authority.db, version)
-            if not await app.state.read_rate_limit(
-                authority.db, "stock-detail:" + who.id, 60, window_seconds=60
-            ) or not await app.state.read_rate_limit(authority.db, "stock-detail-global", 300, window_seconds=60):
+            if not await app.state.read_rate_limits(
+                authority.db,
+                (
+                    ("stock-detail:" + who.id, 60),
+                    ("stock-detail-global", 300),
+                ),
+                window_seconds=60,
+            ):
                 raise HTTPException(429, "请求过于频繁，请稍后再试", headers={"Retry-After":"60"})
             history_only = request.query_params.get("view") == "history"
             limit = 320

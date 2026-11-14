@@ -35,15 +35,24 @@ def assignment_group_string(value):
     return str(value)
 
 
-def mount_legacy_watchlists(app, settings, db, rate_limit):
+def mount_legacy_watchlists(app, settings, db, rate_limit, rate_limits=None):
     service = WatchGroups(db)
 
     async def member(request, write=False):
         who = await portfolio_member(request, settings, db, write=write)
         address = request.client.host if request.client else "unknown"
-        for key, maximum in ((digest("watch-groups:" + address), 60 if write else 120), ("watch-groups-global", 300)):
-            if not await rate_limit(db, key, maximum, window_seconds=60):
-                raise LegacyError(429, 42901, "请求过于频繁，请稍后再试")
+        checks = (
+            (digest("watch-groups:" + address), 60 if write else 120),
+            ("watch-groups-global", 300),
+        )
+        if rate_limits is not None:
+            allowed = await rate_limits(db, checks, window_seconds=60)
+        else:
+            allowed = all(
+                [await rate_limit(db, key, maximum, window_seconds=60) for key, maximum in checks]
+            )
+        if not allowed:
+            raise LegacyError(429, 42901, "请求过于频繁，请稍后再试")
         return who
 
     def guarded(function):
