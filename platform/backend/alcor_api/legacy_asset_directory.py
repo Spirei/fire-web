@@ -312,11 +312,44 @@ class LegacyAssetDirectory:
             if row["type"] == kind and row["code"] in codes and (kind != "stock" or row["market"] == market)
         ]
 
-    async def project(self, row, budget):
+    def stat_bytes(self, relative_path):
+        parts = self.path_parts(relative_path)
+        fd = None
+        try:
+            fd = self.root_fd()
+            for part in parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            child = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+            try:
+                info = os.fstat(child)
+                if not stat.S_ISREG(info.st_mode) or info.st_size <= 0:
+                    raise ValueError()
+                return {"served_size": info.st_size}
+            finally:
+                os.close(child)
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+    async def project(self, row, budget, *, verify_bytes=True):
         result = {k: v for k, v in row.items() if k not in ("relativePath", "fileVariants", "darkVariant")}
         variants = []
         for variant in row.get("fileVariants", [row]):
             item = {"path": variant["legacyPath"], "dark": variant.get("darkVariant", False)}
+            if not verify_bytes:
+                try:
+                    await asyncio.to_thread(self.stat_bytes, variant["relativePath"])
+                    item.update(
+                        imageUrl=variant["legacyPath"],
+                        originalSha256=None,
+                        imageState="read-only-original",
+                    )
+                except (OSError, ValueError):
+                    item.update(imageUrl=None, imageState="unavailable-or-unsafe")
+                variants.append(item)
+                continue
             try:
                 image, stream = await asyncio.to_thread(self.open_bytes, variant["relativePath"])
                 stream.close()

@@ -507,6 +507,7 @@ class AssetCatalog:
                     {"type": row["type"], "market": row["market"], "code": row["code"]},
                     page=entry.get("page"),
                     auth=budget.get("source_auth") if budget is not None else None,
+                    budget=budget,
                 )
             else:
                 cache[metadata_key] = await project_metadata(conn, self.db, row["id"])

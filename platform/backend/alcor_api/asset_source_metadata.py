@@ -98,7 +98,7 @@ async def project(conn, db, asset_id):
     return await project_row(conn, db, asset_id, row)
 
 
-async def project_row(conn, db, asset_id, row, asset=None, page=None, auth=None):
+async def project_row(conn, db, asset_id, row, asset=None, page=None, auth=None, budget=None):
     base = empty_metadata()
     if not row:
         return base
@@ -119,10 +119,17 @@ async def project_row(conn, db, asset_id, row, asset=None, page=None, auth=None)
             conn,db,row['owner_id'],row['source_page_id'],page=page,auth=auth
         )
         asset=asset or await(await conn.execute('SELECT type,market,code FROM asset_catalog_entries WHERE id=%s',(asset_id,))).fetchone()
-        matches=[item for item in parsed.get('items',[]) if asset and all(item.get(key)==asset[key] for key in ('type','market','code'))]
-        if len(matches)!=1 or page['action']!=row['source_action']:
+        index_key=(str(row['owner_id']),str(row['source_page_id']))
+        page_index=budget.get('page_index',{}).get(index_key) if budget is not None else None
+        if page_index is None:
+            page_index={
+                (entry.get('type'),entry.get('market'),entry.get('code')):entry
+                for entry in parsed.get('items',[]) if isinstance(entry,dict)
+            }
+            if budget is not None:budget.setdefault('page_index',{})[index_key]=page_index
+        item=page_index.get((asset['type'],asset['market'],asset['code'])) if asset else None
+        if item is None or page['action']!=row['source_action']:
             raise ValueError('metadata_source_identity')
-        item=matches[0]
         cap=decimal(item.get('marketCap'))
         cap=Decimal(cap) if cap is not None and Decimal(cap)>=0 else None
         board=item.get('board') if isinstance(item.get('board'),str) else None
