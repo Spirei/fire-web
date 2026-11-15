@@ -28,6 +28,15 @@ async def test_provider_extended_fields_and_underlying_identity_never_become_reg
                  'last_price':'100','prev_close_price':'90','stock_owner':'US.REAL-OWNER',
                  'pre_price':'110','pre_change_val':'5','after_price':'120','after_change_val':'7',
                  'overnight_price':'130','overnight_change_val':'10','volume':'999','turnover':'777'}
+            if query.code == 'NVDA':
+                row['update_time'] = '2026-10-23 16:00:00'
+                payload = {'records': [row]}
+                if query.session == 'AFTER':
+                    payload['realTimeRecords'] = [
+                        {'code': 'US.NVDA', 'time': '2026-10-23 19:59:00', 'is_blank': False,
+                         'cur_price': '120', 'last_close': '90'},
+                    ]
+                return canonical(payload).encode(), 'sdk_json_representation_not_wire_bytes'
             return canonical({'records':[row]}).encode(),'sdk_json_representation_not_wire_bytes'
     sdk=SDK()
     for session in ('REGULAR','PRE','AFTER','OVERNIGHT'):
@@ -88,6 +97,30 @@ async def test_provider_extended_fields_and_underlying_identity_never_become_reg
         assert dto['extendedUnavailable'] is False
         assert (dto['price'], dto['prevClose'], dto['change']) == (110, 105, 5)
         assert datetime.fromisoformat(dto['time']) == datetime(2026, 10, 21, 12, tzinfo=UTC)
+
+    authority.clock = lambda: datetime(2026, 10, 24, 15, tzinfo=UTC)
+    for session in ('REGULAR', 'AFTER'):
+        await demand(client, revision, Query('latest', 'US', 'NVDA', session=session))
+        assert await schedule(authority) == 1
+        task = await claim(authority.db, uuid4(), kind='market.latest')
+        assert task and await execute(authority, task, sdk) == 'observed'
+    monkeypatch.setattr('alcor_api.legacy_quote_api.requested_session', lambda: 'REGULAR')
+    body = {'items': [{'id': 'weekend', 'market': 'US', 'code': 'NVDA'}], 'includeMarketCap': False}
+    for version in (1, 2):
+        path = f'/api/v{version}/quotes'
+        plain = await client.post(path, headers=headers, json=body)
+        with_history = await client.post(path, headers=headers, json={**body, 'includeHistoricalExtended': True})
+        assert plain.status_code == with_history.status_code == 200
+        quote = dict(with_history.json()['data']['quotes']['weekend'])
+        after = quote.pop('historicalExtended')
+        assert quote == plain.json()['data']['quotes']['weekend'] and quote['price'] == 100
+        assert after['session'] == 'AFTER' and after['price'] == 120 and after['displayStale'] is True
+        assert after['change'] == 30 and round(after['changePct'], 3) == 33.333
+        assert datetime.fromisoformat(after['time']) == datetime(2026, 10, 23, 23, 59, tzinfo=UTC)
+    authority.clock = lambda: datetime(2026, 10, 26, 0, 1, tzinfo=UTC)
+    next_session = await client.post('/api/v2/quotes', headers=headers, json={**body, 'includeHistoricalExtended': True})
+    assert next_session.status_code == 200
+    assert 'historicalExtended' not in next_session.json()['data']['quotes']['weekend']
 
 
 async def test_fund_units_are_exact_observation_and_aum_is_not_market_cap(market):

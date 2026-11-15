@@ -3,9 +3,10 @@
 import json
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import localcontext
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
@@ -15,6 +16,42 @@ from .market_contract import CURRENCIES, code, number
 from .market_snapshot_metrics import SnapshotMetricMismatch, with_snapshot_metrics
 from .native_app_auth import CLIENT
 from .security import lock_read_identity
+
+
+def weekend_after_date(now):
+    local = now.astimezone(ZoneInfo('America/New_York'))
+    weekday, hour = local.weekday(), local.hour
+    if (weekday == 4 and hour >= 20) or weekday == 5 or (weekday == 6 and hour < 20):
+        return local.date() - timedelta(days=weekday - 4)
+    return None
+
+
+def historical_after_quote(candidates, primary, friday):
+    zone = ZoneInfo('America/New_York')
+    matches = []
+    for fact, _, quote, _ in candidates:
+        local = fact['source_time'].astimezone(zone)
+        if (
+            fact['source_revision'] == primary['source_revision']
+            and fact['source_time'] > primary['source_time']
+            and quote.get('session') == 'AFTER'
+            and quote.get('requestedSession') == 'AFTER'
+            and quote.get('sourceTimestampAuthority') in (
+                'provider_real_time_minute_clock', 'provider_one_minute_bar_not_individual_trade_time'
+            )
+            and local.date() == friday
+            and (16, 0) < (local.hour, local.minute) < (20, 0)
+        ):
+            matches.append((fact['source_time'], quote))
+    if not matches:
+        return None
+    latest = max(at for at, _ in matches)
+    keys = ('session', 'price', 'time', 'source', 'change', 'changePct', 'sourceTimestampAuthority')
+    values = [{key: quote[key] for key in keys if quote.get(key) is not None}
+              for at, quote in matches if at == latest]
+    if any(value != values[0] for value in values):
+        return None
+    return {**values[0], 'displayStale': True}
 
 
 def items_from(body):
@@ -268,7 +305,7 @@ class BatchQuotes:
     def __init__(self, authority):
         self.authority, self.db = authority, authority.db
 
-    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None, legacy_instruments=False):
+    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None, legacy_instruments=False, include_historical_extended=False):
         if instrument not in (None, "equity", "index", "asset"):
             raise HTTPException(400, "证券类型无效")
         if session not in (None, "REGULAR", "PRE", "AFTER", "OVERNIGHT"):
@@ -461,6 +498,8 @@ class BatchQuotes:
                         authorized_alternate = source_preference == 'auto' and bool(candidates)
                         if not retained_policy_ids <= confirmed and not authorized_alternate:
                             raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
+                    friday = weekend_after_date(now) if include_historical_extended and preferred_session == 'REGULAR' and market == 'US' else None
+                    historical_candidates = candidates if friday is not None else ()
                     if preferred_session is not None and market == 'US':
                         extended = [c for c in candidates if c[0]['contents'].get('requestedSession') == preferred_session and c[2]['session'] == preferred_session]
                         regular = [c for c in candidates if c[0]['contents'].get('requestedSession', 'REGULAR') == 'REGULAR']
@@ -539,6 +578,9 @@ class BatchQuotes:
                             resolved[cache_key] = (None, {"state": "ambiguous_session_fact"})
                         else:
                             fact, approved, dto, state = max(same, key=lambda item: item[0]["sequence"])
+                            historical = historical_after_quote(historical_candidates, fact, friday) if friday is not None else None
+                            if historical is not None:
+                                dto = {**dto, "historicalExtended": historical}
                             resolved[cache_key] = (
                                 dto,
                                 {

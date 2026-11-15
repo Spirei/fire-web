@@ -123,7 +123,7 @@ def mount_legacy_quote_reads(app,settings,authority):
                             else:
                                 tracking={"tracked":False,"reason":"demand_precondition_unavailable","automaticCollection":False}
                         headers["X-Alcor-Quote-Tracked"]="unknown" if tracking["tracked"] is None else "true" if tracking["tracked"] else "false"
-                    result=await service.read(who,items,request.headers.get("x-alcor-market-source"),session=selected_session if canonical else None,preferred_session=None if canonical else selected_session,instrument=selected_instrument,legacy_instruments=not canonical,include_market_cap=not isinstance(body,dict) or body.get("includeMarketCap") is not False,strict_sources=not canonical,source_preference=None if canonical else getattr(settings,"_legacy_quote_source",None))
+                    result=await service.read(who,items,request.headers.get("x-alcor-market-source"),session=selected_session if canonical else None,preferred_session=None if canonical else selected_session,instrument=selected_instrument,legacy_instruments=not canonical,include_historical_extended=not canonical and isinstance(body,dict) and body.get("includeHistoricalExtended") is True,include_market_cap=not isinstance(body,dict) or body.get("includeMarketCap") is not False,strict_sources=not canonical,source_preference=None if canonical else getattr(settings,"_legacy_quote_source",None))
             data=result if canonical else {"quotes":result["quotes"]}
             if not canonical and items and request.headers.get("x-alcor-register-demand") == "true":
                 data["tracking"]=tracking
