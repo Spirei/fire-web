@@ -116,10 +116,14 @@ async def test_catalog_keeps_web_wildcards_separate_from_app_substrings():
             if sql == "SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL":
                 assert args is None
                 return Cursor([])
+            if "asset_catalog_management_events" in sql:
+                return Cursor([])
+            if "asset_metadata_observations" in sql:
+                return Cursor([])
             assert "asset_catalog_tombstones" in sql
             return Cursor(rows)
 
-        async def project(self, conn, row, cache, budget):
+        async def project(self, conn, row, cache, budget, verify_bytes=True):
             return row
 
     service = AssetManagement(Catalog())
