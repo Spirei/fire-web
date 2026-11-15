@@ -33,7 +33,7 @@ import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import { applyQuoteBatches, hasLoadedQuote, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot, selectQuoteRecords } from "@/lib/quoteBatches";
 import SettingsWindow from "@/components/SettingsWindow";
-import { ensureStockIcons, primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
+import { ensureStockIcons, primeBrokerIconCache, primeFlagIconCache, primeMarketIconCache, primeStockIconCache, useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
 import WorkspaceNavigation from "@/components/WorkspaceNavigation";
 import GlobalSectionNav from "@/components/GlobalSectionNav";
@@ -132,6 +132,7 @@ export default function RecordsApp({
   initialSettings,
   initialStockIcons,
   initialMarketIcons = {},
+  initialBrokerIcons = {},
   initialFlagIcons = {},
   initialAssetLibrary = null,
   initialCardLibrary = null,
@@ -157,6 +158,7 @@ export default function RecordsApp({
   initialSettings: Pick<SiteSettings, "assetMarketOrder" | "assetAnalysisOrder" | "tabs" | "mobileNavigationOrder" | "groups" | "markets" | "marketLabels" | "stockIconCdn" | "marketBadges" | "marketBadgesVisible" | "allowRegister" | "translationEnabled" | "modelServices" | "modelServicesRevision" | "modelServicesInitialized" | "modelServicesError" | "title" | "logoText" | "siteLogo" | "ico" | "pwaIcon" | "appDisplayName" | "appDisplayIcon">;
   initialStockIcons: Record<string, string>;
   initialMarketIcons?: Record<string, string>;
+  initialBrokerIcons?: Record<string, string>;
   initialFlagIcons?: Record<string, string>;
   initialAssetLibrary?: { assets: import("@/lib/useAssetIcons").Asset[]; total: number } | null;
   initialCardLibrary?: import("@/lib/cardLibrary").CardLibraryPayload | null;
@@ -311,6 +313,7 @@ export default function RecordsApp({
   // 首屏 HTML 直接就是图标；浏览器仅请求当前视图实际渲染的图片。
   useMemo(() => primeStockIconCache(initialStockIcons), [initialStockIcons]);
   useMemo(() => primeMarketIconCache(initialMarketIcons), [initialMarketIcons]);
+  useMemo(() => primeBrokerIconCache(initialBrokerIcons), [initialBrokerIcons]);
   useMemo(() => primeFlagIconCache(initialFlagIcons), [initialFlagIcons]);
   useLayoutEffect(() => {
     applyMarketBadges(initialSettings.marketBadges, initialSettings.marketBadgesVisible);

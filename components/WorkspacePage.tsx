@@ -58,14 +58,18 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const initialWatchGroups=initialWorkspace.watchGroups ?? [];
   const initialUserLogs=initialWorkspace.logs?.userLogs ?? [];
   const iconRead=<T,>(path:string)=>platformJson<T>(path,cookieHeaders,{signal:AbortSignal.timeout(8000)});
-  const [recordIcons,marketAssets]=await Promise.all([
+  const needBrokerIcons=['holdings','watchlist','assets','pnl'].includes(tab.key)&&initialRecords.length>0;
+  const [recordIcons,marketAssets,brokerAssets]=await Promise.all([
     readStockIcons(initialRecords,iconRead),
-    initialRecords.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
+    initialRecords.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market').catch(()=>({assets:[]})):Promise.resolve({assets:[]}),
+    needBrokerIcons?iconRead<{assets:{name:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=broker').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
   ]);
   const initialStockIcons={...recordIcons,...initialCelebs?.stockIcons};
   const initialMarketIcons:Record<string,string>={};
   for(const asset of marketAssets.assets||[])if(asset.market&&(asset.imageUrl||asset.url))initialMarketIcons[asset.market.toUpperCase()]=asset.imageUrl||asset.url!;
   const initialFlagIcons:Record<string,string>=initialWorkspace.global?.flagIcons??{};
+  const initialBrokerIcons:Record<string,string>={};
+  for(const asset of brokerAssets.assets||[])if(asset.name&&(asset.imageUrl||asset.url))initialBrokerIcons[asset.name]=asset.imageUrl||asset.url!;
   const visibleIconRecords=['holdings','assets','pnl'].includes(tab.key)?initialRecords.filter(record=>Number(record.qty)>0):initialRecords;
   const initialStockPreloads=stockIconPreloads(visibleIconRecords,initialStockIcons);
   const initialAvatar=user.avatar;
@@ -116,6 +120,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
           initialFundBalances={initialFundBalances}
           initialStockIcons={initialStockIcons}
           initialMarketIcons={initialMarketIcons}
+          initialBrokerIcons={initialBrokerIcons}
           initialFlagIcons={initialFlagIcons}
           initialAssetLibrary={initialAssetLibrary}
           initialCardLibrary={initialCardLibrary}

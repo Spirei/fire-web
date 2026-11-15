@@ -162,6 +162,39 @@ export function primeStockIconCache(icons: Record<string, string>) {
   cache.set("stock", { assets: [...byKey.values()], at: current?.at ?? 0 });
 }
 
+/** 服务端已保存的券商图标：首帧就按券商名称显示，后台仍会刷新素材目录。 */
+export function primeBrokerIconCache(icons: Record<string, string>) {
+  if (!Object.keys(icons).length) return;
+  const current = cache.get("broker");
+  const byKey = new Map<string, Asset>();
+  (current?.assets ?? []).forEach((asset) => {
+    const key = brokerIconKey(asset.name) || asset.name.toUpperCase();
+    if (key) byKey.set(key, asset);
+  });
+  Object.entries(icons).forEach(([name, url]) => {
+    const key = brokerIconKey(name) || name.toUpperCase();
+    if (!key || !url) return;
+    if ((byKey.get(key)?.imageUrl || byKey.get(key)?.url) === url) return;
+    byKey.set(key, {
+      id: `broker:${key}`,
+      type: "broker",
+      market: "",
+      code: key,
+      name,
+      url,
+      marketCap: 0,
+      price: null,
+      changePct: null,
+      source: "auto",
+      lastCheckedAt: "",
+      board: "",
+      updatedAt: ""
+    });
+  });
+  // at 保持 0，让素材目录仍会在后台修正名称或图标。
+  cache.set("broker", { assets: [...byKey.values()], at: 0 });
+}
+
 /** 服务端首屏注入的市场图标表：渲染期预热，市场下拉 / 筛选首帧就是素材库图标（at 保持 0 让完整列表后台刷新） */
 export function primeMarketIconCache(icons: Record<string, string>) {
   if (!Object.keys(icons).length) return;
