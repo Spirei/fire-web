@@ -22,7 +22,7 @@ from .legacy_identity import assert_native_origin, native_identity
 from .legacy_site_settings import member as legacy_web_member
 from .native_app_auth import CLIENT
 from .profile_http import bounded_body
-from .security import administrator, digest, lock_mutation_identity
+from .security import administrator, digest, lock_read_identity
 
 
 def text(value):
@@ -76,7 +76,7 @@ class SharedBrokerDirectory:
                     raise HTTPException(403, '需要管理员权限')
                 await self.settings.authorize(conn, who)
             else:
-                await lock_mutation_identity(conn, who, require_admin=False)
+                await lock_read_identity(conn, who, require_admin=False)
             await conn.execute('SELECT pg_advisory_xact_lock'+('' if write else '_shared')+"(hashtextextended('shared-broker-directory',0))")
             yield conn
 

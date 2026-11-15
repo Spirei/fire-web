@@ -13,6 +13,10 @@ from .request_timing import measure
 from .security import lock_read_identity
 
 
+class HistoryUnavailable(HTTPException):
+    """The requested authorized history has no collected facts."""
+
+
 class LicensedHistory:
     def __init__(self, authority, *, automatic=False):
         self.authority, self.db = authority, authority.db
@@ -86,7 +90,7 @@ class LicensedHistory:
             if not choices:
                 if retained:
                     raise HTTPException(403, "历史原件仍保留，但当前来源展示许可不可用，请撤下旧数据")
-                raise HTTPException(503, "尚无本人已登记的该口径真实历史，未用其他周期或当前价格替代")
+                raise HistoryUnavailable(503, "尚无本人已登记的该口径真实历史，未用其他周期或当前价格替代")
             if len(choices) != 1:
                 raise HTTPException(409, "存在多个历史来源，请显式选择来源版本及复权口径")
             (revision, fingerprint), (policy, query) = next(iter(choices.items()))
@@ -99,7 +103,7 @@ class LicensedHistory:
                 )
             ).fetchall()
             if not rows:
-                raise HTTPException(503, "该口径历史尚无已采集记录")
+                raise HistoryUnavailable(503, "该口径历史尚无已采集记录")
             from .market_history_evidence import load_history_evidence, verify_history_evidence
             with measure("history_evidence_load"):
                 evidence = await load_history_evidence(conn, who.id, revision, rows)

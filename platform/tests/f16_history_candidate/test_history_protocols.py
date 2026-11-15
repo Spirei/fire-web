@@ -10,7 +10,7 @@ from market_latest_candidate.test_market_authority import demand, market, market
 from psycopg.types.json import Jsonb
 
 
-async def seeded(market, *, purposes=None):  # noqa: F811
+async def seeded(market, *, purposes=None, regular_minute=True):  # noqa: F811
     client, app, authority, _, _ = market
     authority.policies = (replace(authority.policies[0], purposes=purposes or ('latest', 'bars.day', 'bars.minute.ALL', 'bars.minute.REGULAR')),)
     source = await client.post('/api/market/sources', json={'request_id':str(uuid4()),'policy_id':'fixture'})
@@ -30,9 +30,11 @@ async def seeded(market, *, purposes=None):  # noqa: F811
                   Query('bars','US','SPY','day','qfq',start='2026-10-20',through='2026-10-21'),
                   Query('bars','US','AAPL','minute','none','ALL',start='2026-10-21',through='2026-10-21'),
                   Query('bars','US','AAPL','minute','none','REGULAR',start='2026-10-21',through='2026-10-21')]:
-        await demand(client,revision,query)
-    assert await schedule(authority) == 4
-    for _ in range(4):
+        if query.frame != 'minute' or query.session != 'REGULAR' or regular_minute:
+            await demand(client,revision,query)
+    count = 4 if regular_minute else 3
+    assert await schedule(authority) == count
+    for _ in range(count):
         task = await claim(authority.db,uuid4(),kind='market.history')
         assert await execute(authority,task,transport) == 'complete'
     async with app.state.db.connection() as conn:
@@ -164,3 +166,17 @@ async def test_legacy_default_history_uses_one_current_authorized_source_and_pre
         headers={**headers,'x-alcor-market-source':revisions['futu']})
     assert refused.status_code==403 and refused.headers['x-alcor-retire-context']=='true'
     assert source.calls==3
+
+
+async def test_five_day_uses_licensed_all_session_when_regular_history_is_missing(market):
+    client, _, _, _, transport, headers = await seeded(market, regular_minute=False)
+    for path in ('/api/v1/chart-series', '/api/v2/chart-series', '/api/kline/five-day'):
+        params = {'market': 'US', 'code': 'AAPL', 'days': 5}
+        reply = await client.get(path, params=params, headers=headers)
+        assert reply.status_code == 200, reply.text
+        value = reply.json().get('data', reply.json())
+        assert [point['price'] for point in value['points']] == [10, 11]
+        assert value['observationCoverage']['requestedDays'] == 5
+        assert value['observationCoverage']['observedLocalDates'] == ['2026-10-21']
+        assert value['observationCoverage']['complete'] is None
+    assert transport.calls == 3

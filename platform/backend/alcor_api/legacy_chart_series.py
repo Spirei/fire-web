@@ -19,7 +19,7 @@ from .legacy_identity import assert_native_origin
 from .legacy_quote_api import gzip_allowed
 from .market_contract import CURRENCIES, ZONES, number
 from .market_contract import code as security_code
-from .market_history_reads import LicensedHistory
+from .market_history_reads import HistoryUnavailable, LicensedHistory
 from .profile_http import bounded_body
 from .request_timing import measure
 
@@ -110,10 +110,19 @@ def mount_legacy_chart_series(app, settings, authority):
 
     async def observed(request, who, market, symbol, days, *, sessions=False, minimum_points=2):
         session = "ALL" if market == "US" and (days == 1 or sessions) else "REGULAR"
-        rows, policy, query, revision = await read_minute_rows(
-            history, who, market, symbol, session=session,
-            source_revision=request.headers.get("x-alcor-market-source"),
-        )
+        source_revision = request.headers.get("x-alcor-market-source")
+        try:
+            rows, policy, query, revision = await read_minute_rows(
+                history, who, market, symbol, session=session, source_revision=source_revision,
+            )
+        except HistoryUnavailable:
+            if market != "US" or days != 5:
+                raise
+            # US collection retains an ALL-session original. Project its
+            # regular-session observations with the existing five-day filter.
+            rows, policy, query, revision = await read_minute_rows(
+                history, who, market, symbol, session="ALL", source_revision=source_revision,
+            )
         if len(rows) > 16000:
             raise HTTPException(503, "分时原始记录超过读取预算")
         with measure("history_assemble"):

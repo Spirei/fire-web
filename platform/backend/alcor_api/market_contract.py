@@ -253,7 +253,7 @@ def _latest_snapshot(row, query, stamp):
     prefix = {'PRE':'pre','AFTER':'after','OVERNIGHT':'overnight'}.get(requested)
     local = stamp.astimezone(ZoneInfo(ZONES[query.market]))
     minute = local.hour * 60 + local.minute
-    if prefix and not ({'PRE':240 <= minute < 570, 'AFTER':960 <= minute < 1200,
+    if prefix and not ({'PRE':240 <= minute < 570, 'AFTER':960 < minute < 1200,
                         'OVERNIGHT':minute >= 1200 or minute < 240}[requested]):
         raise ValueError('snapshot_update_outside_requested_session')
     price = number(row.get(prefix + '_price' if prefix else 'last_price'), positive=True)
@@ -409,7 +409,7 @@ def futu_rows(payload, query, *, observed_at=None):
             if query.kind == "latest":
                 used_realtime=False
                 try:
-                    if query.session in ('PRE','OVERNIGHT') and observed_at is not None and stamp>observed_at+timedelta(seconds=5):
+                    if query.session in ('PRE','AFTER','OVERNIGHT') and observed_at is not None and stamp>observed_at+timedelta(seconds=5):
                         raise ValueError('source_future_snapshot')
                     fact.update(latest_snapshot(row, query, stamp))
                 except ValueError:

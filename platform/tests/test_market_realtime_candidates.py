@@ -83,7 +83,7 @@ def test_sdk_keeps_only_four_real_candidates_without_more_source_reads():
 def test_after_hours_uses_observed_minute_when_snapshot_only_has_regular_clock():
     query = Query('latest', 'US', 'AAPL', session='AFTER')
     observed = datetime(2026, 11, 11, 21, 6, 20, tzinfo=UTC)
-    snapshot = {**SNAPSHOT, 'update_time': '2026-11-11 15:59:00', 'after_price': 999}
+    snapshot = {**SNAPSHOT, 'update_time': '2026-11-11 16:00:00', 'after_price': 999}
     after = {**POINT, 'time': '2026-11-11 16:06:00'}
     rows = [after, {**after, 'time': '2026-11-11 16:07:00'}, POINT]
     facts, issues = futu_rows({'records': [snapshot], 'realTimeRecords': rows}, query, observed_at=observed)
