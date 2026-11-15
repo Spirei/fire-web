@@ -286,7 +286,10 @@ def content(request, row, stream, private=False, immutable=False):
         "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'",
     }
     if str(request.url.path).startswith(("/uploads/asset/", "/uploads/cards/")):
-        headers["Cache-Control"] = "private, no-store"
+        # Keep the private copy so repeated page loads can revalidate with an
+        # ETag instead of downloading every icon again. Access is still checked
+        # on each request; no-cache never serves a response without that check.
+        headers["Cache-Control"] = "private, no-cache"
         headers["Vary"] = "Cookie, Authorization"
     if private:
         headers["Content-Disposition"] = "attachment"

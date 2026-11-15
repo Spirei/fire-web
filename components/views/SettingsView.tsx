@@ -1964,7 +1964,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     contentScrollRef.current?.scrollTo({ top: 0 });
   }
 
-  const categoryList = <>{currentCategory?.key === "account" && <SecurityCheck onNavigate={anchor => { const item = currentCategory.items.find(item => item.anchor === anchor); if (item) jumpTo(item); }} />}{(currentCategory?.key === "account" ? [
+  const categoryList = <>{currentCategory?.key === "account" && <SecurityCheck userId={user.id} onNavigate={anchor => { const item = currentCategory.items.find(item => item.anchor === anchor); if (item) jumpTo(item); }} />}{(currentCategory?.key === "account" ? [
     { title: "个人资料", desc: "头像、昵称与邮箱", items: currentCategory.items.filter((item) => item.anchor === "profile") },
     { title: "账户登录", desc: "密码、验证器与通行密钥", items: currentCategory.items.filter((item) => item.anchor !== "profile" && item.anchor !== "authorizations") },
     { title: "应用授权", desc: "", items: currentCategory.items.filter((item) => item.anchor === "authorizations") }
@@ -1978,7 +1978,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       <Avatar src={me.avatar} name={me.nickname || me.username} size={24}/>
       <span><strong>{me.email || me.nickname || me.username}</strong></span><span className="sc-chevron" aria-hidden="true">›</span>
     </button>
-    <SecurityCheck onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
+    <SecurityCheck userId={user.id} onNavigate={anchor => jumpTo({ sub: anchor, anchor, label: anchor === "profile" ? "个人信息" : anchor === "totp" ? "双重验证" : "通行密钥" })} />
     <nav className="sc-mobile-navigation sc-row-group" aria-label="手机设置分类">
       {categories.map(category => <button type="button" className="sc-setting-row" key={category.key} onClick={() => openCategory(category.key)}><SubNavIcon name={category.icon} className="h-5 w-5"/><span><strong>{category.label}</strong></span><span className="sc-chevron" aria-hidden="true">›</span></button>)}
     </nav>

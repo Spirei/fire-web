@@ -47,6 +47,13 @@ def public_identity(row):
     return kind, market, code
 
 
+def broker_name_key(value):
+    """Compare broker names without 证劵/证券, spacing or an account suffix."""
+    text = re.sub(r"[\s_\-·]+", "", (value or "").strip())
+    text = text.replace("證", "证").replace("劵", "券")
+    return re.sub(r"(?:账户|帐号|账号)$", "", text).casefold()
+
+
 def stock_image_reference_counts(records):
     """Count declared image references, never decode an entire directory to page it.
 
@@ -501,20 +508,31 @@ class AssetManagement:
                 (card, True) for card in cards if (card["id"] in removed) == deleted and (market is None or card["market"] == market)
             ]
             known_card_ids = {row["id"] for row in cards}
-            known_paths = set()
+            # A physical file already represented by a registered asset
+            # version must not appear again as a legacy filename row.
+            known_paths = (
+                {unquote(row["public_path"]) for row in await (await conn.execute("SELECT public_path FROM system_asset_paths")).fetchall()}
+                if self.legacy_directory is not None
+                else set()
+            )
             if self.legacy_card_directory is not None and kind in (None, "card"):
-                known_paths = {unquote(row["image_path"]) for row in await (await conn.execute("SELECT image_path FROM card_catalog_public_index")).fetchall()}
+                known_paths |= {unquote(row["image_path"]) for row in await (await conn.execute("SELECT image_path FROM card_catalog_public_index")).fetchall()}
                 for card in await self.legacy_card_directory.entries():
                     if (card["id"] in removed) == deleted and card["id"] not in known_card_ids and unquote(card["originalImageUrl"]) not in known_paths and (market is None or card["market"] == market):
                         records.append((card, "legacy-card"))
             if self.legacy_directory is not None:
                 # Any registered row, including a tombstone, suppresses the filename fallback.
-                known_rows = await (await conn.execute("SELECT type,market,code FROM asset_catalog_entries")).fetchall()
+                known_rows = await (await conn.execute("SELECT type,market,code,name FROM asset_catalog_entries")).fetchall()
                 known = {public_identity(r) for r in known_rows}
+                known_brokers = {key for row in known_rows if row["type"] == "broker" and (key := broker_name_key(row["name"]))}
                 for entry in await self.legacy_directory.entries():
                     if entry["type"] not in (*TYPES, "card"):
                         continue
                     if entry["type"] == "card" and (entry["id"] in known_card_ids or unquote(entry["legacyPath"]) in known_paths):
+                        continue
+                    if entry["type"] == "broker" and (name_key := broker_name_key(entry["name"])) and name_key in known_brokers:
+                        continue
+                    if entry["type"] != "card" and unquote(entry["legacyPath"]) in known_paths:
                         continue
                     key = public_identity(entry)
                     if (entry["id"] in removed) == deleted and key not in known and (kind is None or entry["type"] == kind) and (market is None or entry["market"] == market):
@@ -537,6 +555,13 @@ class AssetManagement:
                     removed_count += (await (await conn.execute("SELECT count(*) AS n FROM card_catalog_public_index WHERE deleted_at IS NOT NULL")).fetchone())["n"]
                 if kind == "stock" and not deleted:
                     market_counts = stock_image_reference_counts(records)
+                if kind == "broker" and not deleted:
+                    # Broker artwork is classified by the markets the broker
+                    # serves; the filter must not list markets with no artwork.
+                    for row, _source in records:
+                        markets = row.get("material_state", {}).get("brokerMarkets") or row.get("brokerMarkets") or []
+                        for code in {str(value).upper() for value in markets if value}:
+                            market_counts[code] = market_counts.get(code, 0) + 1
                 selected_market = directory.get("market", "ALL")
                 if selected_market != "ALL":
                     records = [(r, source) for r, source in records if selected_market in r.get("material_state", {}).get("brokerMarkets", r.get("brokerMarkets", []))] if kind == "broker" else [(r, source) for r, source in records if r["market"] == selected_market]

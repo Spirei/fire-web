@@ -18,6 +18,7 @@ import WatchGroupSheet from "@/components/WatchGroupSheet";
 import { showToast } from "@/lib/toast";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { groupCount, groupVisible, migrateLegacyWatchGroups, type WatchGroup } from "@/lib/watchGroups";
+import { brokerIconUrl } from "@/lib/brokerIcons";
 import ImportSnapshotModal from "@/components/ImportSnapshotModal";
 import WatchlistFileImportModal from "@/components/WatchlistFileImportModal";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
@@ -324,7 +325,7 @@ export default function QuotesView({ ownerId = "", initialSymbol, initialNow, re
   const groupStockIcon = useMemo(() => {
     const map: Record<string, string> = {};
     for (const g of watchGroups) {
-      if (g.kind !== "custom" || g.icon || brokerIcons[g.name]) continue;
+      if (g.kind !== "custom" || g.icon || brokerIconUrl(brokerIcons, g.name)) continue;
       let best: { url: string; cap: number } | null = null;
       for (const r of records) {
         if (r.watchGroupId !== g.id) continue;
@@ -803,7 +804,7 @@ export default function QuotesView({ ownerId = "", initialSymbol, initialNow, re
         {groupChips.visible.map((chip) => {
           const selected = filterId === chip.id;
           const g = watchGroups.find((x) => x.id === chip.id);
-          const customIcon = g && g.kind === "custom" ? g.icon || brokerIcons[g.name] || groupStockIcon[g.id] : undefined;
+          const customIcon = g && g.kind === "custom" ? g.icon || brokerIconUrl(brokerIcons, g.name) || groupStockIcon[g.id] : undefined;
           return (
             <Capsule variant="secondary" aria-pressed={selected}
               key={chip.id}
@@ -856,7 +857,7 @@ export default function QuotesView({ ownerId = "", initialSymbol, initialNow, re
                 <div className="max-h-[420px] overflow-y-auto">
                   {groupChips.all.map((chip) => {
                     const g = watchGroups.find((item) => item.id === chip.id);
-                    const customIcon = g?.kind === "custom" ? g.icon || brokerIcons[g.name] || groupStockIcon[g.id] : undefined;
+                    const customIcon = g?.kind === "custom" ? g.icon || brokerIconUrl(brokerIcons, g.name) || groupStockIcon[g.id] : undefined;
                     return (
                       <button key={chip.id} type="button" onClick={() => selectGroupChip(chip.id, true)} className={`flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-xs font-semibold transition-colors ${filterId === chip.id ? "bg-bg-gray text-ink" : "text-muted hover:bg-brand-hover hover:text-ink"}`}>
                         {!g ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg> : g.kind === "market" ? <MarketIcon market={g.market} size={16} /> : customIcon ? <img src={customIcon} alt="" className="h-4 w-4 rounded-full object-cover" /> : <span className="grid h-4 w-4 place-items-center rounded bg-bg-gray text-[9px]">{chip.label.slice(0, 1)}</span>}

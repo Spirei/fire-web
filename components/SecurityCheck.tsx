@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import AppModal from "./AppModal";
 
 type Target = "profile" | "totp" | "passkeys";
@@ -15,15 +15,37 @@ function StatusIcon({ complete = false }: { complete?: boolean }) {
   return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={complete ? "security-check-ok" : "security-check-blue"} aria-hidden="true"><circle cx="12" cy="12" r="9" />{complete ? <path d="m7.5 12 3 3 6-6" /> : <><path d="M12 7v6" /><circle cx="12" cy="16.5" r=".6" fill="currentColor" /></>}</svg>;
 }
 
-export default function SecurityCheck({ onNavigate }: { onNavigate: (target: Target) => void }) {
+const STATUS_CACHE_PREFIX = "fire:security-status:";
+
+function readCachedStatus(key: string): Status | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(key) || "null") as Status | null;
+    if (typeof value?.email === "boolean" && typeof value?.totp === "boolean" && typeof value?.passkeys === "boolean") return value;
+  } catch { /* optional view cache */ }
+  return null;
+}
+
+function saveCachedStatus(key: string, value: Status) {
+  try { sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* optional view cache */ }
+}
+
+export default function SecurityCheck({ onNavigate, userId = "" }: { onNavigate: (target: Target) => void; userId?: string }) {
+  const cacheKey = STATUS_CACHE_PREFIX + (userId || "current");
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const loaded = useRef(false);
+  const mounted = useRef(false);
+  // Restore the last accepted result before paint so a refresh does not flash
+  // "正在检查…" again; the request below still revalidates it.
+  useLayoutEffect(() => {
+    const cached = readCachedStatus(cacheKey);
+    if (cached) setStatus(cached);
+  }, [cacheKey]);
   useEffect(() => {
     // Closing an inspected panel should not clear its result or repeat both requests.
-    if (!open && loaded.current) return;
+    if (!open && mounted.current) return;
+    mounted.current = true;
     const controller = new AbortController();
     setError(false);
     const timeout = window.setTimeout(() => { setError(true); controller.abort(); }, 15000);
@@ -34,15 +56,16 @@ export default function SecurityCheck({ onNavigate }: { onNavigate: (target: Tar
         const [account, security] = await Promise.all(responses.map(response => response.json()));
         if (!account.user || !Array.isArray(security.keys) || typeof security.totpEnabled !== "boolean") throw new Error("status");
         if (!controller.signal.aborted) {
-          loaded.current = true;
-          setStatus({ email: account.user.emailVerified === true, totp: security.totpEnabled, passkeys: security.keys.length > 0 });
+          const next = { email: account.user.emailVerified === true, totp: security.totpEnabled, passkeys: security.keys.length > 0 };
+          setStatus(next);
+          saveCachedStatus(cacheKey, next);
         }
       } catch { if (!controller.signal.aborted) setError(true); }
       finally { window.clearTimeout(timeout); }
     }
     void load();
     return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [open, attempt]);
+  }, [open, attempt, cacheKey]);
   const pending = status ? checks.filter(check => !status[check.key]) : [];
   const completed = status ? checks.filter(check => status[check.key]) : [];
   const summary = error ? "暂时无法检查" : !status ? "正在检查…" : pending.length ? `${pending.length} 项推荐操作` : "推荐操作已完成";

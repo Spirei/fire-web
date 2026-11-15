@@ -28,6 +28,7 @@ import { useRates, readObservedRates } from "@/lib/useRates";
 import StockSearch from "@/components/StockSearch";
 import MarketIcon from "@/components/MarketIcon";
 import GroupSelect from "@/components/GroupSelect";
+import BrokerIcon from "@/components/BrokerIcon";
 import MarketSelect from "@/components/MarketSelect";
 import AppModal from "@/components/AppModal";
 import { appConfirm } from "@/lib/appDialog";
@@ -1224,13 +1225,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
                         <td data-mobile-column="broker" className="px-4 py-3.5">
                           {r.group ? (
                             <span className="inline-flex max-w-[140px] items-center gap-1.5 truncate rounded-full bg-bg-gray px-2.5 py-1 text-xs font-medium text-muted">
-                              {brokerIcons[r.group] ? (
-                                <img src={brokerIcons[r.group]} alt="" className="h-4 w-4 flex-none rounded-full object-cover" />
-                              ) : (
-                                <span className="flex h-4 w-4 flex-none items-center justify-center rounded-full bg-white/70 text-[9px] font-bold text-muted dark:bg-white/10">
-                                  {r.group.slice(0, 1)}
-                                </span>
-                              )}
+                              <BrokerIcon icons={brokerIcons} name={r.group} size={16} />
                               <span className="truncate">{r.group}</span>
                             </span>
                           ) : (

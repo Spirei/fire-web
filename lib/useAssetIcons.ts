@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { applyRelatedEtfMainStockIcons, pickStockIcon, stockIconLookupCodes } from "@/lib/stockIconKey";
+import { brokerIconKey } from "@/lib/brokerIcons";
 
 import { stockIconBatches } from '@/lib/stockIconRequests';
 
@@ -121,6 +122,12 @@ export function ensureStockIcons(pairs: Array<{ market: string; code: string }>,
 /** 个股详情 / 划过卡片按需补一张素材库图标，不拉 3000+ 全量。 */
 export function ensureStockIcon(market: string, code: string, force = false) {
   return ensureStockIcons([{ market, code }], force);
+}
+
+/** Re-read broker artwork after a failed image request or a broker rename. */
+export function ensureBrokerIcons(force = true) {
+  subscribedTypes.add("broker");
+  return refreshType("broker", force);
 }
 
 export function primeStockIconCache(icons: Record<string, string>) {
@@ -467,7 +474,18 @@ export function useAssetIcons(types?: readonly AssetType[], options: HookOptions
   const brokerIcons = useMemo(() => {
     const map: Record<string, string> = {};
     assets.forEach((asset) => {
-      if (asset.type === "broker" && asset.name) map[asset.name] = asset.imageUrl || asset.url;
+      if (asset.type !== "broker") return;
+      const url = asset.imageUrl || asset.url;
+      if (!url) return;
+      if (asset.name) {
+        map[asset.name] = url;
+        const key = brokerIconKey(asset.name);
+        if (key) map[key] = url;
+      }
+      if (asset.code) {
+        map[asset.code] = url;
+        map[asset.code.toUpperCase()] = url;
+      }
     });
     return map;
   }, [assets]);

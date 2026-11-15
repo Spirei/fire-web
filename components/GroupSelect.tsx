@@ -2,6 +2,7 @@
 import { Capsule } from "@/components/Capsule";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import BrokerIcon from "@/components/BrokerIcon";
 
 interface Props {
   value: string;
@@ -9,22 +10,6 @@ interface Props {
   groups: string[];
   /** 券商名称 → 图标 URL（素材库-券商图标） */
   brokerIcons?: Record<string, string>;
-}
-
-function BrokerIcon({ url, name, size = 20 }: { url?: string; name: string; size?: number }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [url]);
-  if (url && !failed) {
-    return <img src={url} alt="" onError={() => setFailed(true)} className="flex-none rounded-full object-cover" style={{ width: size, height: size }} />;
-  }
-  return (
-    <span
-      className="flex flex-none items-center justify-center rounded-full bg-bg-gray text-[10px] font-bold text-muted"
-      style={{ width: size, height: size }}
-    >
-      {(name || "?").slice(0, 1)}
-    </span>
-  );
 }
 
 export default function GroupSelect({ value, onChange, groups, brokerIcons = {} }: Props) {
@@ -88,7 +73,7 @@ export default function GroupSelect({ value, onChange, groups, brokerIcons = {} 
         className="field flex items-center justify-between gap-2 text-left"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {selected ? <BrokerIcon url={brokerIcons[selected]} name={selected} /> : null}
+          {selected ? <BrokerIcon icons={brokerIcons} name={selected} /> : null}
           <span className={selected ? "truncate" : "truncate text-faint"}>{selected || "无券商"}</span>
         </span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 flex-none text-faint transition-transform ${open ? "rotate-180" : ""}`}>
@@ -121,7 +106,7 @@ export default function GroupSelect({ value, onChange, groups, brokerIcons = {} 
                 selected === g ? "bg-[#2a2f3a] font-semibold text-white dark:bg-white/15" : "text-ink-2 hover:bg-[#f2f3f5] dark:hover:bg-white/[0.07]"
               }`}
             >
-              <BrokerIcon url={brokerIcons[g]} name={g} />
+              <BrokerIcon icons={brokerIcons} name={g} />
               <span className="min-w-0 flex-1 truncate">{g}</span>
               {selected === g && (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 flex-none">

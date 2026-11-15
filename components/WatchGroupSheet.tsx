@@ -10,6 +10,7 @@ import MarketIcon from "@/components/MarketIcon";
 import DeleteIcon from "@/components/DeleteIcon";
 import StockSearch from "@/components/StockSearch";
 import { groupCount, groupVisible, type WatchGroup } from "@/lib/watchGroups";
+import { brokerIconUrl } from "@/lib/brokerIcons";
 import { showToast } from "@/lib/toast";
 import type { SearchMatch } from "@/lib/types";
 import { appConfirm } from "@/lib/appDialog";
@@ -295,7 +296,7 @@ export default function WatchGroupSheet({
 
   function groupIcon(g: WatchGroup, size = 20) {
     if (g.kind === "market") return <MarketIcon market={g.market} size={size} />;
-    const src = resolvedGroupIcons[g.id] || g.icon || brokerIcons[g.name];
+    const src = resolvedGroupIcons[g.id] || g.icon || brokerIconUrl(brokerIcons, g.name);
     if (src) return <img src={src} alt="" className="flex-none rounded-full object-cover" style={{ width: size, height: size }} />;
     return (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px] flex-none text-muted">

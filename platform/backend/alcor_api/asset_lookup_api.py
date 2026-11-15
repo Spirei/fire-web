@@ -208,7 +208,7 @@ def mount_asset_catalog(app, settings, db):
         etag = '"' + row["served_sha256"][:12] + '"'
         if "range" not in request.headers and request.headers.get("if-none-match") == etag:
             stream.close()
-            return Response(status_code=304, headers={"Cache-Control": "public, no-cache" if access["guest"] else "private, no-store", "Vary":"Cookie, Authorization", "ETag": etag})
+            return Response(status_code=304, headers={"Cache-Control": "public, no-cache" if access["guest"] else "private, no-cache", "Vary":"Cookie, Authorization", "ETag": etag})
         # The outer old route only compares its short ETag without a Range header.
         checked = Request(
             {
@@ -222,7 +222,9 @@ def mount_asset_catalog(app, settings, db):
         )
         response = content(checked, row, stream)
         response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = "public, no-cache" if access["guest"] else "private, no-store"
+        # Private but revalidatable: the browser keeps the bytes and checks the
+        # ETag on the next page load, while authorization is still enforced.
+        response.headers["Cache-Control"] = "public, no-cache" if access["guest"] else "private, no-cache"
         response.headers["Vary"] = "Cookie, Authorization"
         return response
 

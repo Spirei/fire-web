@@ -76,6 +76,29 @@ type Listing = {
   page: number;
   revision: string;
 };
+
+/** Last accepted catalog page, restored before paint on refresh/tab return. */
+const MATERIAL_PAGE_CACHE = "fire:material:page:v1";
+const materialPageKey = (ownerId: string, readKey: string) => `${MATERIAL_PAGE_CACHE}:${ownerId || "guest"}:${readKey}`;
+
+function readCachedListing(ownerId: string, readKey: string): { data: Listing; at: number } | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(materialPageKey(ownerId, readKey)) || "null") as { data?: Listing; at?: number } | null;
+    if (!saved?.data || !Array.isArray(saved.data.assets) || !Number.isFinite(saved.data.total)) return null;
+    return { data: saved.data, at: Number(saved.at) || 0 };
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedListing(ownerId: string, readKey: string, data: Listing) {
+  try {
+    const value = JSON.stringify({ data, at: Date.now() });
+    // Keep the view cache small; large stock pages still render from the API.
+    if (value.length > 1_000_000) return;
+    localStorage.setItem(materialPageKey(ownerId, readKey), value);
+  } catch { /* optional view cache */ }
+}
 export default function AssetCatalogView({
   ownerId = "",
   initial,
@@ -116,6 +139,7 @@ export default function AssetCatalogView({
     >(null);
   const marketCountCache = useRef(new Map<string, Record<string, number>>());
   const pageCache = useRef(new Map<string, { data: Listing; at: number }>(initial ? [[initial.key, {data:initial.data,at:Date.now()}]] : []));
+  const prefetching = useRef(new Set<string>());
   const seenTick = useRef(0);
   const directoryFile = useRef<HTMLInputElement>(null);
   const editorFile = useRef<HTMLInputElement>(null);
@@ -140,15 +164,50 @@ export default function AssetCatalogView({
   const rows = displayed?.assets || [];
   const total = displayed?.total || 0;
   const marketSlots =
-    type === "stock"
+    type === "stock" || type === "broker"
       ? materialMarketSlots(
           order,
           displayed?.marketCounts ||
-            marketCountCache.current.get(`${ownerId}|${removed}`) ||
+            marketCountCache.current.get(`${type}|${ownerId}|${removed}`) ||
             {},
           market,
         )
       : { visible: order, more: [] };
+  // Restore the last accepted page before the first paint. The network read
+  // below still revalidates it, so this only removes the skeleton flash.
+  useLayoutEffect(() => {
+    if (loadedKey === readKey) return;
+    const cached = readCachedListing(ownerId, readKey);
+    if (!cached) return;
+    pageCache.current.set(readKey, cached);
+    setListing(cached.data);
+    setLoadedKey(readKey);
+    setLoading(false);
+  }, [ownerId, readKey, loadedKey]);
+  // Warm the first page of another category on hover/focus so switching tabs
+  // does not start with a full skeleton.
+  const prefetchCategory = (next: string) => {
+    if (next === type || next === "group" || !foregroundRef.current) return;
+    const key = `${ownerId}|${next}|ALL||1|`;
+    if (pageCache.current.has(key) || prefetching.current.has(key)) return;
+    prefetching.current.add(key);
+    const search = new URLSearchParams({ type: next, market: "ALL", q: "", page: "1", removed: "0" });
+    void readMaterialResponse(`/api/assets/catalog?${search}`, AbortSignal.timeout(15000))
+      .then((data) => {
+        if (!Array.isArray(data.assets) || !Number.isFinite(data.total) || !Number.isFinite(data.page)) return;
+        const listing = data as Listing;
+        pageCache.current.set(key, { data: listing, at: Date.now() });
+        saveCachedListing(ownerId, key, listing);
+        if (current.current === key) {
+          setListing(listing);
+          setLoadedKey(key);
+          setLoading(false);
+          setError("");
+        }
+      })
+      .catch(() => { /* the tab still loads on click */ })
+      .finally(() => prefetching.current.delete(key));
+  };
   const update = (patch: Record<string, string | null>) => {
     if (!guard()) return;
     const next = new URLSearchParams(params.toString());
@@ -174,6 +233,21 @@ export default function AssetCatalogView({
     setEditing(null);
     setImportRows(null);
   }, [readKey]);
+  // A saved icon or metadata edit must not leave an obsolete listing to be
+  // restored after the next refresh.
+  useEffect(() => {
+    const clear = () => {
+      try {
+        const prefix = `${MATERIAL_PAGE_CACHE}:${ownerId || "guest"}:`;
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+          const key = localStorage.key(index);
+          if (key?.startsWith(prefix)) localStorage.removeItem(key);
+        }
+      } catch { /* optional view cache */ }
+    };
+    window.addEventListener("fire:assets-updated", clear);
+    return () => window.removeEventListener("fire:assets-updated", clear);
+  }, [ownerId]);
   useEffect(() => {
     if (!foreground) return;
     const cached = pageCache.current.get(readKey);
@@ -243,9 +317,9 @@ export default function AssetCatalogView({
           document.hidden
         )
           return;
-        if (type === "stock")
+        if (type === "stock" || type === "broker")
           marketCountCache.current.set(
-            `${ownerId}|${removed}`,
+            `${type}|${ownerId}|${removed}`,
             d.marketCounts || {},
           );
         pageCache.current.delete(readKey);
@@ -257,6 +331,7 @@ export default function AssetCatalogView({
           ids.filter((id) => d.assets.some((asset: Item) => asset.id === id)),
         );
         setLoadedKey(readKey);
+        saveCachedListing(ownerId, readKey, d);
       })
       .catch((e) => {
         if (!controller.signal.aborted && current.current === readKey && foregroundRef.current) setError(e.message);
@@ -510,6 +585,8 @@ export default function AssetCatalogView({
               role="tab"
               aria-selected={type === key}
               data-capsule="off"
+              onPointerEnter={() => prefetchCategory(key)}
+              onFocus={() => prefetchCategory(key)}
               onClick={() =>
                 update({
                   tab: key,
@@ -524,7 +601,7 @@ export default function AssetCatalogView({
             </button>
           ))}
         </nav>
-        {(type === "stock" || type === "broker") && (
+        {(type === "stock" || (type === "broker" && marketSlots.visible.length + marketSlots.more.length > 0)) && (
           <div className="material-market-area">
             <span>市场{type === "stock" && <small> 按住拖动排序</small>}</span>
             <div className="material-markets">
@@ -727,7 +804,7 @@ export default function AssetCatalogView({
                   <IdentityText type={selecting ? undefined : "button"} className="material-identity-text" data-capsule="off"
                     disabled={selecting ? undefined : busy} onClick={selecting ? undefined : () => beginEdit(item)}>
                     <strong title={item.name || item.code}>{item.name || item.code}</strong>
-                    {(type !== "card" || item.code.toLocaleLowerCase() !== item.name.toLocaleLowerCase()) && <small>
+                    {type !== "group" && (type !== "card" || item.code.toLocaleLowerCase() !== item.name.toLocaleLowerCase()) && <small>
                       {type === "stock" && <MarketCodeBadge market={item.market} code={item.code} alwaysVisible className="material-stock-badge" />}
                       <span className="material-code" title={item.code}>{item.code}</span>
                     </small>}
@@ -786,7 +863,9 @@ export default function AssetCatalogView({
                 </div>
               </article>
             ))}
-            {!rows.length && <p className="material-empty">没有匹配的素材</p>}
+            {!rows.length && <p className="material-empty">
+              {type === "broker" ? <>没有匹配的券商图标 · <a href="/settings?sub=stocks" className="font-semibold text-ink hover:underline">新增券商</a></> : "没有匹配的素材"}
+            </p>}
           </div>
         )}
         <Pagination
