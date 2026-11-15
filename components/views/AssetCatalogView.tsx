@@ -26,6 +26,7 @@ import Pagination from "@/components/Pagination";
 import AppSelect from "@/components/AppSelect";
 import { materialMarketSlots } from "@/lib/materialMarkets";
 import { readMaterialResponse } from "@/lib/materialRead";
+import { clearCachedMaterialListings, readCachedMaterialListing, saveCachedMaterialListing } from "@/lib/materialCatalogCache";
 import { Capsule } from "@/components/Capsule";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { appConfirm } from "@/lib/appDialog";
@@ -77,28 +78,10 @@ type Listing = {
   revision: string;
 };
 
-/** Last accepted catalog page, restored before paint on refresh/tab return. */
-const MATERIAL_PAGE_CACHE = "fire:material:page:v1";
-const materialPageKey = (ownerId: string, readKey: string) => `${MATERIAL_PAGE_CACHE}:${ownerId || "guest"}:${readKey}`;
-
-function readCachedListing(ownerId: string, readKey: string): { data: Listing; at: number } | null {
-  try {
-    const saved = JSON.parse(localStorage.getItem(materialPageKey(ownerId, readKey)) || "null") as { data?: Listing; at?: number } | null;
-    if (!saved?.data || !Array.isArray(saved.data.assets) || !Number.isFinite(saved.data.total)) return null;
-    return { data: saved.data, at: Number(saved.at) || 0 };
-  } catch {
-    return null;
-  }
-}
-
-function saveCachedListing(ownerId: string, readKey: string, data: Listing) {
-  try {
-    const value = JSON.stringify({ data, at: Date.now() });
-    // Keep the view cache small; large stock pages still render from the API.
-    if (value.length > 1_000_000) return;
-    localStorage.setItem(materialPageKey(ownerId, readKey), value);
-  } catch { /* optional view cache */ }
-}
+const readCachedListing = (ownerId: string, readKey: string) =>
+  readCachedMaterialListing<Listing>(ownerId, readKey);
+const saveCachedListing = (ownerId: string, readKey: string, data: Listing) =>
+  saveCachedMaterialListing(ownerId, readKey, data);
 export default function AssetCatalogView({
   ownerId = "",
   initial,
@@ -236,15 +219,7 @@ export default function AssetCatalogView({
   // A saved icon or metadata edit must not leave an obsolete listing to be
   // restored after the next refresh.
   useEffect(() => {
-    const clear = () => {
-      try {
-        const prefix = `${MATERIAL_PAGE_CACHE}:${ownerId || "guest"}:`;
-        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-          const key = localStorage.key(index);
-          if (key?.startsWith(prefix)) localStorage.removeItem(key);
-        }
-      } catch { /* optional view cache */ }
-    };
+    const clear = () => clearCachedMaterialListings(ownerId);
     window.addEventListener("fire:assets-updated", clear);
     return () => window.removeEventListener("fire:assets-updated", clear);
   }, [ownerId]);

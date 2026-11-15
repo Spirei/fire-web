@@ -16,9 +16,10 @@ const groups = [
   { key: "personal", label: "个人", icon: IconUser, keys: ["users"] }
 ];
 
-export default function PlatformNavigation({ items, activeKey, onSelect, onSettings, onDrop, onDragStart, onDragEnd }: {
+export default function PlatformNavigation({ items, activeKey, onSelect, onSettings, onDrop, onDragStart, onDragEnd, onPrepare }: {
   items: Item[]; activeKey: string; onSelect: (key: string) => void; onSettings: (sub: string) => void;
   onDrop: (key: string) => void; onDragStart: (key: string) => void; onDragEnd: () => void;
+  onPrepare?: (key: string) => void;
 }) {
   const [expanded, setExpanded] = usePersistedState<Record<string, boolean>>("fire:platform-navigation-expanded", {});
   return <div className="platform-navigation">{groups.map(group => {
@@ -30,7 +31,7 @@ export default function PlatformNavigation({ items, activeKey, onSelect, onSetti
         <group.icon size={21} stroke={1.5} /><span>{group.label}</span><IconChevronRight className={open ? "is-expanded" : ""} size={17} stroke={1.6} />
       </button>
       <div id={`platform-group-${group.key}`} hidden={!open} className="platform-group-children">
-        {children.map(item => <button type="button" key={item.key} className={`fire-sidebar-item platform-child ${activeKey === item.key ? "fire-sidebar-item-active" : ""}`} aria-label={item.label} aria-current={activeKey === item.key ? "page" : undefined} onClick={() => onSelect(item.key)} onPointerEnter={event => { if (event.pointerType === "mouse") preloadView(item.key); }} onFocus={() => preloadView(item.key)} draggable onDragStart={event => { event.stopPropagation(); event.dataTransfer.effectAllowed="move"; event.dataTransfer.setData("text/plain", item.key); onDragStart(item.key); }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); event.stopPropagation(); onDrop(item.key); }} onDragEnd={onDragEnd}>
+        {children.map(item => <button type="button" key={item.key} className={`fire-sidebar-item platform-child ${activeKey === item.key ? "fire-sidebar-item-active" : ""}`} aria-label={item.label} aria-current={activeKey === item.key ? "page" : undefined} onClick={() => onSelect(item.key)} onPointerEnter={event => { if (event.pointerType === "mouse") { preloadView(item.key); onPrepare?.(item.key); } }} onFocus={() => { preloadView(item.key); onPrepare?.(item.key); }} draggable onDragStart={event => { event.stopPropagation(); event.dataTransfer.effectAllowed="move"; event.dataTransfer.setData("text/plain", item.key); onDragStart(item.key); }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); event.stopPropagation(); onDrop(item.key); }} onDragEnd={onDragEnd}>
           {item.icon}<span className="fire-sidebar-label truncate">{item.label}</span>
         </button>)}
 

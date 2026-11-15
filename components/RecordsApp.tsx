@@ -47,6 +47,7 @@ import type { WatchGroup } from "@/lib/watchGroups";
 import { useDesktopViewport, useTabletDevice } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
+import { prefetchMaterialCatalog } from "@/lib/materialCatalogCache";
 import { workspaceForPath, workspaceDestination, type WorkspaceVisit } from "@/lib/workspaceRouting";
 import { observeWorkspaceReady } from "@/lib/workspaceTiming";
 import { animateWorkspaceEntrance } from "@/lib/workspaceMotion";
@@ -1052,7 +1053,7 @@ export default function RecordsApp({
       <aside className={`fire-sidebar sticky top-[88px] hidden w-[240px] flex-none lg:flex ${activeTab === "settings" ? "is-settings" : ""}`}>
         <PlatformSidebarHeader collapsed={platformSidebarCollapsed} onToggle={() => tabletDevice ? setTabletSidebarCollapsed(value => !value) : setSidebarCollapsed(value => !value)} items={sidebarTabs} onSelect={key => selectTab(key as TabKey)} admin={user?.role === "admin"} ownerId={user?.id || "guest"} onSettings={(sub, anchor) => anchor ? activateWorkspace("settings", "link", `/settings?${new URLSearchParams({ sub, anchor })}`) : navigateTo("settings", sub)} title={initialSettings.logoText || "Alcor"} />
         <nav id="fire-desktop-nav" ref={desktopNavRef} className="fire-sidebar-panel relative flex min-h-0 flex-col overflow-y-auto rounded-2xl px-2 pb-7">
-          <PlatformNavigation items={sidebarTabs} activeKey={navigationTab} onSelect={key => selectTab(key as TabKey)} onSettings={sub => navigateTo("settings", sub)} onDrop={key => onTabDrop(key as TabKey)} onDragStart={key => { tabDragKeyRef.current = key as TabKey; }} onDragEnd={() => { tabDragKeyRef.current = null; }} />
+          <PlatformNavigation items={sidebarTabs} activeKey={navigationTab} onSelect={key => selectTab(key as TabKey)} onSettings={sub => navigateTo("settings", sub)} onDrop={key => onTabDrop(key as TabKey)} onDragStart={key => { tabDragKeyRef.current = key as TabKey; }} onDragEnd={() => { tabDragKeyRef.current = null; }} onPrepare={key => { if (key === "library" && user.role === "admin") void prefetchMaterialCatalog(user.id, "market"); }} />
         </nav>
         <div className="fire-sidebar-footer">
           <button type="button" className={`platform-appearance ${activeTab === "settings" && settingsSub === "palette" ? "is-active" : ""}`} aria-label="外观" title="外观" onClick={() => navigateTo("settings", "palette")}><PlatformNavigation.AppearanceIcon /><span>外观</span></button>
