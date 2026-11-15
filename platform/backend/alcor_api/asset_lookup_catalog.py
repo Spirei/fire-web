@@ -501,9 +501,12 @@ class AssetCatalog:
             preloaded = budget.get("metadata") if budget is not None else None
             if preloaded is not None and row["id"] in preloaded:
                 from .asset_source_metadata import project_row as project_metadata_row
+                entry = preloaded[row["id"]]
                 cache[metadata_key] = await project_metadata_row(
-                    conn, self.db, row["id"], preloaded[row["id"]],
+                    conn, self.db, row["id"], entry["observation"],
                     {"type": row["type"], "market": row["market"], "code": row["code"]},
+                    page=entry.get("page"),
+                    auth=budget.get("source_auth") if budget is not None else None,
                 )
             else:
                 cache[metadata_key] = await project_metadata(conn, self.db, row["id"])

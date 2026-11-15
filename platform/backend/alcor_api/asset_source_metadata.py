@@ -58,16 +58,34 @@ def empty_metadata():
 
 
 async def preload(conn, asset_ids):
-    if not asset_ids:
+    ids = list(asset_ids)
+    if not ids:
         return {}
     rows = await (
         await conn.execute(
             """SELECT DISTINCT ON (asset_id) * FROM asset_metadata_observations
                WHERE asset_id=ANY(%s) ORDER BY asset_id,observed_at DESC,id DESC""",
-            (list(asset_ids),),
+            (ids,),
         )
     ).fetchall()
-    return {row["asset_id"]: row for row in rows}
+    observations = {row["asset_id"]: row for row in rows}
+    from .asset_source_evidence import preload_source_pages
+
+    pages = await preload_source_pages(
+        conn,
+        [(row["owner_id"], row["source_page_id"]) for row in observations.values()],
+    )
+    return {
+        aid: {
+            "observation": observations.get(aid),
+            "page": (
+                pages.get((str(observations[aid]["owner_id"]), str(observations[aid]["source_page_id"])))
+                if aid in observations
+                else None
+            ),
+        }
+        for aid in ids
+    }
 
 
 async def project(conn, db, asset_id):
@@ -80,7 +98,7 @@ async def project(conn, db, asset_id):
     return await project_row(conn, db, asset_id, row)
 
 
-async def project_row(conn, db, asset_id, row, asset=None):
+async def project_row(conn, db, asset_id, row, asset=None, page=None, auth=None):
     base = empty_metadata()
     if not row:
         return base
@@ -97,7 +115,9 @@ async def project_row(conn, db, asset_id, row, asset=None):
         return base
     try:
         from .asset_source_evidence import source_page
-        page,parsed,_target=await source_page(conn,db,row['owner_id'],row['source_page_id'])
+        page,parsed,_target=await source_page(
+            conn,db,row['owner_id'],row['source_page_id'],page=page,auth=auth
+        )
         asset=asset or await(await conn.execute('SELECT type,market,code FROM asset_catalog_entries WHERE id=%s',(asset_id,))).fetchone()
         matches=[item for item in parsed.get('items',[]) if asset and all(item.get(key)==asset[key] for key in ('type','market','code'))]
         if len(matches)!=1 or page['action']!=row['source_action']:

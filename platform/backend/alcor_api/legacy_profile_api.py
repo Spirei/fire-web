@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections import OrderedDict
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -23,6 +24,36 @@ from .legacy_identity import (
 from .legacy_optional_credentials import credentials_present
 from .profile_http import bounded_body, profile_limits
 from .profile_media import ProfileMedia, validate_legacy_avatar
+
+# Avatars are immutable per revision. Cache the verified bytes for the small
+# set of recently requested revisions; a new upload gets a new revision key.
+_AVATAR_CACHE = OrderedDict()
+_AVATAR_CACHE_BYTES = 0
+_AVATAR_CACHE_MAX_BYTES = 32 * 1024 * 1024
+_AVATAR_CACHE_MAX_ITEMS = 256
+
+
+def _cached_avatar(key):
+    cached = _AVATAR_CACHE.get(key)
+    if cached is None:
+        return None
+    _AVATAR_CACHE.move_to_end(key)
+    return cached[0], cached[1]
+
+
+def _cache_avatar(key, raw, kind):
+    global _AVATAR_CACHE_BYTES
+    prior = _AVATAR_CACHE.pop(key, None)
+    if prior is not None:
+        _AVATAR_CACHE_BYTES -= prior[2]
+    _AVATAR_CACHE[key] = (raw, kind, len(raw))
+    _AVATAR_CACHE_BYTES += len(raw)
+    while _AVATAR_CACHE and (
+        len(_AVATAR_CACHE) > _AVATAR_CACHE_MAX_ITEMS
+        or _AVATAR_CACHE_BYTES > _AVATAR_CACHE_MAX_BYTES
+    ):
+        _, (_, _, evicted) = _AVATAR_CACHE.popitem(last=False)
+        _AVATAR_CACHE_BYTES -= evicted
 from .profile_update import ProfileUpdate
 from .security import digest, identity, lock_mutation_identity
 
@@ -231,15 +262,21 @@ def mount_profile_compatibility(app, settings, db, rate_limit):
     async def avatar(request, revision, version=None, canonical=False, platform=False):
         who, _ = await member(request, False, 2 if canonical else version, platform)
         async with db.connection() as conn, conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("identity-management:" + who.id,))
-            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("profile:" + who.id,))
-            await lock_mutation_identity(conn, who, require_admin=False)
+            # A read-only avatar must not take the profile mutation locks; a
+            # consistent snapshot and the already checked identity are enough.
+            await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             row = await (await conn.execute("SELECT avatar,avatar_object_id,revision FROM user_profiles WHERE user_id=%s", (who.id,))).fetchone()
             if not row or not row["avatar_object_id"] and not row["avatar"]:
                 raise HTTPException(404, "头像不存在")
             if row["revision"] == revision:
                 if row["avatar_object_id"]:
-                    raw, kind = await media.read(conn, who.id, row["avatar_object_id"])
+                    cache_key = (who.id, str(revision), str(row["avatar_object_id"]))
+                    cached = _cached_avatar(cache_key)
+                    if cached is not None:
+                        raw, kind = cached
+                    else:
+                        raw, kind = await media.read(conn, who.id, row["avatar_object_id"])
+                        _cache_avatar(cache_key, raw, kind)
                 else:
                     raw, kind = bytes(row["avatar"]), "image/jpeg"
             else:
@@ -261,7 +298,13 @@ def mount_profile_compatibility(app, settings, db, rate_limit):
                 retired = await (await conn.execute("SELECT 1 FROM audit_events WHERE target_id=%s AND action='profile.avatar.history_retired' AND created_at>=%s LIMIT 1", (who.id,admitted))).fetchone()
                 if retired:
                     raise HTTPException(404, "头像历史版本已明确退役")
-                raw, kind = await media.read(conn,who.id,object_id)
+                cache_key = (who.id, str(revision), str(object_id))
+                cached = _cached_avatar(cache_key)
+                if cached is not None:
+                    raw, kind = cached
+                else:
+                    raw, kind = await media.read(conn,who.id,object_id)
+                    _cache_avatar(cache_key, raw, kind)
                 if hashlib.sha256(raw).hexdigest() != binding.get("sha256") or kind != binding.get("mediaType"):
                     raise HTTPException(503, "头像历史原件摘要不一致")
         return Response(
