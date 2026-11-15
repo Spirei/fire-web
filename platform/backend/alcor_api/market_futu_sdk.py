@@ -114,7 +114,7 @@ def snapshot_records(context, ret_ok, symbols):
     return result, sorted(set(skipped))
 
 
-def collect(factory, ret_ok, payload, enums):
+def collect(factory, ret_ok, payload, enums, *, close_context=True):
     """One bounded quote read; only explicit price_series may subscribe its own symbol."""
     action = payload.get("action")
     if action in {"futu.test", "futu.quota"}:
@@ -247,7 +247,8 @@ def collect(factory, ret_ok, payload, enums):
             with contextlib.suppress(Exception):
                 # Only this temporary context's requested symbol/type, never unsubscribe_all.
                 context.unsubscribe(subscribed_symbols, [enums['SubType'].RT_DATA])
-        context.close()
+        if close_context:
+            context.close()
 
 
 def main():
@@ -267,35 +268,48 @@ def main():
             logger.file_logger.removeHandler(handler)
         ready = time.perf_counter()
         if streaming:
-            # Import reuse only: every request gets its own quote context, its
-            # actual response and the existing bounded scalar conversion.
             protocol = 'futu-history-read-v1' if history_stream else 'futu-read-v1'
             sys.__stdout__.write(json.dumps({'ready':True,'protocol':protocol},separators=(',',':'))+'\n')
             sys.__stdout__.flush()
-            for _ in range(128):
-                line = sys.stdin.buffer.readline(16386)
-                if not line:
-                    return
-                if len(line) > 16385 or not line.endswith(b'\n'):
-                    raise ValueError('sdk_request_too_large_or_incomplete')
-                try:
-                    request = json.loads(line)
-                    allowed = {'history'} if history_stream else {'latest','futu.test','futu.quota'}
-                    if not isinstance(request,dict) or request.get('action') not in allowed:
-                        raise ValueError('sdk_stream_action_invalid')
-                    request_started = time.perf_counter()
-                    value = collect(OpenQuoteContext, RET_OK, request,
-                                    {'AuType':AuType,'KLType':KLType,'Session':Session,'SubType':SubType})
-                    if request.get('action') in {'futu.test','futu.quota'}:
-                        value['sdkStartupMs'] = round((ready-startup)*1000)
-                        value['connectionElapsedMs'] = round((time.perf_counter()-request_started)*1000)
-                    output = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(',',':'))
-                except Exception:  # noqa: BLE001 -- Provider errors may contain private target details.
-                    output = '{"error":"sdk_read_unavailable"}'
-                # SDK logs remain on stderr, while only this protocol goes to
-                # stdout; flush each complete independent observation.
-                sys.__stdout__.write(output+'\n')
-                sys.__stdout__.flush()
+            with contextlib.ExitStack() as cleanup:
+                factory = OpenQuoteContext
+                if history_stream:
+                    # OpenD pagination keys are usable on the connection that issued them.
+                    contexts = {}
+                    def history_context(*, host, port):
+                        target = (host, port)
+                        if target not in contexts:
+                            if contexts:
+                                raise ValueError('sdk_history_target_changed')
+                            contexts[target] = OpenQuoteContext(host=host, port=port)
+                            cleanup.callback(contexts[target].close)
+                        return contexts[target]
+                    factory = history_context
+                for _ in range(128):
+                    line = sys.stdin.buffer.readline(16386)
+                    if not line:
+                        return
+                    if len(line) > 16385 or not line.endswith(b'\n'):
+                        raise ValueError('sdk_request_too_large_or_incomplete')
+                    try:
+                        request = json.loads(line)
+                        allowed = {'history'} if history_stream else {'latest','futu.test','futu.quota'}
+                        if not isinstance(request,dict) or request.get('action') not in allowed:
+                            raise ValueError('sdk_stream_action_invalid')
+                        request_started = time.perf_counter()
+                        value = collect(factory, RET_OK, request,
+                                        {'AuType':AuType,'KLType':KLType,'Session':Session,'SubType':SubType},
+                                        close_context=not history_stream)
+                        if request.get('action') in {'futu.test','futu.quota'}:
+                            value['sdkStartupMs'] = round((ready-startup)*1000)
+                            value['connectionElapsedMs'] = round((time.perf_counter()-request_started)*1000)
+                        output = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(',',':'))
+                    except Exception:  # noqa: BLE001 -- Provider errors may contain private target details.
+                        output = '{"error":"sdk_read_unavailable"}'
+                    # SDK logs remain on stderr, while only this protocol goes to
+                    # stdout; flush each complete independent observation.
+                    sys.__stdout__.write(output+'\n')
+                    sys.__stdout__.flush()
             return
         value = collect(
             OpenQuoteContext, RET_OK, payload, {"AuType": AuType, "KLType": KLType, "Session": Session, "SubType": SubType}

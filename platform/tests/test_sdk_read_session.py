@@ -244,7 +244,8 @@ def test_actual_history_entry_keeps_latest_protocol_closed_and_original_sdk_page
     monkeypatch.setitem(sys.modules,'futu.common.ft_logger',logger)
     payload={**request('US.AAPL'),'action':'history','cursor':base64.b64encode(b'original-page').decode(),
              'query':{'frame':'day','adjust':'qfq','session':'REGULAR','start':'2026-10-01','through':'2026-10-31'}}
-    payloads=[payload,request('US.AAPL'),{**payload,'action':'price_series'},payload]
+    payloads=[{**payload, 'cursor': None}, request('US.AAPL'), {**payload,'action':'price_series'},
+              {**payload, 'cursor': base64.b64encode(b'provider-next').decode()}]
     monkeypatch.setattr(sys,'stdin',io.TextIOWrapper(io.BytesIO(('\n'.join(map(json.dumps,payloads))+'\n').encode())))
     output=io.StringIO();monkeypatch.setattr(sys,'__stdout__',output)
     monkeypatch.setattr(sys,'argv',['sdk','--history-stream'])
@@ -252,9 +253,11 @@ def test_actual_history_entry_keeps_latest_protocol_closed_and_original_sdk_page
     messages=list(map(json.loads,output.getvalue().splitlines()))
     assert messages[0]=={'ready':True,'protocol':'futu-history-read-v1'}
     assert messages[2:4]==[{'error':'sdk_read_unavailable'}]*2
-    assert len(contexts)==2 and all(context.closed for context in contexts)
-    assert all(context.calls==[('US.AAPL',{'start':'2026-10-01','end':'2026-10-31','ktype':'original-day',
-        'autype':'original-qfq','max_count':100,'page_req_key':b'original-page','extended_time':False})] for context in contexts)
+    assert len(contexts) == 1 and contexts[0].closed
+    assert [symbol for symbol, _ in contexts[0].calls] == ['US.AAPL', 'US.AAPL']
+    assert [call['page_req_key'] for _, call in contexts[0].calls] == [None, b'provider-next']
+    assert all(call['max_count'] == 100 and call['extended_time'] is False
+               for _, call in contexts[0].calls)
     assert messages[1]==messages[4]
     assert messages[1]['records']==[{'code':'US.AAPL','close':12.5,'unknown':None}]
     assert messages[1]['nextCursor']==base64.b64encode(b'provider-next').decode()
