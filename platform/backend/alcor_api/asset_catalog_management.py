@@ -640,16 +640,13 @@ class AssetManagement:
                     assets.append(row)
                     continue
                 if card == "legacy-card":
-                    assets.append(
-                        await self.legacy_card_directory.project(row, budget, verify_bytes=False)
-                    )
+                    assets.append(await self.legacy_card_directory.project(row, budget))
                     continue
                 if card == "legacy-file":
                     assets.append(
                         await self.catalog.material_display(
-                            conn,
-                            await self.legacy_directory.project(row, budget, verify_bytes=False),
-                            cache, budget, verify_bytes=False,
+                            conn, await self.legacy_directory.project(row, budget), cache, budget,
+                            verify_bytes=False,
                         )
                     )
                     continue

@@ -48,7 +48,7 @@ async def preload_source_pages(conn, pairs):
     rows = await (
         await conn.execute(
             """SELECT p.id,p.owner_id,p.job_id,p.request_key,p.raw_sha256,p.complete,
-               p.http_status,p.representation,encode(sha256(p.raw),'hex') AS raw_digest,
+               p.http_status,p.representation,p.received_at,encode(sha256(p.raw),'hex') AS raw_digest,
                a.request,a.target_fingerprint AS admitted_fingerprint,
                a.license_revision,j.target_id,j.target_fingerprint,j.action,j.subject,j.inputs
                FROM unnest(%s::text[],%s::uuid[]) req(owner_id,page_id)
@@ -64,7 +64,7 @@ async def preload_source_pages(conn, pairs):
 async def source_page(conn,db,owner,page_id,*,job_id=None,page=None,auth=None):
     if page is None:
         page=await(await conn.execute('''SELECT p.id,p.owner_id,p.job_id,p.request_key,p.raw_sha256,p.complete,
-            p.http_status,p.representation,encode(sha256(p.raw),'hex') AS raw_digest,
+            p.http_status,p.representation,p.received_at,encode(sha256(p.raw),'hex') AS raw_digest,
             a.request,a.target_fingerprint AS admitted_fingerprint,a.license_revision,
             j.target_id,j.target_fingerprint,j.action,j.subject,j.inputs FROM asset_source_pages p
             JOIN asset_source_admissions a ON a.owner_id=p.owner_id AND a.job_id=p.job_id AND a.request_key=p.request_key
