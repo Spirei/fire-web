@@ -568,8 +568,12 @@ export default function AssetCatalogView({
   };
   return (
     <div className="material-catalog">
-      <header>
+      <header className="flex items-center justify-between gap-3">
         <h2>素材库</h2>
+        {type === "broker" && <a
+          href="/settings?sub=stocks"
+          className="rounded-full border border-edge px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover dark:border-white/20"
+        >新增券商</a>}
       </header>
       <section className="material-catalog-panel">
         <nav
