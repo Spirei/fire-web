@@ -17,6 +17,11 @@ from .security import COOKIE, administrator, identity, lock_mutation_identity
 # out a database connection for every icon; saves invalidate it immediately.
 _ACCESS_TTL = 5.0
 _access_cache = None
+# A page requests many icons at once. Reusing the just-verified web identity
+# for one second avoids one session/user lookup per image; writes, bearer
+# clients and expired sessions are never cached.
+_IDENTITY_TTL = 1.0
+_identity_cache = {}
 
 
 async def read_access(conn):
@@ -51,12 +56,32 @@ async def material_member(request, db):
     return await card_member(request, db)
 
 
+async def cached_material_member(request, db):
+    if (
+        'authorization' in request.headers
+        or COOKIE not in request.cookies
+        or request.headers.get('x-csrf-token') is not None
+        or not request.url.path.startswith(('/api/asset-image/', '/api/managed-upload/', '/api/upload-files/'))
+    ):
+        return await material_member(request, db)
+    key = hashlib.sha256((request.headers.get('cookie') or '').encode()).hexdigest()
+    now = monotonic()
+    cached = _identity_cache.get(key)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    who = await material_member(request, db)
+    if len(_identity_cache) > 512:
+        _identity_cache.clear()
+    _identity_cache[key] = (now + _IDENTITY_TTL, who)
+    return who
+
+
 async def assert_material_read(request, db):
     policy = await cached_read_access(db)
     if policy['guest']:
         return policy
     try:
-        who = await material_member(request, db)
+        who = await cached_material_member(request, db)
     except HTTPException as exc:
         raise HTTPException(exc.status_code, '请登录后读取素材' if exc.status_code == 401 else str(exc.detail), headers={'Cache-Control':'private, no-store', 'Vary':'Cookie, Authorization'}) from None
     if who.role != 'admin' and not policy['registered']:
