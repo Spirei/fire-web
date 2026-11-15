@@ -583,6 +583,32 @@ class AssetManagement:
             selected = records[(page - 1) * page_size : page * page_size]
             cache = {}
             budget = {"bytes": 0, "verified": set()}
+            # Load every light/dark version for this page in one statement.
+            # Re-reading and hashing each icon here made a 100-row page issue
+            # hundreds of queries and file reads while holding the event loop.
+            identifiers = set()
+            for row, source in selected:
+                if source is False:
+                    for field in ("light_version", "dark_version"):
+                        if row.get(field):
+                            identifiers.add(str(row[field]))
+                elif source is True and row.get("imageVersion"):
+                    identifiers.add(str(row["imageVersion"]))
+            if identifiers:
+                budget["versions"] = {
+                    str(version["id"]): version
+                    for version in await (
+                        await conn.execute(
+                            "SELECT * FROM system_asset_versions WHERE id=ANY(%s)", (list(identifiers),)
+                        )
+                    ).fetchall()
+                }
+            catalog_ids = [row["id"] for row, source in selected if source is False]
+            if catalog_ids:
+                from .asset_source_evidence import preload_creation_origins
+                from .asset_source_metadata import preload as preload_metadata
+                budget["origins"] = await preload_creation_origins(conn, catalog_ids)
+                budget["metadata"] = await preload_metadata(conn, catalog_ids)
             assets = []
             for row, card in selected:
                 if card == "placeholder":
@@ -592,14 +618,26 @@ class AssetManagement:
                     assets.append(await self.legacy_card_directory.project(row, budget))
                     continue
                 if card == "legacy-file":
-                    assets.append(await self.catalog.material_display(conn, await self.legacy_directory.project(row, budget), cache, budget))
+                    assets.append(
+                        await self.catalog.material_display(
+                            conn, await self.legacy_directory.project(row, budget), cache, budget,
+                            verify_bytes=False,
+                        )
+                    )
                     continue
                 if not card:
                     assets.append(
-                        {**await self.catalog.project(conn, row, cache, budget), "deleted": deleted}
+                        {
+                            **await self.catalog.project(
+                                conn, row, cache, budget, verify_bytes=False
+                            ),
+                            "deleted": deleted,
+                        }
                     )
                     continue
-                assets.append(await self.catalog.project_card(conn, row, budget))
+                assets.append(
+                    await self.catalog.project_card(conn, row, budget, verify_bytes=False)
+                )
             revision = (await (await conn.execute("SELECT revision FROM asset_catalog_scope")).fetchone())[
                 "revision"
             ]

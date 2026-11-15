@@ -113,6 +113,30 @@ def open_verified(settings, sha, size):
         raise HTTPException(503, "原文件缺失或完整性校验失败") from None
 
 
+def stat_verified(settings, sha, size):
+    """Cheap existence/property proof for listings; the serving route still hashes."""
+    try:
+        if not re.fullmatch(r"[0-9a-f]{64}", sha):
+            raise ValueError()
+        descriptor = os.open(verified_root(settings) / sha, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1
+                or info.st_uid != os.getuid()
+                or info.st_mode & 0o077
+                or info.st_size != size
+                or size > UPLOAD_LIMIT
+            ):
+                raise ValueError()
+        finally:
+            os.close(descriptor)
+        return True
+    except (OSError, ValueError, BackupFailure):
+        return False
+
+
 def read_bytes(settings, sha, size):
     with open_verified(settings, sha, size) as stream:
         return stream.read(UPLOAD_LIMIT + 1)

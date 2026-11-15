@@ -245,7 +245,9 @@ class LegacyAssetDirectory:
             if self.cached is None or time.monotonic() >= self.until:
                 self.cached = await asyncio.to_thread(self.scan)
                 self.grouped = None
-                self.until = time.monotonic() + 5
+                # A full directory scan is expensive; registered uploads do not
+                # depend on it. Rebuild at most once a minute.
+                self.until = time.monotonic() + 60
             return self.cached
 
     async def entries(self):

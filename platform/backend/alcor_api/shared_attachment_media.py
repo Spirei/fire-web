@@ -2,7 +2,7 @@
 
 import asyncio
 
-from .resource_media import LIFECYCLE, open_verified, persist
+from .resource_media import LIFECYCLE, open_verified, persist, stat_verified
 
 
 async def media_inventory(conn, limit=None):
@@ -50,3 +50,7 @@ async def stage(conn, settings, digest, raw):
 
 async def open_original(settings, row):
     return await asyncio.to_thread(open_verified, settings, row["sha256"], row["byte_length"])
+
+
+async def stat_original(settings, row):
+    return await asyncio.to_thread(stat_verified, settings, row["sha256"], row["byte_length"])

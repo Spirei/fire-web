@@ -59,11 +59,71 @@ async def historical_identity(conn,job,page_id,asset):
     return any(all(item.get(key)==asset[key] for key in ('type','market','code')) for item in parsed.get('items',[]))
 
 
+def unknown_origin():
+    return {'source':'unknown','sourceKnown':False,'creationAuthority':'unverified_creation_chain'}
+
+
+async def preload_creation_origins(conn, asset_ids):
+    """Resolve the simple creation proofs for a page in two statements.
+
+    None means the automatic path still needs its full receipt/job proof.
+    """
+    if not asset_ids:
+        return {}
+    events = await (
+        await conn.execute(
+            """SELECT DISTINCT ON (asset_id) * FROM asset_catalog_management_events
+               WHERE asset_id=ANY(%s) AND before_snapshot IS NULL AND kind='upsert'
+               ORDER BY asset_id,created_at,id""",
+            (list(asset_ids),),
+        )
+    ).fetchall()
+    receipts = {}
+    pairs = [(event['actor_id'], event['request_id']) for event in events]
+    if pairs:
+        receipts = {
+            (row['actor_id'], row['request_id']): row['result']
+            for row in await (
+                await conn.execute(
+                    """SELECT o.actor_id,o.request_id,o.result FROM asset_catalog_operations o
+                       JOIN unnest(%s::text[],%s::uuid[]) pair(actor_id,request_id)
+                       ON o.actor_id=pair.actor_id AND o.request_id=pair.request_id""",
+                    ([pair[0] for pair in pairs], [pair[1] for pair in pairs]),
+                )
+            ).fetchall()
+        }
+    origins = {}
+    for event in events:
+        aid = event['asset_id']
+        result = receipts.get((event['actor_id'], event['request_id']))
+        if (
+            not result
+            or result != event['result']
+            or not event['after_snapshot']
+            or event['after_snapshot'].get('id') != aid
+        ):
+            origins[aid] = unknown_origin()
+            continue
+        source = event['after_snapshot'].get('source')
+        if source == 'manual':
+            origins[aid] = {
+                'source': 'manual', 'sourceKnown': True,
+                'creationAuthority': 'explicit_manual_registration',
+            }
+        elif source == 'auto':
+            origins[aid] = None
+        else:
+            origins[aid] = unknown_origin()
+    for aid in asset_ids:
+        origins.setdefault(aid, unknown_origin())
+    return origins
+
+
 async def creation_origin(conn,asset):
     """The first creation and exact original child receipt decide origin, never later metadata."""
     from uuid import uuid5
     event=await(await conn.execute("SELECT e.* FROM asset_catalog_management_events e WHERE asset_id=%s AND before_snapshot IS NULL AND kind='upsert' ORDER BY created_at,id LIMIT 1",(asset['id'],))).fetchone()
-    unknown={'source':'unknown','sourceKnown':False,'creationAuthority':'unverified_creation_chain'}
+    unknown=unknown_origin()
     if not event or not event['after_snapshot'] or event['after_snapshot'].get('id')!=asset['id']:
         return unknown
     receipt=await(await conn.execute('SELECT result FROM asset_catalog_operations WHERE actor_id=%s AND request_id=%s',(event['actor_id'],event['request_id']))).fetchone()

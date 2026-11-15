@@ -47,6 +47,29 @@ async def save(conn, db, job, asset_id, item, page, request_id):
     )
 
 
+def empty_metadata():
+    return {
+        "board": None,
+        "marketCap": None,
+        "marketCapCurrency": None,
+        "asOf": None,
+        "metadataObservation": {"state": "unknown", "authority": "licensed_provider_metadata_not_live_quote"},
+    }
+
+
+async def preload(conn, asset_ids):
+    if not asset_ids:
+        return {}
+    rows = await (
+        await conn.execute(
+            """SELECT DISTINCT ON (asset_id) * FROM asset_metadata_observations
+               WHERE asset_id=ANY(%s) ORDER BY asset_id,observed_at DESC,id DESC""",
+            (list(asset_ids),),
+        )
+    ).fetchall()
+    return {row["asset_id"]: row for row in rows}
+
+
 async def project(conn, db, asset_id):
     row = await (
         await conn.execute(
@@ -54,13 +77,11 @@ async def project(conn, db, asset_id):
             (asset_id,),
         )
     ).fetchone()
-    base = {
-        "board": None,
-        "marketCap": None,
-        "marketCapCurrency": None,
-        "asOf": None,
-        "metadataObservation": {"state": "unknown", "authority": "licensed_provider_metadata_not_live_quote"},
-    }
+    return await project_row(conn, db, asset_id, row)
+
+
+async def project_row(conn, db, asset_id, row):
+    base = empty_metadata()
     if not row:
         return base
     try:

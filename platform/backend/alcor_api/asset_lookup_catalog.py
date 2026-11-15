@@ -12,7 +12,7 @@ from psycopg.types.json import Jsonb
 from .admin_attachments import iso
 from .asset_lookup_contract import image_key, lookup_codes, manifest
 from .security import lock_mutation_identity
-from .shared_attachment_media import open_original
+from .shared_attachment_media import open_original, stat_original
 
 # Stable image keys are read repeatedly by icon grids. Registry writes clear
 # this map; card fallback rows stay uncached so card deletion is immediate.
@@ -61,15 +61,23 @@ class AssetCatalog:
             )
             yield conn
 
-    async def image(self, conn, identifier, kind, budget=None):
+    async def image(self, conn, identifier, kind, budget=None, *, verify_bytes=True):
         if not identifier:
             return None, "metadata-only"
-        row = await (
-            await conn.execute(
-                "SELECT * FROM system_asset_versions WHERE id=%s AND (%s='card' OR (kind='asset' AND folder=%s))",
-                (identifier, kind, kind),
-            )
-        ).fetchone()
+        row = None
+        if budget is not None:
+            row = budget.get("versions", {}).get(str(identifier))
+            if row is not None and not (
+                kind == "card" or (row["kind"] == "asset" and row["folder"] == kind)
+            ):
+                row = None
+        if row is None:
+            row = await (
+                await conn.execute(
+                    "SELECT * FROM system_asset_versions WHERE id=%s AND (%s='card' OR (kind='asset' AND folder=%s))",
+                    (identifier, kind, kind),
+                )
+            ).fetchone()
         if not row:
             return None, "unregistered-image"
         if budget is not None:
@@ -78,12 +86,17 @@ class AssetCatalog:
             budget["bytes"] += row["served_size"]
             if budget["bytes"] > 64 * 1024 * 1024:
                 raise HTTPException(503, "素材原件校验超过读取预算，请缩小批次")
-        try:
-            stream = await open_original(
-                self.db.settings, {"sha256": row["served_sha256"], "byte_length": row["served_size"]}
-            )
-            stream.close()
-        except HTTPException:
+        if verify_bytes:
+            try:
+                stream = await open_original(
+                    self.db.settings, {"sha256": row["served_sha256"], "byte_length": row["served_size"]}
+                )
+                stream.close()
+            except HTTPException:
+                return None, "missing-or-unverified-bytes"
+        elif not await stat_original(
+            self.db.settings, {"sha256": row["served_sha256"], "byte_length": row["served_size"]}
+        ):
             return None, "missing-or-unverified-bytes"
         if budget is not None:
             budget["verified"].add(row["served_sha256"])
@@ -409,8 +422,10 @@ class AssetCatalog:
                 "cardSource": "card_catalog_public_index",
             }
 
-    async def project_card(self, conn, card, budget):
-        image, state = await self.image(conn, card["imageVersion"], "card", budget)
+    async def project_card(self, conn, card, budget, *, verify_bytes=True):
+        image, state = await self.image(
+            conn, card["imageVersion"], "card", budget, verify_bytes=verify_bytes
+        )
         return {
             **card,
             "url": image["public_path"] + "?sha256=" + image["served_sha256"] if image else "",
@@ -427,7 +442,7 @@ class AssetCatalog:
             "materialState": state,
         }
 
-    async def project(self, conn, row, cache, budget, *, registration_source=None):
+    async def project(self, conn, row, cache, budget, *, registration_source=None, verify_bytes=True):
         result = {
             "id": row["id"],
             "type": row["type"],
@@ -446,8 +461,18 @@ class AssetCatalog:
             "darkImageVersion": str(row["dark_version"]) if row["dark_version"] else None,
         }
         from .asset_source_evidence import creation_origin
-        origin=({'source':registration_source,'sourceKnown':True,'creationAuthority':'current_registration_transaction'}
-                if registration_source in ('manual','auto') else await creation_origin(conn,row))
+        if registration_source in ('manual','auto'):
+            origin = {
+                'source': registration_source, 'sourceKnown': True,
+                'creationAuthority': 'current_registration_transaction',
+            }
+        else:
+            preloaded = budget.get("origins") if budget is not None else None
+            origin = (
+                dict(preloaded[row["id"]])
+                if preloaded is not None and preloaded.get(row["id"]) is not None
+                else await creation_origin(conn, row)
+            )
         result.update(origin)
         states = {}
         for variant, field, url_field, image_field in (
@@ -456,7 +481,9 @@ class AssetCatalog:
         ):
             identifier = str(row[field]) if row[field] else None
             if identifier not in cache:
-                cache[identifier] = await self.image(conn, identifier, row["type"], budget)
+                cache[identifier] = await self.image(
+                    conn, identifier, row["type"], budget, verify_bytes=verify_bytes
+                )
             image, state = cache[identifier]
             if identifier is None:
                 state = row["material_state"].get(variant, "metadata-only")
@@ -471,10 +498,20 @@ class AssetCatalog:
 
         metadata_key = ("source-metadata", row["id"])
         if metadata_key not in cache:
-            cache[metadata_key] = await project_metadata(conn, self.db, row["id"])
-        return await self.material_display(conn, {**result, **cache[metadata_key], "materialState": states}, cache, budget)
+            preloaded = budget.get("metadata") if budget is not None else None
+            if preloaded is not None and row["id"] in preloaded:
+                from .asset_source_metadata import project_row as project_metadata_row
+                cache[metadata_key] = await project_metadata_row(
+                    conn, self.db, row["id"], preloaded[row["id"]]
+                )
+            else:
+                cache[metadata_key] = await project_metadata(conn, self.db, row["id"])
+        return await self.material_display(
+            conn, {**result, **cache[metadata_key], "materialState": states}, cache, budget,
+            verify_bytes=verify_bytes,
+        )
 
-    async def material_display(self, conn, asset, cache, budget):
+    async def material_display(self, conn, asset, cache, budget, *, verify_bytes=True):
         """Preserve the established shared-underlying image rule without changing ETF identity."""
         if asset.get('type') != 'stock' or asset.get('market') != 'US' or asset.get('iconTarget'):
             return asset
@@ -493,7 +530,9 @@ class AssetCatalog:
         if cache_key not in cache:
             rows = await (await conn.execute("SELECT * FROM asset_catalog_entries e WHERE type='stock' AND upper(market)='US' AND upper(code)=%s ORDER BY created_at,id LIMIT 1",(root,))).fetchall()
             removed = {r['asset_id'] for r in await (await conn.execute('SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL')).fetchall()}
-            source = await self.project(conn, rows[0], cache, budget) if rows and rows[0]['id'] not in removed else None
+            source = await self.project(
+                conn, rows[0], cache, budget, verify_bytes=verify_bytes
+            ) if rows and rows[0]['id'] not in removed else None
             if not rows and self.legacy_directory is not None:
                 original = next((r for r in await self.legacy_directory.matching('stock','US',[root]) if r['id'] not in removed),None)
                 source = await self.legacy_directory.project(original,budget) if original else None
