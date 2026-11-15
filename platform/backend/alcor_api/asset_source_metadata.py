@@ -80,7 +80,7 @@ async def project(conn, db, asset_id):
     return await project_row(conn, db, asset_id, row)
 
 
-async def project_row(conn, db, asset_id, row):
+async def project_row(conn, db, asset_id, row, asset=None):
     base = empty_metadata()
     if not row:
         return base
@@ -98,7 +98,7 @@ async def project_row(conn, db, asset_id, row):
     try:
         from .asset_source_evidence import source_page
         page,parsed,_target=await source_page(conn,db,row['owner_id'],row['source_page_id'])
-        asset=await(await conn.execute('SELECT type,market,code FROM asset_catalog_entries WHERE id=%s',(asset_id,))).fetchone()
+        asset=asset or await(await conn.execute('SELECT type,market,code FROM asset_catalog_entries WHERE id=%s',(asset_id,))).fetchone()
         matches=[item for item in parsed.get('items',[]) if asset and all(item.get(key)==asset[key] for key in ('type','market','code'))]
         if len(matches)!=1 or page['action']!=row['source_action']:
             raise ValueError('metadata_source_identity')

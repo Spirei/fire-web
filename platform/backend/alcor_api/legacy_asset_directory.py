@@ -99,6 +99,8 @@ class LegacyAssetDirectory:
         self.grouped = None
         self.until = 0
         self.lock = asyncio.Lock()
+        self.refreshing = False
+        self.refresh_task = None
 
     def root_fd(self):
         if self.root is None:
@@ -241,14 +243,30 @@ class LegacyAssetDirectory:
         return sorted(records, key=lambda r: (r["type"], r["market"], r["code"], r["relativePath"]))
 
     async def inventory(self):
-        async with self.lock:
-            if self.cached is None or time.monotonic() >= self.until:
+        if self.cached is not None and time.monotonic() < self.until:
+            return self.cached
+        if self.cached is None:
+            async with self.lock:
+                if self.cached is None:
+                    self.cached = await asyncio.to_thread(self.scan)
+                    self.grouped = None
+                    self.until = time.monotonic() + 5
+            return self.cached
+        # Expired snapshots are served stale while one background task rebuilds
+        # the directory. A full scan must not block a page-load request.
+        if not self.refreshing:
+            self.refreshing = True
+            self.refresh_task = asyncio.create_task(self._refresh())
+        return self.cached
+
+    async def _refresh(self):
+        try:
+            async with self.lock:
                 self.cached = await asyncio.to_thread(self.scan)
                 self.grouped = None
-                # A full directory scan is expensive; registered uploads do not
-                # depend on it. Rebuild at most once a minute.
-                self.until = time.monotonic() + 60
-            return self.cached
+                self.until = time.monotonic() + 5
+        finally:
+            self.refreshing = False
 
     async def entries(self):
         files = await self.inventory()

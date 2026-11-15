@@ -502,7 +502,8 @@ class AssetCatalog:
             if preloaded is not None and row["id"] in preloaded:
                 from .asset_source_metadata import project_row as project_metadata_row
                 cache[metadata_key] = await project_metadata_row(
-                    conn, self.db, row["id"], preloaded[row["id"]]
+                    conn, self.db, row["id"], preloaded[row["id"]],
+                    {"type": row["type"], "market": row["market"], "code": row["code"]},
                 )
             else:
                 cache[metadata_key] = await project_metadata(conn, self.db, row["id"])
