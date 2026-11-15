@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import io
 import json
+from collections import OrderedDict
 from importlib.resources import files
 import os
 import re
@@ -17,6 +18,19 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import HTTPException
+
+# Content checks are immutable while a file's size and mtime stay unchanged.
+# Cache the verified digest so repeated page loads do not re-read every icon;
+# any replacement changes the stat key and forces a fresh full verification.
+_VERIFIED_CACHE = OrderedDict()
+_VERIFIED_CACHE_MAX = 8192
+
+
+def _cache_verified(key, mtime_ns, size, info):
+    _VERIFIED_CACHE.pop(key, None)
+    _VERIFIED_CACHE[key] = (mtime_ns, size, info)
+    if len(_VERIFIED_CACHE) > _VERIFIED_CACHE_MAX:
+        _VERIFIED_CACHE.popitem(last=False)
 
 from .system_asset_codec import FOLDERS
 from .legacy_asset_codec import display_bytes
@@ -312,34 +326,63 @@ class LegacyAssetDirectory:
             if row["type"] == kind and row["code"] in codes and (kind != "stock" or row["market"] == market)
         ]
 
+    def stat_bytes(self, relative_path):
+        parts = self.path_parts(relative_path)
+        fd = None
+        try:
+            fd = self.root_fd()
+            for part in parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            child = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+            try:
+                info = os.fstat(child)
+                if not stat.S_ISREG(info.st_mode) or info.st_size <= 0:
+                    raise ValueError()
+                return info.st_size, info.st_mtime_ns
+            finally:
+                os.close(child)
+        finally:
+            if fd is not None:
+                os.close(fd)
+
     async def project(self, row, budget):
         result = {k: v for k, v in row.items() if k not in ("relativePath", "fileVariants", "darkVariant")}
         variants = []
         for variant in row.get("fileVariants", [row]):
             item = {"path": variant["legacyPath"], "dark": variant.get("darkVariant", False)}
-            if budget.get("skip_file_check"):
-                # Listing metadata only; the image route verifies the original.
-                item.update(
-                    imageUrl=variant["legacyPath"],
-                    originalSha256=None,
-                    imageState="read-only-original",
-                )
-                variants.append(item)
-                continue
+            key = (str(self.root), variant["relativePath"])
             try:
-                image, stream = await asyncio.to_thread(self.open_bytes, variant["relativePath"])
-                stream.close()
-                budget["bytes"] += image["served_size"]
-                if budget["bytes"] > 64 * 1024 * 1024:
-                    raise HTTPException(503, "素材校验超过读取预算，请缩小分页")
+                size, mtime_ns = await asyncio.to_thread(self.stat_bytes, variant["relativePath"])
+            except (OSError, ValueError):
+                size = mtime_ns = None
+            cached = _VERIFIED_CACHE.get(key)
+            if cached is not None and cached[0] == mtime_ns and cached[1] == size:
+                info = cached[2]
+            else:
+                info = None
+                if size is not None:
+                    try:
+                        image, stream = await asyncio.to_thread(self.open_bytes, variant["relativePath"])
+                        stream.close()
+                        budget["bytes"] += image["served_size"]
+                        if budget["bytes"] > 64 * 1024 * 1024:
+                            raise HTTPException(503, "素材校验超过读取预算，请缩小分页")
+                        info = image
+                    except HTTPException as exc:
+                        if exc.status_code == 503:
+                            raise
+                    except (OSError, ValueError):
+                        info = None
+                _cache_verified(key, mtime_ns, size, info)
+            if info is not None:
                 item.update(
-                    imageUrl=variant["legacyPath"] + "?sha256=" + image["served_sha256"],
-                    originalSha256=image["original_sha256"],
+                    imageUrl=variant["legacyPath"] + "?sha256=" + info["served_sha256"],
+                    originalSha256=info["original_sha256"],
                     imageState="read-only-original",
                 )
-            except HTTPException as exc:
-                if exc.status_code == 503:
-                    raise
+            else:
                 item.update(imageUrl=None, imageState="unavailable-or-unsafe")
             variants.append(item)
         primary = variants[0]
