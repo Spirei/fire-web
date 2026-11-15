@@ -317,6 +317,15 @@ class LegacyAssetDirectory:
         variants = []
         for variant in row.get("fileVariants", [row]):
             item = {"path": variant["legacyPath"], "dark": variant.get("darkVariant", False)}
+            if budget.get("skip_file_check"):
+                # Listing metadata only; the image route verifies the original.
+                item.update(
+                    imageUrl=variant["legacyPath"],
+                    originalSha256=None,
+                    imageState="read-only-original",
+                )
+                variants.append(item)
+                continue
             try:
                 image, stream = await asyncio.to_thread(self.open_bytes, variant["relativePath"])
                 stream.close()

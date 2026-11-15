@@ -607,7 +607,7 @@ class AssetManagement:
                 page = min(page, max(1, math.ceil(total / page_size)))
             selected = records[(page - 1) * page_size : page * page_size]
             cache = {}
-            budget = {"bytes": 0, "verified": set()}
+            budget = {"bytes": 0, "verified": set(), "skip_file_check": True}
             # Load every light/dark version for this page in one statement.
             # Re-reading and hashing each icon here made a 100-row page issue
             # hundreds of queries and file reads while holding the event loop.

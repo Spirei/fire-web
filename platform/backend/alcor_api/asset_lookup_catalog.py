@@ -86,6 +86,10 @@ class AssetCatalog:
             budget["bytes"] += row["served_size"]
             if budget["bytes"] > 64 * 1024 * 1024:
                 raise HTTPException(503, "素材原件校验超过读取预算，请缩小批次")
+            if budget.get("skip_file_check"):
+                # Listing metadata only. Opening every icon on a network volume
+                # is the request cost; the image route still verifies the file.
+                return row, "registered-shared-image"
         if verify_bytes:
             try:
                 stream = await open_original(
