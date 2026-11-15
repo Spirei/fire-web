@@ -45,11 +45,22 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   if(!tab)notFound();
   const cookieHeaders={cookie:rawCookie};
   const financial=['holdings','watchlist','assets','pnl','fire','earnings','global'].includes(tab.key) || tab.key==='settings'&&query.get('sub')==='profile'&&['data','danger'].includes(query.get('anchor')||'');
-  const [initialRecords,funds,initialWorkspace]=await Promise.all([
-    financial?platformJson<StockRecord[]>('/api/records',cookieHeaders):Promise.resolve([]),
-    ['holdings','global'].includes(tab.key)?platformJson<{balances:Record<string,number|null>}>('/api/fire/funds',cookieHeaders):Promise.resolve({balances:{}}),
+  // A transient failure in one of these heavy reads must not replace the whole
+  // workspace with the global error page; the client can retry or show its own
+  // empty state. Only settings/session are required to render the shell.
+  const recordsRequest=financial
+    ?platformJson<StockRecord[]>('/api/records',cookieHeaders).then(value=>({ready:true,value})).catch(()=>({ready:false,value:[] as StockRecord[]}))
+    :Promise.resolve({ready:true,value:[] as StockRecord[]});
+  const fundsRequest=['holdings','global'].includes(tab.key)
+    ?platformJson<{balances:Record<string,number|null>}>('/api/fire/funds',cookieHeaders).catch(()=>({balances:{}}))
+    :Promise.resolve({balances:{}});
+  const [initialRecordsRead,funds,initialWorkspace]=await Promise.all([
+    recordsRequest,
+    fundsRequest,
     workspaceBootstrap(tab.key,query,identity,path=>platformJson(path,cookieHeaders,{signal:AbortSignal.timeout(8000)}),preferences).catch(()=>({} as WorkspaceInitial))
   ]);
+  const initialRecords=initialRecordsRead.value;
+  const initialRecordsReady=financial&&initialRecordsRead.ready;
   const initialFundBalances=funds.balances;
   const currencyCookie=rawCookie.split(';').map(p=>p.trim()).find(p=>p.startsWith('fire-display-currency='))?.split('=')[1] as CurrencyCode|undefined;
   const currencyFlagCode=displayCurrencyFlagCode(currencyCookie);
@@ -113,7 +124,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
           initialCelebs={initialCelebs}
           initialUser={user}
           initialRecords={initialRecords}
-          initialRecordsReady={financial}
+          initialRecordsReady={initialRecordsReady}
           initialWatchGroups={initialWatchGroups}
           initialUserLogs={initialUserLogs}
           initialPasskeys={tab.key === "settings" ? null : null}

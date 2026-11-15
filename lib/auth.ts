@@ -3,6 +3,7 @@ import type { WebSession } from "./workspaceInitial";
 import { headers } from "next/headers";
 import {
   platformJson,
+  platformJsonRetry,
   PlatformError,
   platformConfig,
 } from "./platformTransport";
@@ -11,7 +12,7 @@ export const SESSION_COOKIE = "fire_session";
 export const LEGACY_SESSION_COOKIE = "sto" + "cklog_session";
 export const getWebSession = cache(async (cookie: string): Promise<WebSession | null> => {
   try {
-    return await platformJson<WebSession>("/api/fire/session", { cookie });
+    return await platformJsonRetry<WebSession>("/api/fire/session", { cookie });
   } catch (error) {
     if (error instanceof PlatformError && [401, 403].includes(error.status))
       return null;

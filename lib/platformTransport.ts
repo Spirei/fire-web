@@ -155,3 +155,24 @@ export class PlatformError extends Error {
     );
   }
 }
+
+const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+/** A read of the shell may retry once after a busy upstream; writes never do. */
+export function isTransientPlatformError(error: unknown) {
+  return !(error instanceof PlatformError) || TRANSIENT_STATUS.has(error.status);
+}
+
+export async function platformJsonRetry<T>(
+  path: string,
+  headers?: HeadersInit,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  try {
+    return await platformJson<T>(path, headers, options);
+  } catch (error) {
+    if (!isTransientPlatformError(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return platformJson<T>(path, headers, options);
+  }
+}
