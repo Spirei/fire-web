@@ -6,6 +6,13 @@ P = "/api/deployment"
 SHA = "a" * 40
 
 
+@pytest.fixture(autouse=True)
+def clear_observation_caches():
+    observations._ACTIVITY_CACHE.clear()
+    observations._PACKAGE_CACHE.clear()
+    yield
+
+
 @pytest.mark.parametrize("conclusion,jobs,expected", [
     ("success", [{"name": "Publish linux/amd64 image", "status": "completed", "conclusion": "success"}], "published"),
     ("success", [{"name": "Publish linux/amd64 image", "status": "completed", "conclusion": "skipped"}], "reused"),
@@ -138,6 +145,7 @@ async def test_heatmap_deduplicates_pages_and_keeps_incomplete_history_unknown(
     monkeypatch.setattr(observations, "github_json", github)
     result = (await client.get(P + "/activity")).json()
     assert result["counts"] == {"2026-10-31": 50} and not result["complete"] and result["loaded"] == 50
+    observations._ACTIVITY_CACHE.clear()
 
     def complete(settings, path):
         return [{"sha": SHA, "commit": {"committer": {"date": "2026-10-30T16:30:00Z"}}}]
@@ -145,12 +153,32 @@ async def test_heatmap_deduplicates_pages_and_keeps_incomplete_history_unknown(
     monkeypatch.setattr(observations, "github_json", complete)
     result = (await client.get(P + "/activity")).json()
     assert result["counts"] == {"2026-10-31": 1} and result["complete"]
+    observations._ACTIVITY_CACHE.clear()
 
     def offline(*args):
         raise OSError()
 
     monkeypatch.setattr(observations, "github_json", offline)
     assert (await client.get(P + "/activity")).status_code == 503
+
+
+async def test_commit_heatmap_reuses_recent_work(client, admin, app, monkeypatch):
+    setup(app)
+    calls = []
+    def github(settings, path):
+        calls.append(path)
+        return (
+            [{"sha": SHA, "commit": {"committer": {"date": "2026-10-30T16:30:00Z"}}}]
+            if "page=1&" in path
+            else []
+        )
+    monkeypatch.setattr(observations, "github_json", github)
+    first = (await client.get(P + "/activity")).json()
+    assert first["counts"] == {"2026-10-31": 1} and first["complete"]
+    assert len(calls) == 4
+    second = (await client.get(P + "/activity")).json()
+    assert second["counts"] == first["counts"] and second["complete"]
+    assert len(calls) == 4
 
 
 async def test_unconfigured_history_has_no_fake_zero_counts(client, admin):

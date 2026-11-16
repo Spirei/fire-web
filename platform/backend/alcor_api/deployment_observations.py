@@ -16,6 +16,21 @@ from .deployments import Admin, configured, github_json
 
 router = APIRouter(prefix="/api/deployment", tags=["deployment"])
 
+# Commit history and repository owner metadata change rarely; live runs do not.
+_ACTIVITY_CACHE = {}
+_PACKAGE_CACHE = {}
+
+
+def _scope_key(settings):
+    token = getattr(settings, "deployment_github_token", None)
+    return (
+        getattr(settings, "deployment_repository", ""),
+        getattr(settings, "deployment_image", ""),
+        str(getattr(settings, "deployment_config_revision", "")),
+        hashlib.sha256(token.get_secret_value().encode()).hexdigest() if token else "",
+    )
+
+
 STAGE_ORDER = {
     "Check scheduled source changes": 0,
     "检查定时源码变更": 0,
@@ -231,12 +246,23 @@ async def observation(settings):
             result["build_error"] = "构建状态暂不可用"
 
     async def package():
+        key = _scope_key(settings)
+        cached = _PACKAGE_CACHE.get(key)
+        if cached and cached[0] > time.monotonic():
+            if cached[1]:
+                result["package_url"] = cached[1]
+            return
         try:
             repo = await asyncio.to_thread(github_json, settings, "")
             owner = repo.get("owner", {})
             image_owner = settings.deployment_image.removeprefix("ghcr.io/").split("/", 1)[0]
+            url = None
             if owner.get("login", "").lower() == image_owner.lower():
-                result["package_url"] = package_page(settings, owner.get("type"))
+                url = package_page(settings, owner.get("type"))
+                result["package_url"] = url
+            if len(_PACKAGE_CACHE) >= 128:
+                _PACKAGE_CACHE.pop(next(iter(_PACKAGE_CACHE)))
+            _PACKAGE_CACHE[key] = (time.monotonic() + 60 * 60, url)
         except (OSError, ValueError, KeyError, TypeError):
             pass  # Repository metadata failure cannot hide a valid source or release check.
 
@@ -322,6 +348,16 @@ async def activity(request: Request, who: Admin):
             "repository": settings.deployment_repository,
         }
 
+    cache_key = (*_scope_key(settings), year)
+    cached = _ACTIVITY_CACHE.get(cache_key)
+    if cached and cached[0] > time.monotonic():
+        return {**cached[1], "counts": dict(cached[1]["counts"])}
+
+    def remember(payload, ttl):
+        if len(_ACTIVITY_CACHE) >= 128:
+            _ACTIVITY_CACHE.pop(next(iter(_ACTIVITY_CACHE)))
+        _ACTIVITY_CACHE[cache_key] = (time.monotonic() + ttl, payload)
+
     # Four bounded pages in parallel. Truncation/failure is explicitly partial; no invented zero days.
     async def page(number):
         try:
@@ -352,20 +388,24 @@ async def activity(request: Request, who: Admin):
                     seen.add(item["sha"])
                     counts[day] = counts.get(day, 0) + 1
             except (ValueError, KeyError, TypeError):
-                return {
+                payload = {
                     "counts": counts,
                     "complete": False,
                     "year": year,
                     "loaded": len(seen),
                     "repository": settings.deployment_repository,
                 }
+                remember(payload, 10)
+                return payload
         if len(items) < 50:
             complete = True
             break
-    return {
+    payload = {
         "counts": counts,
         "complete": complete,
         "year": year,
         "loaded": len(seen),
         "repository": settings.deployment_repository,
     }
+    remember(payload, 30 if complete else 10)
+    return payload

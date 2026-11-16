@@ -32,6 +32,10 @@ async def legacy(app, admin, monkeypatch):
     def offline(*args, **kwargs):
         raise AssertionError("test may not call GitHub, OAuth, or updater")
 
+    from alcor_api import deployment_observations
+
+    deployment_observations._ACTIVITY_CACHE.clear()
+    deployment_observations._PACKAGE_CACHE.clear()
     monkeypatch.setattr(deployments, "github_json", offline)
     monkeypatch.setattr(bridge, "notify", offline)
     monkeypatch.setattr(configuration, "oauth_json", offline)
