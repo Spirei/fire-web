@@ -194,3 +194,15 @@ async def test_completed_minute_history_builds_ready_chart_projection(market):  
     assert payload["points"] and generation >= 1
     assert payload["sampled"] and payload["sourceObservedAt"]
     assert ("US", "AAPL") in current and current[("US", "AAPL")][1]["points"]
+    revoked = await client.request(
+        "DELETE", f"/api/market/sources/{revision}", json={"request_id": str(uuid4())}
+    )
+    assert revoked.status_code == 200, revoked.text
+    async with app.state.db.connection() as conn:
+        left = await (
+            await conn.execute(
+                "SELECT count(*) AS n FROM market_chart_projections WHERE owner_id=%s",
+                (owner,),
+            )
+        ).fetchone()
+    assert left["n"] == 0

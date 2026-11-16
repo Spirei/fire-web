@@ -13,7 +13,10 @@ async def migrate(settings: Settings, database_name: str, initialize_empty: bool
     async with await AsyncConnection.connect(
         settings.database_url.get_secret_value(),
         row_factory=dict_row,
-        options="-c search_path=public -c statement_timeout=30000 -c lock_timeout=5000",
+        # Index builds on retained market/audit history can exceed the short
+        # request budget. Migrations are a maintenance operation and run with
+        # the service stopped; the lock timeout still fails fast on live writers.
+        options="-c search_path=public -c statement_timeout=900000 -c lock_timeout=5000",
     ) as conn:
         async with conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock(67132001)")

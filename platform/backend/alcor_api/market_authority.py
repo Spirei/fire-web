@@ -492,6 +492,13 @@ class Authority:
                 "INSERT INTO market_source_revocations(owner_id,revision,request_id) VALUES(%s,%s,%s) ON CONFLICT(owner_id,revision) DO NOTHING",
                 (who.id, revision, request_id),
             )
+            # Charts are a derived read model, not retained evidence. A revoked
+            # revision can never be served again, so drop its ready payloads
+            # instead of keeping them for every retired source.
+            await conn.execute(
+                "DELETE FROM market_chart_projections WHERE owner_id=%s AND source_revision=%s",
+                (who.id, revision),
+            )
             await conn.execute(
                 """UPDATE tasks t SET status=CASE WHEN t.status='running' THEN 'cancel_requested' ELSE 'cancelled' END,
                 finished_at=CASE WHEN t.status='queued' THEN clock_timestamp() ELSE t.finished_at END FROM market_data_jobs j JOIN market_streams s ON s.owner_id=j.owner_id AND s.id=j.stream_id

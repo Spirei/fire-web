@@ -194,6 +194,7 @@ async def run(settings=None, stop=None):
         from .price_alert_runtime import from_settings as price_alerts_from_settings
         from .price_alert_worker import loop as price_alerts_loop
         alerts_task=asyncio.create_task(price_alerts_loop(price_alerts_from_settings(db),worker_id,stop,lambda:reference_state.current(db)))
+        rollup_at = 0.0
         while not stop.is_set():
             if reference_task.done():
                 await reference_task
@@ -204,8 +205,13 @@ async def run(settings=None, stop=None):
                     await asyncio.sleep(db.settings.worker_poll_seconds)
                     continue
                 await heartbeat(db, worker_id)
-                from .request_observability import rollup as rollup_requests
-                await rollup_requests(db)
+                # Request-log aggregates only feed the admin view; folding them
+                # every few seconds avoids re-taking the rollup row lock while
+                # quote tasks are committing continuously.
+                if monotonic() >= rollup_at:
+                    from .request_observability import rollup as rollup_requests
+                    await rollup_requests(db)
+                    rollup_at = monotonic() + 5
                 await identity_mail.deliver_one(worker_id)
                 await feed_worker.schedule()
                 await celeb_worker.schedule()
