@@ -141,8 +141,8 @@ class Calendars:
             if cursor.rowcount != 1:
                 raise ValueError("calendar publication changed")
 
-    async def discovery(self):
-        async with self.db.connection() as conn, conn.transaction():
+    async def discovery(self, *, connection=None):
+        async def read(conn):
             release=await(await conn.execute('SELECT r.* FROM market_calendar_active a JOIN market_calendar_releases r ON r.revision=a.revision WHERE a.singleton=true')).fetchone()
             if release is None:return None
             try:original=calendar_release(release)
@@ -173,6 +173,11 @@ class Calendars:
                 ],
                 "temporary_closures": "unknown",
             }
+
+        if connection is not None:
+            return await read(connection)
+        async with self.db.connection() as conn, conn.transaction():
+            return await read(conn)
 
     async def batch(self, year, *, who=None):
         calendar_unknown("US", year)

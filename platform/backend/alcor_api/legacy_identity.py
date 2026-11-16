@@ -299,13 +299,17 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
             value.update(business_discovery(version))
             value['security']['email_verification_delivery'] = mail_availability
             value['native_login']['email_registration'] = await native_email_registration_discovery(conn, settings, mail_availability)
+            # Price-alert and calendar discovery share this snapshot instead of
+            # checking out (and re-verifying) two more pooled connections.
+            from .price_alert_runtime import discovery as price_alerts_discovery
+            value['price_alerts'] = await price_alerts_discovery(
+                app.state.price_alerts, version, connection=conn
+            )
+            from .market_calendar import Calendars
+            calendar = await Calendars(db).discovery(connection=conn)
+            if calendar is not None:
+                value['market_calendar'] = calendar
         value['security']['password_recovery_supported'] = True
-        from .price_alert_runtime import discovery as price_alerts_discovery
-        value['price_alerts'] = await price_alerts_discovery(app.state.price_alerts, version)
-        from .market_calendar import Calendars
-        calendar = await Calendars(db).discovery()
-        if calendar is not None:
-            value['market_calendar'] = calendar
         from .account_sync_api import discovery as account_sync_discovery
         value['account_sync'] = account_sync_discovery()
         return value

@@ -26,9 +26,10 @@ def from_settings(db, quote_reader=None):
     return service
 
 
-async def discovery(service, version):
+async def discovery(service, version, *, connection=None):
     base = f"/api/v{version}/price-alerts"
-    async with service.db.connection() as conn:
+
+    async def read(conn):
         from . import __version__
 
         fingerprint = getattr(service.reader, "fingerprint", None)
@@ -42,6 +43,13 @@ async def discovery(service, version):
         from .fx_reference import external_delivery_blocked
 
         quarantined = await external_delivery_blocked(conn)
+        return worker, quarantined
+
+    if connection is not None:
+        worker, quarantined = await read(connection)
+    else:
+        async with service.db.connection() as conn:
+            worker, quarantined = await read(conn)
     return {
         "version": 1,
         "snapshot_path": base,
