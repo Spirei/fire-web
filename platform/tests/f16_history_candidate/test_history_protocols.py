@@ -180,3 +180,17 @@ async def test_five_day_uses_licensed_all_session_when_regular_history_is_missin
         assert value['observationCoverage']['observedLocalDates'] == ['2026-10-21']
         assert value['observationCoverage']['complete'] is None
     assert transport.calls == 3
+
+
+async def test_completed_minute_history_builds_ready_chart_projection(market):  # noqa: F811
+    client, app, _authority, revision, _transport, _headers = await seeded(market)
+    from alcor_api.market_chart_projection import read, read_current
+    async with app.state.db.connection() as conn:
+        owner = (await (await conn.execute("SELECT id FROM users WHERE username='MarketReader'")).fetchone())["id"]
+        found = await read(conn, owner, revision, [("US", "AAPL")], "ALL")
+        current = await read_current(conn, owner, [("US", "AAPL")], "ALL")
+    assert ("US", "AAPL") in found, found
+    payload, generation = found[("US", "AAPL")]
+    assert payload["points"] and generation >= 1
+    assert payload["sampled"] and payload["sourceObservedAt"]
+    assert ("US", "AAPL") in current and current[("US", "AAPL")][1]["points"]

@@ -429,6 +429,17 @@ async def execute(authority, task, transport):
                     len(observed_times),
                 ),
             )
+            # The verified history just reached a terminal page. Publish the
+            # ready minute-chart payload now so reads do not replay originals.
+            try:
+                if query.frame == "minute" and query.kind in ("bars", "price_series"):
+                    from .market_chart_projection import rebuild as rebuild_chart
+
+                    await rebuild_chart(conn, stream, policy, query)
+            except Exception:  # noqa: BLE001 -- the API keeps its verified read fallback
+                import logging
+
+                logging.getLogger("alcor.worker").warning("chart_projection_unavailable")
             await finish(
                 Bound(conn, db.settings),
                 task,

@@ -396,33 +396,94 @@ def mount_legacy_chart_series(app, settings, authority):
                     pass
                 explicit_revision = request.headers.get("x-alcor-market-source")
                 cached_by_identity = {}
-                cacheable = (
-                    authority.db.settings.environment != "test"
-                    and explicit_revision is not None
-                    and len(items) <= 100
+                projected_by_identity = {}
+                sample_flag = body.get("sample") is True
+                usable_projections = (
+                    authority.db.settings.environment != "test" and len(items) <= 100
                 )
-                if cacheable:
+                cacheable = usable_projections and explicit_revision is not None
+                if usable_projections:
                     try:
                         async with authority.db.connection() as conn:
-                            await authority.config(conn, who.id, UUID(explicit_revision))
-                    except (HTTPException, ValueError, TypeError, AttributeError):
+                            groups = {"ALL": [], "REGULAR": []}
+                            for item in items:
+                                market, code = identities.get(
+                                    item["id"], (item["market"], item["code"])
+                                )
+                                session = "ALL" if market == "US" else "REGULAR"
+                                groups[session].append((market, code))
+                            from .market_chart_projection import read as read_projection
+                            from .market_chart_projection import read_current
+
+                            if explicit_revision is not None:
+                                await authority.config(conn, who.id, UUID(explicit_revision))
+                                found_by_session = {}
+                                for session, pairs in groups.items():
+                                    if pairs:
+                                        found_by_session[session] = await read_projection(
+                                            conn, who.id, UUID(explicit_revision), pairs, session,
+                                            cache=getattr(app.state.cache, "client", None),
+                                            instance_id=str(authority.db.settings.instance_id),
+                                        )
+                                current = {}
+                                for found in found_by_session.values():
+                                    current.update(found)
+                            else:
+                                current = {}
+                                for session, pairs in groups.items():
+                                    if pairs:
+                                        current.update(
+                                            await read_current(conn, who.id, pairs, session)
+                                        )
+                            licensed = {}
+                            for identity, entry in current.items():
+                                if explicit_revision is not None:
+                                    payload = entry[0]
+                                else:
+                                    revision, payload, _generation = entry
+                                    if revision not in licensed:
+                                        try:
+                                            await authority.config(conn, who.id, UUID(revision))
+                                            licensed[revision] = True
+                                        except HTTPException:
+                                            licensed[revision] = False
+                                    if not licensed[revision]:
+                                        continue
+                                projected_by_identity[identity] = {
+                                    "date": payload["date"],
+                                    "stale": payload.get("stale"),
+                                    "sourceObservedAt": payload["sourceObservedAt"],
+                                    "expectedSessionKnown": payload.get("expectedSessionKnown", False),
+                                    "points": payload["sampled"] if sample_flag else payload["points"],
+                                    "source": payload["source"],
+                                }
+                    except Exception:  # noqa: BLE001 -- projection is an optional fast path
+                        projected_by_identity = {}
                         cacheable = False
                     if cacheable:
-                        sample_flag = body.get("sample") is True
                         for item in items:
-                            session = "ALL" if item["market"] == "US" else "REGULAR"
+                            market, code = identities.get(
+                                item["id"], (item["market"], item["code"])
+                            )
+                            if (market, code) in projected_by_identity:
+                                continue
+                            session = "ALL" if market == "US" else "REGULAR"
                             key = (
-                                who.id, who.token_hash, explicit_revision, item["market"],
-                                item["code"], session, sample_flag,
+                                who.id, who.token_hash, explicit_revision, market, code,
+                                session, sample_flag,
                             )
                             value = _chart_cache_get(key)
                             if value is not None:
-                                cached_by_identity[(item["market"], item["code"])] = value
+                                cached_by_identity[(market, code)] = value
                 values = {}
                 for item in items:
                     try:
-                        if (item["market"], item["code"]) in cached_by_identity:
-                            values[item["id"]] = cached_by_identity[(item["market"], item["code"])]
+                        identity = identities.get(item["id"], (item["market"], item["code"]))
+                        if identity in projected_by_identity:
+                            values[item["id"]] = projected_by_identity[identity]
+                            continue
+                        if identity in cached_by_identity:
+                            values[item["id"]] = cached_by_identity[identity]
                             continue
                         rows, policy, query, _ = await read_minute_rows(
                             history, who, item["market"], item["code"],
@@ -455,12 +516,10 @@ def mount_legacy_chart_series(app, settings, authority):
                             "source": policy.source,
                         }
                         if cacheable:
-                            session = "ALL" if item["market"] == "US" else "REGULAR"
+                            market, code = identity
+                            session = "ALL" if market == "US" else "REGULAR"
                             _chart_cache_put(
-                                (
-                                    who.id, who.token_hash, explicit_revision, item["market"],
-                                    item["code"], session, body.get("sample") is True,
-                                ),
+                                (who.id, who.token_hash, explicit_revision, market, code, session, sample_flag),
                                 values[item["id"]],
                             )
                     except HTTPException as exc:
