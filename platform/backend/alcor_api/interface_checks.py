@@ -1,10 +1,20 @@
 """Owner-scoped, read-only diagnostics projection. GET never calls a provider."""
+import asyncio
 from datetime import UTC, datetime
+from time import monotonic
 
 from .market_source_descriptors import describe_sources
 
 
 LABELS = {'futu': '富途 OpenD', 'tencent': '腾讯行情', 'yahoo': 'Yahoo 行情', 'coingecko': '加密货币行情'}
+
+# Diagnostics change slowly. Once a snapshot exists, expired reads return it
+# immediately and one background task rebuilds it; a page refresh must never
+# re-run the whole projection while holding the request and a pool connection.
+_SNAPSHOT_TTL = 30.0
+_snapshots = {}
+_refreshing = set()
+_refresh_tasks = {}
 
 
 def point(state, at, elapsed=None):
@@ -12,7 +22,37 @@ def point(state, at, elapsed=None):
             'elapsedMs': elapsed if isinstance(elapsed, (int, float)) and elapsed >= 0 else None}
 
 
+def _store(key, result):
+    if len(_snapshots) > 256:
+        _snapshots.clear()
+    _snapshots[key] = (monotonic() + _SNAPSHOT_TTL, result)
+
+
+async def _refresh(app, who, key):
+    try:
+        _store(key, await _build(app, who))
+    except Exception:  # noqa: BLE001 -- background diagnostics keep the prior snapshot
+        pass
+    finally:
+        _refreshing.discard(key)
+
+
 async def snapshot(app, who):
+    cache_key = (who.id, who.token_hash, who.role)
+    cached = _snapshots.get(cache_key)
+    if cached is not None:
+        if cached[0] <= monotonic() and cache_key not in _refreshing:
+            _refreshing.add(cache_key)
+            task = asyncio.create_task(_refresh(app, who, cache_key))
+            _refresh_tasks[cache_key] = task
+            task.add_done_callback(lambda _result, key=cache_key: _refresh_tasks.pop(key, None))
+        return cached[1]
+    result = await _build(app, who)
+    _store(cache_key, result)
+    return result
+
+
+async def _build(app, who):
     authority = app.state.market_authority
     descriptors = await describe_sources(authority, who)
     versions = [value for value in descriptors['versions'] if value['usable']]

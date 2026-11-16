@@ -198,9 +198,6 @@ class DailyActivitySummary(LegacyAssetAuthority):
     async def read(self, who):
         async with self.context(who) as conn:
             await self.market_authority.authorize_read(conn, who)
-            await conn.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("market-owner:" + who.id,)
-            )
             rows = await (
                 await conn.execute(
                     "SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL AND market IN ('US','HK','CN','JP','KR') AND qty>0 ORDER BY id LIMIT 1001",
