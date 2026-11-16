@@ -5,7 +5,10 @@ import gzip
 import json
 import math
 import re
+from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
+from time import monotonic
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request
@@ -22,6 +25,31 @@ from .market_contract import code as security_code
 from .market_history_reads import HistoryUnavailable, LicensedHistory
 from .profile_http import bounded_body
 from .request_timing import measure
+
+# A visible chart is polled repeatedly while its observed bars change slowly.
+# Cache the already verified per-security payload for a few seconds; every
+# request still re-checks the current source configuration before using it.
+_CHART_CACHE = OrderedDict()
+_CHART_CACHE_TTL = 10.0
+_CHART_CACHE_MAX = 4096
+
+
+def _chart_cache_get(key):
+    entry = _CHART_CACHE.get(key)
+    if entry is None:
+        return None
+    if entry[0] <= monotonic():
+        _CHART_CACHE.pop(key, None)
+        return None
+    _CHART_CACHE.move_to_end(key)
+    return entry[1]
+
+
+def _chart_cache_put(key, value):
+    _CHART_CACHE.pop(key, None)
+    _CHART_CACHE[key] = (monotonic() + _CHART_CACHE_TTL, value)
+    while len(_CHART_CACHE) > _CHART_CACHE_MAX:
+        _CHART_CACHE.popitem(last=False)
 
 
 def minute_points(rows, policy, query, days, now=None, *, session_day=False):
@@ -341,7 +369,6 @@ def mount_legacy_chart_series(app, settings, authority):
                 from .market_history_demands import prepare
                 from .market_subscription_writes import subscription_items
                 from .legacy_identity import native_identity
-                from uuid import UUID
                 try:
                     writer=who
                     if getattr(who,'native_client',False):writer,_=await native_identity(request,authority.db,'portfolio.write')
@@ -367,13 +394,40 @@ def mount_legacy_chart_series(app, settings, authority):
                     # Read-only App grants may consume already observed facts.
                     # A failed registration never fabricates or replays a fact.
                     pass
+                explicit_revision = request.headers.get("x-alcor-market-source")
+                cached_by_identity = {}
+                cacheable = (
+                    authority.db.settings.environment != "test"
+                    and explicit_revision is not None
+                    and len(items) <= 100
+                )
+                if cacheable:
+                    try:
+                        async with authority.db.connection() as conn:
+                            await authority.config(conn, who.id, UUID(explicit_revision))
+                    except (HTTPException, ValueError, TypeError, AttributeError):
+                        cacheable = False
+                    if cacheable:
+                        sample_flag = body.get("sample") is True
+                        for item in items:
+                            session = "ALL" if item["market"] == "US" else "REGULAR"
+                            key = (
+                                who.id, who.token_hash, explicit_revision, item["market"],
+                                item["code"], session, sample_flag,
+                            )
+                            value = _chart_cache_get(key)
+                            if value is not None:
+                                cached_by_identity[(item["market"], item["code"])] = value
                 values = {}
                 for item in items:
                     try:
+                        if (item["market"], item["code"]) in cached_by_identity:
+                            values[item["id"]] = cached_by_identity[(item["market"], item["code"])]
+                            continue
                         rows, policy, query, _ = await read_minute_rows(
                             history, who, item["market"], item["code"],
                             session="ALL" if item["market"] == "US" else "REGULAR",
-                            source_revision=request.headers.get("x-alcor-market-source"),
+                            source_revision=explicit_revision,
                         )
                         if len(rows) > 16000:
                             raise HTTPException(503, "分时原始记录超过读取预算")
@@ -400,6 +454,15 @@ def mount_legacy_chart_series(app, settings, authority):
                             "points": sample_points(selected) if body.get("sample") is True else selected,
                             "source": policy.source,
                         }
+                        if cacheable:
+                            session = "ALL" if item["market"] == "US" else "REGULAR"
+                            _chart_cache_put(
+                                (
+                                    who.id, who.token_hash, explicit_revision, item["market"],
+                                    item["code"], session, body.get("sample") is True,
+                                ),
+                                values[item["id"]],
+                            )
                     except HTTPException as exc:
                         if exc.status_code in (401, 403, 409):
                             raise
