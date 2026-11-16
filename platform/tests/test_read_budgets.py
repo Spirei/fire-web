@@ -10,6 +10,19 @@ from alcor_api.read_budgets import ReadBudgets
 from test_connections import PASSWORD, private_redis  # noqa: F401 -- isolated owned fixture
 
 
+async def test_repeated_bucket_counts_once_like_the_pg_fallback(private_redis):
+    client = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
+    try:
+        limits = ReadBudgets(SimpleNamespace(client=client), uuid4())
+        checks = (("synthetic-repeat", 1), ("synthetic-repeat", 1))
+        assert await limits.allow_many(checks, 60, lambda: False)
+        assert not await limits.allow_many(checks, 60, lambda: False)
+        keys = await client.keys('alcor:*:read-budget:*')
+        assert len(keys) == 1 and await client.get(keys[0]) == b'2'
+    finally:
+        await client.aclose()
+
+
 async def test_redis_shares_atomic_read_budget_without_pg_writes(private_redis):
     client = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
     calls = []

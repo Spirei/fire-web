@@ -8,14 +8,6 @@ from redis.exceptions import RedisError
 
 from .request_timing import measure
 
-SCRIPT = """
-local n = redis.call('INCR', KEYS[1])
-if n == 1 or redis.call('TTL', KEYS[1]) < 0 then
-  redis.call('EXPIRE', KEYS[1], ARGV[1])
-end
-return n
-"""
-
 SCRIPT_MANY = """
 local out = {}
 for index = 1, #KEYS do
@@ -38,7 +30,9 @@ class ReadBudgets:
         return await self.allow_many(((key, maximum),), window_seconds, fallback)
 
     async def allow_many(self, checks, window_seconds, fallback):
-        checks = tuple(checks)
+        # An admission may repeat a bucket; count it once like the PostgreSQL
+        # fallback, which cannot update the same rate-limit row twice.
+        checks = tuple(dict.fromkeys(checks))
         if not checks:
             return True
         if (
