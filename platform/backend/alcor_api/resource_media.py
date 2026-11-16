@@ -5,7 +5,9 @@ import hashlib
 import os
 import re
 import stat
+import threading
 import time
+from collections import OrderedDict
 
 from fastapi import HTTPException
 
@@ -13,6 +15,35 @@ from .backups import BackupFailure, private_dir
 from .resource_contract import UPLOAD_LIMIT
 
 LIFECYCLE = "hashtextextended('profile-media-lifecycle',0)"
+
+# Content-addressed originals never change after publication. Re-hashing every
+# icon on every page load kept the event loop and the network volume busy, so
+# remember the verified file identity. A rewrite or replacement changes inode,
+# size, mtime or ctime and forces a fresh full verification.
+_VERIFIED_IDENTITY = OrderedDict()
+_VERIFIED_IDENTITY_MAX = 8192
+_VERIFIED_IDENTITY_LOCK = threading.Lock()
+
+
+def _file_identity(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _verified_identity(key, identity):
+    with _VERIFIED_IDENTITY_LOCK:
+        cached = _VERIFIED_IDENTITY.get(key)
+        if cached is not None and cached == identity:
+            _VERIFIED_IDENTITY.move_to_end(key)
+            return True
+    return False
+
+
+def _remember_identity(key, identity):
+    with _VERIFIED_IDENTITY_LOCK:
+        _VERIFIED_IDENTITY.pop(key, None)
+        _VERIFIED_IDENTITY[key] = identity
+        while len(_VERIFIED_IDENTITY) > _VERIFIED_IDENTITY_MAX:
+            _VERIFIED_IDENTITY.popitem(last=False)
 
 
 def durable_private_dir(path):
@@ -83,7 +114,8 @@ def open_verified(settings, sha, size):
     try:
         if not re.fullmatch(r"[0-9a-f]{64}", sha):
             raise ValueError()
-        descriptor = os.open(verified_root(settings) / sha, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        path = verified_root(settings) / sha
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         stream = os.fdopen(descriptor, "rb")
         before = os.fstat(stream.fileno())
         if (
@@ -95,16 +127,18 @@ def open_verified(settings, sha, size):
             or size > UPLOAD_LIMIT
         ):
             raise ValueError()
+        identity = _file_identity(before)
+        key = str(path)
+        if _verified_identity(key, identity) and identity == _file_identity(os.fstat(stream.fileno())):
+            stream.seek(0)
+            return stream
         hashed = hashlib.sha256()
         while chunk := stream.read(1024 * 1024):
             hashed.update(chunk)
         after = os.fstat(stream.fileno())
-        if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
-            after.st_size,
-            after.st_mtime_ns,
-            after.st_ctime_ns,
-        ) or hashed.hexdigest() != sha:
+        if identity != _file_identity(after) or hashed.hexdigest() != sha:
             raise ValueError()
+        _remember_identity(key, identity)
         stream.seek(0)
         return stream
     except (OSError, ValueError, BackupFailure):

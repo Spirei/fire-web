@@ -54,10 +54,20 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const fundsRequest=['holdings','global'].includes(tab.key)
     ?platformJson<{balances:Record<string,number|null>}>('/api/fire/funds',cookieHeaders).catch(()=>({balances:{}}))
     :Promise.resolve({balances:{}});
-  const [initialRecordsRead,funds,initialWorkspace]=await Promise.all([
+  const iconRead=<T,>(path:string)=>platformJson<T>(path,cookieHeaders,{signal:AbortSignal.timeout(8000)});
+  const needBrokerIcons=['holdings','watchlist','assets','pnl'].includes(tab.key);
+  // Artwork reads start as soon as records are known instead of waiting for
+  // funds and the tab bootstrap; the three icon sets already run in parallel.
+  const iconRequests=recordsRequest.then(({value})=>Promise.all([
+    readStockIcons(value,iconRead),
+    value.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market').catch(()=>({assets:[]})):Promise.resolve({assets:[]}),
+    value.length&&needBrokerIcons?iconRead<{assets:{name:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=broker').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
+  ]));
+  const [initialRecordsRead,funds,initialWorkspace,[recordIcons,marketAssets,brokerAssets]]=await Promise.all([
     recordsRequest,
     fundsRequest,
-    workspaceBootstrap(tab.key,query,identity,path=>platformJson(path,cookieHeaders,{signal:AbortSignal.timeout(8000)}),preferences).catch(()=>({} as WorkspaceInitial))
+    workspaceBootstrap(tab.key,query,identity,path=>platformJson(path,cookieHeaders,{signal:AbortSignal.timeout(8000)}),preferences).catch(()=>({} as WorkspaceInitial)),
+    iconRequests
   ]);
   const initialRecords=initialRecordsRead.value;
   const initialRecordsReady=financial&&initialRecordsRead.ready;
@@ -68,13 +78,6 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const initialQuotePool=initialWorkspace.quotePool,initialAssetLibrary=null,initialCardLibrary=initialWorkspace.cards,initialCelebs=initialWorkspace.celebs,initialFeed=initialWorkspace.feed;
   const initialWatchGroups=initialWorkspace.watchGroups ?? [];
   const initialUserLogs=initialWorkspace.logs?.userLogs ?? [];
-  const iconRead=<T,>(path:string)=>platformJson<T>(path,cookieHeaders,{signal:AbortSignal.timeout(8000)});
-  const needBrokerIcons=['holdings','watchlist','assets','pnl'].includes(tab.key)&&initialRecords.length>0;
-  const [recordIcons,marketAssets,brokerAssets]=await Promise.all([
-    readStockIcons(initialRecords,iconRead),
-    initialRecords.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market').catch(()=>({assets:[]})):Promise.resolve({assets:[]}),
-    needBrokerIcons?iconRead<{assets:{name:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=broker').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
-  ]);
   const initialStockIcons={...recordIcons,...initialCelebs?.stockIcons};
   const initialMarketIcons:Record<string,string>={};
   for(const asset of marketAssets.assets||[])if(asset.market&&(asset.imageUrl||asset.url))initialMarketIcons[asset.market.toUpperCase()]=asset.imageUrl||asset.url!;

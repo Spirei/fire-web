@@ -396,58 +396,188 @@ class AssetManagement:
             return result
 
     async def web_icons(self, kind, selected):
-        from .asset_web_keys import icon_rows, related_icons, stock_codes
+        from .asset_lookup_contract import image_key, normalize
+        from .asset_web_keys import RELATED, icon_rows, related_icons, stock_codes
+
+        # Icon maps carry artwork only. Read every requested identity, version
+        # and related underlying in bounded statements instead of projecting
+        # source metadata per row and discarding it.
+        requested = []
+        for item in selected:
+            if kind == "stock":
+                market = item["market"].strip().upper()
+                if not market:
+                    continue
+                for code in stock_codes(market, item["code"]):
+                    requested.append((market, code))
+            else:
+                code = str(item).strip().upper()
+                if code:
+                    requested.append(("", code))
 
         async with self.catalog.context() as conn:
             removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
-            mapping = {}
-            cache = {}
+            rows = []
+            if requested and kind == "stock":
+                rows = await (
+                    await conn.execute(
+                        """SELECT e.* FROM asset_catalog_entries e
+                        JOIN unnest(%s::text[],%s::text[]) req(market,code)
+                          ON upper(e.market)=req.market AND upper(e.code)=req.code
+                        WHERE e.type=%s
+                        ORDER BY e.created_at,e.id""",
+                        ([market for market, _ in requested], [code for _, code in requested], kind),
+                    )
+                ).fetchall()
+            elif requested:
+                rows = await (
+                    await conn.execute(
+                        """SELECT e.* FROM asset_catalog_entries e
+                        WHERE e.type=%s AND upper(e.code)=ANY(%s)
+                        ORDER BY e.created_at,e.id""",
+                        (kind, [code for _, code in requested]),
+                    )
+                ).fetchall()
+            index, seen_rows = {}, []
+            seen_ids = set()
+            for row in rows:
+                if row["id"] in seen_ids:
+                    continue
+                seen_ids.add(row["id"])
+                seen_rows.append(row)
+                key = (row["market"].upper() if kind == "stock" else "", row["code"].upper())
+                index.setdefault(key, []).append(row)
+
+            def related_root(code):
+                root = RELATED.get(normalize("US", code))
+                visited = {normalize("US", code)}
+                while root and root in RELATED:
+                    if root in visited:
+                        return None
+                    visited.add(root)
+                    root = RELATED[root]
+                return root
+
+            roots = {
+                root
+                for row in seen_rows
+                if kind == "stock" and row["market"].upper() == "US"
+                if (root := related_root(row["code"]))
+            }
+            underlying = {}
+            if roots:
+                root_rows = await (
+                    await conn.execute(
+                        """SELECT e.* FROM asset_catalog_entries e
+                        WHERE e.type='stock' AND upper(market)='US' AND upper(code)=ANY(%s)
+                        ORDER BY e.created_at,e.id""",
+                        (list(roots),),
+                    )
+                ).fetchall()
+                for row in root_rows:
+                    underlying.setdefault(row["code"].upper(), []).append(row)
+
             budget = {"bytes": 0, "verified": set()}
-            for item in selected:
-                market = item["market"].upper() if kind == "stock" else ""
-                codes = stock_codes(market, item["code"]) if kind == "stock" else [item]
-                for code in codes:
-                    row = await (
+            version_ids = {
+                str(row[field])
+                for row in [*seen_rows, *(item for rows in underlying.values() for item in rows)]
+                for field in ("light_version", "dark_version")
+                if row.get(field)
+            }
+            if version_ids:
+                budget["versions"] = {
+                    str(version["id"]): version
+                    for version in await (
                         await conn.execute(
-                            """SELECT e.* FROM asset_catalog_entries e WHERE type=%s
-                        AND upper(code)=%s AND (%s='flag' OR upper(market)=%s)
-                        AND NOT EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL)
-                        ORDER BY created_at,id LIMIT 1""",
-                            (kind, code, kind, market),
+                            "SELECT * FROM system_asset_versions WHERE id=ANY(%s)",
+                            (list(version_ids),),
                         )
-                    ).fetchone()
-                    if not row:
-                        # Registered absence/deletion is authoritative; filenames cannot restore it.
-                        known = await (await conn.execute(
-                            "SELECT 1 FROM asset_catalog_entries WHERE type=%s AND upper(code)=%s AND (%s='flag' OR upper(market)=%s) LIMIT 1",
-                            (kind, code, kind, market),
-                        )).fetchone()
-                        candidates = await self.legacy_directory.matching(kind, market, [code]) if self.legacy_directory is not None and not known else []
-                        if not candidates:
-                            continue
-                        candidates = [r for r in candidates if r["id"] not in removed]
-                        if not candidates:
-                            continue
-                        row = candidates[0]
-                        asset = await self.legacy_directory.project(row, budget)
-                    else:
-                        asset = await self.catalog.project(conn, row, cache, budget)
-                        # A registered entry can outlive its verified image bytes.
-                        # The legacy public original is still the same licensed
-                        # material, so prefer it over showing a broken/empty icon.
-                        if not asset["imageUrl"] and self.legacy_directory is not None:
-                            candidates = await self.legacy_directory.matching(kind, market, [code])
-                            candidates = [r for r in candidates if r["id"] not in removed]
-                            if candidates:
-                                asset = await self.legacy_directory.project(candidates[0], budget)
-                    if not asset["imageUrl"]:
+                    ).fetchall()
+                }
+
+            async def light_url(row):
+                identifier = str(row["light_version"]) if row.get("light_version") else None
+                if not identifier:
+                    return ""
+                image, _state = await self.catalog.image(conn, identifier, row["type"], budget)
+                return (
+                    "/api/asset-image/" + image_key(row["id"], "light") + "?v=" + image["served_sha256"][:12]
+                    if image
+                    else ""
+                )
+
+            async def legacy_candidate(asset_kind, market, code):
+                if self.legacy_directory is None:
+                    return None
+                for candidate in await self.legacy_directory.matching(asset_kind, market, [code]):
+                    if candidate["id"] not in removed:
+                        return candidate
+                return None
+
+            async def legacy_project(candidate):
+                return "" if candidate is None else (await self.legacy_directory.project(candidate, budget)).get("imageUrl") or ""
+
+            async def legacy_url(market, code, asset_kind=kind):
+                return await legacy_project(await legacy_candidate(asset_kind, market, code))
+
+            async def inherited_url(root):
+                candidates = underlying.get(root) or []
+                if candidates:
+                    return "" if candidates[0]["id"] in removed else await light_url(candidates[0])
+                return await legacy_url("US", root, "stock")
+
+            async def row_url(row):
+                if kind == "stock" and row["market"].upper() == "US":
+                    root = related_root(row["code"])
+                    if root:
+                        return await inherited_url(root)
+                return await light_url(row)
+
+            mapping = {}
+            for item in selected:
+                if kind == "stock":
+                    market = item["market"].strip().upper()
+                    if not market:
                         continue
-                    if kind == "stock":
-                        mapping[row["market"].upper() + ":" + row["code"].upper()] = asset["imageUrl"]
-                        mapping[market + ":" + item["code"].upper()] = asset["imageUrl"]
+                    requested_code = item["code"].strip().upper()
+                    for code in stock_codes(market, item["code"]):
+                        entries = index.get((market, code)) or []
+                        row = next((candidate for candidate in entries if candidate["id"] not in removed), None)
+                        if row is not None:
+                            url = await row_url(row)
+                            # A registered entry can outlive its verified image
+                            # bytes; the licensed legacy original still stands in.
+                            if not url:
+                                url = await legacy_url(market, code)
+                        elif not entries:
+                            # Registered absence/deletion is authoritative;
+                            # filenames cannot restore it.
+                            legacy = await legacy_candidate(kind, market, code)
+                            if legacy is None:
+                                continue
+                            row = legacy
+                            url = await legacy_project(legacy)
+                        else:
+                            url = ""
+                        if not url:
+                            continue
+                        mapping[row["market"].upper() + ":" + row["code"].upper()] = url
+                        mapping[market + ":" + requested_code] = url
+                        break
+                else:
+                    code = str(item).strip().upper()
+                    if not code:
+                        continue
+                    entries = index.get(("", code)) or []
+                    row = next((candidate for candidate in entries if candidate["id"] not in removed), None)
+                    if row is not None:
+                        url = await row_url(row) or await legacy_url("", code)
+                    elif not entries:
+                        url = await legacy_url("", code)
                     else:
-                        mapping[code] = asset["imageUrl"]
-                    break
+                        url = ""
+                    if url:
+                        mapping[code] = url
             return {"assets": icon_rows(kind, related_icons(mapping) if kind == "stock" else mapping)}
 
     async def stock_markets(self):

@@ -772,3 +772,34 @@ async def test_connection_missing_required_resource_permission_is_never_applied(
         async with db.connection() as conn:
             await conn.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role)))
             await conn.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
+
+
+def test_verified_original_reuses_unchanged_identity_and_rechecks_rewritten_bytes(settings, monkeypatch):
+    from alcor_api import resource_media
+    from fastapi import HTTPException
+
+    raw = b"icon-original-bytes"
+    sha = hashlib.sha256(raw).hexdigest()
+    resource_media.persist(settings, sha, raw)
+    path = settings.file_root / "resource-media" / sha
+    verified = []
+    remember = resource_media._remember_identity
+
+    def counted(key, identity):
+        verified.append(identity)
+        remember(key, identity)
+
+    monkeypatch.setattr(resource_media, "_remember_identity", counted)
+    assert resource_media.read_bytes(settings, sha, len(raw)) == raw
+    assert len(verified) == 1
+    # The same inode/size/mtime/ctime reuses the verified digest instead of re-reading.
+    assert resource_media.read_bytes(settings, sha, len(raw)) == raw
+    assert len(verified) == 1
+    # A same-size rewrite changes ctime and must be verified again, not trusted.
+    path.write_bytes(b"X" + raw[1:])
+    with pytest.raises(HTTPException):
+        resource_media.read_bytes(settings, sha, len(raw))
+    assert len(verified) == 1
+    path.write_bytes(raw)
+    assert resource_media.read_bytes(settings, sha, len(raw)) == raw
+    assert len(verified) == 2

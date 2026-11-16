@@ -1,7 +1,9 @@
 """Material edits are metadata operations; originals and business records stay untouched."""
 import json
+import re
 from urllib.parse import quote
 from uuid import uuid4
+
 import pytest
 import pytest_asyncio
 from test_legacy_asset_directory import SVG, write
@@ -156,3 +158,22 @@ async def test_country_pages_are_chinese_sorted_before_paging_without_loading_ev
     assert second.json()['assets'][0]['name']=='阿尔及利亚'
     found=await client.get('/api/assets?type=flag&paged=1&q=阿尔')
     assert {a['code'] for a in found.json()['assets']}=={'AL','DZ'}
+
+async def test_icon_key_lookup_batches_rows_versions_and_related_artwork(client, admin):
+    before = await rows(client, 'flag')
+    asset = next(r for r in before['assets'] if r['code'] == 'AD')
+    lookup = await client.get('/api/assets?type=flag&keys=AD,US')
+    legacy = lookup.json()['assets']
+    assert [r['code'] for r in legacy] == ['AD']
+    assert legacy[0]['url'] == asset['imageUrl']
+    # Batched reads stay constant instead of two statements per requested code.
+    assert int(re.search(r'(\d+) statements', lookup.headers['server-timing']).group(1)) <= 5
+    body = {'requestId': str(uuid4()), 'expectedRevision': before['revision'], 'publicMetadataConfirmed': True, 'asset': {'id': asset['id'], 'name': '安道尔'}, 'restore': False}
+    response = await client.put(P + '/entries/' + quote(asset['id'], safe=''), json=body)
+    assert response.status_code == 200, response.text
+    after = await rows(client, 'flag')
+    registered_lookup = await client.get('/api/assets?type=flag&keys=AD')
+    registered = registered_lookup.json()['assets']
+    assert int(re.search(r'(\d+) statements', registered_lookup.headers['server-timing']).group(1)) <= 6
+    current = next(r for r in after['assets'] if r['code'] == 'AD')
+    assert [r['url'] for r in registered] == [current['imageUrl']]

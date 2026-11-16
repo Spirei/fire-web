@@ -56,16 +56,20 @@ def test_web_keys_truncate_before_filter_and_keep_original_stock_pairs():
 
 async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_bytes():
     from contextlib import asynccontextmanager
+    from typing import ClassVar
 
     from alcor_api.asset_catalog_management import AssetManagement
+    from alcor_api.asset_lookup_contract import image_key
 
     records = [
-        {"id": "stock:HK:09992", "type": "stock", "market": "HK", "code": "09992", "image": "/verified/hk"},
-        {"id": "stock:US:DEMO", "type": "stock", "market": "US", "code": "DEMO", "image": ""},
-        {"id": "stock:US:NVDA", "type": "stock", "market": "US", "code": "NVDA", "image": "/verified/nvda"},
-        {"id": "stock:US:NVDL", "type": "stock", "market": "US", "code": "NVDL", "image": "/verified/etf"},
-        {"id": "flag:US", "type": "flag", "market": "OTHER", "code": "US", "image": "/verified/us"},
+        {"id": "stock:HK:09992", "type": "stock", "market": "HK", "code": "09992", "light_version": "v-hk", "dark_version": None},
+        {"id": "stock:US:DEMO", "type": "stock", "market": "US", "code": "DEMO", "light_version": None, "dark_version": None},
+        {"id": "stock:US:NVDA", "type": "stock", "market": "US", "code": "NVDA", "light_version": "v-nvda", "dark_version": None},
+        {"id": "stock:US:NVDL", "type": "stock", "market": "US", "code": "NVDL", "light_version": "v-etf", "dark_version": None},
+        {"id": "stock:US:DEL", "type": "stock", "market": "US", "code": "DEL", "light_version": "v-del", "dark_version": None},
+        {"id": "flag:US", "type": "flag", "market": "OTHER", "code": "US", "light_version": "v-us", "dark_version": None},
     ]
+    digests = {"v-hk": "h", "v-nvda": "n", "v-etf": "e", "v-del": "d", "v-us": "f"}
     calls = []
 
     class Cursor:
@@ -79,44 +83,71 @@ async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_
             return self.row
 
     class Catalog:
+        versions: ClassVar[list[dict]] = [
+            {"id": key, "kind": "asset", "folder": "flag" if key == "v-us" else "stock", "served_sha256": digest * 64, "served_size": 1}
+            for key, digest in digests.items()
+        ]
+
         @asynccontextmanager
         async def context(self):
             yield self
 
         async def execute(self, sql, args=None):
-            assert "SELECT" in sql and "INSERT" not in sql
-            if sql == "SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL":
+            calls.append(sql)
+            assert "INSERT" not in sql and "UPDATE" not in sql and "DELETE" not in sql
+            if "asset_catalog_tombstones" in sql:
                 assert args is None
-                return Cursor([])
-            known = sql.startswith("SELECT 1 FROM asset_catalog_entries WHERE")
-            assert known or "NOT EXISTS" in sql and "asset_catalog_tombstones" in sql
-            calls.append(args)
-            kind, code, _, market = args
-            return Cursor(
-                next(
-                    (
-                        r
-                        for r in records
-                        if r["type"] == kind
-                        and r["code"] == code
-                        and (kind == "flag" or r["market"] == market)
-                    ),
-                    None,
-                )
-            )
+                return Cursor([{"asset_id": "stock:US:DEL"}])
+            if "system_asset_versions" in sql:
+                return Cursor([v for v in self.versions if v["id"] in set(args[0])])
+            if "upper(market)='US'" in sql:
+                codes = set(args[0])
+                return Cursor([r for r in records if r["type"] == "stock" and r["market"] == "US" and r["code"] in codes])
+            if "unnest" in sql:
+                markets, codes, kind = args
+                wanted = set(zip(markets, codes))
+                return Cursor([r for r in records if r["type"] == kind and (r["market"].upper(), r["code"].upper()) in wanted])
+            assert "upper(e.code)=ANY" in sql
+            kind, codes = args
+            return Cursor([r for r in records if r["type"] == kind and r["code"] in codes])
 
-        async def project(self, conn, row, cache, budget):
-            return {"imageUrl": row["image"]}
+        async def image(self, conn, identifier, kind, budget):
+            version = next((v for v in self.versions if v["id"] == identifier), None)
+            if version is None or version["folder"] != kind:
+                return None, "unregistered-image"
+            return version, "registered-shared-image"
 
-    service = AssetManagement(Catalog())
-    result = await service.web_icons("stock", select_web_keys("stock", "HK:9992,US:DEMO,US:NVDL,US:NVDA"))
+    class Legacy:
+        def __init__(self):
+            self.projected = []
+
+        async def matching(self, kind, market, codes):
+            if kind == "stock" and market == "US" and "DEL" in codes:
+                return [{"id": "stock:US:DEL", "type": "stock", "market": "US", "code": "DEL"}]
+            return []
+
+        async def project(self, row, budget):
+            self.projected.append(row)
+            return {"imageUrl": "/legacy/" + row["id"]}
+
+    legacy = Legacy()
+    service = AssetManagement(Catalog(), legacy)
+    result = await service.web_icons("stock", select_web_keys("stock", "HK:9992,US:DEMO,US:NVDL,US:NVDA,US:DEL"))
     mapping = {row["market"] + ":" + row["code"]: row["url"] for row in result["assets"]}
-    assert mapping["HK:09992"] == mapping["HK:9992"] == "/verified/hk"
+    assert mapping["HK:09992"] == mapping["HK:9992"] == f"/api/asset-image/{image_key('stock:HK:09992', 'light')}?v=" + "h" * 12
     assert "US:DEMO" not in mapping
-    assert mapping["US:NVDL"] == mapping["US:NVDA"] == "/verified/nvda"
+    assert mapping["US:NVDL"] == mapping["US:NVDA"] == f"/api/asset-image/{image_key('stock:US:NVDA', 'light')}?v=" + "n" * 12
+    # A registered tombstone is authoritative; the filename fallback must not revive it.
+    assert "US:DEL" not in mapping
+    assert legacy.projected == []
+    # One tombstone, entry, underlying and version read — never one query per code.
+    assert len(calls) == 4
+    calls.clear()
     result = await service.web_icons("stock", select_web_keys("stock", "US:NVDL"))
     assert result == {"assets": []}
+    assert len(calls) == 4
+    calls.clear()
     result = await service.web_icons("flag", select_web_keys("flag", "us,US,cn"))
     assert [row["code"] for row in result["assets"]] == ["US"]
     assert result["assets"][0]["marketCap"] is None
-    assert all(args[0] in ("stock", "flag") for args in calls)
+    assert len(calls) == 3
