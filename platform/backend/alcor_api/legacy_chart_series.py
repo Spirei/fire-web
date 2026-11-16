@@ -5,9 +5,7 @@ import gzip
 import json
 import math
 import re
-from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
-from time import monotonic
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -25,31 +23,6 @@ from .market_contract import code as security_code
 from .market_history_reads import HistoryUnavailable, LicensedHistory
 from .profile_http import bounded_body
 from .request_timing import measure
-
-# A visible chart is polled repeatedly while its observed bars change slowly.
-# Cache the already verified per-security payload for a few seconds; every
-# request still re-checks the current source configuration before using it.
-_CHART_CACHE = OrderedDict()
-_CHART_CACHE_TTL = 10.0
-_CHART_CACHE_MAX = 4096
-
-
-def _chart_cache_get(key):
-    entry = _CHART_CACHE.get(key)
-    if entry is None:
-        return None
-    if entry[0] <= monotonic():
-        _CHART_CACHE.pop(key, None)
-        return None
-    _CHART_CACHE.move_to_end(key)
-    return entry[1]
-
-
-def _chart_cache_put(key, value):
-    _CHART_CACHE.pop(key, None)
-    _CHART_CACHE[key] = (monotonic() + _CHART_CACHE_TTL, value)
-    while len(_CHART_CACHE) > _CHART_CACHE_MAX:
-        _CHART_CACHE.popitem(last=False)
 
 
 def minute_points(rows, policy, query, days, now=None, *, session_day=False):
@@ -395,13 +368,11 @@ def mount_legacy_chart_series(app, settings, authority):
                     # A failed registration never fabricates or replays a fact.
                     pass
                 explicit_revision = request.headers.get("x-alcor-market-source")
-                cached_by_identity = {}
                 projected_by_identity = {}
                 sample_flag = body.get("sample") is True
                 usable_projections = (
                     authority.db.settings.environment != "test" and len(items) <= 100
                 )
-                cacheable = usable_projections and explicit_revision is not None
                 if usable_projections:
                     try:
                         async with authority.db.connection() as conn:
@@ -422,8 +393,6 @@ def mount_legacy_chart_series(app, settings, authority):
                                     if pairs:
                                         found_by_session[session] = await read_projection(
                                             conn, who.id, UUID(explicit_revision), pairs, session,
-                                            cache=getattr(app.state.cache, "client", None),
-                                            instance_id=str(authority.db.settings.instance_id),
                                         )
                                 current = {}
                                 for found in found_by_session.values():
@@ -459,31 +428,12 @@ def mount_legacy_chart_series(app, settings, authority):
                                 }
                     except Exception:  # noqa: BLE001 -- projection is an optional fast path
                         projected_by_identity = {}
-                        cacheable = False
-                    if cacheable:
-                        for item in items:
-                            market, code = identities.get(
-                                item["id"], (item["market"], item["code"])
-                            )
-                            if (market, code) in projected_by_identity:
-                                continue
-                            session = "ALL" if market == "US" else "REGULAR"
-                            key = (
-                                who.id, who.token_hash, explicit_revision, market, code,
-                                session, sample_flag,
-                            )
-                            value = _chart_cache_get(key)
-                            if value is not None:
-                                cached_by_identity[(market, code)] = value
                 values = {}
                 for item in items:
                     try:
                         identity = identities.get(item["id"], (item["market"], item["code"]))
                         if identity in projected_by_identity:
                             values[item["id"]] = projected_by_identity[identity]
-                            continue
-                        if identity in cached_by_identity:
-                            values[item["id"]] = cached_by_identity[identity]
                             continue
                         rows, policy, query, _ = await read_minute_rows(
                             history, who, item["market"], item["code"],
@@ -515,13 +465,6 @@ def mount_legacy_chart_series(app, settings, authority):
                             "points": sample_points(selected) if body.get("sample") is True else selected,
                             "source": policy.source,
                         }
-                        if cacheable:
-                            market, code = identity
-                            session = "ALL" if market == "US" else "REGULAR"
-                            _chart_cache_put(
-                                (who.id, who.token_hash, explicit_revision, market, code, session, sample_flag),
-                                values[item["id"]],
-                            )
                     except HTTPException as exc:
                         if exc.status_code in (401, 403, 409):
                             raise
