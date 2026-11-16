@@ -16,3 +16,7 @@ CREATE TABLE market_chart_projections(
 );
 CREATE INDEX market_chart_projection_read
  ON market_chart_projections(owner_id,source_revision,market,code);
+-- The no-header read selects the newest projection per security; keep its
+-- DISTINCT ON order indexable instead of sorting every retained revision.
+CREATE INDEX market_chart_projection_current
+ ON market_chart_projections(owner_id,session,market,code,updated_at DESC);

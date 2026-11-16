@@ -33,8 +33,9 @@ async def schedule(authority, limit=100):
     async with db.connection() as conn:
         candidates = await (
             await conn.execute(
-                """SELECT DISTINCT s.owner_id,s.id,CASE WHEN s.query->>'kind'='latest' THEN 0 ELSE 1 END AS priority FROM market_streams s JOIN market_demands d ON d.owner_id=s.owner_id AND d.stream_id=s.id LEFT JOIN tasks t ON t.id=s.current_task_id
-            WHERE d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp())
+                """SELECT s.owner_id,s.id,CASE WHEN s.query->>'kind'='latest' THEN 0 ELSE 1 END AS priority FROM market_streams s LEFT JOIN tasks t ON t.id=s.current_task_id
+            WHERE EXISTS (SELECT 1 FROM market_demands d WHERE d.owner_id=s.owner_id AND d.stream_id=s.id
+              AND d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp()))
             AND (t.id IS NULL OR (t.status IN ('cancelled','failed') OR t.status='succeeded' AND s.query->>'kind'<>'latest') AND COALESCE((t.payload->>'demandGeneration')::bigint,0)<s.demand_generation)
             ORDER BY priority,s.owner_id,s.id LIMIT %s""",
                 (limit,),
@@ -140,7 +141,7 @@ async def current(authority, conn, task):
     )
     owned = await owned_row(conn, task)
     if not owned:
-        return None, None, "lost"
+        return None, None, "lost", ()
     stream = await (
         await conn.execute(
             "SELECT s.* FROM market_streams s JOIN market_data_jobs j ON j.owner_id=s.owner_id AND j.stream_id=s.id WHERE j.task_id=%s FOR UPDATE OF s",
@@ -153,17 +154,18 @@ async def current(authority, conn, task):
         or stream["generation"] != task["payload"]["generation"]
         or owned["status"] == "cancel_requested"
     ):
-        return stream, None, "cancelled"
-    if not await active_demands(conn, stream, authority):
-        return stream, None, "authorization_revoked"
+        return stream, None, "cancelled", ()
+    demands = await active_demands(conn, stream, authority)
+    if not demands:
+        return stream, None, "authorization_revoked", ()
     try:
         _, policy = await authority.config(conn, stream["owner_id"], stream["source_revision"])
         authority.validate_query(policy, query_from(stream["query"]))
     except HTTPException:
-        return stream, None, "source_authorization_unavailable"
+        return stream, None, "source_authorization_unavailable", ()
     if await external_delivery_blocked(conn):
-        return stream, None, "restore_quarantined"
-    return stream, policy, None
+        return stream, None, "restore_quarantined", ()
+    return stream, policy, None, demands
 
 
 def decode(policy, query, raw, *, cursor_in=None, observed_at=None):
@@ -260,18 +262,21 @@ def decode(policy, query, raw, *, cursor_in=None, observed_at=None):
 async def execute(authority, task, transport):
     db = authority.db
     async with db.connection() as conn, conn.transaction():
-        stream, policy, reason = await current(authority, conn, task)
+        stream, policy, reason, demands = await current(authority, conn, task)
         if reason == "lost":
             return reason
         if reason:
             return await stop(conn, db, task, reason)
+        # One round trip supplies both the stored cursor and the transaction clock.
         job = await (
-            await conn.execute("SELECT * FROM market_data_jobs WHERE task_id=%s", (task["id"],))
+            await conn.execute(
+                "SELECT j.*, clock_timestamp() AS now FROM market_data_jobs j WHERE j.task_id=%s",
+                (task["id"],),
+            )
         ).fetchone()
         query = query_from(stream["query"])
         if query.kind=='latest':
-            demands=await active_demands(conn,stream,authority)
-            now=(await(await conn.execute('SELECT clock_timestamp() AS now')).fetchone())['now']
+            now=job['now']
             # A seven-day registration is retention, not permission to poll an
             # invisible client continuously. Alert subscriptions remain active.
             if demands and not any(d['origin']=='price.alert' or d['hot_until']>now for d in demands):
@@ -287,7 +292,7 @@ async def execute(authority, task, transport):
     async with db.connection() as conn,conn.transaction():
         prior=await(await conn.execute('SELECT 1 FROM market_source_pages WHERE task_id=%s AND page_number>%s',(task['id'],job['page_count']))).fetchone()
         if prior:
-            _,_,reason=await current(authority,conn,task)
+            _,_,reason,_=await current(authority,conn,task)
             if reason=='lost':return reason
             return await stop(conn,db,task,reason or 'source_outcome_unknown')
     source_revision=stream['source_revision']
@@ -307,7 +312,7 @@ async def execute(authority, task, transport):
             raise ValueError('source_raw_budget_invalid')
     except Exception:  # noqa: BLE001 - no usable complete body or typed bounded prefix was returned
         async with db.connection() as conn,conn.transaction():
-            _,_,reason=await current(authority,conn,task)
+            _,_,reason,_=await current(authority,conn,task)
             if reason=='lost':return reason
             return await stop(conn,db,task,reason or 'source_outcome_unknown')
     observed_at=authority.clock() if authority.clock else datetime.now(UTC)
@@ -356,7 +361,7 @@ async def execute(authority, task, transport):
             ),
         )
     async with db.connection() as conn,conn.transaction():
-        stream,policy,reason=await current(authority,conn,task)
+        stream,policy,reason,_=await current(authority,conn,task)
         if reason=='lost':return reason
         if reason:return await stop(conn,db,task,reason)
         if decode_failed or query.kind=='latest' and not facts:return await stop(conn,db,task,'source_outcome_unknown')

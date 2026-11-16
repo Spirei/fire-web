@@ -508,12 +508,21 @@ class Authority:
 
 
 async def active_demands(conn, stream, authority=None):
+    # Web sessions are proven in the same statement as the demand lookup so a
+    # quote task does not add one round trip per registered principal.
     rows = await (
         await conn.execute(
             """SELECT d.* FROM market_demands d JOIN users u ON u.id=d.owner_id
         WHERE d.owner_id=%s AND d.stream_id=%s AND d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp())
-        AND u.active AND d.session_version=u.session_version""",
-            (stream["owner_id"], stream["id"]),
+        AND u.active AND d.session_version=u.session_version
+        AND (d.origin='price.alert' OR d.native_grant_id IS NOT NULL OR (
+          d.principal LIKE 'web:%%' AND EXISTS (
+            SELECT 1 FROM sessions s WHERE s.user_id=d.owner_id AND s.token_hash=substr(d.principal,5)
+            AND s.expires_at>clock_timestamp() AND s.session_version=d.session_version
+            AND s.client_id=ANY(%s)
+          )
+        ))""",
+            (stream["owner_id"], stream["id"], ["new-web", "legacy-web", "legacy-v1"]),
         )
     ).fetchall()
     valid = []
@@ -522,16 +531,6 @@ async def active_demands(conn, stream, authority=None):
             from .market_alert_reader import alert_demand_alive
 
             if not await alert_demand_alive(conn, row, stream, authority):
-                continue
-        if row["origin"] == "client" and not row["native_grant_id"]:
-            principal=row["principal"]
-            if not principal.startswith("web:"):
-                continue
-            session=await (await conn.execute(
-                "SELECT 1 FROM sessions WHERE user_id=%s AND token_hash=%s AND expires_at>clock_timestamp() AND session_version=%s AND client_id=ANY(%s)",
-                (row["owner_id"],principal[4:],row["session_version"],["new-web","legacy-web","legacy-v1"]),
-            )).fetchone()
-            if not session:
                 continue
         if row["native_grant_id"]:
             grant = await active_grant(conn, row["native_grant_id"])

@@ -5,6 +5,8 @@ EXPECTED = {
     "market_stream_series_lookup",
     "market_demand_principal",
     "market_demand_live_client",
+    "market_chart_projection_read",
+    "market_chart_projection_current",
 }
 
 
