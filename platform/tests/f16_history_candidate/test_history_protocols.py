@@ -183,8 +183,8 @@ async def test_five_day_uses_licensed_all_session_when_regular_history_is_missin
 
 
 async def test_completed_minute_history_builds_ready_chart_projection(market):  # noqa: F811
-    client, app, _authority, revision, _transport, _headers = await seeded(market)
-    from alcor_api.market_chart_projection import read, read_current
+    client, app, authority, revision, _transport, _headers = await seeded(market)
+    from alcor_api.market_chart_projection import backfill, read, read_current
     async with app.state.db.connection() as conn:
         owner = (await (await conn.execute("SELECT id FROM users WHERE username='MarketReader'")).fetchone())["id"]
         found = await read(conn, owner, revision, [("US", "AAPL")], "ALL")
@@ -194,6 +194,14 @@ async def test_completed_minute_history_builds_ready_chart_projection(market):  
     assert payload["points"] and generation >= 1
     assert payload["sampled"] and payload["sourceObservedAt"]
     assert ("US", "AAPL") in current and current[("US", "AAPL")][1]["points"]
+    # After a deploy the table may be empty while retained facts already exist;
+    # the Worker backfill rebuilds without asking a provider again.
+    async with app.state.db.connection() as conn:
+        await conn.execute("DELETE FROM market_chart_projections")
+    assert await backfill(authority, limit=10) >= 1
+    async with app.state.db.connection() as conn:
+        rebuilt = await read_current(conn, owner, [("US", "AAPL")], "ALL")
+    assert ("US", "AAPL") in rebuilt
     revoked = await client.request(
         "DELETE", f"/api/market/sources/{revision}", json={"request_id": str(uuid4())}
     )

@@ -8,7 +8,7 @@ from psycopg.types.json import Jsonb
 from .market_contract import ZONES, series_fingerprint
 
 
-async def rebuild(conn, stream, policy, query):
+async def rebuild(conn, stream, policy, query, now=None):
     """Build the latest one-day chart payload from the facts just collected."""
     if query.frame != "minute" or query.kind not in ("bars", "price_series"):
         return False
@@ -26,7 +26,7 @@ async def rebuild(conn, stream, policy, query):
     from .legacy_chart_series import minute_points, sample_points
 
     points = minute_points(
-        rows, policy, query, 1, datetime.now(UTC), session_day=query.market == "US"
+        rows, policy, query, 1, now or datetime.now(UTC), session_day=query.market == "US"
     )
     if len(points) < 2:
         return False
@@ -66,6 +66,39 @@ async def rebuild(conn, stream, policy, query):
         ),
     )
     return True
+
+
+async def backfill(authority, limit=10):
+    """Build missing projections from retained facts; never calls a provider."""
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError("chart_projection_backfill_invalid")
+    from .market_authority import query_from
+
+    async with authority.db.connection() as conn, conn.transaction():
+        rows = await (
+            await conn.execute(
+                """SELECT s.owner_id,s.source_revision,s.id,s.query FROM market_streams s
+                   JOIN tasks t ON t.id=s.current_task_id
+                   WHERE s.query->>'frame'='minute' AND s.query->>'kind' IN ('bars','price_series')
+                     AND t.status='succeeded'
+                     AND NOT EXISTS (SELECT 1 FROM market_chart_projections p
+                       WHERE p.owner_id=s.owner_id AND p.source_revision=s.source_revision
+                         AND p.market=s.query->>'market' AND p.code=s.query->>'code'
+                         AND p.session=s.query->>'session')
+                   ORDER BY s.next_due,s.owner_id,s.id LIMIT %s""",
+                (limit,),
+            )
+        ).fetchall()
+        built = 0
+        clock = getattr(authority, "clock", None)
+        for row in rows:
+            try:
+                _, policy = await authority.config(conn, row["owner_id"], row["source_revision"])
+                if await rebuild(conn, row, policy, query_from(row["query"]), clock() if clock else None):
+                    built += 1
+            except Exception:  # noqa: BLE001 -- one unusable stream must not block the rest
+                continue
+        return built
 
 
 async def read_current(conn, owner, pairs, session):

@@ -440,7 +440,8 @@ async def execute(authority, task, transport):
                 if query.frame == "minute" and query.kind in ("bars", "price_series"):
                     from .market_chart_projection import rebuild as rebuild_chart
 
-                    await rebuild_chart(conn, stream, policy, query)
+                    clock = getattr(authority, "clock", None)
+                    await rebuild_chart(conn, stream, policy, query, clock() if clock else None)
             except Exception:  # noqa: BLE001 -- the API keeps its verified read fallback
                 import logging
 

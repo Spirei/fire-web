@@ -195,6 +195,11 @@ async def run(settings=None, stop=None):
         from .price_alert_worker import loop as price_alerts_loop
         alerts_task=asyncio.create_task(price_alerts_loop(price_alerts_from_settings(db),worker_id,stop,lambda:reference_state.current(db)))
         rollup_at = 0.0
+        backfill_at = 0.0
+        from .market_authority import Authority, Policy
+        def chart_policies():
+            return tuple(Policy(**raw) for raw in getattr(db.settings, "market_data_policies", []))
+        chart_authority = Authority(db, chart_policies(), policy_provider=chart_policies)
         while not stop.is_set():
             if reference_task.done():
                 await reference_task
@@ -212,6 +217,16 @@ async def run(settings=None, stop=None):
                     from .request_observability import rollup as rollup_requests
                     await rollup_requests(db)
                     rollup_at = monotonic() + 5
+                # Charts must not wait for the next provider poll after a
+                # deploy or a missed terminal rebuild. Existing facts are
+                # enough; each pass is bounded and never calls a provider.
+                if monotonic() >= backfill_at:
+                    from .market_chart_projection import backfill as backfill_charts
+                    try:
+                        await backfill_charts(chart_authority, limit=10)
+                    except Exception:  # noqa: BLE001 -- optional read model
+                        log.warning("chart_projection_backfill_unavailable")
+                    backfill_at = monotonic() + 5
                 await identity_mail.deliver_one(worker_id)
                 await feed_worker.schedule()
                 await celeb_worker.schedule()

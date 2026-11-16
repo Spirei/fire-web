@@ -429,12 +429,21 @@ def mount_legacy_chart_series(app, settings, authority):
                     except Exception:  # noqa: BLE001 -- projection is an optional fast path
                         projected_by_identity = {}
                 values = {}
+                fallback_used = 0
                 for item in items:
                     try:
                         identity = identities.get(item["id"], (item["market"], item["code"]))
                         if identity in projected_by_identity:
                             values[item["id"]] = projected_by_identity[identity]
                             continue
+                        # A request must not replay retained originals for an
+                        # unbounded page: during a cold start that both holds
+                        # the pool for many seconds and multiplies every retry.
+                        # Serve what is ready; the Worker fills projections.
+                        if fallback_used >= 10:
+                            headers["Retry-After"] = "3"
+                            continue
+                        fallback_used += 1
                         rows, policy, query, _ = await read_minute_rows(
                             history, who, item["market"], item["code"],
                             session="ALL" if item["market"] == "US" else "REGULAR",
@@ -474,6 +483,12 @@ def mount_legacy_chart_series(app, settings, authority):
                                 raise
                             headers["Retry-After"] = retry_after
                             break
+                    except (PoolTimeout, TooManyRequests, LockNotAvailable, QueryCanceled):
+                        # The pool is saturated by other readers. Return the
+                        # ready charts instead of failing the whole page after
+                        # another checkout timeout.
+                        headers["Retry-After"] = "3"
+                        break
                 data = {"charts": values}
                 headers["X-Alcor-Chart-State"] = "observed" if len(values) == len(identities) else "partial"
             raw = json.dumps(
