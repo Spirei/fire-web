@@ -52,7 +52,7 @@ async def issue_grant(conn,user,scope,device_name,passkey_id=None,preserve_grant
 
 _GRANT_PROOF = '''SELECT g.*,u.username,u.email,u.password_hash,u.role,u.active,u.session_version AS current_version,
         g.expires_at>clock_timestamp() AND g.created_at+interval '90 days'>clock_timestamp() AS valid,
-        s.source_stamp,s.totp_enabled,s.totp_secret_ciphertext,
+        s.source_stamp,s.totp_enabled,s.totp_secret_ciphertext,s.user_id AS security_present,
         (g.passkey_id IS NULL OR EXISTS(
           SELECT 1 FROM identity_passkeys p WHERE p.id=g.passkey_id AND p.user_id=g.user_id)) AS passkey_present
         FROM identity_app_grants g JOIN users u ON u.id=g.user_id
@@ -63,8 +63,12 @@ def grant_proof_valid(row):
     """One query carries every grant, user, factor and passkey fact."""
     if (not row or not row['valid'] or row['revoked_at'] or not row['active']
             or row['session_version']!=row['current_version']):return False
+    factor=row['security_present'] is not None
+    # A present factor with no stored secret digests as the literal None, while
+    # a user without a factor row digests as an empty string.
+    secret=row['totp_secret_ciphertext'] if factor else ''
     stamp=row['source_stamp'] or digest(
-        f'{row["password_hash"]}:{int(bool(row["totp_enabled"]))}:{row["totp_secret_ciphertext"] or ""}'
+        f'{row["password_hash"]}:{int(bool(factor and row["totp_enabled"]))}:{secret}'
     )
     return row['security_stamp']==stamp and row['passkey_present']
 
