@@ -95,7 +95,7 @@ def mount_legacy_deployment(app, settings, db):
         # start them together so a slow provider does not add two more waits.
         history_task = asyncio.create_task(
             asyncio.wait_for(
-                observations.history_page(request, who, page=1, per_page=100), timeout=5
+                observations.history_page(request, who, page=1, per_page=20), timeout=5
             )
         )
         activity_task = asyncio.create_task(

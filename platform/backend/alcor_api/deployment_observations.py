@@ -7,14 +7,21 @@ import hashlib
 import re
 import time
 from datetime import datetime
+from functools import partial
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from .deployments import Admin, configured, github_json
+from .deployments import GITHUB_EXECUTOR, Admin, configured, github_json
 
 router = APIRouter(prefix="/api/deployment", tags=["deployment"])
+
+
+async def github_read(settings, path, body=None):
+    """Use the deploy executor, while keeping this module's provider hook patchable."""
+    call = partial(github_json, settings, path) if body is None else partial(github_json, settings, path, body)
+    return await asyncio.get_running_loop().run_in_executor(GITHUB_EXECUTOR, call)
 
 # Commit history and repository owner metadata change rarely; live runs do not.
 _ACTIVITY_CACHE = {}
@@ -95,9 +102,7 @@ async def publication_results(settings, runs, *, cache=None, limit=12, budget=3.
         try:
             async with gate:
                 raw = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        github_json, settings, f"/actions/runs/{run['id']}/jobs?per_page=100"
-                    ),
+                    github_read(settings, f"/actions/runs/{run['id']}/jobs?per_page=100"),
                     timeout=remaining,
                 )
             jobs = raw.get("jobs")
@@ -168,9 +173,8 @@ async def observation(settings):
     async def source():
         try:
             raw, checks = await asyncio.gather(
-                asyncio.to_thread(github_json, settings, "/commits/main"),
-                asyncio.to_thread(
-                    github_json,
+                github_read(settings, "/commits/main"),
+                github_read(
                     settings,
                     "/actions/workflows/" + getattr(settings, 'deployment_checks_workflow', 'docker-publish.yml') + "/runs?branch=main&event=push&per_page=5",
                 ),
@@ -197,7 +201,7 @@ async def observation(settings):
             # Push runs perform checks only. Keep the last actual publication
             # visible even when a newer main revision is being checked.
             pages = await asyncio.gather(*(
-                asyncio.to_thread(github_json, settings,
+                github_read(settings,
                     f"/actions/workflows/docker-publish.yml/runs?per_page=1&branch=main&event={event}")
                 for event in ("workflow_dispatch", "schedule")
             ))
@@ -209,8 +213,8 @@ async def observation(settings):
             latest = run_view(settings, max(runs, key=lambda r: r["id"]))
             result["build"] = {**latest, "head_sha": latest["sha"], "created_at": latest["started_at"]}
             try:
-                raw_jobs = await asyncio.to_thread(
-                    github_json, settings, f"/actions/runs/{latest['id']}/jobs?per_page=20"
+                raw_jobs = await github_read(
+                    settings, f"/actions/runs/{latest['id']}/jobs?per_page=20"
                 )
                 if not isinstance(raw_jobs.get("jobs"), list) or raw_jobs.get("total_count", len(raw_jobs.get("jobs") or [])) > len(raw_jobs.get("jobs") or []):
                     raise TypeError("jobs missing")
@@ -253,7 +257,7 @@ async def observation(settings):
                 result["package_url"] = cached[1]
             return
         try:
-            repo = await asyncio.to_thread(github_json, settings, "")
+            repo = await github_read(settings, "")
             owner = repo.get("owner", {})
             image_owner = settings.deployment_image.removeprefix("ghcr.io/").split("/", 1)[0]
             url = None
@@ -303,15 +307,15 @@ async def history_page(request, who, *, page=1, per_page=5):
         size = min(per_page, 20)
         start = (page - 1) * per_page
         first_page = start // size + 1
-        raw = await asyncio.to_thread(
-            github_json, settings, f"/actions/runs?branch=main&per_page={size}&page={first_page}"
+        raw = await github_read(
+            settings, f"/actions/runs?branch=main&per_page={size}&page={first_page}"
         )
         records = raw["workflow_runs"]
         offset = start % size
         if len(records) == size and offset + per_page > size:
             remaining = min(offset + per_page - size, max(0, raw.get("total_count", start + per_page) - (first_page - 1) * size - size))
             pages = await asyncio.gather(*(
-                asyncio.to_thread(github_json, settings,
+                github_read(settings,
                     f"/actions/runs?branch=main&per_page={size}&page={number}")
                 for number in range(first_page + 1, first_page + 1 + (remaining + size - 1) // size)
             ))
@@ -361,8 +365,7 @@ async def activity(request: Request, who: Admin):
     # Four bounded pages in parallel. Truncation/failure is explicitly partial; no invented zero days.
     async def page(number):
         try:
-            return await asyncio.to_thread(
-                github_json,
+            return await github_read(
                 settings,
                 f"/commits?sha=main&per_page=50&page={number}&since={year}-01-01T00:00:00%2B08:00&until={year + 1}-01-01T00:00:00%2B08:00",
             )

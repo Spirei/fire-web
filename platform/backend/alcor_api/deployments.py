@@ -5,7 +5,9 @@ import hashlib
 import json
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from functools import partial
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -18,6 +20,16 @@ from .models import InputModel
 from .security import Identity, administrator, lock_mutation_identity
 
 router = APIRouter(prefix="/api/deployment", tags=["deployment"])
+
+# Deploy-status fans out to several GitHub endpoints. Keep those blocking
+# reads off the process-wide default executor so a slow provider cannot starve
+# quote, chart or file work for the rest of the service.
+GITHUB_EXECUTOR = ThreadPoolExecutor(max_workers=6, thread_name_prefix="deploy-github")
+
+
+async def github_read(settings, path, body=None):
+    call = partial(github_json, settings, path) if body is None else partial(github_json, settings, path, body)
+    return await asyncio.get_running_loop().run_in_executor(GITHUB_EXECUTOR, call)
 Admin = Annotated[Identity, Depends(administrator)]
 
 
@@ -97,7 +109,7 @@ async def discover(settings):
     if not configured(settings):
         raise HTTPException(409, "尚未配置独立发布仓库")
     try:
-        raw = await asyncio.to_thread(github_json, settings, "/releases/latest")
+        raw = await github_read(settings, "/releases/latest")
         if raw.get("draft") or raw.get("prerelease"):
             raise ValueError("not a published release")
         release = Release.model_validate_json(raw["body"])
