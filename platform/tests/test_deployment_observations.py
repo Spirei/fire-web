@@ -181,6 +181,30 @@ async def test_commit_heatmap_reuses_recent_work(client, admin, app, monkeypatch
     assert len(calls) == 4
 
 
+async def test_commit_heatmap_is_refreshed_once_an_hour(client, admin, app, monkeypatch):
+    from types import SimpleNamespace
+    setup(app)
+    calls = []
+    def github(settings, path):
+        calls.append(path)
+        return (
+            [{"sha": SHA, "commit": {"committer": {"date": "2026-10-30T16:30:00Z"}}}]
+            if "page=1&" in path
+            else []
+        )
+    monkeypatch.setattr(observations, "github_json", github)
+    now = [1000.0]
+    monkeypatch.setattr(observations, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    assert (await client.get(P + "/activity")).json()["complete"]
+    assert len(calls) == 4
+    now[0] += 59 * 60
+    assert (await client.get(P + "/activity")).json()["complete"]
+    assert len(calls) == 4
+    now[0] += 2 * 60
+    assert (await client.get(P + "/activity")).json()["complete"]
+    assert len(calls) == 8
+
+
 async def test_unconfigured_history_has_no_fake_zero_counts(client, admin):
     result = (await client.get(P + "/activity")).json()
     assert result["counts"] is None and result["loaded"] is None and not result["complete"]

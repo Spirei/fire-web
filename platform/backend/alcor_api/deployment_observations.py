@@ -395,7 +395,7 @@ async def activity(request: Request, who: Admin):
                     "loaded": len(seen),
                     "repository": settings.deployment_repository,
                 }
-                remember(payload, 10)
+                remember(payload, 5 * 60)
                 return payload
         if len(items) < 50:
             complete = True
@@ -407,5 +407,8 @@ async def activity(request: Request, who: Admin):
         "loaded": len(seen),
         "repository": settings.deployment_repository,
     }
-    remember(payload, 30 if complete else 10)
+    # The yearly commit heatmap is not a live signal; one query per hour keeps
+    # the page off GitHub's commit history between pushes. Partial data retries
+    # sooner so a transient provider failure can recover.
+    remember(payload, 60 * 60 if complete else 5 * 60)
     return payload
