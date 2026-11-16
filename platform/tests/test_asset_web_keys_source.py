@@ -56,7 +56,6 @@ def test_web_keys_truncate_before_filter_and_keep_original_stock_pairs():
 
 async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_bytes():
     from contextlib import asynccontextmanager
-    from typing import ClassVar
 
     from alcor_api.asset_catalog_management import AssetManagement
     from alcor_api.asset_lookup_contract import image_key
@@ -82,12 +81,21 @@ async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_
         async def fetchall(self):
             return self.row
 
-    class Catalog:
-        versions: ClassVar[list[dict]] = [
-            {"id": key, "kind": "asset", "folder": "flag" if key == "v-us" else "stock", "served_sha256": digest * 64, "served_size": 1}
-            for key, digest in digests.items()
-        ]
+    def projected(record):
+        version_id = record["light_version"]
+        return {
+            "id": record["id"],
+            "type": record["type"],
+            "market": record["market"],
+            "code": record["code"],
+            "light_version": version_id,
+            "light_kind": "asset" if version_id else None,
+            "light_folder": ("flag" if version_id == "v-us" else "stock") if version_id else None,
+            "light_sha256": digests[version_id] * 64 if version_id else None,
+            "light_size": 1 if version_id else None,
+        }
 
+    class Catalog:
         @asynccontextmanager
         async def context(self):
             yield self
@@ -98,22 +106,20 @@ async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_
             if "asset_catalog_tombstones" in sql:
                 assert args is None
                 return Cursor([{"asset_id": "stock:US:DEL"}])
-            if "system_asset_versions" in sql:
-                return Cursor([v for v in self.versions if v["id"] in set(args[0])])
-            if "upper(market)='US'" in sql:
-                codes = set(args[0])
-                return Cursor([r for r in records if r["type"] == "stock" and r["market"] == "US" and r["code"] in codes])
+            assert "LEFT JOIN system_asset_versions" in sql
             if "unnest" in sql:
                 markets, codes, kind = args
                 wanted = set(zip(markets, codes))
-                return Cursor([r for r in records if r["type"] == kind and (r["market"].upper(), r["code"].upper()) in wanted])
-            assert "upper(e.code)=ANY" in sql
-            kind, codes = args
-            return Cursor([r for r in records if r["type"] == kind and r["code"] in codes])
+                matched = [r for r in records if r["type"] == kind and (r["market"].upper(), r["code"].upper()) in wanted]
+            else:
+                kind, codes = args
+                matched = [r for r in records if r["type"] == kind and r["code"] in codes]
+            return Cursor([projected(r) for r in matched])
 
         async def image(self, conn, identifier, kind, budget):
-            version = next((v for v in self.versions if v["id"] == identifier), None)
-            if version is None or version["folder"] != kind:
+            version = budget["versions"].get(identifier)
+            assert version is not None, "icon versions must be preloaded with the entries"
+            if version["folder"] != kind:
                 return None, "unregistered-image"
             return version, "registered-shared-image"
 
@@ -140,14 +146,14 @@ async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_
     # A registered tombstone is authoritative; the filename fallback must not revive it.
     assert "US:DEL" not in mapping
     assert legacy.projected == []
-    # One tombstone, entry, underlying and version read — never one query per code.
-    assert len(calls) == 4
+    # One tombstone read and one entry/version read — never one query per code.
+    assert len(calls) == 2
     calls.clear()
     result = await service.web_icons("stock", select_web_keys("stock", "US:NVDL"))
     assert result == {"assets": []}
-    assert len(calls) == 4
+    assert len(calls) == 2
     calls.clear()
     result = await service.web_icons("flag", select_web_keys("flag", "us,US,cn"))
     assert [row["code"] for row in result["assets"]] == ["US"]
     assert result["assets"][0]["marketCap"] is None
-    assert len(calls) == 3
+    assert len(calls) == 2

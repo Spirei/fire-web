@@ -60,8 +60,8 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   // funds and the tab bootstrap; the three icon sets already run in parallel.
   const iconRequests=recordsRequest.then(({value})=>Promise.all([
     readStockIcons(value,iconRead),
-    value.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market').catch(()=>({assets:[]})):Promise.resolve({assets:[]}),
-    value.length&&needBrokerIcons?iconRead<{assets:{name:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=broker').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
+    value.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market&icons=1').catch(()=>({assets:[]})):Promise.resolve({assets:[]}),
+    value.length&&needBrokerIcons?iconRead<{assets:{name:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=broker&icons=1').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
   ]));
   const [initialRecordsRead,funds,initialWorkspace,[recordIcons,marketAssets,brokerAssets]]=await Promise.all([
     recordsRequest,

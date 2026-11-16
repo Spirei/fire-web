@@ -415,85 +415,74 @@ class AssetManagement:
                 if code:
                     requested.append(("", code))
 
+        def related_root(code):
+            root = RELATED.get(normalize("US", code))
+            visited = {normalize("US", code)}
+            while root and root in RELATED:
+                if root in visited:
+                    return None
+                visited.add(root)
+                root = RELATED[root]
+            return root
+
+        pairs = list(dict.fromkeys(requested))
+        if kind == "stock":
+            known_pairs = set(pairs)
+            for market, code in requested:
+                root = related_root(code) if market == "US" else None
+                if root and ("US", root) not in known_pairs:
+                    known_pairs.add(("US", root))
+                    pairs.append(("US", root))
+
         async with self.catalog.context() as conn:
             removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
             rows = []
-            if requested and kind == "stock":
+            if pairs and kind == "stock":
                 rows = await (
                     await conn.execute(
-                        """SELECT e.* FROM asset_catalog_entries e
+                        """SELECT e.id,e.type,e.market,e.code,e.light_version,
+                        lv.kind AS light_kind,lv.folder AS light_folder,
+                        lv.served_sha256 AS light_sha256,lv.served_size AS light_size
+                        FROM asset_catalog_entries e
+                        LEFT JOIN system_asset_versions lv ON lv.id=e.light_version
                         JOIN unnest(%s::text[],%s::text[]) req(market,code)
                           ON upper(e.market)=req.market AND upper(e.code)=req.code
                         WHERE e.type=%s
                         ORDER BY e.created_at,e.id""",
-                        ([market for market, _ in requested], [code for _, code in requested], kind),
+                        ([market for market, _ in pairs], [code for _, code in pairs], kind),
                     )
                 ).fetchall()
-            elif requested:
+            elif pairs:
                 rows = await (
                     await conn.execute(
-                        """SELECT e.* FROM asset_catalog_entries e
+                        """SELECT e.id,e.type,e.market,e.code,e.light_version,
+                        lv.kind AS light_kind,lv.folder AS light_folder,
+                        lv.served_sha256 AS light_sha256,lv.served_size AS light_size
+                        FROM asset_catalog_entries e
+                        LEFT JOIN system_asset_versions lv ON lv.id=e.light_version
                         WHERE e.type=%s AND upper(e.code)=ANY(%s)
                         ORDER BY e.created_at,e.id""",
-                        (kind, [code for _, code in requested]),
+                        (kind, [code for _, code in pairs]),
                     )
                 ).fetchall()
-            index, seen_rows = {}, []
+            index = {}
+            budget_versions = {}
             seen_ids = set()
             for row in rows:
-                if row["id"] in seen_ids:
-                    continue
-                seen_ids.add(row["id"])
-                seen_rows.append(row)
-                key = (row["market"].upper() if kind == "stock" else "", row["code"].upper())
-                index.setdefault(key, []).append(row)
-
-            def related_root(code):
-                root = RELATED.get(normalize("US", code))
-                visited = {normalize("US", code)}
-                while root and root in RELATED:
-                    if root in visited:
-                        return None
-                    visited.add(root)
-                    root = RELATED[root]
-                return root
-
-            roots = {
-                root
-                for row in seen_rows
-                if kind == "stock" and row["market"].upper() == "US"
-                if (root := related_root(row["code"]))
-            }
-            underlying = {}
-            if roots:
-                root_rows = await (
-                    await conn.execute(
-                        """SELECT e.* FROM asset_catalog_entries e
-                        WHERE e.type='stock' AND upper(market)='US' AND upper(code)=ANY(%s)
-                        ORDER BY e.created_at,e.id""",
-                        (list(roots),),
-                    )
-                ).fetchall()
-                for row in root_rows:
-                    underlying.setdefault(row["code"].upper(), []).append(row)
-
-            budget = {"bytes": 0, "verified": set()}
-            version_ids = {
-                str(row[field])
-                for row in [*seen_rows, *(item for rows in underlying.values() for item in rows)]
-                for field in ("light_version", "dark_version")
-                if row.get(field)
-            }
-            if version_ids:
-                budget["versions"] = {
-                    str(version["id"]): version
-                    for version in await (
-                        await conn.execute(
-                            "SELECT * FROM system_asset_versions WHERE id=ANY(%s)",
-                            (list(version_ids),),
-                        )
-                    ).fetchall()
-                }
+                if row["id"] not in seen_ids:
+                    seen_ids.add(row["id"])
+                    key = (row["market"].upper() if kind == "stock" else "", row["code"].upper())
+                    index.setdefault(key, []).append(row)
+                version_id = row.get("light_version")
+                if version_id and row.get("light_sha256") is not None:
+                    budget_versions[str(version_id)] = {
+                        "id": version_id,
+                        "kind": row["light_kind"],
+                        "folder": row["light_folder"],
+                        "served_sha256": row["light_sha256"],
+                        "served_size": row["light_size"],
+                    }
+            budget = {"bytes": 0, "verified": set(), "versions": budget_versions}
 
             async def light_url(row):
                 identifier = str(row["light_version"]) if row.get("light_version") else None
@@ -521,7 +510,7 @@ class AssetManagement:
                 return await legacy_project(await legacy_candidate(asset_kind, market, code))
 
             async def inherited_url(root):
-                candidates = underlying.get(root) or []
+                candidates = index.get(("US", root)) or []
                 if candidates:
                     return "" if candidates[0]["id"] in removed else await light_url(candidates[0])
                 return await legacy_url("US", root, "stock")
@@ -580,6 +569,24 @@ class AssetManagement:
                         mapping[code] = url
             return {"assets": icon_rows(kind, related_icons(mapping) if kind == "stock" else mapping)}
 
+    async def icon_projection(self, conn, row, budget):
+        """Light artwork only for first-screen icon maps; source metadata is not read."""
+        from .asset_lookup_contract import image_key
+
+        identifier = str(row["light_version"]) if row.get("light_version") else None
+        image, _state = await self.catalog.image(conn, identifier, row["type"], budget, verify_bytes=False)
+        return {
+            "id": row["id"],
+            "type": row["type"],
+            "market": row["market"],
+            "code": row["code"],
+            "name": row["name"],
+            "url": image["public_path"] + "?sha256=" + image["served_sha256"] if image else "",
+            "imageUrl": "/api/asset-image/" + image_key(row["id"], "light") + "?v=" + image["served_sha256"][:12] if image else "",
+            "urlDark": "",
+            "imageUrlDark": "",
+        }
+
     async def stock_markets(self):
         """Availability is based on verified public images, never market quotes."""
         async with self.catalog.context() as conn:
@@ -613,6 +620,7 @@ class AssetManagement:
         deleted=False,
         connection=None,
         directory=None,
+        icons_only=False,
     ):
         from .card_catalog import published_card_assets
 
@@ -759,7 +767,7 @@ class AssetManagement:
                     ).fetchall()
                 }
             catalog_ids = [row["id"] for row, source in selected if source is False]
-            if catalog_ids:
+            if catalog_ids and not icons_only:
                 from .asset_source_evidence import preload_creation_origins
                 from .asset_source_metadata import preload as preload_metadata
                 budget["origins"] = await preload_creation_origins(conn, catalog_ids)
@@ -782,7 +790,9 @@ class AssetManagement:
                     continue
                 if not card:
                     assets.append(
-                        {
+                        await self.icon_projection(conn, row, budget)
+                        if icons_only
+                        else {
                             **await self.catalog.project(
                                 conn, row, cache, budget, verify_bytes=False
                             ),

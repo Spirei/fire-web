@@ -144,6 +144,7 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
                 sort=first(request, "sort", "rank") if web and paged else None,
                 direction="asc" if first(request, "dir") == "asc" else "desc",
                 deleted=deleted,
+                icons_only=web and first(request, "icons") == "1" and kind in ("market", "broker"),
             )
             if version == 2 and "authorization" in request.headers:
                 denied = await v2_access(request)

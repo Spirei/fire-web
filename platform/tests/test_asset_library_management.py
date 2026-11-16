@@ -167,13 +167,30 @@ async def test_icon_key_lookup_batches_rows_versions_and_related_artwork(client,
     assert [r['code'] for r in legacy] == ['AD']
     assert legacy[0]['url'] == asset['imageUrl']
     # Batched reads stay constant instead of two statements per requested code.
-    assert int(re.search(r'(\d+) statements', lookup.headers['server-timing']).group(1)) <= 5
+    assert int(re.search(r'(\d+) statements', lookup.headers['server-timing']).group(1)) <= 4
     body = {'requestId': str(uuid4()), 'expectedRevision': before['revision'], 'publicMetadataConfirmed': True, 'asset': {'id': asset['id'], 'name': '安道尔'}, 'restore': False}
     response = await client.put(P + '/entries/' + quote(asset['id'], safe=''), json=body)
     assert response.status_code == 200, response.text
     after = await rows(client, 'flag')
     registered_lookup = await client.get('/api/assets?type=flag&keys=AD')
     registered = registered_lookup.json()['assets']
-    assert int(re.search(r'(\d+) statements', registered_lookup.headers['server-timing']).group(1)) <= 6
+    assert int(re.search(r'(\d+) statements', registered_lookup.headers['server-timing']).group(1)) <= 4
     current = next(r for r in after['assets'] if r['code'] == 'AD')
     assert [r['url'] for r in registered] == [current['imageUrl']]
+
+async def test_icons_only_broker_listing_matches_artwork_without_source_metadata(client, admin):
+    before = await rows(client, 'broker')
+    asset = before['assets'][0]
+    body = {'requestId': str(uuid4()), 'expectedRevision': before['revision'], 'publicMetadataConfirmed': True, 'asset': {'id': asset['id'], 'name': asset['name']}, 'restore': False}
+    assert (await client.put(P + '/entries/' + quote(asset['id'], safe=''), json=body)).status_code == 200
+    normal = await client.get('/api/assets?type=broker')
+    icons = await client.get('/api/assets?type=broker&icons=1')
+    assert normal.status_code == icons.status_code == 200
+
+    def mapping(response):
+        return {a['id']: a.get('imageUrl') or a.get('url') or '' for a in response.json()['assets']}
+
+    assert mapping(icons) == mapping(normal)
+    assert all('metadataObservation' not in a and 'sourceKnown' not in a and 'creationAuthority' not in a for a in icons.json()['assets'])
+    statements = lambda response: int(re.search(r'(\d+) statements', response.headers['server-timing']).group(1))
+    assert statements(icons) < statements(normal)
