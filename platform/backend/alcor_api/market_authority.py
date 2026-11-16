@@ -144,7 +144,7 @@ class Authority:
         # proof, but do not take UPDATE on the native account/grant and block
         # independent account reads. Source/intent mutations stay serialized.
         identity_lock = lock_read_identity if shared_identity else lock_mutation_identity
-        await identity_lock(conn, who, require_admin=False)
+        identity = await identity_lock(conn, who, require_admin=False)
         key = "market-owner:" + who.id
         if opportunistic:
             row = await (await conn.execute(
@@ -152,10 +152,11 @@ class Authority:
             )).fetchone()
             if not row["acquired"]:
                 raise HTTPException(503, "行情采集登记繁忙，请稍后重试", headers={"Retry-After": "3"})
-            return
+            return identity
         await conn.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (key,)
         )
+        return identity
 
     async def config(self, conn, owner, revision):
         row = await (

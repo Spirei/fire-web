@@ -54,6 +54,10 @@ class Database:
                     "autocommit": True,
                     "row_factory": dict_row,
                     "connect_timeout": settings.connect_timeout,
+                    # Quote and asset reads reuse the same statements on every
+                    # poll. Prepare them after the second use so a weak NAS CPU
+                    # does not re-plan them on each pooled request.
+                    "prepare_threshold": 2,
                     "options": "-c search_path=public -c statement_timeout=5000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=10000",
                 },
             )

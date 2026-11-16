@@ -50,6 +50,25 @@ async def issue_grant(conn,user,scope,device_name,passkey_id=None,preserve_grant
     return {**await token_pair(conn,grant_id),'scope':scope}
 
 
+_GRANT_PROOF = '''SELECT g.*,u.username,u.email,u.password_hash,u.role,u.active,u.session_version AS current_version,
+        g.expires_at>clock_timestamp() AND g.created_at+interval '90 days'>clock_timestamp() AS valid,
+        s.source_stamp,s.totp_enabled,s.totp_secret_ciphertext,
+        (g.passkey_id IS NULL OR EXISTS(
+          SELECT 1 FROM identity_passkeys p WHERE p.id=g.passkey_id AND p.user_id=g.user_id)) AS passkey_present
+        FROM identity_app_grants g JOIN users u ON u.id=g.user_id
+        LEFT JOIN identity_security s ON s.user_id=u.id'''
+
+
+def grant_proof_valid(row):
+    """One query carries every grant, user, factor and passkey fact."""
+    if (not row or not row['valid'] or row['revoked_at'] or not row['active']
+            or row['session_version']!=row['current_version']):return False
+    stamp=row['source_stamp'] or digest(
+        f'{row["password_hash"]}:{int(bool(row["totp_enabled"]))}:{row["totp_secret_ciphertext"] or ""}'
+    )
+    return row['security_stamp']==stamp and row['passkey_present']
+
+
 async def active_grant(conn,grant_id,*,lock=False,shared=False):
     predicate,params='g.id=%s',(grant_id,)
     if lock or shared:
@@ -67,20 +86,19 @@ async def active_grant(conn,grant_id,*,lock=False,shared=False):
         # a changed relationship instead of locking an unverified second owner.
         predicate+=' AND g.user_id=%s'
         params+=(owner['id'],)
-    row=await (await conn.execute('''SELECT g.*,u.username,u.email,u.password_hash,u.role,u.active,u.session_version AS current_version,
-        g.expires_at>clock_timestamp() AND g.created_at+interval '90 days'>clock_timestamp() AS valid
-        FROM identity_app_grants g JOIN users u ON u.id=g.user_id WHERE '''+predicate+(' FOR SHARE OF g,u' if shared else ' FOR UPDATE OF g,u' if lock else ''),params)).fetchone()
-    if not row or not row['valid'] or row['revoked_at'] or not row['active'] or row['session_version']!=row['current_version']:return None
-    user={**row,'id':row['user_id']}
-    if row['security_stamp']!=await security_stamp(conn,user):return None
-    if row['passkey_id'] and not await (await conn.execute('SELECT 1 FROM identity_passkeys WHERE id=%s AND user_id=%s',(row['passkey_id'],row['user_id']))).fetchone():return None
-    return row
+    row=await (await conn.execute(_GRANT_PROOF+' WHERE '+predicate+(' FOR SHARE OF g,u' if shared else ' FOR UPDATE OF g,u' if lock else ''),params)).fetchone()
+    return row if grant_proof_valid(row) else None
 
 
 async def authenticate(conn,token,scope=None,*,lock=False,shared=False):
     if not re.fullmatch(r'fat_[A-Za-z0-9_-]{43}',token):raise HTTPException(401,'需要有效的 App 连接')
-    row=await (await conn.execute("SELECT grant_id FROM identity_app_access_tokens WHERE token_hash=%s AND expires_at>clock_timestamp()",(digest(token),))).fetchone()
-    grant=await active_grant(conn,row['grant_id'],lock=lock,shared=shared) if row else None
+    if lock or shared:
+        row=await (await conn.execute("SELECT grant_id FROM identity_app_access_tokens WHERE token_hash=%s AND expires_at>clock_timestamp()",(digest(token),))).fetchone()
+        grant=await active_grant(conn,row['grant_id'],lock=lock,shared=shared) if row else None
+    else:
+        grant=await (await conn.execute(_GRANT_PROOF+''' JOIN identity_app_access_tokens t ON t.grant_id=g.id
+            WHERE t.token_hash=%s AND t.expires_at>clock_timestamp()''',(digest(token),))).fetchone()
+        if not grant_proof_valid(grant):grant=None
     if not grant:raise HTTPException(401,'连接已失效，请重新连接')
     if scope and scope not in grant['scope'].split():raise HTTPException(403,'连接缺少此操作的授权范围')
     from .request_activity import bind_account

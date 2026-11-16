@@ -318,7 +318,7 @@ class BatchQuotes:
         quotes, states = {}, {}
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            await lock_read_identity(conn, who, require_admin=False)
+            identity = await lock_read_identity(conn, who, require_admin=False)
             if getattr(who, "native_client", False):
                 grant = await (
                     await conn.execute(
@@ -327,8 +327,11 @@ class BatchQuotes:
                 ).fetchone()
                 if not grant or grant["client_id"] != CLIENT:
                     raise HTTPException(401, "客户端连接已变化")
-            user = await (await conn.execute("SELECT role FROM users WHERE id=%s", (who.id,))).fetchone()
-            if not user or user["role"] != who.role:
+            role = identity.get("role") if isinstance(identity, dict) else None
+            if role is None:
+                user = await (await conn.execute("SELECT role FROM users WHERE id=%s", (who.id,))).fetchone()
+                role = user["role"] if user else None
+            if role != who.role:
                 raise HTTPException(403, "账号权限已变化")
             policies = {}
             unavailable_policies = set()

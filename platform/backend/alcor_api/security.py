@@ -92,15 +92,14 @@ async def lock_mutation_identity(conn, who: Identity, *, require_admin=True):
             raise HTTPException(403, "客户端不能执行管理操作")
         if getattr(who,"native_client",False):
             from .native_app_auth import lock_native_mutation
-            await lock_native_mutation(conn,who)
-            return
+            return await lock_native_mutation(conn,who)
         from .client_auth import lock_client_mutation
 
         return await lock_client_mutation(conn, who)
     row = await (
         await conn.execute(
             """
-        SELECT u.id FROM sessions s JOIN users u ON u.id=s.user_id
+        SELECT u.id,u.role FROM sessions s JOIN users u ON u.id=s.user_id
         WHERE s.token_hash=%s AND u.id=%s AND u.active AND (NOT %s OR u.role='admin')
           AND s.expires_at>clock_timestamp() AND s.session_version=u.session_version
           AND s.client_id=ANY(%s) FOR SHARE OF u,s
@@ -110,6 +109,7 @@ async def lock_mutation_identity(conn, who: Identity, *, require_admin=True):
     ).fetchone()
     if not row:
         raise HTTPException(401, "操作授权已变化，请重新登录核对")
+    return row
 
 
 async def lock_read_identity(conn, who: Identity, *, require_admin=False):

@@ -29,6 +29,15 @@ class Subscriptions:
     def __init__(self,authority):self.authority,self.db=authority,authority.db
 
     @staticmethod
+    async def current_role(conn, who, identity):
+        """Reuse the role already returned by the identity lock on hot paths."""
+        role = identity.get('role') if isinstance(identity, dict) else None
+        if role is None:
+            row = await (await conn.execute('SELECT role FROM users WHERE id=%s', (who.id,))).fetchone()
+            role = row['role'] if row else None
+        return role
+
+    @staticmethod
     def query(item, instrument=None, session=None, policy=None):
         return Query('latest', item['market'], item['code'],
                      instrument=instrument or ('asset' if item['market'] == 'ASSET' else 'equity'),
@@ -92,17 +101,15 @@ class Subscriptions:
                 # An immutable accepted receipt needs current credential proof,
                 # not the Worker's exclusive source/intent mutation lock.
                 from .security import lock_read_identity
-                await lock_read_identity(conn,who,require_admin=False)
-                user=await (await conn.execute('SELECT role FROM users WHERE id=%s',(who.id,))).fetchone()
-                if not user or user['role']!=who.role:raise HTTPException(403,'账号权限已变化')
+                identity=await lock_read_identity(conn,who,require_admin=False)
+                if await self.current_role(conn,who,identity)!=who.role:raise HTTPException(403,'账号权限已变化')
                 previous=await self.authority.receipt(conn,who.id,request_id,operation)
                 if previous:return previous,True
-            await self.authority.owner_lock(
+            identity=await self.authority.owner_lock(
                 conn, who, shared_identity=observe and not remove,
                 opportunistic=observe and legacy_generated and not remove,
             )
-            user=await (await conn.execute("SELECT role FROM users WHERE id=%s",(who.id,))).fetchone()
-            if not user or user["role"]!=who.role:raise HTTPException(403,"账号权限已变化")
+            if await self.current_role(conn,who,identity)!=who.role:raise HTTPException(403,"账号权限已变化")
             previous=await self.authority.receipt(conn,who.id,request_id,operation)
             if previous:return previous,True
             # Nested domain operations use this exact PG connection/transaction.

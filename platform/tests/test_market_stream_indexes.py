@@ -16,6 +16,7 @@ HOT_PATH = {
     "audit_events_target_time",
     "personal_activity_owner_time",
     "personal_declaration_owner_time",
+    "tasks_failed_latest",
 }
 
 
