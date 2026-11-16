@@ -66,62 +66,70 @@ const formatTime = (value?: string | null) => {
   const stamp = typeof value === "string" ? Date.parse(value) : NaN;
   if (!Number.isFinite(stamp)) return "时间未知";
   return `${new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Hong_Kong",
+    timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false
-  }).format(new Date(stamp))} 香港时间`;
+  }).format(new Date(stamp))} 上海时间`;
 };
 const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "healthy" | "failed";
-type AutoUpdateSchedule = { key: string; deadline: number; triggered: boolean };
 
 type HeatView = "day" | "week" | "month" | "total";
 type HeatCell = { key: string; label: string; count: number; date?: Date; weekKey?: string; monthKey?: string; empty?: boolean };
 
-function dayKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const shanghaiDayFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+
+/** Heatmap keys follow the same Shanghai calendar as the server counts. */
+function shanghaiDayKey(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function UpdateHeatmap({ counts }: { counts: Record<string, number> }) {
   const [view, setView] = useState<HeatView>("day");
   const [selected, setSelected] = useState<HeatCell | null>(null);
   const today = useMemo(() => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    return date;
+    const [year, month, day] = shanghaiDayFormat.format(new Date()).split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 12));
   }, []);
   const { cells, monthLabels, weekCount } = useMemo(() => {
-    const rangeStart = new Date(today.getFullYear(), 0, 1);
-    const rangeEnd = new Date(today.getFullYear(), 11, 31);
+    const year = today.getUTCFullYear();
+    const rangeStart = new Date(Date.UTC(year, 0, 1, 12));
+    const rangeEnd = new Date(Date.UTC(year, 11, 31, 12));
     const gridStart = new Date(rangeStart);
-    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+    gridStart.setUTCDate(gridStart.getUTCDate() - gridStart.getUTCDay());
     const gridEnd = new Date(rangeEnd);
-    gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()));
+    gridEnd.setUTCDate(gridEnd.getUTCDate() + (6 - gridEnd.getUTCDay()));
     const result: HeatCell[] = [];
     const labels: { key: string; label: string; column: number }[] = [];
     let previousMonth = "";
-    for (let date = new Date(gridStart), index = 0; date <= gridEnd; date.setDate(date.getDate() + 1), index += 1) {
+    for (let date = new Date(gridStart), index = 0; date <= gridEnd; date.setUTCDate(date.getUTCDate() + 1), index += 1) {
       const current = new Date(date);
       const inYear = current >= rangeStart && current <= rangeEnd;
       const hasOccurred = inYear && current <= today;
-      const key = dayKey(current);
-      const monthKey = `${current.getFullYear()}-${current.getMonth() + 1}`;
+      const key = shanghaiDayKey(current);
+      const month = current.getUTCMonth() + 1;
+      const monthKey = `${current.getUTCFullYear()}-${month}`;
       if (inYear && monthKey !== previousMonth) {
-        labels.push({ key: monthKey, label: `${current.getMonth() + 1}月`, column: Math.floor(index / 7) });
+        labels.push({ key: monthKey, label: `${month}月`, column: Math.floor(index / 7) });
         previousMonth = monthKey;
       }
       const weekStart = new Date(current);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
       result.push({
         key: inYear ? key : `pad-${key}`,
-        label: inYear ? `${current.getMonth() + 1}月${current.getDate()}日` : "",
+        label: inYear ? `${month}月${current.getUTCDate()}日` : "",
         count: hasOccurred ? counts[key] || 0 : 0,
         date: inYear ? current : undefined,
-        weekKey: `week-${dayKey(weekStart)}`,
+        weekKey: `week-${shanghaiDayKey(weekStart)}`,
         monthKey: `month-${monthKey}`,
         empty: !inYear
       });
@@ -136,8 +144,8 @@ function UpdateHeatmap({ counts }: { counts: Record<string, number> }) {
     <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none sm:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium">更新热力图</h2>
-          <p className="mt-1 text-xs text-slate-500">最近一年工作流更新频率</p>
+          <h2 className="text-sm font-medium">提交热力图</h2>
+          <p className="mt-1 text-xs text-slate-500">本年度 main 提交频率</p>
         </div>
         <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-white/[.06]" role="tablist" aria-label="热力图统计周期">
           {tabs.map(([key, label]) => (
@@ -160,8 +168,8 @@ function UpdateHeatmap({ counts }: { counts: Record<string, number> }) {
                     key={cell.key}
                     type="button"
                     onClick={() => setSelected({ ...cell, count: total })}
-                    aria-label={`${cell.label}，${total} 次 workflow`}
-                    title={`${cell.label} · ${total} workflow`}
+                    aria-label={`${cell.label}，${total} 次提交`}
+                    title={`${cell.label} · ${total} 次提交`}
                     className={`min-w-0 rounded-[2px] p-0 transition hover:ring-2 hover:ring-emerald-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${highlighted ? "ring-2 ring-emerald-400/80" : ""}`}
                     style={{ backgroundColor: cell.empty ? "transparent" : tone(cell.count), aspectRatio: "1 / 1" }}
                   />
@@ -171,7 +179,7 @@ function UpdateHeatmap({ counts }: { counts: Record<string, number> }) {
       </div>
       {selected && (
         <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700 dark:bg-white/[.06] dark:text-slate-200">
-          {view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date ? selected.date.getMonth() + 1 : ""}月` : selected.label} · {selected.count} workflow
+          {view === "week" ? `${selected.label}所在周` : view === "month" ? `${selected.date ? selected.date.getUTCMonth() + 1 : ""}月` : selected.label} · {selected.count} 次提交
         </p>
       )}
       <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
@@ -183,8 +191,6 @@ function UpdateHeatmap({ counts }: { counts: Record<string, number> }) {
   );
 }
 
-const AUTO_UPDATE_DELAY_MS = 5 * 60 * 1000;
-const AUTO_UPDATE_STORAGE_KEY = "fire:deploy-auto-update";
 const readApiJson = async <T extends Record<string, unknown>>(response: Response): Promise<T> => {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
@@ -231,9 +237,6 @@ export default function DeployStatusPage() {
   const [configOpen, setConfigOpen] = useState(false);
   const [token, setToken] = useState("");
   const [configError, setConfigError] = useState("");
-  const autoUpdateKeyRef = useRef("");
-  const [autoUpdateDeadline, setAutoUpdateDeadline] = useState<number | null>(null);
-  const [autoUpdateSeconds, setAutoUpdateSeconds] = useState<number | null>(null);
   const load = useCallback(async () => {
     loadController.current?.abort();
     const controller = new AbortController();
@@ -247,6 +250,7 @@ export default function DeployStatusPage() {
         source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
         packageName?: string; workflowRunCount?: number; checkedAt?: string; heatmap?: Record<string, number>;
         updateRequests?: Array<Record<string, unknown>>;
+        updater?: { available?: boolean; reason?: string; observedAt?: string | null };
       }>(response);
       if (controller.signal.aborted) return;
       const changedRepository = !!loadedRepository.current && loadedRepository.current !== data.repository;
@@ -264,6 +268,10 @@ export default function DeployStatusPage() {
       setSourceVersion(data.source || null);
       setImageVersion(data.image || null);
       setRuntimeVersion(data.runtime || null);
+      if (data.updater) {
+        setUpdaterAvailable(Boolean(data.updater.available));
+        setUpdaterReason(data.updater.reason || "更新服务不可用");
+      }
       const updates = Array.isArray(data.updateRequests) ? data.updateRequests : [];
       const update = updates.find(item => item.request_id === commands.update.requestId)
         || updates.find(item => deploymentPending(item.status));
@@ -280,20 +288,10 @@ export default function DeployStatusPage() {
     } catch (err) { if (!controller.signal.aborted) { setNotice(""); setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); } }
     finally { if (loadController.current === controller) { setRefreshing(false); setHasLoaded(true); } }
   }, [commands]);
-  const loadUpdater = useCallback(async () => {
-    try {
-      const response = await fetch("/api/deploy-status/container-update", { cache: "no-store" });
-      if (!response.ok) throw new Error("unavailable");
-      const data = await readApiJson<{ available?: boolean; reason?: string }>(response);
-      setUpdaterAvailable(Boolean(data.available));
-      setUpdaterReason(data.reason || "更新服务不可用");
-    } catch {
-      setUpdaterAvailable(false);
-      setUpdaterReason("无法连接更新服务");
-    }
-  }, []);
   const currentMainCheck = observedCheck?.sha === sourceVersion?.sha ? observedCheck : runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
-  const refreshInterval = commands.update.pending || (imageProgress && imageProgress.status !== "completed") || (sourceVersion && (!currentMainCheck || currentMainCheck.status !== "completed")) ? 10000 : 60000;
+  // GitHub's own run/step updates lag by tens of seconds. Poll quickly only
+  // while an image build is live; a source check or an idle page needs less.
+  const refreshInterval = commands.update.pending || (imageProgress && imageProgress.status !== "completed") ? 15000 : (sourceVersion && (!currentMainCheck || currentMainCheck.status !== "completed")) ? 30000 : 60000;
   const refreshIntervalRef = useRef(refreshInterval);
   refreshIntervalRef.current = refreshInterval;
   useEffect(() => {
@@ -317,7 +315,6 @@ export default function DeployStatusPage() {
     return () => { stopped = true; clearTimeout(timer); loadController.current?.abort(); document.removeEventListener("visibilitychange", visibility); };
   }, [load]);
   useEffect(() => { fetch("/api/deploy-status/config").then(async (response) => response.ok ? setConfig(await readApiJson<typeof config>(response)) : null).catch(() => {}); }, []);
-  useEffect(() => { void loadUpdater(); const timer = window.setInterval(() => void loadUpdater(), 15000); return () => window.clearInterval(timer); }, [loadUpdater]);
   const totalPages = Math.max(1, Math.ceil(runs.length / RUNS_PER_PAGE));
   const pagedRuns = runs.slice((page - 1) * RUNS_PER_PAGE, page * RUNS_PER_PAGE);
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
@@ -325,7 +322,6 @@ export default function DeployStatusPage() {
     if (refreshing) return;
     setRefreshTurns((value) => value + 1);
     void load();
-    void loadUpdater();
   };
   const saveConfig = async () => {
     if (configBusy) return;
@@ -356,11 +352,6 @@ export default function DeployStatusPage() {
   };
   const updateContainer = async () => {
     if (containerUpdateState === "triggering") return;
-    if (autoUpdateKeyRef.current) {
-      try { localStorage.setItem(AUTO_UPDATE_STORAGE_KEY, JSON.stringify({ key: autoUpdateKeyRef.current, deadline: autoUpdateDeadline, triggered: true })); } catch { /* storage unavailable */ }
-    }
-    setAutoUpdateDeadline(null);
-    setAutoUpdateSeconds(null);
     setContainerUpdateState("triggering"); setNotice(""); setError("");
     try {
       if (!release && !commands.update.pending) throw new Error("尚未读取到已发布的镜像，请刷新核对");
@@ -407,45 +398,6 @@ export default function DeployStatusPage() {
   const latestMainCheck = currentMainCheck;
   const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
   const imageBuilding = Boolean(imageProgress && ["schedule", "workflow_dispatch"].includes(imageProgress.event || "") && imageProgress.status !== "completed");
-  const autoUpdateEligible = Boolean(
-    !error && !buildError && !runsError && latest?.status === "completed" && latest.conclusion === "success" &&
-    imageVersion?.matchesMain && updaterAvailable && runtimeVersion &&
-    !runtimeVersion.matchesImage && !imageBuilding
-  );
-  useEffect(() => {
-    if (!autoUpdateEligible) {
-      autoUpdateKeyRef.current = "";
-      setAutoUpdateDeadline(null);
-      setAutoUpdateSeconds(null);
-      return;
-    }
-    const key = imageVersion?.latestSuccessfulSha || "";
-    if (!key || autoUpdateKeyRef.current === key) return;
-    autoUpdateKeyRef.current = key;
-    let saved: AutoUpdateSchedule | null = null;
-    try { saved = JSON.parse(localStorage.getItem(AUTO_UPDATE_STORAGE_KEY) || "null") as AutoUpdateSchedule | null; } catch { /* replace invalid state below */ }
-    if (saved?.key === key && saved.triggered) return;
-    const completedAt = Date.parse(imageVersion?.latestSuccessfulAt || latest?.updatedAt || "");
-    const canonicalDeadline = Number.isFinite(completedAt) ? completedAt + AUTO_UPDATE_DELAY_MS : Date.now() + AUTO_UPDATE_DELAY_MS;
-    const deadline = saved?.key === key && typeof saved.deadline === "number" && Number.isFinite(saved.deadline) ? saved.deadline : canonicalDeadline;
-    try { localStorage.setItem(AUTO_UPDATE_STORAGE_KEY, JSON.stringify({ key, deadline, triggered: false })); } catch { /* countdown still works for this page */ }
-    setAutoUpdateDeadline(deadline);
-    setAutoUpdateSeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
-  }, [autoUpdateEligible, imageVersion?.latestSuccessfulAt, imageVersion?.latestSuccessfulSha, latest?.id, latest?.updatedAt]);
-  useEffect(() => {
-    if (autoUpdateDeadline === null) return;
-    const tick = () => {
-      const remaining = Math.max(0, Math.ceil((autoUpdateDeadline - Date.now()) / 1000));
-      setAutoUpdateSeconds(remaining);
-      if (remaining === 0) {
-        window.clearInterval(timer);
-        void updateContainer();
-      }
-    };
-    const timer = window.setInterval(tick, 1000);
-    tick();
-    return () => window.clearInterval(timer);
-  }, [autoUpdateDeadline]);
   const latestAttemptFailed = Boolean(imageProgress && imageProgress.status === "completed" && !!imageProgress.conclusion && !["success", "skipped", "cancelled"].includes(imageProgress.conclusion) && sourceVersion && imageProgress.sha === sourceVersion.shortSha);
   const sourceState = sourceVersion
     ? { label: `main ${sourceVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
@@ -518,10 +470,9 @@ export default function DeployStatusPage() {
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
             <button onClick={() => void updateContainer()} disabled={(!canUpdateContainer && !commands.update.pending) || containerUpdateState === "triggering"} title={commands.update.pending ? "仅核对原更新请求与运行版本" : !updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "Watchtower 在线，容器已运行最新镜像" : "Watchtower 在线，可拉取最新 GHCR 镜像并重启 Alcor"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${updaterDot}`} /><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : updaterReason === "正在检查更新服务" ? "服务检测中" : !updaterAvailable ? "服务离线" : runtimeVersion?.matchesImage ? "容器已是最新" : "有新镜像"}</button>
           </div>
-          {autoUpdateSeconds !== null && <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-300">镜像已构建成功，将在 {Math.floor(autoUpdateSeconds / 60)} 分 {String(autoUpdateSeconds % 60).padStart(2, "0")} 秒后自动更新容器</p>}
         </section>
         {buildError && <p role="alert" className="deploy-observation-error mb-4 text-sm">{buildError}{imageProgress ? " · 显示上次记录" : ""}</p>}
-        {imageProgress && showImageProgress && <DeploymentBuildProgress key={imageProgress.id} progress={imageProgress} checkedAt={checkedAt} />}
+        {imageProgress && showImageProgress && <DeploymentBuildProgress key={imageProgress.id} progress={imageProgress} checkedAt={buildError ? imageProgress.updatedAt : checkedAt} />}
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
           <div><div className="flex items-center gap-2.5"><span className={`h-3 w-3 shrink-0 rounded-full ${latestState.className} ring-4 ${latestState.ring} ${latest && latest.status !== "completed" ? "animate-pulse" : ""}`} /><p className="text-lg font-medium">最新发布 <span className="text-slate-400">·</span> {latestState.label}</p></div><p className="mt-1.5 pl-[22px] text-xs text-slate-500">{latest ? `${latest.sha} · ${formatTime(latest.updatedAt)}` : "等待读取 GitHub Actions"}</p></div>
           {error && <p role="alert" className="mt-4 rounded-xl bg-red-400/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">{error}</p>}

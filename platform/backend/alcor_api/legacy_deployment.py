@@ -213,6 +213,13 @@ def mount_legacy_deployment(app, settings, db):
                 "matchesImage": state["matches_release"] if runtime_sha and release_sha else None,
                 "matchesMain": state["runtime_ready"] and runtime_sha == source_sha if runtime_sha and source_sha else None,
             },
+            "updater": {
+                "available": bool(state["runner"].get("configured") and state["runner"].get("online")),
+                "configured": bool(state["runner"].get("configured")),
+                "reachable": bool(state["runner"].get("online")),
+                "observedAt": state["runner"].get("observed_at"),
+                "reason": state["runner"].get("reason") or "更新服务不可用",
+            },
             "updateRequests": [deployments.public_receipt(row) for row in state["receipts"]],
             "checkedAt": state["checked_at"],
             "configured": state["configured"],

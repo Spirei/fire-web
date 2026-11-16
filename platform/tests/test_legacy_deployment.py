@@ -72,6 +72,7 @@ async def test_legacy_unconfigured_reads_are_unknown_no_write_and_no_probe(legac
     assert value["source"] is None and value["runs"] is None and value["heatmap"] is None
     assert value["workflowRunCount"] is None and value["runtime"]["sha"] == "unknown"
     assert value["image"]["matchesMain"] is None
+    assert value["updater"]["available"] is False and "尚未配置" in value["updater"]["reason"]
     config = await legacy.get(P + "/config")
     assert config.status_code == 200 and config.json()["revision"] is None and not config.json()["hasToken"]
     runner = await legacy.get(P + "/container-update")
