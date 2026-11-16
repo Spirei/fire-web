@@ -19,6 +19,7 @@ async def test_real_http_route_template_privacy_pg_restart_and_worker(client, ad
     async with db.connection() as conn:
         rows = await (await conn.execute("SELECT * FROM request_observations")).fetchall()
         assert rows
+        assert any(r["timing"] and "backend_ttfb" in r["timing"] for r in rows)
         assert any(
             r["path"] == "/api/[unmatched]" and r["status"] == 404 and r["source"] == "web" for r in rows
         )

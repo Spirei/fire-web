@@ -70,7 +70,7 @@ def filters(params, now):
     }
 
 
-async def snapshot(conn, params, now=None):
+async def snapshot(conn, params, now=None, *, include_timing=False):
     now = now or datetime.now(UTC)
     f = filters(params, now)
     today = (now + timedelta(hours=8)).date()
@@ -136,12 +136,17 @@ async def snapshot(conn, params, now=None):
     page = min(f["page"], max(1, (total + 19) // 20))
     logs = await (
         await conn.execute(
-            "SELECT id,(extract(epoch FROM at)*1000)::float8 AS at,path,method,source,status,duration FROM request_observations WHERE "
+            "SELECT id,(extract(epoch FROM at)*1000)::float8 AS at,path,method,source,status,duration,timing FROM request_observations WHERE "
             + detail_where
             + " ORDER BY id DESC LIMIT 20 OFFSET %s",
             [*detail_args, (page - 1) * 20],
         )
     ).fetchall()
+    if not include_timing:
+        logs = [
+            {key: row[key] for key in ("id", "at", "path", "method", "source", "status", "duration")}
+            for row in logs
+        ]
     hourly = start == end and from_at >= now - timedelta(days=30)
     unit = "hour" if hourly else "day"
     chart_where = "unit=%s AND bucket>=%s AND bucket<%s" + suffix
@@ -228,7 +233,13 @@ def legacy_ok(data):
 
 
 def legacy_snapshot(value):
-    return {key: value[key] for key in LEGACY_SNAPSHOT_KEYS}
+    result = {key: value[key] for key in LEGACY_SNAPSHOT_KEYS}
+    # The reviewed legacy contract has no timing detail; keep its rows frozen.
+    result["logs"] = [
+        {key: row[key] for key in ("id", "at", "path", "method", "source", "status", "duration")}
+        for row in value.get("logs", [])
+    ]
+    return result
 
 
 def mount_request_observability(app, settings, db):
@@ -276,7 +287,7 @@ def mount_request_observability(app, settings, db):
         async with db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             await lock_mutation_identity(conn, who, require_admin=True)
-            value = await snapshot(conn, request.query_params)
+            value = await snapshot(conn, request.query_params, include_timing=True)
         value["localCollector"] = app.state.request_observations.status()
         response.headers["Cache-Control"] = "no-store, private"
         return {"code": 0, "message": "ok", "data": value}

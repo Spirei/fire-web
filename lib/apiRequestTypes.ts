@@ -13,6 +13,7 @@ export interface RequestFilters {
 export interface ApiRequestLog {
   id: number; at: number; path: string; method: string;
   source: RequestSource; status: number; duration: number;
+  timing?: string | null;
 }
 export interface RequestMetrics {
   total: number; errors: number; serverErrors: number; averageMs: number;

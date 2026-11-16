@@ -100,13 +100,17 @@ async def snapshot(service,who,options):
     if (not isinstance(selected['currency'],str) or len(selected['currency'])!=3 or not selected['currency'].isascii() or not selected['currency'].isupper()
             or selected['costMethod'] not in ('diluted','average_open') or selected['usPrice'] not in ('observed','regular')):
         raise HTTPException(400,'资产显示参数无效')
-    async with service.context(who,shared_read=True) as conn:
-        original=await (await conn.execute('''SELECT r.id,r.market,r.code,r.revision,r.qty,r.trade_tip_id,r.position_transfer_id,a.holding_source AS _holding_source
-            FROM portfolio_records r LEFT JOIN broker_accounts a ON a.owner_id=r.owner_id AND a.id=r.broker_account_id AND a.deleted_at IS NULL
-            WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY r.id LIMIT 10001''',(who.id,))).fetchall()
-        if len(original)>10000:raise HTTPException(409,'持仓超过完整读取上限')
-    quoted=await configured_quotes(service.market_authority,who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original if needs_position_quote(row)],regular=selected['usPrice']=='regular')
-    fx=await FxWorker(service.db).snapshot(exact=True)
+    from .request_timing import elapsed, measure, start
+    with measure('assets_records'):
+        async with service.context(who,shared_read=True) as conn:
+            original=await (await conn.execute('''SELECT r.id,r.market,r.code,r.revision,r.qty,r.trade_tip_id,r.position_transfer_id,a.holding_source AS _holding_source
+                FROM portfolio_records r LEFT JOIN broker_accounts a ON a.owner_id=r.owner_id AND a.id=r.broker_account_id AND a.deleted_at IS NULL
+                WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY r.id LIMIT 10001''',(who.id,))).fetchall()
+            if len(original)>10000:raise HTTPException(409,'持仓超过完整读取上限')
+    with measure('assets_quotes'):
+        quoted=await configured_quotes(service.market_authority,who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original if needs_position_quote(row)],regular=selected['usPrice']=='regular')
+    with measure('assets_fx'):
+        fx=await FxWorker(service.db).snapshot(exact=True)
     async with service.context(who,shared_read=True) as conn:
         rows=await (await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         if [(row['id'],row['market'],row['code'],row['revision']) for row in rows]!=[(row['id'],row['market'],row['code'],row['revision']) for row in original]:
@@ -119,12 +123,16 @@ async def snapshot(service,who,options):
                     _, policies[revision] = await service.market_authority.config(conn, who.id, revision)
                 if policies[revision].license_revision != state['licenseRevision']:
                     raise HTTPException(403, '报价来源许可已变化')
-        actual = await actual_records_dto(conn, who.id, rows)
-        declarations = await service.declarations(conn, who.id, rows)
-        average,cleared=await averages(conn,who.id,rows,actual)
-        overview=await CashOverview(service.db).on_connection(conn,who)
+        with measure('assets_actual'):
+            actual = await actual_records_dto(conn, who.id, rows)
+        with measure('assets_declarations'):
+            declarations = await service.declarations(conn, who.id, rows)
+        with measure('assets_averages'):
+            average,cleared=await averages(conn,who.id,rows,actual)
         from .legacy_registered_cash import read_registered_cash
-        registered=await read_registered_cash(conn,who,service.db.settings,overview)
+        with measure('assets_cash'):
+            overview=await CashOverview(service.db).on_connection(conn,who)
+            registered=await read_registered_cash(conn,who,service.db.settings,overview)
         registered_cash=registered.dto if registered is not None else None
         head=await (await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
         accounts=await (await conn.execute('SELECT id,account_kind,holding_source FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL',(who.id,))).fetchall()
@@ -134,8 +142,10 @@ async def snapshot(service,who,options):
             raise HTTPException(409,'持仓来源在读取报价期间已变化，请重新读取')
         now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
         from .legacy_identity import public_profile
-        owner=await public_profile(conn,who.id,scope='portfolio.read')
+        with measure('assets_profile'):
+            owner=await public_profile(conn,who.id,scope='portfolio.read')
         values=[];money={};kinds=set()
+        assemble_started=start()
         with localcontext() as context:
             context.prec=80
             for row in rows:
@@ -215,6 +225,7 @@ async def snapshot(service,who,options):
                     'marketValue':display(totals[0],2),'holdingPnl':display(totals[1],2),
                     'date':now.astimezone(ZoneInfo(ZONES[market])).date().isoformat() if market in ZONES else None,'timeZone':ZONES.get(market),
                     'cash':None,'cashUnavailableReason':'currency_balances_not_allocated_to_markets','dayPnl':None,'sessionStatus':'unknown'})
+        elapsed('assets_assemble', assemble_started)
         result={'schemaVersion':1,'accountId':who.id,
             'profile':{'accountId':who.id,'username':owner['username'],'nickname':owner.get('nickname'),'uid':owner.get('uid'),'avatar':owner.get('avatar')},
             'collectionRevision':head['revision'] if head else 0,'currency':selected['currency'],'options':selected,

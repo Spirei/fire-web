@@ -36,6 +36,7 @@ async def test_concurrent_timings_are_local_and_do_not_capture_query_or_identifi
     assert '3 statements' in second.headers['server-timing']
     assert 'secret' not in first.headers['server-timing']
     assert all(item[0] == '/api/measure/{count}' for item in records.items)
+    assert all('backend_ttfb' in item[5] for item in records.items)
     assert request_timing.start() is None
 
 

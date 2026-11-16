@@ -42,7 +42,7 @@ class Observations:
         self.storage_available = None
         self.lock = asyncio.Lock()
 
-    def record(self, route, method, source, status, duration):
+    def record(self, route, method, source, status, duration, timing=""):
         # Callers supply only a framework-owned template, never raw URLs or IDs.
         if (
             not route
@@ -52,6 +52,8 @@ class Observations:
             return
         if len(self.queue) == self.queue.maxlen:
             self.lost += 1
+        # The same numeric summary clients already receive; bounded and ASCII.
+        detail = timing[:512] if isinstance(timing, str) else ""
         self.queue.append(
             (
                 uuid4(),
@@ -61,6 +63,7 @@ class Observations:
                 source if source in SOURCES else "other",
                 max(100, min(599, status)),
                 max(0, min(86400000, duration)) if math.isfinite(duration) else 0,
+                detail,
             )
         )
 
@@ -81,7 +84,7 @@ class Observations:
                         # its transaction, deduplication or failure requeue.
                         async with conn.cursor() as cursor:
                             await cursor.executemany(
-                                "INSERT INTO request_observations(observation_key,at,path,method,source,status,duration) VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(observation_key) DO NOTHING",
+                                "INSERT INTO request_observations(observation_key,at,path,method,source,status,duration,timing) VALUES(%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(observation_key) DO NOTHING",
                                 batch,
                             )
                     prior = await (
@@ -147,13 +150,15 @@ class ObserveRequests:
         if scope["type"] != "http" or not scope.get("path", "").startswith("/api/"):
             return await self.app(scope, receive, send)
         timing, token = request_timing.begin()
-        start, status = time.monotonic(), 503
+        start, status, detail = time.monotonic(), 503, ""
 
         async def outgoing(message):
-            nonlocal status
+            nonlocal status, detail
             if message["type"] == "http.response.start":
                 status = message["status"]
-                message = {**message, "headers": [*message.get("headers", []), (b"server-timing", timing.header())]}
+                header = timing.header()
+                detail = header.decode("ascii", "ignore")
+                message = {**message, "headers": [*message.get("headers", []), (b"server-timing", header)]}
             await send(message)
 
         try:
@@ -177,6 +182,7 @@ class ObserveRequests:
                     source_for(dict(scope.get("headers", []))),
                     status,
                     (time.monotonic() - start) * 1000,
+                    detail,
                 )
             finally:
                 request_timing.finish(timing, token)
