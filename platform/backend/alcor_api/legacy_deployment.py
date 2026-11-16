@@ -91,15 +91,29 @@ def mount_legacy_deployment(app, settings, db):
     @protocol
     async def status(request: Request):
         who = await admin(request, db)
-        state = await deployments.status(request, who)
+        # History and heatmap do not depend on the release/observation reads;
+        # start them together so a slow provider does not add two more waits.
+        history_task = asyncio.create_task(
+            asyncio.wait_for(
+                observations.history_page(request, who, page=1, per_page=100), timeout=5
+            )
+        )
+        activity_task = asyncio.create_task(
+            asyncio.wait_for(observations.activity(request, who), timeout=5)
+        )
+        try:
+            state = await deployments.status(request, who)
+        except BaseException:
+            for task in (history_task, activity_task):
+                task.cancel()
+            await asyncio.gather(history_task, activity_task, return_exceptions=True)
+            raise
+        history, activity = await asyncio.gather(
+            history_task, activity_task, return_exceptions=True
+        )
         runs, heatmap = None, None
         run_error, heatmap_error = None, None
         if state["configured"]:
-            history, activity = await asyncio.gather(
-                observations.history_page(request, who, page=1, per_page=100),
-                observations.activity(request, who),
-                return_exceptions=True,
-            )
             if isinstance(history, BaseException):
                 run_error = "运行记录暂不可用"
             else:

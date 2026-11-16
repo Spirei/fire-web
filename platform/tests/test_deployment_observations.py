@@ -1,6 +1,6 @@
+import pytest
 from alcor_api import deployment_observations as observations
 from pydantic import SecretStr
-import pytest
 
 P = "/api/deployment"
 SHA = "a" * 40
@@ -212,8 +212,7 @@ async def test_newer_push_check_cannot_replace_last_image_publication(app, monke
             return {"owner": {"login": "synthetic", "type": "User"}}
         if path == "/commits/main":
             return {"sha": checked["head_sha"]}
-        if "head_sha=" in path:
-            assert "event=push" in path
+        if "event=push" in path:
             return {"workflow_runs": [checked]}
         if "event=workflow_dispatch" in path:
             return {"workflow_runs": [published]}
@@ -233,7 +232,7 @@ async def test_newer_push_check_cannot_replace_last_image_publication(app, monke
 
 async def test_history_keeps_100_records_in_provider_pages_below_response_budget(client, admin, app, monkeypatch):
     import json
-    from urllib.parse import urlsplit, parse_qs
+    from urllib.parse import parse_qs, urlsplit
     setup(app)
     records = [run(300 - i) | {"event": "push", "provider_metadata": "x" * 12000} for i in range(100)]
     assert len(json.dumps({"workflow_runs": records}).encode()) > 1048576
@@ -251,10 +250,38 @@ async def test_history_keeps_100_records_in_provider_pages_below_response_budget
     request = SimpleNamespace(app=app)
     result = await observations.history_page(request, None, per_page=100)
     assert len(result["items"]) == 100 and result["total"] == 100
-    assert len(set(item["id"] for item in result["items"])) == 100
+    assert len({item["id"] for item in result["items"]}) == 100
     assert len(paths) == 5 and all("per_page=20" in p for p in paths)
     result = await observations.history_page(request, None, page=2, per_page=25)
     assert [item["id"] for item in result["items"]] == [item["id"] for item in records[25:50]]
+
+
+async def test_publication_checks_are_bounded_and_unknown_evidence_is_reused(monkeypatch):
+    from types import SimpleNamespace
+    settings = SimpleNamespace(deployment_repository="synthetic/repo", deployment_config_revision="one", deployment_github_token=SecretStr("synthetic-only"))
+    runs = [observations.run_view(settings, run(1000 - index)) for index in range(30)]
+    calls = []
+    def github(*args):
+        calls.append(args[-1])
+        return {"jobs": [{"name": "Publish linux/amd64 image", "status": "completed", "conclusion": "success"}]}
+    monkeypatch.setattr(observations, "github_json", github)
+    cache = {}
+    first = await observations.publication_results(settings, runs, cache=cache, limit=8, budget=30)
+    assert len(calls) == 8
+    assert sum(value == "published" for value in first.values()) == 8
+    second = await observations.publication_results(settings, runs, cache=cache, limit=8, budget=30)
+    assert len(calls) == 16
+    assert sum(value == "published" for value in second.values()) == 16
+
+    offline_calls = []
+    def offline(*args):
+        offline_calls.append(args[-1])
+        raise OSError()
+    monkeypatch.setattr(observations, "github_json", offline)
+    unknown_cache = {}
+    assert await observations.publication_results(settings, [runs[0]], cache=unknown_cache) == {runs[0]["id"]: "unknown"}
+    assert await observations.publication_results(settings, [runs[0]], cache=unknown_cache) == {runs[0]["id"]: "unknown"}
+    assert len(offline_calls) == 1
 
 
 async def test_only_completed_history_evidence_is_reused_and_scope_changes_invalidate(monkeypatch):

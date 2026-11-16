@@ -62,15 +62,19 @@ function stateOf(run: Run) {
   return { label: "失败", className: "bg-red-400", ring: "ring-red-400/15" };
 }
 
-const formatTime = (value: string) => `${new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Hong_Kong",
-  year: "numeric",
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false
-}).format(new Date(value))} 香港时间`;
+const formatTime = (value?: string | null) => {
+  const stamp = typeof value === "string" ? Date.parse(value) : NaN;
+  if (!Number.isFinite(stamp)) return "时间未知";
+  return `${new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Hong_Kong",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(stamp))} 香港时间`;
+};
 const RUNS_PER_PAGE = 5;
 type ContainerUpdateState = "idle" | "triggering" | "watching" | "healthy" | "failed";
 type AutoUpdateSchedule = { key: string; deadline: number; triggered: boolean };
@@ -372,13 +376,34 @@ export default function DeployStatusPage() {
   };
   const containerBusy = containerUpdateState === "triggering" || commands.update.pending;
   const containerButtonLabel = containerUpdateState === "triggering" ? "正在核对…" : "核对更新";
-  const manualPublishActive = runs.some((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "workflow_dispatch" || run.event === "schedule") && run.status !== "completed");
+  // Progress is read separately from the history page; keep the release card
+  // on the newer of the two so a slow history response cannot show stale steps.
+  const progressRun: Run | null = imageProgress && ["schedule", "workflow_dispatch"].includes(imageProgress.event || "")
+    ? {
+        id: imageProgress.id,
+        name: "Build and publish Alcor image",
+        title: "Build and publish Alcor image",
+        sha: imageProgress.sha,
+        status: imageProgress.status,
+        conclusion: imageProgress.conclusion,
+        event: imageProgress.event || "schedule",
+        workflowPath: ".github/workflows/docker-publish.yml",
+        startedAt: imageProgress.startedAt,
+        updatedAt: imageProgress.updatedAt,
+        url: imageProgress.url,
+      }
+    : null;
+  const historyPublishRun = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
+  const latest = [historyPublishRun, progressRun]
+    .filter((run): run is Run => Boolean(run))
+    .sort((a, b) => b.id - a.id)[0];
+  const manualPublishActive = runs.some((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "workflow_dispatch" || run.event === "schedule") && run.status !== "completed")
+    || Boolean(progressRun && progressRun.status !== "completed");
   const imageAlreadyBuilt = Boolean(imageVersion?.matchesMain);
   const publishBusy = triggering || manualPublishActive;
   const publishDisabled = publishBusy || imageAlreadyBuilt;
   const publishLabel = imageAlreadyBuilt ? "镜像已是最新" : manualPublishActive ? "镜像构建进行中…" : triggering ? "正在触发…" : "立即构建镜像";
   const publishTitle = imageAlreadyBuilt ? "当前 main 提交已有可用镜像，无需重复构建" : manualPublishActive ? "镜像构建进行中" : triggering ? "正在触发镜像构建" : "生成并推送 GHCR 镜像";
-  const latest = runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && (run.event === "schedule" || run.event === "workflow_dispatch"));
   const latestMainCheck = currentMainCheck;
   const latestState = latest ? stateOf(latest) : { label: hasLoaded ? "未知" : "读取中", className: "bg-slate-400", ring: "ring-slate-400/15" };
   const imageBuilding = Boolean(imageProgress && ["schedule", "workflow_dispatch"].includes(imageProgress.event || "") && imageProgress.status !== "completed");

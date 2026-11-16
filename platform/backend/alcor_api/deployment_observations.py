@@ -32,11 +32,29 @@ STAGE_ORDER = {
 }
 
 
-async def publication_results(settings, runs, *, cache=None):
-    """Historical job observations only; never a deployable-release proof."""
+async def publication_results(settings, runs, *, cache=None, limit=12, budget=3.0):
+    """Historical job observations only; never a deployable-release proof.
+
+    Completed publication evidence is immutable, so it is reused for the life
+    of the process. A page can list a hundred runs; checking every older daily
+    release on every refresh (and again when a short cache expires) could open
+    dozens of jobs requests and exceed the reverse-proxy timeout. Unchecked or
+    unavailable evidence stays "unknown" and is retried after a short grace.
+    """
     gate = asyncio.Semaphore(5)
+    deadline = time.monotonic() + budget
+    checked = 0
+
+    def remember(key, result):
+        if cache is None:
+            return
+        ttl = 24 * 60 * 60 if result in {"published", "reused"} else 15
+        if len(cache) >= 512:
+            cache.pop(next(iter(cache)))
+        cache[key] = (time.monotonic() + ttl, result)
 
     async def outcome(run):
+        nonlocal checked
         if run["workflow_path"] != ".github/workflows/docker-publish.yml" or run["event"] not in {
             "schedule", "workflow_dispatch"
         }:
@@ -53,28 +71,33 @@ async def publication_results(settings, runs, *, cache=None):
         cached = cache.get(key) if cache is not None else None
         if cached and cached[0] > time.monotonic():
             return cached[1]
+        if checked >= limit or time.monotonic() >= deadline:
+            return "unknown"
+        checked += 1
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return "unknown"
         try:
             async with gate:
-                raw = await asyncio.to_thread(
-                    github_json, settings, f"/actions/runs/{run['id']}/jobs?per_page=100"
+                raw = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        github_json, settings, f"/actions/runs/{run['id']}/jobs?per_page=100"
+                    ),
+                    timeout=remaining,
                 )
             jobs = raw.get("jobs")
             if not isinstance(jobs, list) or raw.get("total_count", len(jobs)) > len(jobs):
+                remember(key, "unknown")
                 return "unknown"
             publish = [j for j in jobs if j.get("name") == "Publish linux/amd64 image"]
             if len(publish) == 1 and publish[0].get("status") == "completed":
                 result = {"success": "published", "skipped": "reused"}.get(
                     publish[0].get("conclusion"), "unknown"
                 )
-                if cache is not None and result in {"published", "reused"}:
-                    # Only completed historical evidence is cached. Active runs,
-                    # source checks and the current image progress are always live.
-                    if len(cache) >= 256:
-                        cache.pop(next(iter(cache)))
-                    cache[key] = (time.monotonic() + 60, result)
+                remember(key, result)
                 return result
-        except (OSError, ValueError, KeyError, TypeError, AttributeError):
-            pass
+        except (TimeoutError, OSError, ValueError, KeyError, TypeError, AttributeError):
+            remember(key, "unknown")
         return "unknown"
 
     return dict(zip((r["id"] for r in runs), await asyncio.gather(*(outcome(r) for r in runs))))
@@ -129,7 +152,14 @@ async def observation(settings):
 
     async def source():
         try:
-            raw = await asyncio.to_thread(github_json, settings, "/commits/main")
+            raw, checks = await asyncio.gather(
+                asyncio.to_thread(github_json, settings, "/commits/main"),
+                asyncio.to_thread(
+                    github_json,
+                    settings,
+                    "/actions/workflows/" + getattr(settings, 'deployment_checks_workflow', 'docker-publish.yml') + "/runs?branch=main&event=push&per_page=5",
+                ),
+            )
             sha = raw["sha"]
             if not re.fullmatch(r"[a-f0-9]{40}", sha):
                 raise ValueError("invalid source")
@@ -137,16 +167,13 @@ async def observation(settings):
                 "sha": sha,
                 "url": f"https://github.com/{settings.deployment_repository}/commit/{sha}",
             }
-            checks = await asyncio.to_thread(
-                github_json,
-                settings,
-                "/actions/workflows/" + getattr(settings, 'deployment_checks_workflow', 'docker-publish.yml') + "/runs?branch=main&event=push&per_page=1&head_sha=" + sha,
-            )
-            runs = checks.get("workflow_runs", [])
-            if runs:
-                check = run_view(settings, runs[0])
+            for item in checks.get("workflow_runs", []):
+                if item.get("head_sha") != sha:
+                    continue
+                check = run_view(settings, item)
                 if check["sha"] == sha:
                     result["check"] = check
+                break
         except (OSError, ValueError, KeyError, TypeError):
             result["source_error"] = "源码或当前提交检查暂不可用"
 
@@ -213,7 +240,15 @@ async def observation(settings):
         except (OSError, ValueError, KeyError, TypeError):
             pass  # Repository metadata failure cannot hide a valid source or release check.
 
-    await asyncio.gather(source(), build(), package())
+    try:
+        await asyncio.wait_for(asyncio.gather(source(), build(), package()), timeout=5)
+    except TimeoutError:
+        # One provider read must not hold the whole status response past the
+        # reverse-proxy timeout; return the observations that already landed.
+        if result["source"] is None and result["source_error"] is None:
+            result["source_error"] = "源码读取超时"
+        if result["build"] is None and result["build_error"] is None:
+            result["build_error"] = "构建状态读取超时"
     return result
 
 

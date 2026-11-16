@@ -134,9 +134,11 @@ async def status(request: Request, who: Admin):
         async def latest():
             nonlocal release, release_error, release_published_at
             try:
-                release, release_published_at = await discover(settings)
+                release, release_published_at = await asyncio.wait_for(discover(settings), timeout=4)
             except HTTPException as exc:
                 release_error = exc.detail
+            except TimeoutError:
+                release_error = "发布记录读取超时"
 
         async def observations():
             nonlocal observed
