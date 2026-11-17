@@ -354,8 +354,10 @@ def mount_legacy_cash_reads(app):
                         "SELECT revision FROM cash_ledger_collections WHERE owner_id=%s", (who.id,)
                     )
                 ).fetchone()
+                evidence = {}
                 snapshot = await service.snapshot_on_connection(
-                    conn, who, accountId, head["revision"] if head else 0
+                    conn, who, accountId, head["revision"] if head else 0,
+                    account=account, evidence=evidence,
                 )
                 facts = await activity_facts(conn, who.id, account, snapshot)
                 if account["account_kind"] in ("real", "simulated") and account["holding_source"] == "manual":
@@ -363,7 +365,8 @@ def mount_legacy_cash_reads(app):
                         facts.setdefault(row["currency"], {})[
                             "ledgerCapacity"
                         ] = await service.withdrawal_capacity_on_connection(
-                            conn, who, accountId, row["currency"], account_kind=account["account_kind"]
+                            conn, who, accountId, row["currency"], account_kind=account["account_kind"],
+                            account=account, evidence=evidence.get(row["currency"]),
                         )
                 instance = await (
                     await conn.execute("SELECT instance_id FROM alcor_instance WHERE singleton")

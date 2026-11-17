@@ -272,8 +272,12 @@ class CashLedger:
             revision = collection["revision"] if collection else 0
             return await self.snapshot_on_connection(conn, who, account_id, revision)
 
-    async def snapshot_on_connection(self, conn, who, account_id, revision, *, account=None):
-        """Caller holds the owner/session and broker locks in one read transaction."""
+    async def snapshot_on_connection(self, conn, who, account_id, revision, *, account=None, evidence=None):
+        """Caller holds the owner/session and broker locks in one read transaction.
+
+        Passing an evidence dict lets the caller reuse the coverage checks for
+        the withdrawal-capacity calculation instead of repeating every query.
+        """
         account = account or await broker_account(conn, who.id, account_id)
         from .scope_coverage import account_status, scope_status
 
@@ -285,24 +289,28 @@ class CashLedger:
                     (who.id, account_id, currency),
                 )
             ).fetchone()
-            _, _, balance = await self.balances(conn, who.id, currency, account_id, account["account_kind"])
+            total, _attributed, balance = await self.balances(conn, who.id, currency, account_id, account["account_kind"])
             account_complete = await account_status(conn, who.id, account_id, currency)
-            actual_complete = (
-                bool(opening)
-                and account_complete
-                and await self.actual_known(conn, who.id, account["account_kind"], currency, account_id)
-            )
+            actual_account = await self.actual_known(conn, who.id, account["account_kind"], currency, account_id)
+            scope_ok = await scope_status(conn, who.id, account["account_kind"], currency)
+            actual_owner = await self.actual_known(conn, who.id, account["account_kind"], currency)
+            actual_complete = bool(opening) and account_complete and actual_account
             values.append(
                 {
                     "currency": currency,
                     "registeredBalance": str(balance) if opening else None,
                     "balance": str(balance) if actual_complete else None,
                     "complete": actual_complete,
-                    "ownerCashComplete": await scope_status(conn, who.id, account["account_kind"], currency)
-                    and await self.actual_known(conn, who.id, account["account_kind"], currency),
+                    "ownerCashComplete": scope_ok and actual_owner,
                     "opening": opening,
                 }
             )
+            if evidence is not None:
+                evidence[currency] = {
+                    "opening": bool(opening), "account_status": account_complete,
+                    "scope_status": scope_ok, "actual_account": actual_account,
+                    "actual_owner": actual_owner, "total": total, "balance": balance,
+                }
         from .broker_statement_projection import official_cash
 
         official = await official_cash(conn, who.id, account_id)
@@ -325,7 +333,7 @@ class CashLedger:
                 )
         return {"accountId": account_id, "revision": revision, "currencies": values}
 
-    async def withdrawal_capacity_on_connection(self, conn, who, account_id, currency, *, account_kind, account=None):
+    async def withdrawal_capacity_on_connection(self, conn, who, account_id, currency, *, account_kind, account=None, evidence=None):
         """Verified internal book limit only; caller holds the owner/source read lock.
 
         This does not include manual cards, local ledgers, provider buying power or
@@ -354,26 +362,38 @@ class CashLedger:
             "accountKind": account_kind,
             "currency": currency,
         }
-        opening = await (
-            await conn.execute(
-                "SELECT 1 FROM cash_ledger_accounts a JOIN cash_ledger_entries e ON e.owner_id=a.owner_id AND e.account_id=a.account_id AND e.currency=a.currency AND e.request_id=a.opening_request_id AND e.occurred_at=a.opening_at AND e.kind IN ('opening','allocation') WHERE a.owner_id=%s AND a.account_id=%s AND a.currency=%s AND e.account_kind=%s",
-                (who.id, account_id, currency, account_kind),
-            )
-        ).fetchone()
-        if not opening or account["holding_source"] != "manual":
-            return result
-        if not await account_status(conn, who.id, account_id, currency) or not await scope_status(
-            conn, who.id, account_kind, currency
-        ):
-            return result
-        if not await self.actual_known(
-            conn, who.id, account_kind, currency, account_id
-        ) or not await self.actual_known(conn, who.id, account_kind, currency):
-            return result
+        if evidence is not None:
+            # The snapshot already proved opening, scope and actual coverage on
+            # this exact connection and transaction; only reservations change.
+            if not evidence["opening"] or account["holding_source"] != "manual":
+                return result
+            if not (
+                evidence["account_status"] and evidence["scope_status"]
+                and evidence["actual_account"] and evidence["actual_owner"]
+            ):
+                return result
+            total, balance = evidence["total"], evidence["balance"]
+        else:
+            opening = await (
+                await conn.execute(
+                    "SELECT 1 FROM cash_ledger_accounts a JOIN cash_ledger_entries e ON e.owner_id=a.owner_id AND e.account_id=a.account_id AND e.currency=a.currency AND e.request_id=a.opening_request_id AND e.occurred_at=a.opening_at AND e.kind IN ('opening','allocation') WHERE a.owner_id=%s AND a.account_id=%s AND a.currency=%s AND e.account_kind=%s",
+                    (who.id, account_id, currency, account_kind),
+                )
+            ).fetchone()
+            if not opening or account["holding_source"] != "manual":
+                return result
+            if not await account_status(conn, who.id, account_id, currency) or not await scope_status(
+                conn, who.id, account_kind, currency
+            ):
+                return result
+            if not await self.actual_known(
+                conn, who.id, account_kind, currency, account_id
+            ) or not await self.actual_known(conn, who.id, account_kind, currency):
+                return result
+            total, _attributed, balance = await self.balances(conn, who.id, currency, account_id, account_kind)
         reservations = await pending_reservations(conn, who.id, account_kind, currency, account_id=account_id, shared_read=True)
         if not reservations["complete"] or reservations["cash"] is None:
             return result
-        total, _attributed, balance = await self.balances(conn, who.id, currency, account_id, account_kind)
         owner_free = add(total, reservations["cash"].copy_negate())
         return {
             **result,

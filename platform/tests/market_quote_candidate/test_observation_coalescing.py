@@ -42,6 +42,53 @@ async def test_repeated_generated_posts_reuse_original_receipt_without_more_writ
     assert await hashes(app) != before
 
 
+async def test_hot_explicit_repoll_renews_without_reregistering(market, monkeypatch):
+    import asyncio
+
+    client, app, _authority, _transport, _revision = market
+    headers = await token(app, "portfolio.read portfolio.write")
+    first = await client.post("/api/v2/quotes", json=body(), headers=headers)
+    assert first.status_code == 200, first.text
+    statement = (
+        """SELECT count(*) AS n,max(d.revision) AS rev,max(d.hot_until) AS hot
+           FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id
+           WHERE d.owner_id=%s AND s.query->>'kind'='latest' AND s.query->>'code'='AAPL'"""
+    )
+    async with app.state.db.connection() as conn:
+        owner = (await (await conn.execute("SELECT id FROM users WHERE username='MarketReader'")).fetchone())["id"]
+        before = await (await conn.execute(statement, (owner,))).fetchone()
+    await asyncio.sleep(0.02)
+    explicit = str(uuid4())
+    second = await client.post(
+        "/api/v2/quotes", json=body(),
+        headers={**headers, "x-alcor-request-id": explicit},
+    )
+    assert second.status_code == 200, second.text
+    assert second.headers["x-alcor-quote-tracked"] == "true"
+    async with app.state.db.connection() as conn:
+        after = await (await conn.execute(statement, (owner,))).fetchone()
+        receipt = await (await conn.execute(
+            "SELECT 1 FROM market_data_operations WHERE owner_id=%s AND request_id=%s", (owner, explicit)
+        )).fetchone()
+        assert after["n"] == before["n"] and after["rev"] == before["rev"]
+        assert after["hot"] > before["hot"] and receipt
+        # A dormant demand is not a valid fast-path target.
+        await conn.execute(
+            """UPDATE market_demands SET hot_until=clock_timestamp()-interval '1 second'
+               WHERE owner_id=%s AND stream_id IN (
+                 SELECT id FROM market_streams WHERE owner_id=%s AND query->>'kind'='latest' AND query->>'code'='AAPL')""",
+            (owner, owner),
+        )
+    renewed = await client.post(
+        "/api/v2/quotes", json=body(),
+        headers={**headers, "x-alcor-request-id": str(uuid4())},
+    )
+    assert renewed.status_code == 200, renewed.text
+    async with app.state.db.connection() as conn:
+        last = await (await conn.execute(statement, (owner,))).fetchone()
+    assert last["rev"] > after["rev"]
+
+
 async def test_explicit_uuids_and_different_native_connections_are_independent(market, monkeypatch):
     client, app, _authority, _transport, _revision = market
     monkeypatch.setattr('alcor_api.market_observation_receipts.observation_bucket', lambda _at: 100)

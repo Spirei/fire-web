@@ -88,6 +88,60 @@ class Subscriptions:
         if len(approved)!=1:raise HTTPException(409,"存在多个行情来源，请明确选择当前来源版本")
         return approved[0]
 
+    async def hot_observation(self, conn, who, items, selected, session, source_preference, instrument):
+        """Renew an already-hot licensed demand without per-item registration."""
+        if not items:
+            return None
+        try:
+            revision = selected
+            if revision is None:
+                revision = await self.source(conn, who, items, None, source_preference, instrument, session)
+            _, policy = await self.authority.config(conn, who.id, revision)
+        except (HTTPException, ValueError, TypeError):
+            return None
+        if "latest" not in policy.purposes:
+            return None
+        pairs = sorted({(item["market"], item["code"]) for item in items})
+        principal = str(getattr(who, "grant_id", None) or "web:" + who.token_hash)
+        rows = await (await conn.execute(
+            """SELECT s.id,s.query FROM market_streams s
+               JOIN market_demands d ON d.owner_id=s.owner_id AND d.stream_id=s.id
+               JOIN users u ON u.id=d.owner_id
+               WHERE s.owner_id=%s AND s.source_revision=%s AND d.principal=%s
+                 AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp()
+                 AND d.hot_until>clock_timestamp() AND d.session_version=u.session_version AND u.active
+                 AND s.query->>'kind'='latest'
+                 AND (s.query->>'market',s.query->>'code') IN
+                     (SELECT * FROM unnest(%s::text[],%s::text[]))""",
+            (who.id, revision, principal, [market for market, _ in pairs], [code for _, code in pairs]),
+        )).fetchall()
+        if not rows:
+            return None
+        matches = {}
+        for row in rows:
+            try:
+                stored = query_from(row["query"])
+            except (ValueError, TypeError, KeyError):
+                continue
+            for item in items:
+                try:
+                    desired = self.query(item, instrument, session, policy)
+                except (HTTPException, ValueError):
+                    continue
+                if asdict(stored) == asdict(desired):
+                    matches.setdefault((item["market"], item["code"]), set()).add(row["id"])
+        if set(matches) != set(pairs):
+            return None
+        streams = sorted({stream_id for ids in matches.values() for stream_id in ids}, key=str)
+        await conn.execute(
+            """UPDATE market_demands SET hot_until=clock_timestamp()+interval '90 seconds',
+               expires_at=clock_timestamp()+interval '7 days'
+               WHERE owner_id=%s AND principal=%s AND stream_id=ANY(%s)
+                 AND revoked_at IS NULL AND expires_at>clock_timestamp()""",
+            (who.id, principal, streams),
+        )
+        return {"affectedStreams": len(streams), "collection": "worker_pending"}
+
     async def mutate(self,who,request_id,items,*,remove=False,selected=None,observe=False,legacy_generated=False,source_preference=None,instrument=None,session=None):
         if instrument not in (None,'equity','index','asset'):
             raise HTTPException(400,'行情证券类型无效')
@@ -112,6 +166,16 @@ class Subscriptions:
             if await self.current_role(conn,who,identity)!=who.role:raise HTTPException(403,"账号权限已变化")
             previous=await self.authority.receipt(conn,who.id,request_id,operation)
             if previous:return previous,True
+            if observe and not remove:
+                hot = await self.hot_observation(conn, who, items, selected, session, source_preference, instrument)
+                if hot is not None:
+                    result = {
+                        "requestId": str(request_id), "status": "accepted", "revoked": False,
+                        "affectedStreams": hot["affectedStreams"], "collection": hot["collection"],
+                        "subscriptions": None, "observation": True,
+                        "legacyClientIdempotency": not legacy_generated, "receiptId": str(request_id),
+                    }
+                    return await self.authority.save_receipt(conn, who.id, request_id, operation, result), False
             # Nested domain operations use this exact PG connection/transaction.
             # Their UUID/CAS/limits/source checks remain the existing implementation.
             bound=Authority(Bound(conn,self.db.settings),policy_provider=lambda:tuple(self.authority.policy_provider()) if self.authority.policy_provider else self.authority.policies)

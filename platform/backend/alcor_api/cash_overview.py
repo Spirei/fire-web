@@ -41,10 +41,18 @@ class CashOverview(BrokerMetadata):
         by_scope = {(row['account_kind'], row['currency']): row for row in postings}
         currencies = {'real': set(), 'simulated': set()}
         snapshots = []
+        scope_known = {}
         for selected in accounts:
             account = await broker_account(conn, who.id, selected['id'])
+            evidence = {}
             if account['account_kind'] in currencies:
-                snapshot = await self.cash.snapshot_on_connection(conn, who, account['id'], revision, account=account)
+                snapshot = await self.cash.snapshot_on_connection(
+                    conn, who, account['id'], revision, account=account, evidence=evidence,
+                )
+                for currency, proof in evidence.items():
+                    scope_known[(account['account_kind'], currency)] = (
+                        proof['scope_status'], proof['actual_owner'],
+                    )
             else:
                 snapshot = {'accountId': account['id'], 'revision': revision,
                             'currencies': [{'currency': currency, 'registeredBalance': None, 'balance': None,
@@ -58,7 +66,7 @@ class CashOverview(BrokerMetadata):
                 for currency in account['currencies']:
                     capacities[currency] = await self.cash.withdrawal_capacity_on_connection(
                         conn, who, account['id'], currency, account_kind=account['account_kind'],
-                        account=account,
+                        account=account, evidence=evidence.get(currency),
                     )
             snapshots.append({'accountId': account['id'], 'accountRevision': account['revision'],
                               'name': account['name'], 'accountKind': account['account_kind'],
@@ -72,11 +80,16 @@ class CashOverview(BrokerMetadata):
         for kind, values in currencies.items():
             rows = []
             for currency in sorted(values):
-                evidence = by_scope.get((kind, currency))
-                opened = bool(evidence and evidence['opening_known'])
-                complete = opened and await scope_status(conn, who.id, kind, currency) and await self.cash.actual_known(
-                    conn, who.id, kind, currency,
-                )
+                posting = by_scope.get((kind, currency))
+                opened = bool(posting and posting['opening_known'])
+                scope_complete = scope_known.get((kind, currency))
+                if scope_complete is None:
+                    scope_complete = (
+                        await scope_status(conn, who.id, kind, currency)
+                        and await self.cash.actual_known(conn, who.id, kind, currency)
+                    )
+                    scope_known[(kind, currency)] = scope_complete
+                complete = opened and scope_complete
                 reservation = await pending_reservations(conn, who.id, kind, currency, shared_read=True)
                 reservations_known = reservation['complete'] and reservation['cash'] is not None
                 total, allocated, _ = await self.cash.balances(conn, who.id, currency, None, kind)
@@ -94,7 +107,7 @@ class CashOverview(BrokerMetadata):
                     'reservedBuyCash': str(reservation['cash']) if reservations_known else None,
                     'reservationsComplete': bool(reservations_known),
                     'availableOwnerBalance': str(available) if available is not None else None,
-                    'ledgerAsOf': evidence['ledger_as_of'].isoformat() if evidence else None,
+                    'ledgerAsOf': posting['ledger_as_of'].isoformat() if posting else None,
                     'authority': 'platform_posted_cash_ledger',
                     'externalBuyingPowerKnown': False,
                 })
