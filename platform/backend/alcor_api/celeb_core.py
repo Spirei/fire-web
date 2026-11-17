@@ -5,8 +5,9 @@ import json
 import math
 import re
 from decimal import Decimal
+from importlib.resources import files
 from urllib.parse import parse_qs, urlsplit
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
@@ -188,6 +189,65 @@ async def public_projection(conn,row):
         value['dataAuthority']='registered_disclosure_source_retained_unavailable'
         detail['sourceEvidence']['integrityState']='retained_unavailable'
     return value,detail
+
+
+async def seed_bundled_samples(db, *, require_legacy=True):
+    """One-time recovery of the pre-migration celebrity examples.
+
+    Runs only on a completely empty catalogue. The source categories are the
+    legacy ones (13F for four, sample for two); these are not presented as
+    verified disclosures and never overwrite an existing registered person.
+    """
+    try:
+        samples=json.loads(files('alcor_api').joinpath('data/celeb_samples.json').read_text('utf-8'))
+    except (OSError, ValueError):
+        return {'seeded':0,'reason':'samples_unavailable'}
+    if not isinstance(samples,list) or not samples:
+        return {'seeded':0,'reason':'samples_unavailable'}
+    async with db.connection() as conn, conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('celeb-sample-seed',0))")
+        scope=await(await conn.execute('SELECT revision FROM celeb_scope WHERE singleton')).fetchone()
+        heads=await(await conn.execute('SELECT count(*) AS n FROM celeb_heads')).fetchone()
+        if not scope or scope['revision']!=0 or heads['n']!=0:
+            return {'seeded':0,'reason':'not_empty'}
+        if require_legacy:
+            # Only repair a migrated instance; a brand-new empty install keeps
+            # its catalogue empty until an administrator registers someone.
+            legacy=await(await conn.execute(
+                'SELECT (EXISTS(SELECT 1 FROM portfolio_records LIMIT 1) '
+                'OR EXISTS(SELECT 1 FROM watch_groups LIMIT 1) '
+                'OR EXISTS(SELECT 1 FROM database_migration_personal_imports LIMIT 1)) AS present'
+            )).fetchone()
+            if not legacy or not legacy['present']:
+                return {'seeded':0,'reason':'not_legacy'}
+        admin=await(await conn.execute("SELECT id FROM users WHERE role='admin' ORDER BY created_at,id LIMIT 1")).fetchone()
+        if not admin:
+            return {'seeded':0,'reason':'no_admin'}
+        seeded=0
+        for item in samples:
+            if not isinstance(item,dict):
+                continue
+            value={key:item[key] for key in FIELDS if key in item}
+            value['id']=identifier(value.get('id'))
+            raw=input_bytes(value)
+            request_id=str(uuid5(NAMESPACE_URL,'alcor-celeb-sample:'+value['id']))
+            await conn.execute(
+                'INSERT INTO celeb_heads(id,revision,sort) VALUES(%s,1,%s)',
+                (value['id'],int(value.get('sort',0))),
+            )
+            await conn.execute(
+                'INSERT INTO celeb_revisions(celeb_id,revision,payload,raw_input,raw_bytes,input_sha256,actor_id,request_id,source_kind,source_page_id,source_revision) '
+                'VALUES(%s,1,%s,%s,%s,%s,%s,%s,%s,NULL,NULL)',
+                (value['id'],Jsonb(value),Jsonb(value),raw,hashlib.sha256(raw).hexdigest(),admin['id'],request_id,value.get('sourceKind') or 'none'),
+            )
+            await conn.execute(
+                "INSERT INTO audit_events(actor_id,action,target_id,request_id) VALUES(%s,'celebs.sample_seed',%s,%s)",
+                (admin['id'],value['id'],request_id),
+            )
+            seeded+=1
+        if seeded:
+            await conn.execute('UPDATE celeb_scope SET revision=revision+1')
+        return {'seeded':seeded}
 
 
 class Celebs:

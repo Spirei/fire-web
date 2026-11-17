@@ -174,6 +174,14 @@ def create_app(settings: Settings | None = None):
             watcher = asyncio.create_task(connections.watch())
             observer = asyncio.create_task(observations.loop())
             activity_writer = asyncio.create_task(request_activity.loop())
+            if runtime.environment != "test":
+                try:
+                    from .celeb_core import seed_bundled_samples
+                    seeded = await seed_bundled_samples(db)
+                    if seeded.get("seeded"):
+                        log.info("celeb_samples_seeded count=%s", seeded["seeded"])
+                except Exception:
+                    log.warning("celeb_sample_seed_failed", exc_info=True)
             yield
         finally:
             if watcher:
