@@ -254,3 +254,21 @@ async def test_automatic_minute_history_fetches_only_the_missing_tail(market):  
     assert task['payload'].get('fetchStart') == '2026-10-20'
     assert await execute(authority, task, source) == 'complete'
     assert source.starts == ['2026-10-12', '2026-10-20']
+
+    class Broken:
+        fixture = True
+
+        async def read(self, policy, query, cursor):
+            raise TimeoutError('Synthetic provider timeout')
+
+    # A failed refresh must not advance the checkpoint: the next task asks for
+    # the full canonical window again instead of skipping the failed tail.
+    await demand(client, revision, query, expected=2)
+    assert await schedule(authority) == 1
+    task = await claim(app.state.db, uuid4(), kind='market.history')
+    assert task['payload'].get('fetchStart') == '2026-10-20'
+    assert await execute(authority, task, Broken()) == 'source_outcome_unknown'
+    await demand(client, revision, query, expected=3)
+    assert await schedule(authority) == 1
+    task = await claim(app.state.db, uuid4(), kind='market.history')
+    assert 'fetchStart' not in task['payload']

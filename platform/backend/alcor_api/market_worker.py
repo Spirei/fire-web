@@ -92,6 +92,8 @@ async def schedule(authority, limit=100):
             fetch_start = None
             if (
                 kind == "market.history"
+                and previous
+                and previous["status"] == "succeeded"
                 and query.frame == "minute"
                 and query.kind in ("bars", "price_series")
                 and (policy.source in ("futu", "yahoo") or policy.fixture)
