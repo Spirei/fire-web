@@ -23,16 +23,13 @@ class LicensedHistory:
         self.automatic=automatic
 
     async def authorize_history_read(self, conn, who):
-        await lock_read_identity(conn, who, require_admin=False)
-        actor = await (await conn.execute("SELECT role FROM users WHERE id=%s", (who.id,))).fetchone()
-        if not actor or actor["role"] != who.role:
+        identity = await lock_read_identity(conn, who, require_admin=False)
+        # The lock returns the current user role (and, for App grants, the
+        # client) from the same proof row; no second identity read is needed.
+        if not identity or identity["role"] != who.role:
             raise HTTPException(403, "账号权限已变化")
-        if getattr(who, "native_client", False):
-            grant = await (await conn.execute(
-                "SELECT client_id FROM identity_app_grants WHERE id=%s", (who.grant_id,)
-            )).fetchone()
-            if not grant or grant["client_id"] != CLIENT:
-                raise HTTPException(401, "客户端连接已变化")
+        if getattr(who, "native_client", False) and identity.get("client_id") != CLIENT:
+            raise HTTPException(401, "客户端连接已变化")
 
     @bounded_history_read
     async def read(

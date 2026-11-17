@@ -319,14 +319,9 @@ class BatchQuotes:
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             identity = await lock_read_identity(conn, who, require_admin=False)
-            if getattr(who, "native_client", False):
-                grant = await (
-                    await conn.execute(
-                        "SELECT client_id FROM identity_app_grants WHERE id=%s", (who.grant_id,)
-                    )
-                ).fetchone()
-                if not grant or grant["client_id"] != CLIENT:
-                    raise HTTPException(401, "客户端连接已变化")
+            if getattr(who, "native_client", False) and identity.get("client_id") != CLIENT:
+                # The identity lock already returned the current grant proof.
+                raise HTTPException(401, "客户端连接已变化")
             role = identity.get("role") if isinstance(identity, dict) else None
             if role is None:
                 user = await (await conn.execute("SELECT role FROM users WHERE id=%s", (who.id,))).fetchone()
