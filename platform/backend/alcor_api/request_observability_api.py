@@ -232,13 +232,17 @@ def legacy_ok(data):
     )
 
 
-def legacy_snapshot(value):
+def legacy_snapshot(value, *, include_timing=False):
     result = {key: value[key] for key in LEGACY_SNAPSHOT_KEYS}
-    # The reviewed legacy contract has no timing detail; keep its rows frozen.
-    result["logs"] = [
-        {key: row[key] for key in ("id", "at", "path", "method", "source", "status", "duration")}
-        for row in value.get("logs", [])
-    ]
+    if include_timing:
+        # The current request page opts in explicitly; the frozen legacy
+        # contract stays unchanged for every caller that does not.
+        result["logs"] = value.get("logs", [])
+    else:
+        result["logs"] = [
+            {key: row[key] for key in ("id", "at", "path", "method", "source", "status", "duration")}
+            for row in value.get("logs", [])
+        ]
     return result
 
 
@@ -269,11 +273,12 @@ def mount_request_observability(app, settings, db):
             who, denied = await legacy_admin(request)
             if denied:
                 return denied
+            include_timing = request.headers.get("x-alcor-request-log-timing") == "1"
             try:
                 async with db.connection() as conn, conn.transaction():
                     await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                     await lock_mutation_identity(conn, who, require_admin=True)
-                    value = await snapshot(conn, request.query_params)
+                    value = await snapshot(conn, request.query_params, include_timing=include_timing)
             except HTTPException as exc:
                 if exc.status_code == 403:
                     return legacy_fail(40301, "需要管理员权限", 403)
@@ -282,7 +287,7 @@ def mount_request_observability(app, settings, db):
                 return legacy_fail(50001, "请求日志读取失败", 500)
             except READ_FAILURES:
                 return legacy_fail(50001, "请求日志读取失败", 500)
-            return legacy_ok(legacy_snapshot(value))
+            return legacy_ok(legacy_snapshot(value, include_timing=include_timing))
         who = await admin(request)
         async with db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")

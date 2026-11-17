@@ -4,6 +4,17 @@ from alcor_api.request_observability import Observations, rollup
 from alcor_api.request_observability_api import snapshot
 
 
+def test_legacy_snapshot_timing_is_opt_in():
+    from alcor_api.request_observability_api import legacy_snapshot
+
+    row = {"id": 1, "at": 1, "path": "/api/x", "method": "GET",
+           "source": "other", "status": 200, "duration": 5, "timing": "backend_ttfb;dur=5"}
+    value = {"revision": 0, "today": "2026-01-01", "summary": {}, "chart": [], "chartUnit": "day",
+             "endpoints": [], "logs": [row], "pagination": {}, "heatmap": {}, "detailFrom": 0}
+    assert "timing" not in legacy_snapshot(value)["logs"][0]
+    assert legacy_snapshot(value, include_timing=True)["logs"][0]["timing"] == row["timing"]
+
+
 async def test_real_http_route_template_privacy_pg_restart_and_worker(client, admin, app, db):
     probe = "NEVER_PERSIST_opaque_token_and_filename"
     await client.get(

@@ -109,7 +109,7 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
     setRefreshing(true);
     const isCurrent = () => !controller.signal.aborted && foregroundRef.current && !document.hidden && key === filterParams(filtersRef.current).toString();
     try {
-      const response = await fetch(`/api/request-logs?${key}`, { cache: "no-store", signal: controller.signal });
+      const response = await fetch(`/api/request-logs?${key}`, { cache: "no-store", signal: controller.signal, headers: { "x-alcor-request-log-timing": "1" } });
       const data = await response.json();
       if (!isCurrent()) return;
       if (!response.ok || data.code !== 0) {
