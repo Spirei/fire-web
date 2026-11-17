@@ -10,7 +10,7 @@ from .broker_accounts import broker_connection, serialize_brokers
 from .broker_metadata import BrokerMetadata, fingerprint
 from .legacy_broker_read import iso
 from .legacy_broker_statements import request_id
-from .native_app_auth import CLIENT, authenticate
+from .native_app_auth import CLIENT
 from .portfolio_records import PortfolioRecords
 
 
@@ -31,12 +31,11 @@ class LegacyAssetAuthority(BrokerMetadata):
         # two round trips per snapshot section.
         async with broker_connection(self.db, None) as conn, conn.transaction():
             await serialize_brokers(conn, who.id, shared_read=shared_read)
-            current = await authenticate(conn, who.native_access_token, lock=not shared_read, shared=shared_read)
-            if current['id'] != who.grant_id or current['user_id'] != who.id or current['client_id'] != CLIENT:
+            # Resolved at call time so the real identity lock stays observable.
+            from .native_app_auth import lock_native_identity
+            current = await lock_native_identity(conn, who, shared=shared_read)
+            if current['client_id'] != CLIENT:
                 raise HTTPException(401, '连接已变化')
-            required = getattr(who, 'required_scope', None)
-            if required and required not in current['scope'].split():
-                raise HTTPException(403, '连接缺少此操作的授权范围')
             if not set(getattr(who, 'asset_required_scopes', ())) <= set(current['scope'].split()):
                 raise HTTPException(403, '连接缺少明确授权的范围')
             yield conn
