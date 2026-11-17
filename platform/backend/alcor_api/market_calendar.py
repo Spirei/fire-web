@@ -1,5 +1,6 @@
 """Typed PostgreSQL annual cash-equity plans. Never a live trading-status feed."""
 
+import copy
 import hashlib
 import json
 from datetime import date
@@ -143,18 +144,27 @@ class Calendars:
 
     async def discovery(self, *, connection=None):
         async def read(conn):
-            release=await(await conn.execute('SELECT r.* FROM market_calendar_active a JOIN market_calendar_releases r ON r.revision=a.revision WHERE a.singleton=true')).fetchone()
+            active=await(await conn.execute('SELECT revision FROM market_calendar_active WHERE singleton=true')).fetchone()
+            if active is None:return None
+            revision=active['revision']
+            # Releases are immutable; only the active pointer changes. Skip the
+            # bounded original replay on repeated App discovery reads.
+            cacheable=self.db.settings.environment!='test'
+            cached=getattr(self.db,'_market_calendar_discovery',None) if cacheable else None
+            if cached is not None and cached[0]==revision:
+                return copy.deepcopy(cached[1])
+            release=await(await conn.execute('SELECT * FROM market_calendar_releases WHERE revision=%s',(revision,))).fetchone()
             if release is None:return None
             try:original=calendar_release(release)
             except (ValueError,TypeError,KeyError):return None
             rows = await (
                 await conn.execute(
-                    "SELECT m.* FROM market_calendar_active a JOIN market_calendar_markets m ON m.revision=a.revision ORDER BY m.market"
+                    "SELECT * FROM market_calendar_markets WHERE revision=%s ORDER BY market", (revision,)
                 )
             ).fetchall()
             try:calendar_markets(original,rows)
             except (ValueError,TypeError,KeyError):return None
-            return {
+            value = {
                 "path": "/api/v2/market-calendar",
                 "batch_path": "/api/v2/market-calendar/batch",
                 "api_version": 2,
@@ -173,6 +183,8 @@ class Calendars:
                 ],
                 "temporary_closures": "unknown",
             }
+            if cacheable:setattr(self.db,'_market_calendar_discovery',(revision,value))
+            return value
 
         if connection is not None:
             return await read(connection)

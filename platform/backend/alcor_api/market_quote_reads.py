@@ -386,6 +386,7 @@ class BatchQuotes:
                 raise HTTPException(400, "单次最多查询 100 只")
             grouped_streams = {}
             latest_facts = {}
+            all_streams = []
             if pairs:
                 all_streams = await (await conn.execute("""SELECT s.*,c.policy_id,t.status AS task_status,t.finished_at AS task_finished_at
                     FROM market_streams s JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision
@@ -411,6 +412,19 @@ class BatchQuotes:
                             ORDER BY source_time DESC,sequence DESC LIMIT 1) f""",
                         ([s['id'] for s in all_streams],[s['source_revision'] for s in all_streams],who.id))).fetchall()
                     latest_facts = {fact['stream_id']:fact for fact in facts}
+            failed_sources = set()
+            if all_streams and source_revision is None and source_preference == "auto":
+                from .market_source_failures import recent_failed_sources_by_pair
+
+                def instrument_for(market):
+                    value = instrument
+                    if legacy_instruments and value is None:
+                        value = 'asset' if market == 'ASSET' else 'equity'
+                    return value or 'equity'
+
+                failed_sources = await recent_failed_sources_by_pair(
+                    conn, who.id, {stream['source_revision'] for stream in all_streams}, pairs, instrument_for,
+                )
             resolved = {}
             snapshot_pages = {}
             for identifier, (market, symbol) in normalized.items():
@@ -515,8 +529,10 @@ class BatchQuotes:
                         sources &= chosen
                         instruments = set().union(*(source_instruments[r] for r in sources)) if sources else set()
                     if source_revision is None and source_preference == "auto" and market != "ASSET":
-                        from .market_source_failures import recent_failed_sources
-                        cooling_sources |= await recent_failed_sources(conn,who.id,sources,market,symbol,query_instrument or 'equity')
+                        cooling_sources |= {
+                            revision for market_name, code_name, revision in failed_sources
+                            if (market_name, code_name) == (market, symbol)
+                        }
                         usable=[c for c in candidates if c[0]['source_revision'] not in cooling_sources]
                         if usable:candidates=usable
                         order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
