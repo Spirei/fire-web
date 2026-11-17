@@ -44,7 +44,7 @@ class CashOverview(BrokerMetadata):
         for selected in accounts:
             account = await broker_account(conn, who.id, selected['id'])
             if account['account_kind'] in currencies:
-                snapshot = await self.cash.snapshot_on_connection(conn, who, account['id'], revision)
+                snapshot = await self.cash.snapshot_on_connection(conn, who, account['id'], revision, account=account)
             else:
                 snapshot = {'accountId': account['id'], 'revision': revision,
                             'currencies': [{'currency': currency, 'registeredBalance': None, 'balance': None,
@@ -58,6 +58,7 @@ class CashOverview(BrokerMetadata):
                 for currency in account['currencies']:
                     capacities[currency] = await self.cash.withdrawal_capacity_on_connection(
                         conn, who, account['id'], currency, account_kind=account['account_kind'],
+                        account=account,
                     )
             snapshots.append({'accountId': account['id'], 'accountRevision': account['revision'],
                               'name': account['name'], 'accountKind': account['account_kind'],

@@ -272,9 +272,9 @@ class CashLedger:
             revision = collection["revision"] if collection else 0
             return await self.snapshot_on_connection(conn, who, account_id, revision)
 
-    async def snapshot_on_connection(self, conn, who, account_id, revision):
+    async def snapshot_on_connection(self, conn, who, account_id, revision, *, account=None):
         """Caller holds the owner/session and broker locks in one read transaction."""
-        account = await broker_account(conn, who.id, account_id)
+        account = account or await broker_account(conn, who.id, account_id)
         from .scope_coverage import account_status, scope_status
 
         values = []
@@ -325,7 +325,7 @@ class CashLedger:
                 )
         return {"accountId": account_id, "revision": revision, "currencies": values}
 
-    async def withdrawal_capacity_on_connection(self, conn, who, account_id, currency, *, account_kind):
+    async def withdrawal_capacity_on_connection(self, conn, who, account_id, currency, *, account_kind, account=None):
         """Verified internal book limit only; caller holds the owner/source read lock.
 
         This does not include manual cards, local ledgers, provider buying power or
@@ -342,7 +342,7 @@ class CashLedger:
             or not currency.isupper()
         ):
             raise HTTPException(422, "账本类型或币种尚未核对")
-        account = await broker_account(conn, who.id, account_id)
+        account = account or await broker_account(conn, who.id, account_id)
         if account["account_kind"] != account_kind or currency not in account["currencies"]:
             raise HTTPException(409, "账本归属或币种已变化")
         result = {

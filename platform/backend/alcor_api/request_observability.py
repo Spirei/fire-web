@@ -53,7 +53,7 @@ class Observations:
         if len(self.queue) == self.queue.maxlen:
             self.lost += 1
         # The same numeric summary clients already receive; bounded and ASCII.
-        detail = timing[:512] if isinstance(timing, str) else ""
+        detail = timing[:1024] if isinstance(timing, str) else ""
         self.queue.append(
             (
                 uuid4(),

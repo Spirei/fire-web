@@ -10,7 +10,7 @@ PHASES = {'pool_wait', 'db_guard', 'sql_execute', 'catalogue', 'json_encode',
           'read_admission_redis', 'read_admission_pg', 'history_proof', 'history_proof_wait',
           'history_authorize', 'history_select', 'history_evidence_load', 'history_assemble', 'history_admission',
           'assets_records', 'assets_quotes', 'assets_fx', 'assets_actual', 'assets_declarations',
-          'assets_averages', 'assets_cash', 'assets_profile', 'assets_assemble'}
+          'assets_averages', 'assets_cash', 'assets_profile', 'assets_assemble', 'assets_main'}
 
 
 class RequestTiming:
@@ -25,7 +25,9 @@ class RequestTiming:
         if self.snapshot is not None:
             return self.snapshot
         parts = [f'backend_ttfb;dur={(perf_counter() - self.started) * 1000:.2f}']
-        for phase in sorted(self.durations):
+        # Largest phases first: stored diagnostics may be truncated, and the
+        # slowest phase is the one worth keeping.
+        for phase in sorted(self.durations, key=lambda name: self.durations[name], reverse=True):
             suffix = f';desc="{self.statements} statements"' if phase == 'sql_execute' else ''
             parts.append(f'{phase};dur={self.durations[phase] * 1000:.2f}{suffix}')
         self.snapshot = ', '.join(parts).encode('ascii')

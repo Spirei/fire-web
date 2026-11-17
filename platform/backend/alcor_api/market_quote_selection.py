@@ -8,7 +8,7 @@ from .market_quote_reads import BatchQuotes
 from .market_sessions import requested_session
 
 
-async def configured_quotes(authority, who, items, source_revision=None, *, regular=False):
+async def configured_quotes(authority, who, items, source_revision=None, *, regular=False, include_market_cap=True):
     now = authority.clock() if authority.clock else None
     return await BatchQuotes(authority).read(
         who, items, source_revision,
@@ -17,4 +17,5 @@ async def configured_quotes(authority, who, items, source_revision=None, *, regu
         session='REGULAR' if regular else None,
         preferred_session=None if regular else requested_session(now),
         legacy_instruments=True,
+        include_market_cap=include_market_cap,
     )

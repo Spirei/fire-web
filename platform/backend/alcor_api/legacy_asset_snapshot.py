@@ -1,5 +1,6 @@
 """Existing asset DTO projection from PG records, licensed quotes, FX and cash books."""
 
+import asyncio
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, localcontext
 from zoneinfo import ZoneInfo
@@ -107,10 +108,22 @@ async def snapshot(service,who,options):
                 FROM portfolio_records r LEFT JOIN broker_accounts a ON a.owner_id=r.owner_id AND a.id=r.broker_account_id AND a.deleted_at IS NULL
                 WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY r.id LIMIT 10001''',(who.id,))).fetchall()
             if len(original)>10000:raise HTTPException(409,'持仓超过完整读取上限')
-    with measure('assets_quotes'):
-        quoted=await configured_quotes(service.market_authority,who,[{'id':row['id'],'market':row['market'],'code':row['code']} for row in original if needs_position_quote(row)],regular=selected['usPrice']=='regular')
-    with measure('assets_fx'):
-        fx=await FxWorker(service.db).snapshot(exact=True)
+    async def read_quotes():
+        with measure('assets_quotes'):
+            return await configured_quotes(
+                service.market_authority, who,
+                [{'id':row['id'],'market':row['market'],'code':row['code']} for row in original if needs_position_quote(row)],
+                regular=selected['usPrice']=='regular', include_market_cap=False,
+            )
+
+    async def read_fx():
+        with measure('assets_fx'):
+            return await FxWorker(service.db).snapshot(exact=True)
+
+    # Quotes and FX are independent snapshots; both are validated against the
+    # position catalog again below before anything is published.
+    quoted, fx = await asyncio.gather(read_quotes(), read_fx())
+    main_started = start()
     async with service.context(who,shared_read=True) as conn:
         rows=await (await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         if [(row['id'],row['market'],row['code'],row['revision']) for row in rows]!=[(row['id'],row['market'],row['code'],row['revision']) for row in original]:
@@ -226,6 +239,7 @@ async def snapshot(service,who,options):
                     'date':now.astimezone(ZoneInfo(ZONES[market])).date().isoformat() if market in ZONES else None,'timeZone':ZONES.get(market),
                     'cash':None,'cashUnavailableReason':'currency_balances_not_allocated_to_markets','dayPnl':None,'sessionStatus':'unknown'})
         elapsed('assets_assemble', assemble_started)
+        elapsed('assets_main', main_started)
         result={'schemaVersion':1,'accountId':who.id,
             'profile':{'accountId':who.id,'username':owner['username'],'nickname':owner.get('nickname'),'uid':owner.get('uid'),'avatar':owner.get('avatar')},
             'collectionRevision':head['revision'] if head else 0,'currency':selected['currency'],'options':selected,
