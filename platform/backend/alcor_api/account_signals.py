@@ -249,30 +249,41 @@ class AccountSignals:
                 )
             ).fetchall()
             by_domain = {row["domain"]: row for row in rows}
-            capture_verified = (await (await conn.execute("""SELECT EXISTS(
-                SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('public.capture_account_change()')
-                AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')=%s
-                AND p.prorettype='trigger'::regtype AND p.pronargs=0
-                AND NOT p.prosecdef AND NOT p.proisstrict AND p.provolatile='v' AND p.proconfig IS NULL
-                AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')) AS verified""",
-                (CAPTURE_FUNCTION_SHA256,))).fetchone())["verified"]
-            registrations = await (
-                await conn.execute(
-                    """SELECT s.*,EXISTS(SELECT 1 FROM pg_trigger t
-                WHERE t.tgrelid=to_regclass('public.'||s.source_table)
-                AND t.tgname=CASE WHEN s.domain='settings' AND s.source_table='private_runtime_versions'
-                  THEN 'account_signal_private_runtime' ELSE 'account_signal_'||s.domain END
-                AND NOT t.tgisinternal
-                AND t.tgenabled IN ('O','A') AND t.tgtype=29 AND t.tgqual IS NULL
-                AND t.tgfoid=to_regprocedure('public.capture_account_change()') AND %s
-                AND t.tgargs=convert_to(s.domain,'UTF8')||decode('00','hex')||
-                  convert_to(s.owner_column,'UTF8')||decode('00','hex')||
-                  convert_to(s.selected_columns,'UTF8')||decode('00','hex')||
-                  convert_to(s.ignored_columns,'UTF8')||decode('00','hex')) AS installed
-                FROM account_change_sources s ORDER BY s.domain,s.source_table""",
-                    (capture_verified,),
-                )
-            ).fetchall()
+            # The capture function and trigger registration are schema
+            # properties: they only change with a migration and process
+            # restart. Production reuses the verified catalog instead of
+            # re-reading pg_proc/pg_trigger on every 15-second sync poll.
+            cacheable = self.db.settings.environment != "test"
+            cached = getattr(self.db, "_account_signal_catalog", None) if cacheable else None
+            if cached is None:
+                capture_verified = (await (await conn.execute("""SELECT EXISTS(
+                    SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('public.capture_account_change()')
+                    AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')=%s
+                    AND p.prorettype='trigger'::regtype AND p.pronargs=0
+                    AND NOT p.prosecdef AND NOT p.proisstrict AND p.provolatile='v' AND p.proconfig IS NULL
+                    AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')) AS verified""",
+                    (CAPTURE_FUNCTION_SHA256,))).fetchone())["verified"]
+                registrations = await (
+                    await conn.execute(
+                        """SELECT s.*,EXISTS(SELECT 1 FROM pg_trigger t
+                    WHERE t.tgrelid=to_regclass('public.'||s.source_table)
+                    AND t.tgname=CASE WHEN s.domain='settings' AND s.source_table='private_runtime_versions'
+                      THEN 'account_signal_private_runtime' ELSE 'account_signal_'||s.domain END
+                    AND NOT t.tgisinternal
+                    AND t.tgenabled IN ('O','A') AND t.tgtype=29 AND t.tgqual IS NULL
+                    AND t.tgfoid=to_regprocedure('public.capture_account_change()') AND %s
+                    AND t.tgargs=convert_to(s.domain,'UTF8')||decode('00','hex')||
+                      convert_to(s.owner_column,'UTF8')||decode('00','hex')||
+                      convert_to(s.selected_columns,'UTF8')||decode('00','hex')||
+                      convert_to(s.ignored_columns,'UTF8')||decode('00','hex')) AS installed
+                    FROM account_change_sources s ORDER BY s.domain,s.source_table""",
+                        (capture_verified,),
+                    )
+                ).fetchall()
+                if cacheable:
+                    setattr(self.db, "_account_signal_catalog", (capture_verified, registrations))
+            else:
+                capture_verified, registrations = cached
             domains = {}
             for domain in DOMAINS:
                 # The original App sync permission grants only these owner's
