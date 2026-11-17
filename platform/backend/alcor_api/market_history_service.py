@@ -106,6 +106,7 @@ class HistoryService(LicensedHistory):
             facts.append({**value,'factId':str(row['id']),'pageId':str(row['page_id']),'revision':row['sequence']})
         windows = [{'from':row['window_from'].isoformat(),'through':row['window_through'].isoformat(),
                     'assurance':row['assurance'],'pointCount':row['point_count'],'taskId':str(row['task_id']),
+                    'incremental':row['incremental'],
                     'pageIds':[str(value) for value in row['page_ids']]} for row in coverage[:1000]]
         from .market_indicators import calculate_indicators
         indicators = calculate_indicators(facts,price_field='price' if kind=='price_series' else 'c')

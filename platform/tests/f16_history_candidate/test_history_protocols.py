@@ -214,3 +214,43 @@ async def test_completed_minute_history_builds_ready_chart_projection(market):  
             )
         ).fetchone()
     assert left["n"] == 0
+
+
+async def test_automatic_minute_history_fetches_only_the_missing_tail(market):  # noqa: F811
+    client, app, authority, revision, _transport, _headers = await seeded(market)
+    query = Query('bars', 'US', 'MSFT', 'minute', 'none', 'ALL',
+                  start='2026-10-12', through='2026-10-21')
+    await demand(client, revision, query)
+    assert await schedule(authority) == 1
+    task = await claim(app.state.db, uuid4(), kind='market.history')
+    assert task and 'fetchStart' not in task['payload']
+
+    class Recording:
+        fixture = True
+        starts = []
+
+        async def read(self, policy, query, cursor):
+            self.starts.append(query.start)
+            return canonical({
+                'query': asdict(query),
+                'licenseRevision': policy.license_revision,
+                'facts': [
+                    {'at': stamp, 'o': '10', 'h': '12', 'l': '9', 'c': str(10 + index),
+                     'session': query.session, 'currency': 'USD'}
+                    for index, stamp in enumerate([
+                        '2026-10-21T13:30:00+00:00', '2026-10-21T13:31:00+00:00',
+                    ])
+                ],
+            }).encode(), 'controlled_original'
+
+    source = Recording()
+    assert await execute(authority, task, source) == 'complete'
+    assert source.starts == ['2026-10-12']
+    # A new demand generation on the same stream may only fetch the missing
+    # tail; the canonical window and its facts remain the series identity.
+    await demand(client, revision, query, expected=1)
+    assert await schedule(authority) == 1
+    task = await claim(app.state.db, uuid4(), kind='market.history')
+    assert task['payload'].get('fetchStart') == '2026-10-20'
+    assert await execute(authority, task, source) == 'complete'
+    assert source.starts == ['2026-10-12', '2026-10-20']

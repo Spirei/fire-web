@@ -2,7 +2,7 @@
 
 import json
 from contextlib import asynccontextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4, uuid5
 from zoneinfo import ZoneInfo
@@ -57,7 +57,8 @@ async def schedule(authority, limit=100):
                 continue
             try:
                 _, policy = await authority.config(conn, stream["owner_id"], stream["source_revision"])
-                authority.validate_query(policy, query_from(stream["query"]))
+                query = query_from(stream["query"])
+                authority.validate_query(policy, query)
             except HTTPException:
                 continue
             previous = (
@@ -83,11 +84,34 @@ async def schedule(authority, limit=100):
             demands = await active_demands(conn, stream, authority)
             demand_revision = max(row["revision"] for row in demands)
             kind = "market.latest" if stream["query"]["kind"] == "latest" else "market.history"
+            # Minute series keep their full canonical window as the series
+            # identity. Once a checkpoint exists, a source that honours date
+            # ranges fetches only the missing tail (plus one overlap day).
+            # The narrow window is stored on the task so every page of that
+            # task decodes against the same bound.
+            fetch_start = None
+            if (
+                kind == "market.history"
+                and query.frame == "minute"
+                and query.kind in ("bars", "price_series")
+                and (policy.source in ("futu", "yahoo") or policy.fixture)
+            ):
+                checkpoint = await (
+                    await conn.execute(
+                        "SELECT max(source_time) AS at FROM market_facts WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s",
+                        (stream["owner_id"], stream["source_revision"], series_fingerprint(query)),
+                    )
+                ).fetchone()
+                if checkpoint and checkpoint["at"] is not None:
+                    local = checkpoint["at"].astimezone(ZoneInfo(ZONES[query.market])).date() - timedelta(days=1)
+                    if query.start is not None and local.isoformat() > query.start:
+                        fetch_start = local.isoformat()
             payload = {
                 "streamId": str(stream["id"]),
                 "generation": generation,
                 "demandRevision": demand_revision,
                 "demandGeneration": stream["demand_generation"],
+                **({"fetchStart": fetch_start} if fetch_start else {}),
             }
             await conn.execute(
                 "INSERT INTO tasks(id,owner_id,request_id,fingerprint,kind,status,payload) VALUES(%s,%s,%s,%s,%s,'queued',%s)",
@@ -275,6 +299,8 @@ async def execute(authority, task, transport):
             )
         ).fetchone()
         query = query_from(stream["query"])
+        fetch_start = task["payload"].get("fetchStart")
+        fetch_query = replace(query, start=fetch_start) if fetch_start else query
         if query.kind=='latest':
             now=job['now']
             # A seven-day registration is retention, not permission to poll an
@@ -300,7 +326,7 @@ async def execute(authority, task, transport):
     reply_failure=None
     try:
         try:
-            raw, representation = await transport.read(policy, query, job["cursor"])
+            raw, representation = await transport.read(policy, fetch_query, job["cursor"])
         except ResponseFailure as observed:
             # fetch_page already bounds this body. An HTTP rejection or retained
             # prefix is evidence only, never valid source facts.
@@ -321,7 +347,7 @@ async def execute(authority, task, transport):
         facts,issues,cursor=[],[reply_failure],None
     else:
         try:
-            facts, issues, cursor = decode(policy, query, raw, cursor_in=job['cursor'],observed_at=observed_at)
+            facts, issues, cursor = decode(policy, fetch_query, raw, cursor_in=job['cursor'],observed_at=observed_at)
             cutoff = observed_at + timedelta(seconds=5)
             accepted=[]
             for fact in facts:
@@ -407,7 +433,7 @@ async def execute(authority, task, transport):
             ).fetchall()
             observed_times = set()
             for page_row in rows:
-                page_facts, _, _ = decode(policy, query, bytes(page_row["raw_bytes"]), cursor_in=page_row['cursor_in'],observed_at=page_row['observed_at'])
+                page_facts, _, _ = decode(policy, fetch_query, bytes(page_row["raw_bytes"]), cursor_in=page_row['cursor_in'],observed_at=page_row['observed_at'])
                 rejected_times = {
                     issue["at"]
                     for issue in page_row["issues"]
@@ -420,18 +446,19 @@ async def execute(authority, task, transport):
             if any(row["issues"] for row in rows):
                 assurance += "_partial_records"
             await conn.execute(
-                """INSERT INTO market_coverage_receipts(owner_id,stream_id,task_id,page_ids,terminal_page,window_from,window_through,assurance,point_count)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                """INSERT INTO market_coverage_receipts(owner_id,stream_id,task_id,page_ids,terminal_page,window_from,window_through,assurance,point_count,incremental)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     task["owner_id"],
                     stream["id"],
                     task["id"],
                     [row["id"] for row in rows],
                     page_id,
-                    query.start,
+                    fetch_query.start,
                     query.through,
                     assurance,
                     len(observed_times),
+                    bool(fetch_start),
                 ),
             )
             # The verified history just reached a terminal page. Publish the
