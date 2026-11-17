@@ -56,7 +56,7 @@ def fee_transport(value,detailed):
     return row
 
 
-async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,strict=True,exact=False,scope_record_id=None,scope_account_id=None,registered_order_read_model=False):
+async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,strict=True,exact=False,scope_record_id=None,scope_account_id=None,registered_order_read_model=False,orders_only=False):
     scope_record=None
     if scope_record_id is not None and scope_account_id is not None:
         raise HTTPException(400,'记录与账户范围不能混用')
@@ -108,12 +108,13 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
         if record_id not in by_record:raise HTTPException(409,'原订单证券归属缺失，不能隐藏历史')
         try:effective.update(effective_projection(history,by_record[record_id],corrections,projected_by_record[record_id]))
         except ValueError:raise HTTPException(409,'原成交与更正链尚未核对') from None
-        try:
-            initial,events=replay(history,by_record[record_id],corrections,projected_by_record[record_id])
-            from .position_transfer_checkpoint import economic_initial
-            economics=replay_economic_trades(economic_initial(by_record[record_id],initial),events)
-            averages[record_id]=economics.position.cost if economics.complete and economics.position.quantity>0 else None
-        except ValueError:averages[record_id]=None
+        if not orders_only:
+            try:
+                initial,events=replay(history,by_record[record_id],corrections,projected_by_record[record_id])
+                from .position_transfer_checkpoint import economic_initial
+                economics=replay_economic_trades(economic_initial(by_record[record_id],initial),events)
+                averages[record_id]=economics.position.cost if economics.complete and economics.position.quantity>0 else None
+            except ValueError:averages[record_id]=None
         for row in history:
             for amendment in row.get('_record_amendments',()):amendments[amendment['id']]=amendment
     latest={row['id']:row['_latest_amendment'] for row in state['fills'] if row.get('_latest_amendment')}

@@ -99,10 +99,11 @@ class Alerts:
             }
             for channel in CHANNELS
         ]
+        binding_states = await self.bindings.states(conn, owner, CHANNELS)
         channels = [
             row
             if row["channel"] == "app"
-            else {**row, **await self.bindings.state(conn, owner, row["channel"])}
+            else {**row, **binding_states.get(row["channel"], {})}
             for row in channels
         ]
         jobs = {}

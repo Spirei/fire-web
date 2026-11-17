@@ -24,7 +24,10 @@ class NativeOrders(InternalOrders):
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
             await lock_read_identity(conn,who,require_admin=False)
-            _, snapshot = await snapshot_in_transaction(conn,who,strict=False,scope_record_id=record_id,registered_order_read_model=True)
+            _, snapshot = await snapshot_in_transaction(
+                conn, who, strict=False, scope_record_id=record_id,
+                registered_order_read_model=True, orders_only=True,
+            )
             now = datetime.now(UTC)
             items, unknown_dates = [], []
             for item in snapshot['orders']:

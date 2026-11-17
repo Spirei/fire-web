@@ -49,24 +49,18 @@ class Bindings:
             raise HTTPException(503, "请先通过当前通知配置的连接测试")
         return row
 
-    async def state(self, conn, owner, channel):
-        result = {
+    @staticmethod
+    def _base_state(channel):
+        return {
             "channel": channel,
             "ready": False,
             "configured": False,
             "destination": "",
             "pendingConfirmation": False,
         }
-        provider = await self.providers.current(conn, owner, channel)
-        if provider is None:
-            return result
-        try:
-            self.providers.materialize(provider)
-            result["configured"] = True
-        except HTTPException:
-            return {**result, "verificationState": "configuration_unavailable"}
-        checked = await self.providers.checked(conn, provider)
-        binding = await (
+
+    async def binding(self, conn, owner, channel, provider):
+        return await (
             await conn.execute(
                 """SELECT b.* FROM business_notification_bindings b JOIN users u ON u.id=b.owner_id
             WHERE b.owner_id=%s AND b.channel=%s AND b.revoked_at IS NULL AND b.verified_at IS NOT NULL
@@ -74,6 +68,98 @@ class Bindings:
                 (owner, channel, provider["config_stamp"], self.db.settings.instance_id),
             )
         ).fetchone()
+
+    async def state(self, conn, owner, channel):
+        provider = await self.providers.current(conn, owner, channel)
+        if provider is None:
+            return self._base_state(channel)
+        last = await self.providers.last_check(conn, provider)
+        checked = last if last and last["status"] == "verified" else None
+        binding = await self.binding(conn, owner, channel, provider)
+        pending = await self.challenge(conn, owner, channel)
+        return await self._state_from(conn, owner, channel, provider, checked, last, binding, pending)
+
+    async def states(self, conn, owner, channels):
+        """Batch the channel discovery shared by one owner snapshot."""
+        channels = [channel for channel in channels if channel != "app"]
+        if not channels:
+            return {}
+        providers = {}
+        rows = await (await conn.execute(
+            """SELECT DISTINCT ON (channel) * FROM business_notification_provider_revisions
+               WHERE owner_id=%s AND channel=ANY(%s)
+               ORDER BY channel,created_at DESC,revision DESC""",
+            (owner, channels),
+        )).fetchall()
+        revisions = [row["revision"] for row in rows]
+        revoked = set()
+        if revisions:
+            revoked = {
+                row["provider_revision"] for row in await (await conn.execute(
+                    "SELECT provider_revision FROM business_notification_provider_revocations WHERE owner_id=%s AND provider_revision=ANY(%s)",
+                    (owner, revisions),
+                )).fetchall()
+            }
+        for row in rows:
+            if row["revision"] not in revoked:
+                providers[row["channel"]] = row
+        checks = {}
+        if providers:
+            for row in await (await conn.execute(
+                """SELECT DISTINCT ON (provider_revision) * FROM business_notification_provider_checks
+                   WHERE owner_id=%s AND provider_revision=ANY(%s)
+                   ORDER BY provider_revision,checked_at DESC""",
+                (owner, [row["revision"] for row in providers.values()]),
+            )).fetchall():
+                checks[row["provider_revision"]] = row
+        bindings = {}
+        for row in await (await conn.execute(
+            """SELECT b.*,u.session_version AS current_version,u.active AS user_active
+               FROM business_notification_bindings b JOIN users u ON u.id=b.owner_id
+               WHERE b.owner_id=%s AND b.channel=ANY(%s) AND b.revoked_at IS NULL AND b.verified_at IS NOT NULL
+               ORDER BY b.verified_at DESC""",
+            (owner, channels),
+        )).fetchall():
+            provider = providers.get(row["channel"])
+            if (
+                row["channel"] in bindings
+                or provider is None
+                or row["config_stamp"] != provider["config_stamp"]
+                or str(row["origin_instance"]) != str(self.db.settings.instance_id)
+                or not row["user_active"]
+                or row["session_version"] != row["current_version"]
+            ):
+                continue
+            bindings[row["channel"]] = row
+        pending = {}
+        for row in await (await conn.execute(
+            """SELECT DISTINCT ON (channel) *,expires_at>clock_timestamp() AS valid
+               FROM business_notification_challenges WHERE owner_id=%s AND channel=ANY(%s)
+               ORDER BY channel,created_at DESC,id DESC""",
+            (owner, channels),
+        )).fetchall():
+            pending[row["channel"]] = row
+        result = {}
+        for channel in channels:
+            provider = providers.get(channel)
+            if provider is None:
+                result[channel] = self._base_state(channel)
+                continue
+            last = checks.get(provider["revision"])
+            checked = last if last and last["status"] == "verified" else None
+            result[channel] = await self._state_from(
+                conn, owner, channel, provider, checked, last,
+                bindings.get(channel), pending.get(channel),
+            )
+        return result
+
+    async def _state_from(self, conn, owner, channel, provider, checked, last, binding, pending):
+        result = self._base_state(channel)
+        try:
+            self.providers.materialize(provider)
+            result["configured"] = True
+        except HTTPException:
+            return {**result, "verificationState": "configuration_unavailable"}
         if binding and checked and await subject_alive(conn, binding):
             try:
                 destination = self.security.decrypt(
@@ -91,7 +177,6 @@ class Bindings:
                     )
             except HTTPException:
                 binding = None
-        pending = await self.challenge(conn, owner, channel)
         if (
             pending
             and pending["valid"]
@@ -112,7 +197,6 @@ class Bindings:
                 )
                 result["destination"] = "待确认 · " + destination[-4:]
         elif not result["ready"] and not checked:
-            last = await self.providers.last_check(conn, provider)
             result["verificationState"] = "provider_" + last["status"] if last else "provider_untested"
         return result
 
