@@ -5,7 +5,6 @@ from decimal import Decimal, localcontext
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
 
-from .broker_accounts import broker_account
 from .broker_metadata import BrokerMetadata, fingerprint
 from .cash_ledger import CashLedger
 from .internal_orders import pending_reservations
@@ -23,8 +22,11 @@ class CashOverview(BrokerMetadata):
 
     async def on_connection(self, conn, who):
         # No collection rows, openings or zero-balance accounts are initialized by reads.
+        # The shared broker/identity locks above exclude account mutations, so
+        # this one row set is the whole directory the loop below may read.
         accounts = await (await conn.execute(
-            "SELECT id FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL ORDER BY created_at,id LIMIT 101",
+            "SELECT id,account_kind,currencies,revision,name,holding_source FROM broker_accounts "
+            "WHERE owner_id=%s AND deleted_at IS NULL ORDER BY created_at,id LIMIT 101",
             (who.id,),
         )).fetchall()
         if len(accounts) > 100:
@@ -42,8 +44,7 @@ class CashOverview(BrokerMetadata):
         currencies = {'real': set(), 'simulated': set()}
         snapshots = []
         scope_known = {}
-        for selected in accounts:
-            account = await broker_account(conn, who.id, selected['id'])
+        for account in accounts:
             evidence = {}
             if account['account_kind'] in currencies:
                 snapshot = await self.cash.snapshot_on_connection(
