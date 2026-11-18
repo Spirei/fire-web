@@ -77,6 +77,34 @@ def mount_legacy_portfolio(app, settings, db):
             rows = await (await conn.execute("SELECT r.*,COALESCE(o.display_timestamp,r.updated_at) AS legacy_updated_at FROM portfolio_records r LEFT JOIN portfolio_legacy_ordering o ON o.owner_id=r.owner_id AND o.record_id=r.id WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY COALESCE(o.display_timestamp,r.updated_at) DESC,r.id", (owner,))).fetchall()
             return [legacy_record(record_dto(dict(row, updated_at=row["legacy_updated_at"]))) for row in rows], revision
 
+    async def paged_snapshot(who, expected, *, market, group, page, size):
+        """One bounded page plus its filtered total inside the same snapshot."""
+        owner = who.id
+        async with db.connection() as conn, conn.transaction():
+            await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+            from .legacy_record_writes import ReadOnlyRecords
+            revision = await ReadOnlyRecords(db, who).lock(conn, owner)
+            from .scope_coverage import require_global
+            await require_global(conn, owner)
+            if expected is not None and revision != expected:
+                raise LegacyError(409, 40902, "记录已变化，请重新读取第一页")
+            where, params = "r.owner_id=%s AND r.deleted_at IS NULL", [owner]
+            if market:
+                where += " AND r.market=%s"
+                params.append(market)
+            if group:
+                where += " AND r.group_name=%s"
+                params.append(group)
+            source = (" FROM portfolio_records r LEFT JOIN portfolio_legacy_ordering o "
+                      "ON o.owner_id=r.owner_id AND o.record_id=r.id WHERE " + where)
+            total = (await (await conn.execute("SELECT count(*) AS n" + source, params)).fetchone())["n"]
+            rows = await (await conn.execute(
+                "SELECT r.*,COALESCE(o.display_timestamp,r.updated_at) AS legacy_updated_at" + source
+                + " ORDER BY COALESCE(o.display_timestamp,r.updated_at) DESC,r.id OFFSET %s LIMIT %s",
+                (*params, (page - 1) * size, size),
+            )).fetchall()
+            return [legacy_record(record_dto(dict(row, updated_at=row["legacy_updated_at"]))) for row in rows], revision, total
+
     @app.get("/api/records", tags=["legacy-web-portfolio"])
     async def web_list(request: Request, response: Response):
         try:
@@ -96,12 +124,14 @@ def mount_legacy_portfolio(app, settings, db):
         response.headers.update({'Cache-Control':'no-store, private','Vary':'Cookie, Authorization'})
         who = await portfolio_member(request, settings, db)
         params = request.query_params
-        rows, revision = await snapshot(who, collection_value(params.get("collectionRevision")))
         market, group = params.get("market", "").upper(), params.get("group", "").strip()
-        filtered = [r for r in rows if (not market or r["market"] == market) and (not group or r["group"] == group)]
         page, size = page_value(params.get("page"), 1, 1_000_000), page_value(params.get("pageSize"), 20, 100)
-        result = envelope(filtered[(page-1)*size:page*size], request, response)
-        result["meta"] = {"page": page, "pageSize": size, "total": len(filtered), "collectionRevision": revision}
+        rows, revision, total = await paged_snapshot(
+            who, collection_value(params.get("collectionRevision")),
+            market=market, group=group, page=page, size=size,
+        )
+        result = envelope(rows, request, response)
+        result["meta"] = {"page": page, "pageSize": size, "total": total, "collectionRevision": revision}
         return result
 
     @app.get("/api/v{version}/records/operations/{request_id}", tags=["legacy-native-portfolio"])
