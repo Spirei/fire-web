@@ -8277,7 +8277,7 @@ const V0_1_82_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_83_ENTRY: VersionEntry = {
   ...V0_1_82_ENTRY,
   version: "v0.1.83", date: "2026-11-14", summary: "历史走势不再阻塞资产与行情读取",
   software: V0_1_82_ENTRY.software.map(item => ({...item,version:"v0.1.83"})),
@@ -8367,10 +8367,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_83_ENTRY,
+  version: "v0.1.84", date: "2026-11-18", summary: "补回 App 热门股票接口声明",
+  software: V0_1_83_ENTRY.software.map(item => ({...item,version:"v0.1.84"})),
+  changes: [
+    {kind:"fix",title:"补回 App 热门股票接口声明",desc:"v1 和 v2 分别公布同版本的成交额榜单路径。美股、港股和 A 股按各自原币筛选证券目录，榜单仍需同一真实交易日的已许可完整前十。"},
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_83_ENTRY,
   V0_1_82_ENTRY,
   V0_1_81_ENTRY,
   V0_1_80_ENTRY,

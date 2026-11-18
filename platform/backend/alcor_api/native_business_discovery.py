@@ -56,6 +56,9 @@ def discovery(version):
             'collection_revision_field': 'collectionRevision',
             'idempotency': 'reject-duplicate-query-original', 'automatic_mutation_replay': False,
         },
+        'market_amount_ranking': {
+            'version': 1, 'path': base + '/market-ranking', 'markets': ['US', 'HK', 'CN'], 'metric': 'amount',
+        },
         'chart_series': {
             'version': 1, 'path': base + '/chart-series', 'markets': ['US', 'HK', 'CN'],
         },

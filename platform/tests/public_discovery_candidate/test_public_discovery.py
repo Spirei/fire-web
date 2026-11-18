@@ -182,11 +182,17 @@ async def test_public_quote_snapshot_rechecks_original_fact_not_newer_price_or_n
     with pytest.raises(HTTPException):await reader.read(items,snapshot=snapshot,observed_at=clock)
 
 
-async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechecks_license(db,client,admin):
+@pytest.mark.parametrize(('market','currency','exchange','code_prefix','zone'),[
+    ('US','USD','NASDAQ','ZZZ','America/New_York'),
+    ('HK','HKD','HKEX','0060','Asia/Hong_Kong'),
+    ('CN','CNY','SSE','60000','Asia/Shanghai'),
+])
+async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechecks_license(app,db,client,admin,market,currency,exchange,code_prefix,zone):
     import json
     from dataclasses import replace
     from zoneinfo import ZoneInfo
 
+    from alcor_api.dividend_sources import security
     from alcor_api.market_contract import Query, canonical
     from alcor_api.market_worker import decode
     from alcor_api.public_market_authority import PublicAuthority, PublicPolicy
@@ -194,21 +200,36 @@ async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechec
     from psycopg.types.json import Jsonb
 
     who,p,_target,scanner,service=await prepared(db,client,admin)
+    app.state.public_discovery=service
+    client.cookies.clear()
+    client.headers.pop('x-csrf-token',None)
+    for version in (1,2):
+        path=f'/api/v{version}/market-ranking'
+        config=await client.get(f'/api/v{version}/auth/config')
+        assert config.status_code==200,config.text
+        assert config.json()['data']['market_amount_ranking']=={
+            'version':1,'path':path,'markets':['US','HK','CN'],'metric':'amount',
+        }
+        unavailable=await client.get(path,params={'market':market,'metric':'amount'})
+        assert unavailable.status_code==503,unavailable.text
+    assert scanner.calls==0
     now=datetime.now(UTC).replace(microsecond=0)
-    codes=[f'ZZZ{index}' for index in range(10)]
+    observed_at=now.replace(second=0)-timedelta(seconds=2)
+    timezone=ZoneInfo(zone)
+    codes=[f'{code_prefix}{index}' for index in range(10)]
     quote_policy=PublicPolicy('public-amount-quotes','futu','futu-sdk-records-v1','synthetic-public-sdk','a'*64,
         'public-amount-license','c'*64,str(db.settings.instance_id),(now-timedelta(days=1)).isoformat(),
-        (now+timedelta(days=1)).isoformat(),tuple(('US',code,'equity','REGULAR') for code in codes),('collect','display'),True)
+        (now+timedelta(days=1)).isoformat(),tuple((market,code,'equity','REGULAR') for code in codes),('collect','display'),True)
     authority=PublicAuthority(db,(quote_policy,));service.quote_authority=authority
     quote_license=await authority.install(who,uuid4(),quote_policy.id,'Synthetic9Pass')
 
     async def publish(code,index,updated=False):
-        q=Query('latest','US',code)
+        q=Query('latest',market,code)
         task=await authority.enqueue(who,uuid4(),quote_license['licenseId'],q,'Synthetic9Pass')
-        stamp=now-timedelta(seconds=1 if updated else 2)
-        local=stamp.astimezone(ZoneInfo('America/New_York'))
+        stamp=observed_at+timedelta(seconds=int(updated))
+        local=stamp.astimezone(timezone)
         amount=10000-index*100 if not updated else 100+index*100
-        raw=canonical({'records':[{'code':'US.'+code,'name':'Synthetic '+code,
+        raw=canonical({'records':[{'code':security('futu',market,code),'name':'Synthetic '+code,
             'update_time':local.strftime('%Y-%m-%d %H:%M:%S'),'last_price':'99' if updated else '10',
             'prev_close_price':'9','volume':'100','turnover':str(amount)}]}).encode()
         facts,issues,cursor=decode(quote_policy,q,raw)
@@ -221,12 +242,15 @@ async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechec
             await conn.execute("UPDATE public_market_tasks SET status='completed' WHERE id=%s",(task['taskId'],))
     for index,code in enumerate(codes):await publish(code,index)
     target=Target('public-amount-scanner','tradingview','scanner.tradingview.com',('8.8.8.8',),True)
-    policy=replace(p,target_id=target.id,target_fingerprint=target.fingerprint,purposes=('collect','display','discovery.ranking.amount'))
+    policy=replace(p,target_id=target.id,target_fingerprint=target.fingerprint,markets=(market,),purposes=('collect','display','discovery.ranking.amount'))
     service.policies=(policy,);service.targets=(target,)
-    day=int(datetime.combine(now.astimezone(ZoneInfo('America/New_York')).date(),datetime.min.time(),UTC).timestamp())
-    scanner.raw=json.dumps({'totalCount':10,'data':[{'s':'NASDAQ:'+code,'d':[code,'Synthetic '+code,100,100,day,'stock','NASDAQ','USD']} for code in codes]}).encode()
+    trade_date=observed_at.astimezone(timezone).date()
+    day=int(datetime.combine(trade_date,datetime.min.time(),UTC).timestamp())
+    scanner.raw=json.dumps({'totalCount':10,'data':[{'s':exchange+':'+code,'d':[code,'Synthetic '+code,100,100,day,'stock',exchange,currency]} for code in codes]}).encode()
     license=await service.install(who,uuid4(),policy.id,'Synthetic9Pass');rid=uuid4()
-    value={'kind':'ranking','market':'US','metric':'amount'}
+    value={'kind':'ranking','market':market,'metric':'amount'}
+    _,_,scanner_body,_=target.request(value)
+    assert {'left':'currency','operation':'equal','right':currency} in json.loads(scanner_body)['filter']
     captured=await service.collect(who,rid,license['licenseId'],value,'Synthetic9Pass')
     assert captured['state']=='observed' and captured['projection']['rankingVerified'],captured
     refs=captured['projection']['publicQuoteFacts']
@@ -234,14 +258,23 @@ async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechec
     first=await service.read(value)
     assert first['coverage']['complete'] and [item['code'] for item in first['items']]==codes
     assert [item['amount'] for item in first['items']]==[10000-index*100 for index in range(10)]
+    assert all(item['price']==10 and datetime.fromisoformat(item['time'])==observed_at for item in first['items'])
     assert all(item['quoteState']=='stale' and item['displayStale'] is True and item['cached'] is None for item in first['items'])
     assert all(item['sourceTime']==item['time'] for item in first['items'])
     assert first['coverage']['realTimePricesAssumed'] is False
     assert first['coverage']['rankingBasis']=='retained_provider_observations_on_trade_date_not_live'
     assert 'publicQuoteFacts' not in first and 'publicQuoteEvidence' not in first
+    for version in (1,2):
+        response=await client.get(f'/api/v{version}/market-ranking',params={'market':market,'metric':'amount'})
+        assert response.status_code==200,response.text
+        ranking=response.json()['data']
+        assert (ranking['market'],ranking['currency'],ranking['metric'])==(market,currency,'amount')
+        assert ranking['tradeDate']==first['tradeDate']==trade_date.isoformat()
+        assert ranking['updatedAt']==first['updatedAt']
+        assert ranking['items']==first['items'] and ranking['coverage']['complete']
     assert (await service.original(who,captured['pageId'],'Synthetic9Pass'))[0]==scanner.raw
     for index,code in enumerate(codes):await publish(code,index,updated=True)
-    latest=await PublicQuotes(authority).read([{'id':code,'market':'US','code':code} for code in codes])
+    latest=await PublicQuotes(authority).read([{'id':code,'market':market,'code':code} for code in codes])
     assert latest['quotes'][codes[0]]['price']==99
     assert await service.read(value)==first
     assert await service.collect(who,rid,license['licenseId'],value,'')==captured

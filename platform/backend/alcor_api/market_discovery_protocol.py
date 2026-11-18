@@ -121,8 +121,11 @@ class Target:
         elif self.source=='tradingview' and kind=='ranking':
             path='/'+SCANNERS[market]+'/scan';params={};method='POST'
             columns=['name','description','volume','daily-bar.time','type','exchange'] if value['metric']=='volume' else ['name','description','high','volume','daily-bar.time','type','exchange','currency']
-            body=json.dumps({'filter':[{'left':'type','operation':'equal','right':'stock'},{'left':'is_primary','operation':'equal','right':True},
-                {'left':'exchange','operation':'in_range','right':EXCHANGES[market]}], 'columns':columns,
+            filters=[{'left':'type','operation':'equal','right':'stock'},{'left':'is_primary','operation':'equal','right':True},
+                {'left':'exchange','operation':'in_range','right':EXCHANGES[market]}]
+            if value['metric']=='amount':
+                filters.append({'left':'currency','operation':'equal','right':CURRENCIES[market]})
+            body=json.dumps({'filter':filters, 'columns':columns,
                 'sort':{'sortBy':'volume','sortOrder':'desc'},'range':[0,10 if value['metric']=='volume' else 20000],'options':{'lang':'zh'}},separators=(',',':')).encode()
         elif self.source=='cnn' and kind=='indices':
             path='/index/fearandgreed/graphdata';params={}
