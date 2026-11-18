@@ -77,7 +77,9 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   const filters = useMemo(() => parseRequestFilters(new URLSearchParams(query)), [query]);
   const filterKey = filterParams(filters).toString();
   const [result, setResult] = useState<{ key: string; snapshot: RequestSnapshot } | null>(null);
-  const snapshot = result?.key === filterKey ? result.snapshot : null;
+  // Keep the last result visible while a sort/filter repaint is loading: the
+  // pending key must not blank the table, chart and cards into skeletons.
+  const snapshot = result?.snapshot ?? null;
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
