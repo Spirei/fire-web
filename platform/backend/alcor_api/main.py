@@ -22,7 +22,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from psycopg.errors import UniqueViolation
+from psycopg.errors import LockNotAvailable, QueryCanceled, UniqueViolation
 from psycopg_pool import PoolTimeout, TooManyRequests
 
 from . import __build__, __version__, profiles, tasks
@@ -327,8 +327,10 @@ def create_app(settings: Settings | None = None):
 
     @app.exception_handler(PoolTimeout)
     @app.exception_handler(TooManyRequests)
+    @app.exception_handler(LockNotAvailable)
+    @app.exception_handler(QueryCanceled)
     async def database_busy(request, exc):
-        # A bounded pool protects the database; contention must remain recoverable.
+        # Pool, lock and statement deadlines share the recoverable budget contract.
         log.warning(
             "database_busy type=%s route=%s request_id=%s",
             type(exc).__name__,

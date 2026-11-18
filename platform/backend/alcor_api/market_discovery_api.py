@@ -38,9 +38,18 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
             **({'X-Alcor-Retire-Context':'true'} if status in (401,403) else {}),
             **({'X-Alcor-API-Version':'2'} if request.url.path.startswith('/api/v2/') else {})})
 
-    async def rate(request,kind,who=None):
+    async def rate(request,kind,who=None,*,read_only=False):
         caller=who.id if who else request.client.host if request.client else 'unknown'
-        if not await app.state.rate_limit(authority.db,digest('discovery:'+kind+':'+caller),60,window_seconds=60) or not await app.state.rate_limit(authority.db,'discovery-global:'+kind,300,window_seconds=60):raise HTTPException(429,'请求过于频繁，请稍后再试')
+        checks=((digest('discovery:'+kind+':'+caller),60),('discovery-global:'+kind,300))
+        if read_only:
+            allowed=await app.state.read_rate_limits(authority.db,checks,window_seconds=60)
+        else:
+            allowed=True
+            for key,maximum in checks:
+                if not await app.state.rate_limit(authority.db,key,maximum,window_seconds=60):
+                    allowed=False
+                    break
+        if not allowed:raise HTTPException(429,'请求过于频繁，请稍后再试')
 
     async def read(request,who):
         allowed={'kind','market','q','metric','source_revision','revision','offset','limit'}
@@ -73,7 +82,7 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
     @app.get('/api/market/discovery')
     async def state(request:Request):
         try:
-            who=await member(request);await rate(request,'read',who)
+            who=await member(request);await rate(request,'read',who,read_only=True)
             return response(await read(request,who),request)
         except HTTPException as exc:return response({'error':{'code':exc.status_code*100+1,'message':str(exc.detail)}},request,exc.status_code)
 
@@ -131,7 +140,7 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
             who = await member(request,version) if credentials else None
             if kind=='indices' and version is None and who is None:
                 raise HTTPException(401,'未登录')
-            await rate(request,kind)
+            await rate(request,kind,read_only=True)
             raw={'kind':kind}
             if kind=='search':raw['q']=request.query_params.get('q','')
             elif kind=='top':raw['market']=request.query_params.get('market','US').upper()

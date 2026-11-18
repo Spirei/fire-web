@@ -8367,7 +8367,7 @@ export const V0_1_83_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_84_ENTRY: VersionEntry = {
   ...V0_1_83_ENTRY,
   version: "v0.1.84", date: "2026-11-18", summary: "补回 App 热门股票接口声明",
   software: V0_1_83_ENTRY.software.map(item => ({...item,version:"v0.1.84"})),
@@ -8377,10 +8377,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_84_ENTRY,
+  version: "v0.1.85", date: "2026-11-19", summary: "减少搜索和行情采集的数据库争用",
+  software: V0_1_84_ENTRY.software.map(item => ({...item,version:"v0.1.85"})),
+  changes: [
+    {kind:"fix",title:"减少搜索和行情采集的数据库争用",desc:"搜索、榜单与其他发现读取合并限流检查，优先复用 Redis。行情 Worker 同一账户的短事务在取得连接前排队，继续并行请求行情源。数据库锁和语句超时保留暂时不可用的响应，并记录脱敏故障类别。"},
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_84_ENTRY,
   V0_1_83_ENTRY,
   V0_1_82_ENTRY,
   V0_1_81_ENTRY,

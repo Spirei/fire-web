@@ -1,7 +1,7 @@
 """Bounded collection over existing PG tasks; latest observations precede historical backfill."""
 
 import json
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4, uuid5
@@ -285,9 +285,18 @@ def decode(policy, query, raw, *, cursor_in=None, observed_at=None):
     return facts, issues, cursor
 
 
-async def execute(authority, task, transport):
+@asynccontextmanager
+async def task_transaction(db, owner_gate):
+    # Wait before borrowing a pool connection. Provider IO remains outside the
+    # gate so the source adapter can still combine independent securities.
+    gate=owner_gate if owner_gate is not None else nullcontext()
+    async with gate,db.connection() as conn,conn.transaction():
+        yield conn
+
+
+async def execute(authority, task, transport, *, owner_gate=None):
     db = authority.db
-    async with db.connection() as conn, conn.transaction():
+    async with task_transaction(db,owner_gate) as conn:
         stream, policy, reason, demands = await current(authority, conn, task)
         if reason == "lost":
             return reason
@@ -317,7 +326,7 @@ async def execute(authority, task, transport):
             raise ValueError("fixture_transport_outside_test")
     # An archived page beyond the published checkpoint is an uncertain prior
     # attempt. Never reissue its provider call after a crash or permission race.
-    async with db.connection() as conn,conn.transaction():
+    async with task_transaction(db,owner_gate) as conn:
         prior=await(await conn.execute('SELECT 1 FROM market_source_pages WHERE task_id=%s AND page_number>%s',(task['id'],job['page_count']))).fetchone()
         if prior:
             _,_,reason,_=await current(authority,conn,task)
@@ -339,7 +348,7 @@ async def execute(authority, task, transport):
         if not isinstance(raw,bytes) or len(raw)>2*1024*1024 or not isinstance(representation,str):
             raise ValueError('source_raw_budget_invalid')
     except Exception:  # noqa: BLE001 - no usable complete body or typed bounded prefix was returned
-        async with db.connection() as conn,conn.transaction():
+        async with task_transaction(db,owner_gate) as conn:
             _,_,reason,_=await current(authority,conn,task)
             if reason=='lost':return reason
             return await stop(conn,db,task,reason or 'source_outcome_unknown')
@@ -361,7 +370,7 @@ async def execute(authority, task, transport):
             facts,issues,cursor=[],[{'reason':'source_decode_failed'}],None
             decode_failed=True
     page_id=uuid4()
-    async with db.connection() as conn,conn.transaction():
+    async with task_transaction(db,owner_gate) as conn:
         # Saving an already received body is independent of current collection
         # permission. Immutable provenance always retains its original license.
         binding=await(await conn.execute('''SELECT t.id FROM tasks t JOIN market_data_jobs j ON j.task_id=t.id AND j.owner_id=t.owner_id JOIN market_streams s ON s.owner_id=j.owner_id AND s.id=j.stream_id JOIN market_source_configs c ON c.owner_id=s.owner_id AND c.revision=s.source_revision WHERE t.id=%s AND t.owner_id=%s AND j.stream_id=%s AND j.generation=%s AND s.source_revision=%s AND c.origin_instance=%s FOR UPDATE OF t''',(task['id'],task['owner_id'],stream['id'],job['generation'],source_revision,origin_instance))).fetchone()
@@ -388,7 +397,7 @@ async def execute(authority, task, transport):
                 observed_at,
             ),
         )
-    async with db.connection() as conn,conn.transaction():
+    async with task_transaction(db,owner_gate) as conn:
         stream,policy,reason,_=await current(authority,conn,task)
         if reason=='lost':return reason
         if reason:return await stop(conn,db,task,reason)

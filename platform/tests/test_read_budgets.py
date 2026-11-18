@@ -322,6 +322,33 @@ async def test_unix_gateway_chart_requests_do_not_share_a_fake_ip_budget(client,
     assert keys == [('charts-global', 600), ('charts:' + admin, 120)]
 
 
+async def test_discovery_reads_share_redis_limits_and_keep_pg_fallback(client,app,private_redis):
+    cache=Redis(unix_socket_path=str(private_redis),password=PASSWORD)
+    database=app.state.db
+
+    async def attempts():
+        async with database.connection() as conn:
+            return (await (await conn.execute('SELECT coalesce(sum(attempts),0) AS n FROM auth_rate_limits')).fetchone())['n']
+
+    app.state.cache.client=cache
+    try:
+        before=await attempts()
+        search=await client.get('/api/v2/search')
+        ranking=await client.get('/api/v2/market-ranking?market=US&metric=amount')
+        assert search.status_code==200 and ranking.status_code==503
+        assert 'read_admission_redis' in search.headers['server-timing']
+        assert 'read_admission_redis' in ranking.headers['server-timing']
+        assert await attempts()==before
+        assert len(await cache.keys('alcor:*:read-budget:*'))==4
+        app.state.cache.client=None
+        fallback=await client.get('/api/v1/search')
+        assert fallback.status_code==200 and 'read_admission_pg' in fallback.headers['server-timing']
+        assert await attempts()==before+2
+    finally:
+        app.state.cache.client=None
+        await cache.aclose()
+
+
 async def test_many_redis_budgets_use_one_eval(private_redis):
     client = Redis(unix_socket_path=str(private_redis), password=PASSWORD)
     calls = []

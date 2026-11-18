@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections import Counter
 from uuid import uuid4
 
 from .dividend_sources import Target
@@ -61,11 +62,13 @@ async def batch_cycle(authority, transport, worker_id, *, history_turn=False, ma
             tasks.append(historical)
     # Gather all leased children before the next batch. A failed provider must
     # neither cancel unrelated securities nor leave unbounded orphan reads.
+    owner_gates={owner:asyncio.Lock() for owner in {task['owner_id'] for task in tasks}}
     outcomes = await asyncio.gather(
-        *(execute(authority, task, transport) for task in tasks), return_exceptions=True,
+        *(execute(authority, task, transport,owner_gate=owner_gates[task['owner_id']]) for task in tasks), return_exceptions=True,
     )
-    if any(isinstance(outcome, BaseException) for outcome in outcomes):
-        logging.getLogger("alcor.worker").warning("market_latest_batch_unavailable")
+    failures=Counter(type(outcome).__name__ for outcome in outcomes if isinstance(outcome,BaseException))
+    if failures:
+        logging.getLogger("alcor.worker").warning("market_latest_batch_unavailable types=%s",dict(failures))
     return bool(tasks)
 
 

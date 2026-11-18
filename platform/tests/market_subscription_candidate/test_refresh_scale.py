@@ -5,11 +5,12 @@ from datetime import UTC, datetime, timedelta
 from time import monotonic
 from uuid import uuid4
 
+from alcor_api import market_worker
 from alcor_api.market_runtime import batch_cycle
 from market_subscription_candidate.test_subscriptions import native
 
 
-async def test_114_native_subscriptions_complete_bounded_worker_cycle_without_financial_changes(market):
+async def test_114_native_subscriptions_complete_bounded_worker_cycle_without_financial_changes(market,monkeypatch):
     client,app,authority,transport,revision=market
     headers,_=await native(app)
     headers['x-alcor-market-source']=revision
@@ -18,6 +19,19 @@ async def test_114_native_subscriptions_complete_bounded_worker_cycle_without_fi
         response=await client.post('/api/v2/quote-subscriptions',headers=headers,
             json={'items':[{'market':'US','code':code} for code in symbols[offset:offset+100]]})
         assert response.status_code==200,response.text
+    current=market_worker.current
+    active_checks=peak_checks=0
+
+    async def track_current(*args):
+        nonlocal active_checks,peak_checks
+        active_checks+=1
+        peak_checks=max(peak_checks,active_checks)
+        try:
+            return await current(*args)
+        finally:
+            active_checks-=1
+
+    monkeypatch.setattr(market_worker,'current',track_current)
     # Feed the existing controlled representation with actual per-security PG
     # proofs. No external supplier or business/account mutation is involved.
     authority.clock=lambda:datetime(2026,10,20,14,tzinfo=UTC)+timedelta(seconds=1)
@@ -29,6 +43,7 @@ async def test_114_native_subscriptions_complete_bounded_worker_cycle_without_fi
                 count=(await (await conn.execute('SELECT count(DISTINCT stream_id) n FROM market_facts')).fetchone())['n']
             if count==114:break
     assert count==114 and monotonic()-started<60
+    assert peak_checks==1
     async with app.state.db.connection() as conn:
         for table in ('portfolio_records','trade_ledger','cash_ledger_entries','broker_accounts'):
             # Every table name is a fixed test constant, never request data.

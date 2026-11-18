@@ -8,6 +8,7 @@ from alcor_api import request_timing
 from alcor_api.request_observability import ObserveRequests
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from psycopg.errors import LockNotAvailable, QueryCanceled
 
 
 class Records:
@@ -16,6 +17,20 @@ class Records:
 
     def record(self, *args):
         self.items.append(args)
+
+
+@pytest.mark.parametrize('deadline',[LockNotAvailable,QueryCanceled])
+async def test_database_deadlines_report_native_retry_without_sql_details(client,app,monkeypatch,caplog,deadline):
+    async def busy(*args,**kwargs):
+        raise deadline('synthetic SQL details')
+
+    monkeypatch.setattr(app.state,'read_rate_limits',busy)
+    response=await client.get('/api/v2/search')
+    assert response.status_code==503 and response.json()['code']==50001
+    assert response.headers['retry-after']=='3'
+    assert 'synthetic SQL details' not in response.text
+    assert f'database_busy type={deadline.__name__} route=/api/v2/search' in caplog.text
+    assert response.headers['x-request-id'] in caplog.text
 
 
 async def test_concurrent_timings_are_local_and_do_not_capture_query_or_identifiers():
