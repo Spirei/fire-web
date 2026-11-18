@@ -29,25 +29,27 @@ async def test_scope_never_changes_fx_private_futu_or_other_public_sources():
         raise AssertionError('unrelated source must never resolve proxy')
     for url in ['https://rates.example.test/latest', 'http://192.0.2.1:11111/',
                 'https://push2delay.eastmoney.com/api/qt/ulist.np/get',
-                'https://query1.finance.yahoo.com/unrelated']:
+                'https://query1.finance.yahoo.com/unrelated', 'https://scanner.tradingview.com/unrelated',
+                'https://qt.gtimg.cn/q=usAAPL']:
         assert isinstance(await quote_backend(url, ['8.8.8.8'], resolver=no_dns, value='invalid'), PinnedBackend)
     assert isinstance(await quote_backend(YAHOO, ['8.8.8.8'], resolver=no_dns, value='off'), PinnedBackend)
 
 
-async def test_current_operator_proxy_is_resolved_and_connected_only_to_its_checked_addresses(monkeypatch):
+@pytest.mark.parametrize('url', [YAHOO, 'https://scanner.tradingview.com/china/scan'])
+async def test_current_operator_proxy_is_resolved_and_connected_only_to_its_checked_addresses(monkeypatch, url):
     calls = []
     async def resolver(host, port):
         calls.append((host, port))
         return ['192.0.2.7']
     monkeypatch.setenv('STOCKLOG_PROXY', 'http://operator-proxy:1088')
-    backend = await quote_backend(YAHOO, ['8.8.8.8'], resolver=resolver)
+    backend = await quote_backend(url, ['8.8.8.8'], resolver=resolver)
     assert isinstance(backend, TunnelBackend)
     assert calls == [('operator-proxy', 1088)]
     assert backend.proxy.addresses == ('192.0.2.7',)
     for answers in [[], ['0.0.0.0'], ['224.0.0.1'], ['169.254.169.254'], ['192.0.2.7', 'fe80::1']]:
         async def invalid(*_): return answers
         with pytest.raises(ValueError, match='quote_proxy_configuration_invalid'):
-            await quote_backend(YAHOO, ['8.8.8.8'], resolver=invalid)
+            await quote_backend(url, ['8.8.8.8'], resolver=invalid)
 
 
 class Stream:

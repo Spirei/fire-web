@@ -1,4 +1,4 @@
-"""Operator-configured Yahoo egress; original public IP, TLS name and HTTP identity stay pinned."""
+"""Operator-configured market egress with pinned public IP and TLS identity."""
 import asyncio
 import ipaddress
 import os
@@ -73,8 +73,9 @@ class TunnelBackend:
 async def quote_backend(url, pins, *, resolver=resolve, value=None):
     parsed = urlsplit(url)
     host, port = parsed.hostname, parsed.port or 443
-    if (parsed.scheme != 'https' or port != 443 or host not in ('query1.finance.yahoo.com', 'query2.finance.yahoo.com')
-            or not parsed.path.startswith('/v8/finance/chart/')):
+    yahoo = host in ('query1.finance.yahoo.com', 'query2.finance.yahoo.com') and parsed.path.startswith('/v8/finance/chart/')
+    scanner = host == 'scanner.tradingview.com' and parsed.path in ('/america/scan', '/hongkong/scan', '/china/scan')
+    if parsed.scheme != 'https' or port != 443 or not (yahoo or scanner):
         return PinnedBackend(host, port, pins)
     address = proxy_address(os.environ.get('STOCKLOG_PROXY', '') if value is None else value)
     if address is None:

@@ -54,6 +54,8 @@ async def test_app_amount_ranking_uses_observed_amounts_and_shared_cache(
             return ('var hq_str_sh600000="' + ','.join(fields) + '";').encode()
         symbol = urlsplit(url).path.removeprefix('/q=')
         index = {stock_symbol(market, code): i for i, code in enumerate(codes)}[symbol]
+        if market == 'US' and index == 0 and calls.count(ranking.TENCENT) == 1:
+            raise TimeoutError
         fields = [''] * 38
         fields[1], fields[3], fields[30], fields[32], fields[36], fields[37] = (
             codes[index], '10', stamp, '0.25', '10', str(index + 1 if market == 'CN' else 100 + index),
@@ -74,7 +76,7 @@ async def test_app_amount_ranking_uses_observed_amounts_and_shared_cache(
         assert result['items'][0]['amount'] == (100000 if market == 'CN' else 109)
     assert responses[0].json() == responses[1].json()
     assert calls.count(ranking.SCANNER) == 1
-    assert calls.count(ranking.TENCENT) == 10
+    assert calls.count(ranking.TENCENT) == (11 if market == 'US' else 10)
     assert calls.count(ranking.SINA_LIST) == (2 if market == 'CN' else 0)
     assert calls.count(ranking.SINA_QUOTES) == (1 if market == 'CN' else 0)
 

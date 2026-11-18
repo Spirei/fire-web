@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from urllib.parse import urlencode
+from urllib.request import proxy_bypass_environment
 from zoneinfo import ZoneInfo
 
 import httpcore
@@ -17,6 +18,7 @@ from .fx_reference import external_delivery_blocked
 from .market_contract import Query, number
 from .market_discovery_protocol import CURRENCIES, LIMIT, Target, document, iso, parse
 from .market_public_dns import public_addresses
+from .market_quote_proxy import TunnelBackend, quote_backend
 from .market_tencent_latest import parse as parse_tencent
 from .market_tencent_latest import symbol as tencent_symbol
 
@@ -27,8 +29,9 @@ SINA_QUOTES = 'hq.sinajs.cn'
 SINA_RANK_LIMIT = 30
 ZONES = {'US': 'America/New_York', 'HK': 'Asia/Hong_Kong', 'CN': 'Asia/Shanghai'}
 TENCENT_CLOCKS = SimpleNamespace(timestamp_zones=tuple(ZONES.items()))
-EXPECTED_SOURCE_FAILURES = (ValueError, TypeError, KeyError, ArithmeticError, OSError,
-                            httpcore.NetworkError, httpcore.ProtocolError, httpcore.TimeoutException)
+NETWORK_FAILURES = (OSError, httpcore.NetworkError, httpcore.RemoteProtocolError, httpcore.TimeoutException)
+EXPECTED_SOURCE_FAILURES = NETWORK_FAILURES + (ValueError, TypeError, KeyError, AttributeError, ArithmeticError,
+                                               httpcore.LocalProtocolError, httpcore.ProxyError)
 COUNT = 10
 BATCH_SIZE = 12
 MAX_CANDIDATES = 72
@@ -73,8 +76,28 @@ async def scanner_universe(market, now):
     async with source_pool(SCANNER) as (pool, addresses):
         target = Target('legacy-amount-scanner', 'tradingview', SCANNER, addresses, True)
         _, url, body, _ = target.request(value)
-        raw = await response_bytes(pool, url, body=body, limit=LIMIT)
+        raw = await scanner_bytes(pool, addresses, url, body)
     return parse(raw, target, value, now)
+
+
+async def scanner_bytes(pool, addresses, url, body):
+    if not proxy_bypass_environment(SCANNER):
+        try:
+            backend = await quote_backend(url, addresses, resolver=resolve)
+            if isinstance(backend, TunnelBackend):
+                async with (asyncio.timeout(4),
+                            httpcore.AsyncConnectionPool(network_backend=backend, max_connections=1) as proxy):
+                    return await response_bytes(proxy, url, body=body, limit=LIMIT)
+        except EXPECTED_SOURCE_FAILURES:
+            pass
+    return await retry_read(pool, url, body=body, limit=LIMIT)
+
+
+async def retry_read(pool, url, **options):
+    try:
+        return await response_bytes(pool, url, **options)
+    except NETWORK_FAILURES:
+        return await response_bytes(pool, url, **options)
 
 
 def ranking_item(market, code, name, amount, price, change, at, date, now):
@@ -93,7 +116,7 @@ async def tencent_quote(pool, market, candidate, date, now):
         # Symbols the quote source cannot represent remain in the exclusion proof.
         query = Query('latest', market, code).validate()
         symbol = tencent_symbol(market, code)
-        raw = await response_bytes(pool, f'https://{TENCENT}/q={symbol}')
+        raw = await retry_read(pool, f'https://{TENCENT}/q={symbol}')
         facts, _, _ = parse_tencent(raw, query, TENCENT_CLOCKS)
         fact, = facts
         amount = number(fact['amount'], positive=True) * (10000 if market == 'CN' else 1)

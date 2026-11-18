@@ -8383,7 +8383,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_84_ENTRY.software.map(item => ({...item,version:"v0.1.85"})),
   changes: [
     {kind:"fix",title:"减少搜索和行情采集的数据库争用",desc:"搜索、榜单与其他发现读取合并限流检查，优先复用 Redis。行情 Worker 同一账户的短事务在取得连接前排队，继续并行请求行情源。数据库锁和语句超时保留暂时不可用的响应，并记录脱敏故障类别。"},
-    {kind:"fix",title:"恢复三地热门股票成交额榜",desc:"App v1 和 v2 恢复按各市场实际成交额取前十。未配置发布快照的市场可从原行情链路读取，A 股补齐北交所覆盖。"},
+    {kind:"fix",title:"恢复三地热门股票成交额榜",desc:"App v1 和 v2 恢复按各市场实际成交额取前十。未配置发布快照的市场可从原行情链路读取，A 股补齐北交所覆盖。TradingView 候选请求沿用已配置的出站代理。"},
   ],
 };
 
