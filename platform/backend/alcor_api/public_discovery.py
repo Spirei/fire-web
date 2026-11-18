@@ -58,6 +58,16 @@ class PublicDiscovery:
         self.admin=PublicAuthority(db)
         self.quote_authority=quote_authority
 
+    def has_scope(self, value):
+        policies = self.policy_provider() if self.policy_provider else self.policies
+        required = purpose(value)
+        market = value['market']
+        return any(
+            required in (policy.purposes if isinstance(policy, PublicDiscoveryPolicy) else policy.get('purposes', ()))
+            and market in (policy.markets if isinstance(policy, PublicDiscoveryPolicy) else policy.get('markets', ()))
+            for policy in policies
+        )
+
     def policy(self,identifier):
         values=self.policy_provider() if self.policy_provider else self.policies
         matches=[p if isinstance(p,PublicDiscoveryPolicy) else PublicDiscoveryPolicy(**p) for p in values if (p.id if isinstance(p,PublicDiscoveryPolicy) else p.get('id'))==identifier]

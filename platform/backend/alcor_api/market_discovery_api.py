@@ -5,6 +5,7 @@ import json
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
+from .legacy_amount_ranking import LegacyAmountRanking
 from .legacy_history_bars import history_member
 from .legacy_identity import assert_native_origin
 from .legacy_optional_credentials import credentials_present
@@ -23,6 +24,7 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
         targets=tuple(Target(**value).validate() for value in configured)
     service=Discovery(authority,targets,transport)
     app.state.market_discovery=service
+    app.state.legacy_amount_ranking = None if settings.environment == 'test' else LegacyAmountRanking(authority.db)
 
     async def member(request,version=None,write=False):
         assert_native_origin(request,settings)
@@ -162,10 +164,14 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
                     return response({'code':0,'message':'ok','data':data} if version else data,request)
             if 'x-alcor-market-source' not in request.headers:
                 public = getattr(app.state,'public_discovery',None)
+                live_amount = app.state.legacy_amount_ranking
+                if (live_amount is not None and kind=='ranking' and value['metric']=='amount'
+                        and (public is None or not public.has_scope(value))):
+                    data = await live_amount.read(value['market'])
+                    return response({'code':0,'message':'ok','data':data},request)
                 if public is None:
                     raise HTTPException(503,'公共发现再分发许可尚未配置')
-                selectors = {'source_revision':request.headers['x-alcor-market-source']} if 'x-alcor-market-source' in request.headers else {}
-                observed = await public.read(value,**selectors)
+                observed = await public.read(value)
             else:
                 if who is None:raise HTTPException(400,'本人发现来源需要有效登录')
                 observed=await service.read(who,value,source_revision=request.headers.get('x-alcor-market-source'))

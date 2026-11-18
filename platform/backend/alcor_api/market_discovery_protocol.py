@@ -264,7 +264,8 @@ def parse(raw,target,value,now):
             if (not isinstance(code,str) or not isinstance(name,str) or not name.strip() or type_!='stock' or exchange not in EXCHANGES[market]
                 or entry.get('s')!=exchange+':'+code or currency!=CURRENCIES[market]):raise ValueError('scanner_identity_invalid')
             normalized=code.zfill(5) if market=='HK' else code.upper()
-            if not re.fullmatch(r'[A-Z0-9.\-]{1,24}',normalized) or normalized in seen or market=='HK' and not re.fullmatch(r'[0-9]{5}',normalized) or market=='CN' and not re.fullmatch(r'[0-9]{6}',normalized):raise ValueError('scanner_code_invalid')
+            pattern=r'[A-Z0-9./\-]{1,24}' if market=='US' and metric=='amount' else r'[A-Z0-9.\-]{1,24}'
+            if not re.fullmatch(pattern,normalized) or normalized in seen or market=='HK' and not re.fullmatch(r'[0-9]{5}',normalized) or market=='CN' and not re.fullmatch(r'[0-9]{6}',normalized):raise ValueError('scanner_code_invalid')
             seen.add(normalized);v=numeric(volume)
             if metric=='amount' and (volume is None or v==0):continue
             stamp=numeric(day,positive=True)
