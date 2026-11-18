@@ -77,15 +77,16 @@ class PublicAuthority:
             raise HTTPException(503, '公共行情许可无效') from None
         return p
 
-    async def lock(self, conn, license_id):
-        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('public-market-license:'+str(license_id),))
+    async def lock(self, conn, license_id, *, shared=False):
+        statement = 'SELECT pg_advisory_xact_lock_shared(hashtextextended(%s,0))' if shared else 'SELECT pg_advisory_xact_lock(hashtextextended(%s,0))'
+        await conn.execute(statement, ('public-market-license:'+str(license_id),))
 
     async def current(self, conn, license_id, purpose, query=None):
         try: license_id = UUID(str(license_id))
         except (ValueError, TypeError): raise HTTPException(400, '公共许可编号无效') from None
         if purpose not in ('collect','display'):
             raise HTTPException(400, '公共许可用途无效')
-        await self.lock(conn, license_id)
+        await self.lock(conn, license_id, shared=purpose=='display')
         row = await (await conn.execute('SELECT * FROM public_market_licenses WHERE id=%s', (license_id,))).fetchone()
         if not row: raise HTTPException(404, '公共许可不存在')
         p = self.policy(row['policy_id'])

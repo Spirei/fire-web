@@ -8373,6 +8373,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_83_ENTRY.software.map(item => ({...item,version:"v0.1.84"})),
   changes: [
     {kind:"fix",title:"补回 App 热门股票接口声明",desc:"v1 和 v2 分别公布同版本的成交额榜单路径。美股、港股和 A 股按各自原币筛选证券目录，榜单仍需同一真实交易日的已许可完整前十。"},
+    {kind:"fix",title:"稳定热门股票并发读取",desc:"仅加载需核对的榜单原件，原件和报价许可验证共用一个数据库连接。低成交额候选缺项时仍可依据覆盖证明读取已核实前十。新采集缺项时保留同交易日的完整榜单，观察到新交易日后等待该日的完整结果。"},
   ],
 };
 

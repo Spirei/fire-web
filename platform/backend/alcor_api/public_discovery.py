@@ -11,13 +11,24 @@ from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
 from .fx_reference import external_delivery_blocked
-from .market_discovery_protocol import VERSION, Target, digest, parse, purpose, query
+from .market_discovery_protocol import RANKING_MAX_AGE, VERSION, Target, digest, parse, purpose, query
 from .market_discovery_transport import PageFailure, Transport
 from .notification_security import NotificationSecurity
 from .public_market_authority import PublicAuthority, instant
 from .public_market_quotes import PublicQuotes
 
 SCOPES={'discovery.search','discovery.indices','discovery.top','discovery.ranking.volume','discovery.ranking.amount'}
+
+
+def replay_projection_digest(projection):
+    evidence=projection.get('publicQuoteEvidence')
+    if evidence is not None:
+        # Replay verifies the saved facts. Unreferenced candidates had no fact
+        # to replay, so their diagnostic state can differ from collection.
+        references=projection['publicQuoteFacts']
+        states={code:state for code,state in evidence['quoteStates'].items() if code in references}
+        projection={**projection,'publicQuoteEvidence':{**evidence,'quoteStates':states}}
+    return digest(projection)
 
 
 @dataclass(frozen=True)
@@ -72,11 +83,12 @@ class PublicDiscovery:
             return target
         except (ValueError,TypeError,KeyError):raise HTTPException(503,'公共发现目标或用途未获许可') from None
 
-    async def lock(self,conn,identifier):
-        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',('public-discovery:'+str(identifier),))
+    async def lock(self,conn,identifier,*,shared=False):
+        statement='SELECT pg_advisory_xact_lock_shared(hashtextextended(%s,0))' if shared else 'SELECT pg_advisory_xact_lock(hashtextextended(%s,0))'
+        await conn.execute(statement,('public-discovery:'+str(identifier),))
 
     async def current(self,conn,identifier,usage,value=None):
-        await self.lock(conn,identifier)
+        await self.lock(conn,identifier,shared=usage=='display')
         row=await(await conn.execute('SELECT * FROM public_discovery_licenses WHERE id=%s',(identifier,))).fetchone()
         if not row:raise HTTPException(404,'公共发现许可不存在')
         p=self.policy(row['policy_id'])
@@ -126,10 +138,10 @@ class PublicDiscovery:
             await conn.execute('INSERT INTO public_discovery_operations(request_id,created_by,request_hash,license_id,result) VALUES(%s,%s,%s,%s,%s)',(rid,who.id,hashed,identifier,Jsonb(result)))
             return result
 
-    async def rank_amounts(self,value,projection,*,snapshot=None,stamp=None):
+    async def rank_amounts(self,value,projection,*,snapshot=None,stamp=None,connection=None):
         candidates=projection.pop('candidates');selected=candidates[:72]
         if self.quote_authority is None:raise HTTPException(503,'公共成交额报价许可未配置')
-        observed=await PublicQuotes(self.quote_authority).read([{'id':row['code'],'market':value['market'],'code':row['code']} for row in selected],session='REGULAR',retain_evidence=True,snapshot=snapshot,observed_at=stamp if snapshot is not None else None)
+        observed=await PublicQuotes(self.quote_authority).read([{'id':row['code'],'market':value['market'],'code':row['code']} for row in selected],session='REGULAR',retain_evidence=True,snapshot=snapshot,observed_at=stamp if snapshot is not None else None,connection=connection)
         references=observed.pop('_publicEvidence')
         accepted=[];unresolved=[];exact={}
         for row in selected:
@@ -145,19 +157,20 @@ class PublicDiscovery:
                     'cached':data.get('cached') if type(data.get('cached')) is bool else None})
             except (KeyError,ValueError,TypeError,ArithmeticError):unresolved.append(row)
         accepted.sort(key=lambda row:(-exact[row['code']],row['code']))
-        outstanding=max([Decimal(row['upper']) for row in [*unresolved,*candidates[72:]]] or [Decimal(0)])
+        next_upper=Decimal(candidates[len(selected)]['upper']) if len(candidates)>len(selected) else Decimal(0)
+        outstanding=max(next_upper,max((Decimal(row['upper']) for row in unresolved),default=Decimal(0)))
         verified=len(accepted)>=10 and exact[accepted[9]['code']]>outstanding
         projection.update(items=accepted[:10],publicQuoteEvidence=observed,publicQuoteFacts=references,rankingVerified=verified)
-        projection['coverage'].update(complete=verified,observedCount=len(accepted[:10]),remainingCandidates=len(unresolved)+len(candidates[72:]),unverifiedAmountNeverSubstituted=True,
+        projection['coverage'].update(complete=verified,observedCount=len(accepted[:10]),remainingCandidates=len(unresolved)+len(candidates)-len(selected),unverifiedAmountNeverSubstituted=True,
             rankingBasis='retained_provider_observations_on_trade_date_not_live',realTimePricesAssumed=False)
         return projection
 
-    async def project(self,raw,target,value,stamp,p,*,snapshot=None):
+    async def project(self,raw,target,value,stamp,p,*,snapshot=None,connection=None):
         result=parse(raw,target,value,stamp)
         if value['kind']=='search':
             result['items']=[r for r in result['items'] if r['market'] in p.markets]
             result['coverage']['observedCount']=len(result['items'])
-        if 'candidates' in result:result=await self.rank_amounts(value,result,snapshot=snapshot,stamp=stamp)
+        if 'candidates' in result:result=await self.rank_amounts(value,result,snapshot=snapshot,stamp=stamp,connection=connection)
         return result
 
     async def collect(self,who,rid,license_id,raw,password,code=''):
@@ -198,28 +211,53 @@ class PublicDiscovery:
         value=query(raw)
         if selectors.get('source_revision'):raise HTTPException(400,'匿名读取不能指定个人来源')
         if type(limit) is not int or not 1<=limit<=100 or type(offset) is not int or not 0<=offset<=1000000 or offset and not revision:raise HTTPException(400,'公共发现分页无效')
+        amount_ranking=value['kind']=='ranking' and value['metric']=='amount'
+        earliest=(datetime.now(UTC)-RANKING_MAX_AGE).date().isoformat() if amount_ranking else None
+        wanted=Jsonb(value)
         async with self.db.connection() as conn,conn.transaction():
-            rows=await(await conn.execute('''SELECT o.*,r.result AS final,p.raw_bytes,p.raw_sha256,p.http_status,p.complete,p.id AS page_id,p.request_id AS page_request
+            rows=await(await conn.execute('''SELECT o.request_id,o.license_id,
+                r.result#>>'{projection,tradeDate}' AS trade_date,r.result#>>'{projection,coverage,complete}'='true' AS verified
                 FROM public_discovery_operations o JOIN public_discovery_results r ON r.request_id=o.request_id
-                LEFT JOIN public_discovery_pages p ON p.id=r.page_id WHERE o.query=%s ORDER BY o.created_at DESC,o.request_id DESC LIMIT 1001''',(Jsonb(value),))).fetchall()
+                WHERE o.query @> %(query)s AND o.query=%(query)s AND r.result->>'state'='observed'
+                  AND (%(earliest)s::text IS NULL OR r.result#>>'{projection,tradeDate}'>=%(earliest)s)
+                ORDER BY CASE WHEN %(earliest)s::text IS NOT NULL THEN r.result#>>'{projection,tradeDate}' END DESC,
+                         o.created_at DESC,o.request_id DESC LIMIT 1001''',{'query':wanted,'earliest':earliest})).fetchall()
             if len(rows)>1000:raise HTTPException(409,'公共发现候选超过核对范围')
             choices={}
-            for row in rows:
-                try:
-                    _,p=await self.current(conn,row['license_id'],'display',value);target=self.target(p,value)
-                except HTTPException:continue
-                if row['license_id'] in choices:continue
-                final=row['final']
-                if final['state']!='observed':continue
-                if (not row['complete'] or row['http_status']!=200 or row['page_request']!=row['request_id']
+            licenses={}
+            trade_date=None
+            for candidate in rows:
+                if trade_date is not None and candidate['trade_date']!=trade_date:break
+                license_id=candidate['license_id']
+                if license_id in choices:continue
+                if license_id not in licenses:
+                    try:
+                        _,policy=await self.current(conn,license_id,'display')
+                        licenses[license_id]=(policy,self.target(policy,value))
+                    except HTTPException:licenses[license_id]=None
+                if licenses[license_id] is None:continue
+                p,target=licenses[license_id]
+                if amount_ranking:
+                    # Incomplete observations advance the market date. They allow a
+                    # verified capture from that day, but cannot revive an older day.
+                    trade_date=candidate['trade_date']
+                    if not candidate['verified']:continue
+                row=await(await conn.execute('''SELECT r.result AS final,p.raw_bytes,p.raw_sha256,p.http_status,p.complete,p.request_id AS page_request
+                    FROM public_discovery_results r LEFT JOIN public_discovery_pages p ON p.id=r.page_id WHERE r.request_id=%s''',
+                    (candidate['request_id'],))).fetchone()
+                if (not row or not row['complete'] or row['http_status']!=200 or row['page_request']!=candidate['request_id']
                         or sha256(bytes(row['raw_bytes'])).hexdigest()!=row['raw_sha256']):raise HTTPException(503,'公共发现原件绑定无法核对')
-                try:observed=await self.project(bytes(row['raw_bytes']),target,value,datetime.fromisoformat(final['observedAt']),p,snapshot=final['projection'].get('publicQuoteFacts'))
+                final=row['final']
+                try:
+                    observed=await self.project(bytes(row['raw_bytes']),target,value,datetime.fromisoformat(final['observedAt']),p,snapshot=final['projection'].get('publicQuoteFacts'),connection=conn)
+                    if replay_projection_digest(observed)!=replay_projection_digest(final['projection']):continue
                 except (ValueError,TypeError,KeyError,HTTPException):continue
-                if digest(observed)!=digest(final['projection']):continue
-                choices[row['license_id']]=(row,p,observed)
+                metadata={key:final[key] for key in ('revision','source','observedAt')}
+                published={k:v for k,v in observed.items() if k not in ('publicQuoteEvidence','publicQuoteFacts')}
+                choices[license_id]=(metadata,p,published)
             if not choices:raise HTTPException(503,'公共发现许可或已观察结果不可用')
             if len(choices)!=1 and value['kind']!='indices':raise HTTPException(409,'公共发现存在多个来源，未自动选择')
-            row,p,observed=next(iter(choices.values()));final=row['final']
+            final,p,observed=next(iter(choices.values()))
             if value['kind']=='indices' and len(choices)>1:
                 groups={}
                 for _row,_policy,part in choices.values():
@@ -231,11 +269,11 @@ class PublicDiscovery:
                 observed={**observed,'groups':list(groups.values()),'items':[],
                           'coverage':{'scope':'explicit_public_index_groups','complete':all(part['coverage']['complete'] for _,_,part in choices.values()),
                                       'observedCount':sum(len(group['indices']) for group in groups.values())}}
-                final={**final,'revision':digest(sorted(item[0]['final']['revision'] for item in choices.values()))}
+                final={**final,'revision':digest(sorted(item[0]['revision'] for item in choices.values()))}
             if revision and revision!=final['revision']:raise HTTPException(409,'公共发现版本已变化')
             items=observed['items']
             return {'query':value,'state':'observed','revision':final['revision'],'sourceRevision':None,'licenseRevision':p.license_revision,'source':final['source'],
-                    'observedAt':final['observedAt'],**{k:v for k,v in observed.items() if k not in ('items','publicQuoteEvidence','publicQuoteFacts')},'items':items[offset:offset+limit],
+                    'observedAt':final['observedAt'],**{k:v for k,v in observed.items() if k!='items'},'items':items[offset:offset+limit],
                     'pagination':{'offset':offset,'limit':limit,'total':len(items),'hasMore':offset+limit<len(items)},'originals':[],'automaticCollection':False,'collectionOnRead':False}
 
     async def receipt(self,who,rid):

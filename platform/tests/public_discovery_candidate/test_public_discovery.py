@@ -188,10 +188,13 @@ async def test_public_quote_snapshot_rechecks_original_fact_not_newer_price_or_n
     ('CN','CNY','SSE','60000','Asia/Shanghai'),
 ])
 async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechecks_license(app,db,client,admin,market,currency,exchange,code_prefix,zone):
+    import asyncio
     import json
     from dataclasses import replace
+    from unittest.mock import patch
     from zoneinfo import ZoneInfo
 
+    from alcor_api.db import Database
     from alcor_api.dividend_sources import security
     from alcor_api.market_contract import Query, canonical
     from alcor_api.market_worker import decode
@@ -214,8 +217,10 @@ async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechec
         assert unavailable.status_code==503,unavailable.text
     assert scanner.calls==0
     now=datetime.now(UTC).replace(microsecond=0)
-    observed_at=now.replace(second=0)-timedelta(seconds=2)
     timezone=ZoneInfo(zone)
+    newer_date=min(now.date(),now.astimezone(timezone).date())
+    trade_date=newer_date-timedelta(days=1)
+    observed_at=datetime.combine(trade_date,datetime.min.time(),timezone).replace(hour=12)
     codes=[f'{code_prefix}{index}' for index in range(10)]
     quote_policy=PublicPolicy('public-amount-quotes','futu','futu-sdk-records-v1','synthetic-public-sdk','a'*64,
         'public-amount-license','c'*64,str(db.settings.instance_id),(now-timedelta(days=1)).isoformat(),
@@ -244,9 +249,14 @@ async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechec
     target=Target('public-amount-scanner','tradingview','scanner.tradingview.com',('8.8.8.8',),True)
     policy=replace(p,target_id=target.id,target_fingerprint=target.fingerprint,markets=(market,),purposes=('collect','display','discovery.ranking.amount'))
     service.policies=(policy,);service.targets=(target,)
-    trade_date=observed_at.astimezone(timezone).date()
     day=int(datetime.combine(trade_date,datetime.min.time(),UTC).timestamp())
-    scanner.raw=json.dumps({'totalCount':10,'data':[{'s':exchange+':'+code,'d':[code,'Synthetic '+code,100,100,day,'stock',exchange,currency]} for code in codes]}).encode()
+    rows=[{'s':exchange+':'+code,'d':[code,'Synthetic '+code,100,100,day,'stock',exchange,currency]} for code in codes]
+    if market=='US':
+        for index in range(5990):
+            code=f'ZZSMALL{index}'
+            rows.append({'s':exchange+':'+code,'d':[code,'Synthetic '+code,1,1,day,'stock',exchange,currency]})
+    original=json.dumps({'totalCount':len(rows),'data':rows}).encode()
+    scanner.raw=original
     license=await service.install(who,uuid4(),policy.id,'Synthetic9Pass');rid=uuid4()
     value={'kind':'ranking','market':market,'metric':'amount'}
     _,_,scanner_body,_=target.request(value)
@@ -264,26 +274,61 @@ async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechec
     assert first['coverage']['realTimePricesAssumed'] is False
     assert first['coverage']['rankingBasis']=='retained_provider_observations_on_trade_date_not_live'
     assert 'publicQuoteFacts' not in first and 'publicQuoteEvidence' not in first
-    for version in (1,2):
-        response=await client.get(f'/api/v{version}/market-ranking',params={'market':market,'metric':'amount'})
+
+    # The replay must work at Fire's smallest supported PostgreSQL pool size.
+    one_connection=Database(db.settings.model_copy(update={'pool_size':1,'pool_min_size':1}))
+    await one_connection.open()
+    try:
+        single_reader=PublicDiscovery(one_connection,(policy,),(target,),quote_authority=PublicAuthority(one_connection,(quote_policy,)))
+        assert await single_reader.read(value)==first
+    finally:
+        await one_connection.close()
+
+    # Concurrent public reads must share the locks held by an existing reader.
+    async with db.connection() as conn,conn.transaction():
+        await service.lock(conn,license['licenseId'],shared=True)
+        await authority.lock(conn,quote_license['licenseId'],shared=True)
+        responses=await asyncio.gather(*(client.get(f'/api/v{version}/market-ranking',params={'market':market,'metric':'amount'}) for version in (1,2)))
+    for response in responses:
         assert response.status_code==200,response.text
         ranking=response.json()['data']
         assert (ranking['market'],ranking['currency'],ranking['metric'])==(market,currency,'amount')
         assert ranking['tradeDate']==first['tradeDate']==trade_date.isoformat()
         assert ranking['updatedAt']==first['updatedAt']
         assert ranking['items']==first['items'] and ranking['coverage']['complete']
-    assert (await service.original(who,captured['pageId'],'Synthetic9Pass'))[0]==scanner.raw
+    assert (await service.original(who,captured['pageId'],'Synthetic9Pass'))[0]==original
+    unknown_code=code_prefix[:-1]+'19'
+    rows.append({'s':exchange+':'+unknown_code,'d':[unknown_code,'Synthetic unresolved candidate',200,100,day,'stock',exchange,currency]})
+    scanner.raw=json.dumps({'totalCount':len(rows),'data':rows}).encode()
+    partial=await service.collect(who,uuid4(),license['licenseId'],value,'Synthetic9Pass')
+    assert partial['state']=='observed' and not partial['projection']['rankingVerified']
+    assert await service.read(value)==first
+
+    newer=await service.install(who,uuid4(),policy.id,'Synthetic9Pass')
+    for row in rows:
+        row['d'][4]=int(datetime.combine(newer_date,datetime.min.time(),UTC).timestamp())
+    scanner.raw=json.dumps({'totalCount':len(rows),'data':rows}).encode()
+    partial=await service.collect(who,uuid4(),newer['licenseId'],value,'Synthetic9Pass')
+    assert partial['projection']['tradeDate']==newer_date.isoformat() and not partial['projection']['rankingVerified']
+    unavailable=await client.get('/api/v2/market-ranking',params={'market':market,'metric':'amount'})
+    assert unavailable.status_code==503,unavailable.text
+    await service.revoke(who,uuid4(),newer['licenseId'],'Synthetic9Pass')
+
     for index,code in enumerate(codes):await publish(code,index,updated=True)
     latest=await PublicQuotes(authority).read([{'id':code,'market':market,'code':code} for code in codes])
     assert latest['quotes'][codes[0]]['price']==99
     assert await service.read(value)==first
+    with patch('alcor_api.public_discovery.datetime',wraps=datetime) as clock:
+        clock.now.return_value=now+timedelta(days=11)
+        with pytest.raises(HTTPException) as expired:await service.read(value)
+        assert expired.value.status_code==503
     assert await service.collect(who,rid,license['licenseId'],value,'')==captured
-    assert scanner.calls==1
+    assert scanner.calls==3
     await authority.revoke(who,uuid4(),quote_license['licenseId'],'Synthetic9Pass')
     with pytest.raises(HTTPException) as revoked:await service.read(value)
     assert revoked.value.status_code==503
-    assert (await service.original(who,captured['pageId'],'Synthetic9Pass'))[0]==scanner.raw
+    assert (await service.original(who,captured['pageId'],'Synthetic9Pass'))[0]==original
     async with db.connection() as conn:
         for table in ('market_facts','market_source_configs','market_discovery_pages'):
             assert not await(await conn.execute(f'SELECT 1 FROM {table}')).fetchone()
-    assert scanner.calls==1
+    assert scanner.calls==3

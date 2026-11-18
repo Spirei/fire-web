@@ -1,5 +1,6 @@
 """Anonymous reads of separately licensed public facts; never owner data or IO."""
 
+from contextlib import nullcontext
 from dataclasses import asdict
 from hashlib import sha256
 from uuid import UUID
@@ -58,12 +59,13 @@ class PublicQuotes:
         self.authority = authority
         self.db = authority.db
 
-    async def read(self, items, *, session=None, include_market_cap=True, retain_evidence=False, snapshot=None, observed_at=None):
+    async def read(self, items, *, session=None, include_market_cap=True, retain_evidence=False, snapshot=None, observed_at=None, connection=None):
         # Snapshot locators are service-internal only; HTTP callers never bind these arguments.
         quotes, states, evidence = {}, {}, {}
         if snapshot is not None and not isinstance(snapshot,dict):raise ValueError('public_snapshot_invalid')
         if observed_at is not None and (snapshot is None or observed_at.tzinfo is None):raise ValueError('public_snapshot_clock_invalid')
-        async with self.db.connection() as conn, conn.transaction():
+        context = self.db.connection() if connection is None else nullcontext(connection)
+        async with context as conn, conn.transaction():
             # READ COMMITTED + Authority.current's license lock serialize revocation.
             licenses = await (await conn.execute(
                 'SELECT id FROM public_market_licenses ORDER BY id LIMIT 101'

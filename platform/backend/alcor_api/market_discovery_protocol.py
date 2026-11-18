@@ -20,6 +20,7 @@ from .market_contract import canonical
 
 VERSION='market-discovery-v1'
 LIMIT=8*1024*1024
+RANKING_MAX_AGE=timedelta(days=10)
 FILTERS={'US':'m:105,m:106,m:107','HK':'m:128+t:3,m:128+t:4,m:128+t:1,m:128+t:8','CN':'m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048'}
 EXCHANGES={'US':('AMEX','NYSE','NASDAQ'),'HK':('HKEX',),'CN':('SSE','SZSE','BSE')}
 SCANNERS={'US':'america','HK':'hongkong','CN':'china'}
@@ -243,7 +244,7 @@ def parse(raw,target,value,now):
             seen.add(code);previous=Decimal(str(rank));item={'market':market,'code':code.upper(),'name':name.strip(),'price':numeric(row.get('f2'),positive=True),'changePct':numeric(row.get('f3'))}
             if ranking:
                 stamp=numeric(row.get('f124'),positive=True)
-                if stamp is None or not now-timedelta(days=10)<=datetime.fromtimestamp(stamp,UTC)<=now+timedelta(minutes=3):raise ValueError('ranking_timestamp_invalid')
+                if stamp is None or not now-RANKING_MAX_AGE<=datetime.fromtimestamp(stamp,UTC)<=now+timedelta(minutes=3):raise ValueError('ranking_timestamp_invalid')
                 at=datetime.fromtimestamp(stamp,UTC);dates.add(at.astimezone(ZoneInfo('America/New_York' if market=='US' else 'Asia/Shanghai')).date().isoformat())
                 item.update({metric:rank,'time':at.isoformat()})
             else:item.update(marketCap=rank,logo='',type='stock',rankChange=None)
@@ -270,7 +271,7 @@ def parse(raw,target,value,now):
             if v is None or v<=0 or stamp is None or stamp%86400 or datetime.fromtimestamp(stamp,UTC)>now+timedelta(minutes=3):raise ValueError('scanner_observation_invalid')
             date=datetime.fromtimestamp(stamp,UTC).date().isoformat();dates.add(date)
             if metric=='volume':
-                if Decimal(str(v))>previous or datetime.fromtimestamp(stamp,UTC)<now-timedelta(days=10):raise ValueError('scanner_rank_or_date_invalid')
+                if Decimal(str(v))>previous or datetime.fromtimestamp(stamp,UTC)<now-RANKING_MAX_AGE:raise ValueError('scanner_rank_or_date_invalid')
                 previous=Decimal(str(v));items.append({'market':market,'code':normalized,'name':name.strip(),'volume':v})
             else:
                 h=numeric(high,positive=True)
@@ -280,7 +281,7 @@ def parse(raw,target,value,now):
         if metric=='amount':
             latest=max(dates) if dates else None
             candidates=sorted((row for row in candidates if row['date']==latest),key=lambda row:Decimal(row['upper']),reverse=True)
-            if latest is None or len(candidates)<10 or datetime.fromisoformat(latest).replace(tzinfo=UTC)<now-timedelta(days=10):raise ValueError('amount_universe_invalid')
+            if latest is None or len(candidates)<10 or datetime.fromisoformat(latest).replace(tzinfo=UTC)<now-RANKING_MAX_AGE:raise ValueError('amount_universe_invalid')
             extra={'candidates':candidates,'tradeDate':latest,'currency':CURRENCIES[market]};complete=False
         else:extra={'tradeDate':next(iter(dates))};complete=True
     elif target.source=='companiesmarketcap':
