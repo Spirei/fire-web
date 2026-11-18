@@ -6718,13 +6718,14 @@ html { scrollbar-gutter:stable; }
 .platform-search-overlay { position:fixed; inset:0; z-index:350; display:flex; justify-content:center; align-items:flex-start; padding:14vh 16px 24px; background:#0006; }
 .platform-search-dialog { width:min(520px,100%); max-height:72dvh; display:flex; flex-direction:column; border:1px solid rgb(var(--site-edge)); border-radius:18px; background:rgb(var(--site-surface)); color:rgb(var(--site-ink)); box-shadow:0 18px 70px #0004; overflow:hidden; }
 .platform-search-input { display:flex; flex:none; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid rgb(var(--site-edge)); }
-.platform-search-input input { width:100%; min-width:0; padding:4px 0; border:0; outline:none; background:transparent; color:inherit; font-size:15px; }
+.platform-search-input > svg { flex:none; color:rgb(var(--site-muted)); }
+.platform-search-input input { flex:1; min-width:0; padding:4px 0; border:0; outline:none; background:transparent; color:inherit; font-size:16px; }
 .platform-search-input button { display:grid; place-items:center; flex:none; width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:inherit; }
 .platform-search-results { overflow:auto; padding:8px; }
 .platform-search-results > button { display:flex; align-items:center; gap:12px; width:100%; min-height:42px; padding:10px 12px; text-align:left; border:0; border-radius:8px; background:transparent; color:inherit; font-size:14px; }
 .platform-search-results > button > svg { width:18px; height:18px; flex:none; }
-.platform-search-results > button:hover,.platform-search-results > button:focus-visible { background:rgb(var(--site-ink) / .07); }
-.platform-search-results > p { padding:16px 12px; color:rgb(var(--site-muted)); font-size:14px; }
+.platform-search-results > button:hover,.platform-search-results > button:focus-visible,.platform-search-results > button[aria-selected="true"] { background:rgb(var(--site-ink) / .07); }
+.platform-search-empty { padding:24px 20px; color:rgb(var(--site-muted)); font-size:14px; }
 @media(min-width:1024px) {
   .fire-sidebar { transition:width 160ms ease; }
   .records-app[data-sidebar-collapsed="true"] > .fire-sidebar { width:64px!important; }
@@ -6997,8 +6998,8 @@ html[data-platform-reduced="true"] .app-shell-root *,html[data-platform-reduced=
 
 /* Unified global search: history and results share one scrollable surface. */
 .platform-search-results { min-height:0; }
-.platform-search-results > button > span { flex:1; min-width:0; }
-.platform-search-results small { color:rgb(var(--site-muted)); font-size:12px; flex:none; }
+.platform-search-results > button > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.platform-search-results small { color:rgb(var(--site-muted)); font-size:12px; flex:0 1 auto; text-align:right; }
 .platform-search-history { display:flex; flex-direction:column; min-height:0; }
 .platform-search-history-head { display:flex; justify-content:space-between; align-items:center; padding:12px 16px 8px; color:rgb(var(--site-muted)); font-size:12px; }
 .platform-search-history-head .capsule-control { min-height:30px; padding:4px 10px; font-size:12px; }
@@ -7011,7 +7012,12 @@ html[data-platform-reduced="true"] .app-shell-root *,html[data-platform-reduced=
 .platform-search-history-row .capsule-icon-control { width:30px; height:30px; min-height:30px; border-color:transparent; background:transparent; }
 .platform-search-history-error { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px; color:rgb(var(--site-muted)); font-size:12px; border-top:1px solid rgb(var(--site-edge)); }
 .platform-search-history-error .capsule-control { min-height:28px; padding:3px 10px; font-size:12px; }
-@media(max-width:600px) { .platform-search-overlay { padding-top:12vh; } .platform-search-dialog { max-height:75dvh; } }
+@media(max-width:600px) {
+  .platform-search-overlay { padding-top:max(14px,env(safe-area-inset-top)); }
+  .platform-search-dialog { max-height:calc(100dvh - max(14px,env(safe-area-inset-top)) - 24px); }
+  .platform-search-input { padding-inline:12px; gap:8px; }
+  .platform-search-input button { width:36px; height:36px; }
+}
 
 /* Use the available panel width, not the browser width, for user table layout. */
 .users-page { container:users / inline-size; }

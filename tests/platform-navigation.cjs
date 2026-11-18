@@ -79,9 +79,10 @@ try{
  tree.find(n=>n.props?.label==='删除搜索：外观').props.onClick();tree.find(n=>n.props?.children==='清空历史').props.onClick();
  assert.deepEqual(historyActions,[['remove','one'],['clear']]);
  let input=tree.find(n=>n.type==='input');input.props.onChange({target:{value:'市场色块'}});tree=view();
- let results=tree.find(n=>n.props?.className==='platform-search-results');assert.equal(results.props.children[0].length,1);results.props.children[0][0].props.onClick();
+ const options=nodes=>nodes.filter(n=>n.props?.role==='option');
+ let results=options(tree);assert.equal(results.length,1);results[0].props.onClick();
  assert.deepEqual(historyActions.at(-1),['record','市场色块']);assert.deepEqual(selected.at(-1),['stocks','market-badges']);
- searchStates=[true,'市场色块'];assert(!view({admin:false}).some(n=>n.props?.className==='platform-search-results'&&n.props.children[0].length),'ordinary users cannot search administrator settings');
+ searchStates=[true,'市场色块'];assert.equal(options(view({admin:false})).length,0,'ordinary users cannot search administrator settings');
  searchStates=[true,'不存在的功能'];tree=view();input=tree.find(n=>n.type==='input');input.props.onKeyDown({key:'Enter',nativeEvent:{isComposing:false},preventDefault(){}});assert.deepEqual(historyActions.at(-1),['record','不存在的功能']);
  input.props.onChange({target:{value:'正在输入'}});assert.deepEqual(historyActions.at(-1),['record','不存在的功能'],'typing never writes history');
  const settings=fs.readFileSync(path.join(root,'components/views/SettingsView.tsx'),'utf8');assert(!settings.includes('placeholder="搜索设置"')&&!settings.includes('fire:settings-cmd-open'));
