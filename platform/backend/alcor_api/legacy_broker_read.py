@@ -65,38 +65,65 @@ async def presets(catalog):
 
 async def account_view(conn, owner, identifier, preset_rows, *, version=2):
     row = await broker_account(conn, owner, identifier)
-    if any(c not in ACCOUNT_METADATA_CURRENCIES for c in row["currencies"]):
+    return (await account_views(conn, owner, [row], preset_rows, version=version))[0]
+
+
+async def account_views(conn, owner, rows, preset_rows, *, version):
+    if not rows:
+        return []
+    if any(c not in ACCOUNT_METADATA_CURRENCIES for row in rows for c in row["currencies"]):
         raise HTTPException(409, "旧账户协议不支持当前账户币种，请使用平台账户接口")
+    identifiers = [row["id"] for row in rows]
     records = await (
         await conn.execute(
-            "SELECT market,account_market FROM portfolio_records WHERE owner_id=%s AND broker_account_id=%s AND deleted_at IS NULL",
-            (owner, identifier),
+            """SELECT broker_account_id, market, account_market, count(*) AS record_count
+               FROM portfolio_records
+               WHERE owner_id=%s AND broker_account_id=ANY(%s) AND deleted_at IS NULL
+               GROUP BY broker_account_id, market, account_market""",
+            (owner, identifiers),
         )
     ).fetchall()
-    used, issues = set(), set()
-
-    def add(currency):
-        if currency is None:
-            issues.add("unknown_currency")
-        else:
-            used.add(currency)
-
-    for record in records:
-        add(MARKETS.get(record["market"]))
-        if record["account_market"]:
-            add(MARKETS.get(record["account_market"]))
     references = await (
         await conn.execute(
-            "SELECT kind,currency FROM broker_account_references WHERE owner_id=%s AND account_id=%s AND kind NOT IN ('position','connection')",
-            (owner, identifier),
+            """SELECT DISTINCT account_id, currency FROM broker_account_references
+               WHERE owner_id=%s AND account_id=ANY(%s) AND kind NOT IN ('position','connection')""",
+            (owner, identifiers),
         )
     ).fetchall()
-    for reference in references:
-        add(reference["currency"])
     revision = await (
         await conn.execute("SELECT revision FROM portfolio_record_collections WHERE owner_id=%s", (owner,))
     ).fetchone()
-    preset = next((p for p in preset_rows if p["id"] == row["provider_id"]), None)
+
+    currencies = {identifier: set() for identifier in identifiers}
+    counts = dict.fromkeys(identifiers, 0)
+    for record in records:
+        identifier = record["broker_account_id"]
+        counts[identifier] += record["record_count"]
+        currencies[identifier].add(MARKETS.get(record["market"]))
+        if record["account_market"]:
+            currencies[identifier].add(MARKETS.get(record["account_market"]))
+    for reference in references:
+        currencies[reference["account_id"]].add(reference["currency"])
+
+    presets_by_id = {preset["id"]: preset for preset in preset_rows}
+    record_revision = revision["revision"] if revision else 0
+    return [
+        project_account(
+            row,
+            currencies[row["id"]],
+            counts[row["id"]],
+            presets_by_id.get(row["provider_id"]),
+            record_revision,
+            version,
+        )
+        for row in rows
+    ]
+
+
+def project_account(row, currencies, record_count, preset, record_revision, version):
+    identifier = row["id"]
+    used = currencies - {None}
+    unknown_currency = None in currencies
     return {
         "id": row["id"],
         "name": row["name"],
@@ -107,18 +134,22 @@ async def account_view(conn, owner, identifier, preset_rows, *, version=2):
         "currencies": [c for c in ACCOUNT_METADATA_CURRENCIES if c in set(row["currencies"]) | used],
         "currencyUsage": {
             "complete": False,
-            "platformComplete": not issues,
+            "platformComplete": not unknown_currency,
             "historicalCoverageKnown": False,
             "coverageScope": "platform_registered_dependencies",
             "usedCurrencies": sorted(used),
-            "recordCollectionRevision": revision["revision"] if revision else 0,
-            "issues": sorted(issues),
+            "recordCollectionRevision": record_revision,
+            "issues": ["unknown_currency"] if unknown_currency else [],
         },
         "revision": row["revision"],
-        "icon": f"/api/v{version}/broker-accounts/{identifier}/icon" if row.get("icon_version") else preset["icon"] if preset else None,
+        "icon": f"/api/v{version}/broker-accounts/{identifier}/icon"
+        if row.get("icon_version")
+        else preset["icon"]
+        if preset
+        else None,
         "iconSource": "custom" if row.get("icon_version") else "preset" if preset else "none",
         "recordGroup": row["name"],
-        "recordCount": len(records),
+        "recordCount": record_count,
         "createdAt": iso(row["created_at"]),
         "updatedAt": iso(row["updated_at"]),
     }
@@ -166,13 +197,13 @@ def mount_legacy_broker_reads(app):
                 else:
                     rows = await (
                         await conn.execute(
-                            "SELECT id FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL ORDER BY created_at,id",
+                            "SELECT * FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL ORDER BY created_at,id",
                             (who.id,),
                         )
                     ).fetchall()
                     value = {
                         "accountId": who.id,
-                        "items": [await account_view(conn, who.id, row["id"], values, version=version) for row in rows],
+                        "items": await account_views(conn, who.id, rows, values, version=version),
                         "collectionRevision": await broker_collection(conn, who.id),
                     }
             return JSONResponse({"code": 0, "message": "ok", "data": value}, headers=headers)

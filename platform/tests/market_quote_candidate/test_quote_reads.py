@@ -9,7 +9,7 @@ import subprocess
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -416,7 +416,8 @@ async def test_price_only_Futu_record_stays_unknown_for_OHLC_volume_and_actual_i
     assert await hashes(app)==before and transport.calls==1
 
 
-async def test_auto_source_priority_precedes_ambiguity_and_preserves_explicit_reads(quoted):
+async def test_auto_source_priority_precedes_ambiguity_and_preserves_explicit_reads(quoted, monkeypatch):
+    from alcor_api import market_quote_reads
     from alcor_api.market_contract import Query
     client,app,authority,transport,_revision,headers,_source=quoted
     original=authority.policies[0]
@@ -431,10 +432,12 @@ async def test_auto_source_priority_precedes_ambiguity_and_preserves_explicit_re
         return canonical({'query':asdict(query),'licenseRevision':policy.license_revision,
             'facts':[{**_source,'currency':'HKD','price':'140'}],'nextCursor':None}).encode(),'controlled_http_response_body'
     transport.read=collect
+    revisions = {}
     for name in ('hk-backup','hk-tencent'):
         response=await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':name})
         assert response.status_code==200,response.text
-        await demand(client,response.json()['revision'],Query('latest','HK','00700'))
+        revisions[name] = response.json()['revision']
+        await demand(client,revisions[name],Query('latest','HK','00700'))
     await schedule(authority)
     for _ in range(2):
         task=await claim(app.state.db,uuid4());assert task is not None
@@ -446,6 +449,33 @@ async def test_auto_source_priority_precedes_ambiguity_and_preserves_explicit_re
     assert response.json()['quotes']['42']['price']==160
     explicit=await client.post('/api/market/quotes/read',json=body({'id':'42','market':'HK','code':'00700'}),headers=headers)
     assert explicit.json()['quoteStates']['42']['state']=='ambiguous_source','no preference must retain the ambiguity guard'
+
+    app.state.db.settings._legacy_quote_order = ['tencent', original.source]
+    monkeypatch.setattr('alcor_api.legacy_quote_api.requested_session', lambda: 'REGULAR')
+    items = body({'id': 'hk', 'market': 'HK', 'code': '00700'},
+                 {'id': 'us', 'market': 'US', 'code': 'AAPL'})
+    async def recent_failures(*_args):
+        return {('HK', '00700', UUID(revisions['hk-tencent']))}
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr('alcor_api.market_source_failures.recent_failed_sources_by_pair', recent_failures)
+        response = await client.post('/api/v2/quotes', json=items, headers=headers)
+        assert response.status_code == 200, response.text
+        quotes = response.json()['data']['quotes']
+        assert (quotes['hk']['price'], quotes['us']['price']) == (140, 120)
+
+    verified = market_quote_reads.with_snapshot_metrics
+
+    async def verify(conn, who, query, policy, fact, pages):
+        if policy.id == 'hk-tencent':
+            raise market_quote_reads.SnapshotMetricMismatch()
+        return await verified(conn, who, query, policy, fact, pages)
+
+    monkeypatch.setattr(market_quote_reads, 'with_snapshot_metrics', verify)
+    response = await client.post('/api/v2/quotes', json=items, headers=headers)
+    assert response.status_code == 200, response.text
+    quotes = response.json()['data']['quotes']
+    assert (quotes['hk']['price'], quotes['us']['price']) == (140, 120)
 
 
 async def test_private_ticker_binds_security_kind_owner_and_does_not_collect(quoted):

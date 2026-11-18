@@ -37,6 +37,18 @@ async def test_provider_extended_fields_and_underlying_identity_never_become_reg
                          'cur_price': '120', 'last_close': '90'},
                     ]
                 return canonical(payload).encode(), 'sdk_json_representation_not_wire_bytes'
+            if query.code in ('ROBN', 'RKLX', 'TSLL'):
+                row['update_time'] = {
+                    'ROBN': '2026-10-26 16:00:00',
+                    'RKLX': '2026-10-26 15:59:59',
+                    'TSLL': '2026-10-23 16:00:00',
+                }[query.code]
+                return canonical({
+                    'records': [row],
+                    'realTimeRecords': [{'code': f'US.{query.code}', 'time': '2026-10-27 03:35:00',
+                                         'is_blank': False, 'cur_price': '130',
+                                         'last_close': '99' if query.code == 'RKLX' else '100'}],
+                }).encode(), 'sdk_json_representation_not_wire_bytes'
             return canonical({'records':[row]}).encode(),'sdk_json_representation_not_wire_bytes'
     sdk=SDK()
     for session in ('REGULAR','PRE','AFTER','OVERNIGHT'):
@@ -121,6 +133,27 @@ async def test_provider_extended_fields_and_underlying_identity_never_become_reg
     next_session = await client.post('/api/v2/quotes', headers=headers, json={**body, 'includeHistoricalExtended': True})
     assert next_session.status_code == 200
     assert 'historicalExtended' not in next_session.json()['data']['quotes']['weekend']
+
+    authority.clock = lambda: datetime(2026, 10, 27, 7, 36, tzinfo=UTC)
+    overnight = ('ROBN', 'RKLX', 'TSLL')
+    for symbol in overnight:
+        await demand(client, revision, Query('latest', 'US', symbol, session='OVERNIGHT'))
+        assert await schedule(authority) == 1
+        task = await claim(authority.db, uuid4(), kind='market.latest')
+        assert task and await execute(authority, task, sdk) == 'observed'
+    quotes = await client.post('/api/v2/quotes', headers=headers, json={
+        'session': 'OVERNIGHT',
+        'items': [{'id': symbol, 'market': 'US', 'code': symbol} for symbol in overnight],
+    })
+    assert quotes.status_code == 200, quotes.text
+    result = quotes.json()['data']['quotes']
+    assert all(result[symbol]['price'] == 130 for symbol in overnight)
+    assert datetime.fromisoformat(result['ROBN']['time']) == datetime(2026, 10, 27, 7, 35, tzinfo=UTC)
+    assert result['ROBN']['regularSession'] == {
+        'price': 100, 'previousClose': 90, 'time': '2026-10-26T20:00:00+00:00',
+        'authority': 'futu_snapshot_close_matches_extended_baseline',
+    }
+    assert not any('regularSession' in result[symbol] for symbol in ('RKLX', 'TSLL'))
 
 
 async def test_fund_units_are_exact_observation_and_aum_is_not_market_cap(market):

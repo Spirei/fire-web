@@ -3,6 +3,7 @@
 import json
 import math
 import re
+from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import localcontext
 from uuid import UUID
@@ -160,6 +161,22 @@ def project(row, policy, market, now, *, include_market_cap=True):
                     result["regularSnapshotMetrics"][field] = metric
                 except (ValueError, TypeError, OverflowError):
                     continue
+    regular_close = value.get("regularSession")
+    if (market == "US" and policy.source == "futu" and session in ("PRE", "AFTER", "OVERNIGHT")
+            and isinstance(regular_close, dict)):
+        try:
+            regular_at = datetime.fromisoformat(regular_close["time"])
+            _, regular_price = observed(regular_close["price"], positive=True)
+            if regular_at.tzinfo is not None and regular_at < at:
+                result["regularSession"] = {
+                    "price": regular_price, "time": regular_at.isoformat(),
+                    "authority": "futu_snapshot_close_matches_extended_baseline",
+                }
+                for key in ("previousClose", "open", "high", "low"):
+                    if key in regular_close:
+                        _, result["regularSession"][key] = observed(regular_close[key], positive=True)
+        except (ValueError, TypeError, OverflowError, KeyError):
+            result.pop("regularSession", None)
     for field in (
         "open",
         "high",
@@ -407,7 +424,7 @@ class BatchQuotes:
                             ORDER BY source_time DESC,sequence DESC LIMIT 1) f""",
                         ([s['id'] for s in all_streams],[s['source_revision'] for s in all_streams],who.id))).fetchall()
                     latest_facts = {fact['stream_id']:fact for fact in facts}
-            failed_sources = set()
+            failures_by_security = defaultdict(set)
             if all_streams and source_revision is None and source_preference == "auto":
                 from .market_source_failures import recent_failed_sources_by_pair
 
@@ -417,9 +434,11 @@ class BatchQuotes:
                         value = 'asset' if market == 'ASSET' else 'equity'
                     return value or 'equity'
 
-                failed_sources = await recent_failed_sources_by_pair(
+                recent_failures = await recent_failed_sources_by_pair(
                     conn, who.id, {stream['source_revision'] for stream in all_streams}, pairs, instrument_for,
                 )
+                for market, symbol, revision in recent_failures:
+                    failures_by_security[market, symbol].add(revision)
             resolved = {}
             snapshot_pages = {}
             for identifier, (market, symbol) in normalized.items():
@@ -442,7 +461,7 @@ class BatchQuotes:
                     instruments = set()
                     source_families = {}
                     source_instruments = {}
-                    failed_sources = set()
+                    unverified_sources = set()
                     retained_source = False
                     retained_policy_ids = set()
                     current_policy_ids = set()
@@ -473,7 +492,7 @@ class BatchQuotes:
                                 )
                             except SnapshotMetricMismatch:
                                 integrity_failure = True
-                                failed_sources.add(stream["source_revision"])
+                                unverified_sources.add(stream["source_revision"])
                                 continue
                             dto, state = project(fact, approved, market, now, include_market_cap=include_market_cap)
                             if dto:
@@ -524,10 +543,7 @@ class BatchQuotes:
                         sources &= chosen
                         instruments = set().union(*(source_instruments[r] for r in sources)) if sources else set()
                     if source_revision is None and source_preference == "auto" and market != "ASSET":
-                        cooling_sources |= {
-                            revision for market_name, code_name, revision in failed_sources
-                            if (market_name, code_name) == (market, symbol)
-                        }
+                        cooling_sources.update(failures_by_security.get(cache_key, ()))
                         usable=[c for c in candidates if c[0]['source_revision'] not in cooling_sources]
                         if usable:candidates=usable
                         order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
@@ -537,7 +553,7 @@ class BatchQuotes:
                                 candidates = prioritized
                                 sources = {revision for revision in sources if source_families[revision] == provider}
                                 instruments = set().union(*(source_instruments[revision] for revision in sources))
-                                integrity_failure = bool(failed_sources & sources)
+                                integrity_failure = bool(unverified_sources & sources)
                                 break
                     if integrity_failure:
                         resolved[cache_key] = (None, {"state": "unverified_source_page"})

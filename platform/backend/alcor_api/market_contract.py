@@ -371,6 +371,45 @@ def latest_realtime(payload,query,symbol,observed_at=None):
     return result
 
 
+def futu_regular_close(row, snapshot_time, extended):
+    """Keep the provider's verified regular close beside the extended tick."""
+    zone = ZoneInfo(ZONES['US'])
+    regular = snapshot_time.astimezone(zone)
+    tick = datetime.fromisoformat(extended['at']).astimezone(zone)
+    session = extended['session']
+    expected_date = tick.date()
+    if session == 'PRE' or session == 'OVERNIGHT' and tick.hour < 4:
+        expected_date -= timedelta(days=1)
+    if session != 'AFTER':
+        expected_date -= timedelta(days=max(0, expected_date.weekday() - 4))
+    if (
+        regular.weekday() >= 5 or regular.date() != expected_date or regular >= tick
+        or (regular.hour, regular.minute, regular.second) not in ((15, 59, 59), (16, 0, 0))
+    ):
+        return None
+    try:
+        price = number(row.get('last_price'), positive=True)
+        if price != number(extended['prevClose'], positive=True):
+            return None
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return None
+    result = {'price': str(price), 'time': snapshot_time.isoformat()}
+    for source, target in (('prev_close_price', 'previousClose'), ('open_price', 'open'),
+                           ('high_price', 'high'), ('low_price', 'low')):
+        try:
+            result[target] = str(number(row.get(source), positive=True))
+        except (ValueError, TypeError, OverflowError):
+            continue
+    values = [Decimal(result[key]) for key in ('price', 'open') if key in result]
+    if (
+        'high' in result and Decimal(result['high']) < max(values)
+        or 'low' in result and Decimal(result['low']) > min(values)
+    ):
+        for key in ('open', 'high', 'low'):
+            result.pop(key, None)
+    return result
+
+
 def futu_rows(payload, query, *, observed_at=None):
     """Normalize the real SDK records representation; an invalid row never becomes zero."""
     query.validate()
@@ -414,6 +453,10 @@ def futu_rows(payload, query, *, observed_at=None):
                     fact.update(latest_snapshot(row, query, stamp))
                 except ValueError:
                     fact.update(latest_realtime(payload,query,symbol,observed_at));fact['snapshotObservedAt']=stamp.isoformat();used_realtime=True
+                    if query.instrument == 'equity':
+                        regular_close = futu_regular_close(row, stamp, fact)
+                        if regular_close is not None:
+                            fact['regularSession'] = regular_close
                 metrics = snapshot_metrics(row)
                 if query.session != 'REGULAR':
                     fact['regularSnapshotMetrics'] = {key:metrics.pop(key) for key in

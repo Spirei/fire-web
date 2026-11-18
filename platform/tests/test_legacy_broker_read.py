@@ -219,6 +219,14 @@ async def test_broker_reads_frozen_source_owner_versions_presets_unknown_currenc
         "recordCollectionRevision": 1,
         "issues": ["unknown_currency"],
     }
+    listing = await client.get("/api/v2/broker-accounts", headers=bearer(pair))
+    assert listing.status_code == 200, listing.text
+    directory = {item["id"]: item for item in listing.json()["data"]["items"]}
+    assert directory[account["id"]] == result.json()["data"]
+    assert directory[account["id"]]["recordCount"] == 1
+    assert directory[simulated["id"]]["currencyUsage"]["usedCurrencies"] == []
+    assert directory[simulated["id"]]["currencyUsage"]["platformComplete"] is True
+    assert directory[simulated["id"]]["recordCount"] == 0
     async with db.connection() as conn:
         assert not await (
             await conn.execute("SELECT 1 FROM cash_ledger_entries WHERE owner_id=%s", (admin,))
