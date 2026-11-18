@@ -4,7 +4,7 @@ import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard 
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { IconActivity, IconArrowLeft, IconArrowUpRight, IconCheck, IconChevronLeft, IconChevronRight, IconPlayerPause, IconPlayerPlay, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
+import { IconActivity, IconArrowDown, IconArrowLeft, IconArrowUp, IconArrowUpRight, IconCheck, IconChevronLeft, IconChevronRight, IconPlayerPause, IconPlayerPlay, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
 import ThemeToggle from "@/components/ThemeToggle";
 import AppSelect from "@/components/AppSelect";
 import ApiPathText from "@/components/ApiPathText";
@@ -13,7 +13,7 @@ import { parseRequestFilters, requestDay, type RequestFilters, type RequestSnaps
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 
 const SOURCE_NAMES = { web: "网页", ios: "iOS", app: "App", other: "其他" };
-const FILTER_KEYS: Record<keyof RequestFilters, string> = { period: "rPeriod", status: "rStatus", source: "rSource", method: "rMethod", q: "rQ", page: "rPage", anchor: "rAnchor", day: "rDay", year: "rYear" };
+const FILTER_KEYS: Record<keyof RequestFilters, string> = { period: "rPeriod", status: "rStatus", source: "rSource", method: "rMethod", q: "rQ", sort: "rSort", dir: "rDir", page: "rPage", anchor: "rAnchor", day: "rDay", year: "rYear" };
 const fmt = (value: number) => value.toLocaleString("zh-CN");
 const ms = (value: number) => value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${Math.round(value)} ms`;
 const time = (value: number) => new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(value);
@@ -23,6 +23,7 @@ function filterParams(filters: RequestFilters) {
   const params = new URLSearchParams();
   for (const key of Object.keys(FILTER_KEYS) as Array<keyof RequestFilters>) {
     const value = filters[key];
+    if (key === "sort" && value === "time" || key === "dir" && value === "desc") continue;
     if (value !== "" && value !== "all" && value !== 0) params.set(FILTER_KEYS[key], String(value));
   }
   return params;
@@ -182,6 +183,17 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
     filterParams(next).forEach((value, key) => url.searchParams.set(key, value));
     window.history.replaceState(null, "", url.pathname + "?" + url.searchParams.toString());
   };
+  const toggleSort = (sort: "status" | "duration") => {
+    const dir = filters.sort === sort && filters.dir === "desc" ? "asc" : "desc";
+    change({ sort, dir });
+  };
+  const sortHeader = (key: "status" | "duration", label: string) => (
+    <th aria-sort={filters.sort === key ? (filters.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" className={`rq-sort${filters.sort === key ? " is-active" : ""}`} onClick={() => toggleSort(key)}>
+        {label}{filters.sort === key && (filters.dir === "asc" ? <IconArrowUp size={11} /> : <IconArrowDown size={11} />)}
+      </button>
+    </th>
+  );
   const selectClass = "rq-select";
   const summary = snapshot?.summary;
   const successRate = summary?.total ? `${((1 - summary.errors / summary.total) * 100).toFixed(1)}%` : "—";
@@ -246,7 +258,7 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
         {snapshot?.endpoints.length ? snapshot.endpoints.map(row => <button type="button" key={`${row.method}:${row.path}`} className="rq-endpoint" onClick={() => change({ q: row.path, method: row.method })}><Method value={row.method} /><ApiPath path={row.path} className="rq-endpoint-path" /><span className="rq-endpoint-track"><i style={{ width: `${row.count / snapshot.endpoints[0].count * 100}%` }} /></span><strong>{fmt(row.count)}</strong><span className="rq-meta">{ms(row.averageMs)}</span></button>) : snapshot ? <div className="rq-empty">暂无请求</div> : Array.from({ length: Math.max(1, loadingShape.current.endpoints) }, (_, index) => <div className="rq-endpoint rq-placeholder" aria-hidden="true" key={index}><i className="rq-skeleton" /></div>)}
       </section>
       <section className="rq-card rq-records"><div className="rq-section-head"><h2>请求日志</h2><span className="rq-count">{snapshot ? fmt(snapshot.pagination.total) : "—"}</span></div>
-        <div className="rq-table-scroll"><table><thead><tr><th>时间</th><th>接口</th><th>状态</th><th>耗时</th><th>来源</th></tr></thead><tbody>{snapshot ? snapshot.logs.map(row => <tr key={row.id}><td><time dateTime={new Date(row.at).toISOString()} title={new Date(row.at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}>{stamp(row.at)}</time></td><td><div className="rq-table-path"><Method value={row.method} /><ApiPath path={row.path} /></div></td><td><span className={`rq-status ${row.status >= 500 ? "is-error" : row.status >= 400 ? "is-warn" : "is-success"}`}>{row.status < 400 && <IconCheck size={11} />}{row.status}</span></td><td className={row.duration >= 1000 ? "rq-slow" : "rq-fast"} title={row.timing || undefined}>{ms(row.duration)}</td><td>{SOURCE_NAMES[row.source]}</td></tr>) : Array.from({ length: Math.max(1, loadingShape.current.rows) }, (_, index) => <tr className="rq-placeholder" aria-hidden="true" key={index}>{[0, 1, 2, 3, 4].map(column => <td key={column}><i className="rq-skeleton" /></td>)}</tr>)}</tbody></table></div>
+        <div className="rq-table-scroll"><table><thead><tr><th>时间</th><th>接口</th>{sortHeader("status", "状态")}{sortHeader("duration", "耗时")}<th>来源</th></tr></thead><tbody>{snapshot ? snapshot.logs.map(row => <tr key={row.id}><td><time dateTime={new Date(row.at).toISOString()} title={new Date(row.at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}>{stamp(row.at)}</time></td><td><div className="rq-table-path"><Method value={row.method} /><ApiPath path={row.path} /></div></td><td><span className={`rq-status ${row.status >= 500 ? "is-error" : row.status >= 400 ? "is-warn" : "is-success"}`}>{row.status < 400 && <IconCheck size={11} />}{row.status}</span></td><td className={row.duration >= 1000 ? "rq-slow" : "rq-fast"} title={row.timing || undefined}>{ms(row.duration)}</td><td>{SOURCE_NAMES[row.source]}</td></tr>) : Array.from({ length: Math.max(1, loadingShape.current.rows) }, (_, index) => <tr className="rq-placeholder" aria-hidden="true" key={index}>{[0, 1, 2, 3, 4].map(column => <td key={column}><i className="rq-skeleton" /></td>)}</tr>)}</tbody></table></div>
         {snapshot && !snapshot.logs.length && <div className="rq-empty">{filters.day && Date.parse(`${filters.day}T23:59:59+08:00`) < snapshot.detailFrom ? "该日期的请求明细已过保留期" : "暂无请求记录"}</div>}
         {totalPages > 1 && <div className="rq-pagination"><span>第 {safePage} / {totalPages} 页</span><div><button type="button" className="rq-icon-button" disabled={safePage <= 1 || refreshing} aria-label="上一页请求" onClick={() => change({ page: safePage - 1, anchor: safePage === 2 ? 0 : snapshot?.pagination.anchor || 0 })}><IconChevronLeft size={15} /></button><button type="button" className="rq-icon-button" disabled={safePage >= totalPages || refreshing} aria-label="下一页请求" onClick={() => change({ page: safePage + 1, anchor: snapshot?.pagination.anchor || 0 })}><IconChevronRight size={15} /></button></div></div>}
       </section>

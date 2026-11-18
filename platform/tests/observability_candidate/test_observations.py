@@ -151,3 +151,27 @@ async def test_admin_snapshot_get_does_not_flush_queue_or_rollup_prune_or_write_
         assert len(obs.queue) == pending
         assert await tables_and_hashes(conn) == before
         assert result.json()["data"]["localCollector"]["buffered"] == pending
+
+
+async def test_request_log_sort_by_status_and_duration_keeps_default_time_order(db):
+    async with db.connection() as conn:
+        await conn.execute("TRUNCATE request_observations RESTART IDENTITY")
+        for status, duration in ((200, 5), (503, 900), (404, 50)):
+            await conn.execute(
+                "INSERT INTO request_observations(path,method,source,status,duration) "
+                "VALUES('/api/sorted','GET','web',%s,%s)", (status, duration),
+            )
+        await conn.execute(
+            "UPDATE request_rollup_state SET revision=(SELECT max(id) FROM request_observations) WHERE singleton"
+        )
+    async with db.connection() as conn:
+        slowest = await snapshot(conn, {"rSort": "duration", "rDir": "desc"})
+        assert [row["duration"] for row in slowest["logs"]] == [900.0, 50.0, 5.0]
+        fastest = await snapshot(conn, {"rSort": "duration", "rDir": "asc"})
+        assert [row["duration"] for row in fastest["logs"]] == [5.0, 50.0, 900.0]
+        statuses = await snapshot(conn, {"rSort": "status", "rDir": "asc"})
+        assert [row["status"] for row in statuses["logs"]] == [200, 404, 503]
+        default = await snapshot(conn, {})
+        assert [row["id"] for row in default["logs"]] == sorted(
+            [row["id"] for row in default["logs"]], reverse=True
+        )

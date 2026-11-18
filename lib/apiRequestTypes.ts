@@ -5,6 +5,8 @@ export interface RequestFilters {
   source: "all" | RequestSource;
   method: string;
   q: string;
+  sort: "time" | "status" | "duration";
+  dir: "asc" | "desc";
   page: number;
   anchor: number;
   day: string;
@@ -54,6 +56,8 @@ export function parseRequestFilters(params: URLSearchParams, now = Date.now()): 
     source: pick("rSource", ["all", "web", "ios", "app", "other"], "all"),
     method: pick("rMethod", ["all", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "OTHER"], "all"),
     q: (params.get("rQ") || "").trim().slice(0, 120),
+    sort: pick("rSort", ["time", "status", "duration"], "time"),
+    dir: pick("rDir", ["asc", "desc"], "desc"),
     page: int("rPage", 1, 5000), anchor: int("rAnchor", 0, Number.MAX_SAFE_INTEGER),
     day: validDay && day >= `${year - 1}-01-01` ? day : "",
     year: selectedYear >= year - 1 ? selectedYear : year

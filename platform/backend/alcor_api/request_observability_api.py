@@ -63,6 +63,8 @@ def filters(params, now):
             "rMethod", {"all", "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "OTHER"}, "all"
         ),
         "q": params.get("rQ", "").strip()[:120],
+        "sort": pick("rSort", {"time", "status", "duration"}, "time"),
+        "dir": pick("rDir", {"asc", "desc"}, "desc"),
         "page": positive("rPage", 1, 5000),
         "anchor": positive("rAnchor", 0, 9007199254740991),
         "day": day,
@@ -134,11 +136,14 @@ async def snapshot(conn, params, now=None, *, include_timing=False):
         ).fetchone()
     )["n"]
     page = min(f["page"], max(1, (total + 19) // 20))
+    ordered = {"time": "id", "status": "status", "duration": "duration"}[f["sort"]]
+    direction = "ASC" if f["dir"] == "asc" else "DESC"
+    order = ordered + " " + direction + ("" if ordered == "id" else ",id DESC")
     logs = await (
         await conn.execute(
             "SELECT id,(extract(epoch FROM at)*1000)::float8 AS at,path,method,source,status,duration,timing FROM request_observations WHERE "
             + detail_where
-            + " ORDER BY id DESC LIMIT 20 OFFSET %s",
+            + " ORDER BY " + order + " LIMIT 20 OFFSET %s",
             [*detail_args, (page - 1) * 20],
         )
     ).fetchall()
