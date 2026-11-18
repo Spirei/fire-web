@@ -129,9 +129,10 @@ async def test_cancelled_observer_does_not_cancel_other_security_and_close_rejec
 async def test_real_worker_batch_is_bounded_and_awaits_all_failed_and_successful_children(monkeypatch):
     from alcor_api import market_runtime as runtime
 
-    tasks = [{'id': uuid4()} for _ in range(114)]
+    tasks = [{'id': uuid4(), 'owner_id': f'owner-{index % 2}'} for index in range(114)]
     running = maximum = completed = 0
     calls = []
+    owner_gates = {}
 
     async def noop(*args):
         pass
@@ -142,12 +143,14 @@ async def test_real_worker_batch_is_bounded_and_awaits_all_failed_and_successful
 
     async def claim_batch(_db, _worker, *, kind, maximum):
         calls.append(kind)
+        owner_gates.clear()
         selected=tasks[:maximum]
         del tasks[:maximum]
         return selected
 
-    async def execute(_authority, task, _transport):
+    async def execute(_authority, task, _transport, *, owner_gate):
         nonlocal running, maximum, completed
+        assert owner_gates.setdefault(task['owner_id'],owner_gate) is owner_gate
         running += 1
         maximum = max(maximum, running)
         await asyncio.sleep(.001)
@@ -163,6 +166,7 @@ async def test_real_worker_batch_is_bounded_and_awaits_all_failed_and_successful
     authority = SimpleNamespace(db=None)
     while await runtime.batch_cycle(authority, None, uuid4(), history_turn=True):
         assert running == 0
+        assert len(set(owner_gates.values())) == len(owner_gates) == 2
     assert completed == 114 and maximum == 20 and calls.count('market.history') >= 6
     with pytest.raises(ValueError):
         await runtime.batch_cycle(authority, None, uuid4(), maximum=21)
