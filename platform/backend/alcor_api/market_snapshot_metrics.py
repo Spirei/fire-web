@@ -16,7 +16,9 @@ from .market_contract import CURRENCIES, ZONES, digest, number, source_time
 # skipped. Bounded by entry count and page size.
 _PAGE_CACHE = OrderedDict()
 _PAGE_CACHE_LIMIT = 128
-_PAGE_CACHE_MAX_BYTES = 1024 * 1024
+_PAGE_CACHE_MAX_BYTES = 512 * 1024
+_PAGE_CACHE_TOTAL_BYTES = 8 * 1024 * 1024
+_PAGE_CACHE_BYTES = 0
 
 
 class SnapshotMetricMismatch(ValueError):
@@ -60,10 +62,18 @@ async def with_snapshot_metrics(conn, who, query, policy, fact, cache):
                     rows = []
                 entry = (rows, raw)
                 if len(raw) <= _PAGE_CACHE_MAX_BYTES:
+                    global _PAGE_CACHE_BYTES
+                    previous = _PAGE_CACHE.pop(shared, None)
+                    if previous is not None:
+                        _PAGE_CACHE_BYTES -= len(previous[1])
                     _PAGE_CACHE[shared] = entry
-                    _PAGE_CACHE.move_to_end(shared)
-                    while len(_PAGE_CACHE) > _PAGE_CACHE_LIMIT:
-                        _PAGE_CACHE.popitem(last=False)
+                    _PAGE_CACHE_BYTES += len(raw)
+                    while _PAGE_CACHE and (
+                        len(_PAGE_CACHE) > _PAGE_CACHE_LIMIT
+                        or _PAGE_CACHE_BYTES > _PAGE_CACHE_TOTAL_BYTES
+                    ):
+                        _, removed = _PAGE_CACHE.popitem(last=False)
+                        _PAGE_CACHE_BYTES -= len(removed[1]) if removed else 0
             cache[key] = entry
     entry = cache[key]
     if entry is None:
