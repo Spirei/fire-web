@@ -1,6 +1,7 @@
 """Recover optional metrics only from the immutable SDK page that created this exact fact."""
 
 import json
+from collections import OrderedDict
 from dataclasses import asdict
 from datetime import datetime
 from decimal import Decimal
@@ -8,6 +9,14 @@ from decimal import Decimal
 from .dividend_sources import security
 from .fx_provider_parser import unique
 from .market_contract import CURRENCIES, ZONES, digest, number, source_time
+
+# Source pages are immutable, so the verified SDK decode can be reused across
+# combined quote/account reads. Facts are still matched against the decoded
+# page on every read; only the repeated transport fetch and JSON parse are
+# skipped. Bounded by entry count and page size.
+_PAGE_CACHE = OrderedDict()
+_PAGE_CACHE_LIMIT = 128
+_PAGE_CACHE_MAX_BYTES = 1024 * 1024
 
 
 class SnapshotMetricMismatch(ValueError):
@@ -21,29 +30,41 @@ async def with_snapshot_metrics(conn, who, query, policy, fact, cache):
     if type(value.get("snapshotMetricsVersion")) is int and value["snapshotMetricsVersion"] in (1, 2):
         return fact
     key = (str(fact["page_id"]), digest(asdict(query)))
+    shared = (str(who.id), str(fact["page_id"]), digest(asdict(query)))
     if key not in cache:
-        page = await (
-            await conn.execute(
-                """SELECT raw_bytes,raw_sha256,representation FROM market_source_pages
-            WHERE owner_id=%s AND id=%s AND source_revision=%s""",
-                (who.id, fact["page_id"], fact["source_revision"]),
-            )
-        ).fetchone()
-        if not page:
-            raise SnapshotMetricMismatch("source_page_missing")
-        if page["representation"] != "sdk_json_representation_not_wire_bytes":
-            cache[key] = None
+        entry = _PAGE_CACHE.get(shared)
+        if entry is not None:
+            _PAGE_CACHE.move_to_end(shared)
+            cache[key] = entry
         else:
-            raw = bytes(page["raw_bytes"])
-            if digest(raw) != page["raw_sha256"]:
-                raise SnapshotMetricMismatch("source_page_digest_mismatch")
-            from .market_worker import decode
+            page = await (
+                await conn.execute(
+                    """SELECT raw_bytes,raw_sha256,representation FROM market_source_pages
+                WHERE owner_id=%s AND id=%s AND source_revision=%s""",
+                    (who.id, fact["page_id"], fact["source_revision"]),
+                )
+            ).fetchone()
+            if not page:
+                raise SnapshotMetricMismatch("source_page_missing")
+            if page["representation"] != "sdk_json_representation_not_wire_bytes":
+                entry = None
+            else:
+                raw = bytes(page["raw_bytes"])
+                if digest(raw) != page["raw_sha256"]:
+                    raise SnapshotMetricMismatch("source_page_digest_mismatch")
+                from .market_worker import decode
 
-            try:
-                rows, _, _ = decode(policy, query, raw)
-            except (ValueError, TypeError, KeyError, OverflowError):
-                rows = []
-            cache[key] = (rows, raw)
+                try:
+                    rows, _, _ = decode(policy, query, raw)
+                except (ValueError, TypeError, KeyError, OverflowError):
+                    rows = []
+                entry = (rows, raw)
+                if len(raw) <= _PAGE_CACHE_MAX_BYTES:
+                    _PAGE_CACHE[shared] = entry
+                    _PAGE_CACHE.move_to_end(shared)
+                    while len(_PAGE_CACHE) > _PAGE_CACHE_LIMIT:
+                        _PAGE_CACHE.popitem(last=False)
+            cache[key] = entry
     entry = cache[key]
     if entry is None:
         return {**fact, "snapshot_metrics_unavailable": "original_representation_not_supported"}

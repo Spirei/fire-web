@@ -136,7 +136,7 @@ class FeeRepairs:
         self.db = db
         self.trading = Trading(db)
 
-    async def state(self, conn, who, account_id):
+    async def state(self, conn, who, account_id, *, snapshot_revision=True):
         account = await broker_account(conn, who.id, account_id)
 
         async def rows(table, order):
@@ -191,7 +191,8 @@ class FeeRepairs:
             "openings": openings,
             "cashRevision": revision["revision"] if revision else 0,
         }
-        state["snapshotRevision"] = hashed(state)
+        if snapshot_revision:
+            state["snapshotRevision"] = hashed(state)
         return state
 
     async def snapshot(self, who, account_id):

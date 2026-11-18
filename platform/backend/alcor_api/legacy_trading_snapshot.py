@@ -79,7 +79,7 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
     brokers=await(await conn.execute('SELECT * FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL AND (%s::text IS NULL OR id=%s) ORDER BY id LIMIT 10001',(who.id,scoped_account,scoped_account))).fetchall()
     if len(brokers)>10000:raise HTTPException(409,'账户范围超出本次完整交易快照预算')
     if brokers:
-        state=await FeeRepairs(None).state(conn,who,brokers[0]['id'])
+        state=await FeeRepairs(None).state(conn,who,brokers[0]['id'],snapshot_revision=not orders_only)
     else:
         rows=await(await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         head=await(await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
@@ -192,17 +192,24 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
         if (scope_record_id is None or row['recordId']==scope_record_id)
         and (scoped_account is None or (registered_order_read_model and scope_record_id is not None)
              or row['brokerAccountId']==scoped_account)]
+    def at(value):
+        if value is None:return datetime.min.replace(tzinfo=UTC)
+        return value if isinstance(value,datetime) else datetime.fromisoformat(value)
     missing_context=[row['id'] for row in orders if not row.get('registrationContextKnown')]
     if strict and missing_context:raise HTTPException(409,'旧交易协议需要原委托上下文；当前成交未登记此事实，请使用可表达未知的客户端')
+    if orders_only:
+        # The native order list consumes only the ordered items. Positions,
+        # balances and the two whole-state revision hashes are a full
+        # financial-snapshot cost the listing never reads.
+        orders.extend(historical)
+        return state, legacy_numbers(scalar({'accountId':who.id,'orders':sorted(
+            orders,key=lambda row:(at(row['tradedAt']),at(row['createdAt']),row['id']),reverse=True)}))
     currencies={row['currency'] for row in state['openings']}|{row['currency'] for row in state['cash']}
     balances={currency:sum((row['amount'] for row in state['cash'] if row['currency']==currency and row['affects_owner']),Decimal(0)) for currency in currencies}
     required={MARKET_CURRENCY.get(row['market']) for row in rows if row['qty'] is not None and row['qty']!=0}
     if None in required:raise HTTPException(409,'旧交易协议无法核对未知市场的资金单位')
     missing=sorted(required-currencies)
     complete=not missing and all(row['opening_at'] is not None for row in state['openings'])
-    def at(value):
-        if value is None:return datetime.min.replace(tzinfo=UTC)
-        return value if isinstance(value,datetime) else datetime.fromisoformat(value)
     positions=[]
     active_by_record=defaultdict(list)
     for order in orders:

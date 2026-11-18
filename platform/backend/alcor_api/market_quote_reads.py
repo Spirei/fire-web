@@ -558,7 +558,8 @@ class BatchQuotes:
                             # only its explicitly selected, validated source field.
                             same = selected_session_facts
                         if (
-                            len(
+                            len(same) > 1
+                            and len(
                                 {
                                     json.dumps(
                                         {
