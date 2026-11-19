@@ -31,6 +31,7 @@ _files = threading.BoundedSemaphore(2)
 # verified on every request.
 _cache_limit = 64
 _books = OrderedDict()
+_LOAD_SOURCE = object()
 
 
 def _cache_key(owner, original):
@@ -211,22 +212,26 @@ async def card_totals(conn, owner, account_kind):
     return result
 
 
-async def read_registered_cash(conn, who, settings, overview):
+async def registered_book_source(conn, owner):
+    rows = await (await conn.execute('''SELECT h.originals,h.source_sha256,h.source_instance,h.source_owner,
+        t.payload->'_archive' AS archive FROM database_migration_history_imports h
+        JOIN tasks t ON t.id=h.task_id AND t.owner_id=h.owner_id
+        WHERE h.owner_id=%s ORDER BY h.created_at LIMIT 2''', (owner,))).fetchall()
+    return rows[0] if len(rows) == 1 else None
+
+
+async def read_registered_cash(conn, who, settings, overview, *, source=_LOAD_SOURCE):
     """Compatibility display only. Existing CashLedger remains trading authority."""
     with localcontext() as precision:
         precision.prec = 80
-        return await _read_registered_cash(conn, who, settings, overview)
+        return await _read_registered_cash(conn, who, settings, overview, source=source)
 
 
-async def _read_registered_cash(conn, who, settings, overview):
-    stored = await (await conn.execute('''SELECT h.originals,h.source_sha256,h.source_instance,h.source_owner,
-        t.payload->'_archive' AS archive FROM database_migration_history_imports h
-        JOIN tasks t ON t.id=h.task_id AND t.owner_id=h.owner_id
-        WHERE h.owner_id=%s ORDER BY h.created_at LIMIT 2''', (who.id,))).fetchall()
-    if len(stored) != 1:
+async def _read_registered_cash(conn, who, settings, overview, *, source):
+    original = await registered_book_source(conn, who.id) if source is _LOAD_SOURCE else source
+    if original is None:
         return None
     try:
-        original = stored[0]
         key = _cache_key(who.id, original)
         cached_book = _cached_ordered(_books, key)
         if cached_book is None:

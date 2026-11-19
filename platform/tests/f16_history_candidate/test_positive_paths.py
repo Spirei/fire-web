@@ -4,6 +4,8 @@ from datetime import datetime
 from hashlib import sha256
 from uuid import uuid4
 
+import pytest
+
 from alcor_api.market_contract import Query, canonical
 from alcor_api.market_worker import claim, execute, schedule
 from alcor_api.market_yahoo_history import VERSION
@@ -12,15 +14,16 @@ from market_latest_candidate.test_market_authority import demand, market, market
 from test_history_protocols import seeded
 
 
-async def test_true_yahoo_index_is_not_etf_proxy_and_original_is_retained(market):  # noqa: F811
+@pytest.mark.parametrize(('key', 'code', 'provider_symbol'), [('spx', 'SPX', '^GSPC'), ('ndx', 'IXIC', '^IXIC')])
+async def test_true_yahoo_index_is_not_etf_proxy_and_original_is_retained(market, key, code, provider_symbol):  # noqa: F811
     client,app,authority,_,_ = market
     authority.policies = (replace(authority.policies[0],source='yahoo',source_version=VERSION,fixture=False,purposes=('bars.day',)),)
     configured = await client.post('/api/market/sources',json={'request_id':str(uuid4()),'policy_id':'fixture'})
     revision = configured.json()['revision']
     authority.clock = lambda:datetime.fromisoformat('2026-10-21T20:30:00+00:00')
-    query = Query('bars','US','SPX','day','none',instrument='index',start='2026-10-20',through='2026-10-21')
+    query = Query('bars','US',code,'day','none',instrument='index',start='2026-10-20',through='2026-10-21')
     stamps = [int(datetime.fromisoformat(value).timestamp()) for value in ('2026-10-20T14:00:00+00:00','2026-10-21T14:00:00+00:00')]
-    raw = canonical({'chart':{'error':None,'result':[{'meta':{'symbol':'^GSPC','instrumentType':'INDEX','currency':'USD'},'timestamp':stamps,'indicators':{'quote':[{'open':[100,110],'high':[112,122],'low':[90,100],'close':[110,120],'volume':[None,0]}]}}]}}).encode()
+    raw = canonical({'chart':{'error':None,'result':[{'meta':{'symbol':provider_symbol,'instrumentType':'INDEX','currency':'USD'},'timestamp':stamps,'indicators':{'quote':[{'open':[100,110],'high':[112,122],'low':[90,100],'close':[110,120],'volume':[None,0]}]}}]}}).encode()
     class YahooOriginal:
         fixture = True
         calls = 0
@@ -39,11 +42,11 @@ async def test_true_yahoo_index_is_not_etf_proxy_and_original_is_retained(market
     headers = {'authorization':'Bearer '+grant['access_token'],'x-alcor-market-source':revision}
     for version in ('v1','v2'):
         for suffix in ('','&view=daily'):
-            response = await client.get(f'/api/{version}/index-kline?key=spx'+suffix,headers=headers)
+            response = await client.get(f'/api/{version}/index-kline?key={key}'+suffix,headers=headers)
             assert response.status_code == 200,response.text
             data = response.json()['data']
             assert data['kind'] == 'index' and data['proxy'] is False and data['isActualIndex'] is True
-            assert data['sourceSymbol'] == '^GSPC' and data['adjust'] == 'none'
+            assert data['sourceSymbol'] == provider_symbol and data['adjust'] == 'none'
             assert data['rows'] == [{'d':'2026-10-20','c':110},{'d':'2026-10-21','c':120}] if suffix else data['closes'] == [120]
     original = await client.get(f"/api/market/history/originals/{page['id']}?source_revision={revision}")
     assert original.status_code == 200 and original.content == raw

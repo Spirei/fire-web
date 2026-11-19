@@ -13,6 +13,7 @@ from .cash_overview import CashOverview
 from .fee_repair_model import replay
 from .fx_reference import FxWorker
 from .legacy_broker_read import iso
+from .legacy_registered_positions import registered_closures
 from .market_quote_selection import configured_quotes
 from .position_transfer_checkpoint import economic_initial
 from .trade_accounting import replay_economic_trades
@@ -142,10 +143,11 @@ async def snapshot(service,who,options):
             declarations = await service.declarations(conn, who.id, rows)
         with measure('assets_averages'):
             average,cleared=await averages(conn,who.id,rows,actual)
-        from .legacy_registered_cash import read_registered_cash
+        from .legacy_registered_cash import read_registered_cash, registered_book_source
         with measure('assets_cash'):
             overview=await CashOverview(service.db).on_connection(conn,who)
-            registered=await read_registered_cash(conn,who,service.db.settings,overview)
+            archive=await registered_book_source(conn,who.id)
+            registered=await read_registered_cash(conn,who,service.db.settings,overview,source=archive)
         registered_cash=registered.dto if registered is not None else None
         head=await (await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
         accounts=await (await conn.execute('SELECT id,account_kind,holding_source FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL',(who.id,))).fetchall()
@@ -154,6 +156,7 @@ async def snapshot(service,who,options):
                for row,current in zip(original,rows,strict=True)):
             raise HTTPException(409,'持仓来源在读取报价期间已变化，请重新读取')
         now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
+        migrated_closed=registered_closures(archive,who.id,rows,actual,accounts,now)
         from .legacy_identity import public_profile
         with measure('assets_profile'):
             owner=await public_profile(conn,who.id,scope='portfolio.read')
@@ -182,7 +185,7 @@ async def snapshot(service,who,options):
                         source='record';price_at=(record.get('officialObservation') or {}).get('reportDate') or record['updatedAt']
                 currency=CURRENCIES.get(row['market']);account=accounts.get(row['broker_account_id'])
                 kind=account['account_kind'] if account else 'unknown'
-                position_status=position_state(row,record)
+                position_status='closed' if rid in migrated_closed else position_state(row,record)
                 is_active=position_status in ('open','quantity_unknown')
                 if is_active:kinds.add(kind)
                 cost=(diluted if selected['costMethod']=='diluted' else average.get(rid)) if known else None
@@ -194,7 +197,7 @@ async def snapshot(service,who,options):
                 pnl_value=convert(native_pnl,currency,selected['currency'],fx['rates'])
                 money[rid]=(market_value,cost_value,pnl_value,native_market,native_cost,native_pnl)
                 reason=None if market_value is not None else 'instrument_unclassified' if not known else 'unsupported_position_quantity' if qty is None or qty<0 else 'missing_price' if price is None else 'missing_exchange_rate'
-                market=row['account_market'] or row['market'];closed=cleared.get(rid)
+                market=row['account_market'] or row['market'];closed=cleared.get(rid) or migrated_closed.get(rid)
                 closed_today=bool(closed and row['market'] in ZONES and closed.astimezone(ZoneInfo(ZONES[row['market']])).date()==now.astimezone(ZoneInfo(ZONES[row['market']])).date())
                 values.append({'recordId':rid,'recordRevision':row['revision'],'name':row['name'],'code':row['code'],'market':row['market'],
                     'accountMarket':market,'accountCurrency':CURRENCIES.get(market,'UNKNOWN'),'channel':'stock_connect' if row['market']=='HK' and market=='CN' else 'direct',
