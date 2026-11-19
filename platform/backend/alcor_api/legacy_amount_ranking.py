@@ -1,6 +1,7 @@
 """Live amount ranking for the original App routes."""
 
 import asyncio
+import logging
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -26,6 +27,8 @@ SCANNER = 'scanner.tradingview.com'
 TENCENT = 'qt.gtimg.cn'
 SINA_LIST = 'vip.stock.finance.sina.com.cn'
 SINA_QUOTES = 'hq.sinajs.cn'
+RANKING_HOSTS = frozenset({SCANNER, TENCENT, SINA_LIST, SINA_QUOTES})
+DNS_RESOLVER = '1.1.1.1'
 SINA_RANK_LIMIT = 30
 ZONES = {'US': 'America/New_York', 'HK': 'Asia/Hong_Kong', 'CN': 'Asia/Shanghai'}
 TENCENT_CLOCKS = SimpleNamespace(timestamp_zones=tuple(ZONES.items()))
@@ -36,23 +39,26 @@ COUNT = 10
 BATCH_SIZE = 12
 MAX_CANDIDATES = 72
 MAX_FUTURE = timedelta(minutes=3)
+LOG = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def source_pool(host, connections=1):
-    addresses = public_addresses(await resolve(host, 443))
+    addresses = await ranking_addresses(host)
     async with httpcore.AsyncConnectionPool(
         network_backend=PinnedBackend(host, 443, addresses), max_connections=connections,
     ) as pool:
         yield pool, addresses
 
 
-async def response_bytes(pool, url, *, body=None, referer=None, limit=131072):
+async def response_bytes(pool, url, *, body=None, referer=None, limit=131072, accept=None):
     headers = {'User-Agent': 'Mozilla/5.0', 'Accept-Encoding': 'identity'}
     if body is not None:
         headers.update({'Content-Type': 'application/json', 'Origin': 'https://www.tradingview.com'})
     if referer is not None:
         headers['Referer'] = referer
+    if accept is not None:
+        headers['Accept'] = accept
     method = 'GET' if body is None else 'POST'
     async with pool.stream(
         method, url, content=body, headers=headers,
@@ -69,6 +75,28 @@ async def response_bytes(pool, url, *, body=None, referer=None, limit=131072):
                 raise ValueError('ranking_source_response_too_large')
             result.extend(chunk)
         return bytes(result)
+
+
+async def ranking_addresses(host):
+    if host not in RANKING_HOSTS:
+        raise ValueError('ranking_source_not_approved')
+    try:
+        async with asyncio.timeout(2):
+            return public_addresses(await resolve(host, 443))
+    except (OSError, ValueError):
+        # Some local resolvers return synthetic addresses for proxied domains.
+        # Resolve only fixed market hosts; TLS still verifies the provider's name.
+        async with (asyncio.timeout(3), httpcore.AsyncConnectionPool(
+            network_backend=PinnedBackend(DNS_RESOLVER, 443, DNS_RESOLVER), max_connections=1,
+        ) as pool):
+            params = urlencode({'name': host, 'type': 'A'})
+            raw = await response_bytes(pool, f'https://{DNS_RESOLVER}/dns-query?{params}',
+                                       accept='application/dns-json', limit=8192)
+        data = document(raw)
+        if (not isinstance(data, dict) or data.get('Status') != 0 or data.get('TC') is not False
+                or data.get('Question') not in ([{'name': host, 'type': 1}], [{'name': host + '.', 'type': 1}])):
+            raise ValueError('ranking_public_dns_response_invalid')
+        return public_addresses([row['data'] for row in data.get('Answer', []) if row['type'] == 1])
 
 
 async def scanner_universe(market, now):
@@ -249,7 +277,8 @@ class LegacyAmountRanking:
                 try:
                     async with asyncio.timeout(12):
                         result = await collect(market)
-                except EXPECTED_SOURCE_FAILURES:
+                except EXPECTED_SOURCE_FAILURES as error:
+                    LOG.warning('market_amount_ranking_unavailable market=%s category=%s', market, type(error).__name__)
                     result = None
                 self.cache[market] = (clock() + (180 if result else 15), result)
             if result is None:

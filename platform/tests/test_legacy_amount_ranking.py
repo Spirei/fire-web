@@ -11,6 +11,37 @@ from alcor_api import legacy_amount_ranking as ranking
 from alcor_api.market_discovery_protocol import CURRENCIES, stock_symbol
 
 
+@pytest.mark.parametrize('system,answer,expected', [
+    (['1.0.0.1'], [], ('1.0.0.1',)),
+    (['198.18.0.1'], [{'type': 1, 'data': '1.0.0.1'}], ('1.0.0.1',)),
+    (['198.18.0.1'], [{'type': 1, 'data': '192.168.0.1'}], None),
+])
+async def test_ranking_dns_recovers_without_accepting_local_addresses(monkeypatch, system, answer, expected):
+    calls = []
+
+    async def resolve(host, port):
+        assert (host, port) == (ranking.SCANNER, 443)
+        return system
+
+    async def fetch(pool, url, **options):
+        calls.append(url)
+        assert url == f'https://1.1.1.1/dns-query?name={ranking.SCANNER}&type=A'
+        assert options == dict(accept='application/dns-json', limit=8192)
+        return json.dumps({'Status': 0, 'TC': False, 'Answer': answer,
+                           'Question': [{'name': ranking.SCANNER if expected else ranking.SCANNER + '.', 'type': 1}]}).encode()
+
+    monkeypatch.setattr(ranking, 'resolve', resolve)
+    monkeypatch.setattr(ranking, 'response_bytes', fetch)
+    if expected is None:
+        with pytest.raises(ValueError, match='address_not_approved'):
+            await ranking.ranking_addresses(ranking.SCANNER)
+    else:
+        assert await ranking.ranking_addresses(ranking.SCANNER) == expected
+    with pytest.raises(ValueError, match='ranking_source_not_approved'):
+        await ranking.ranking_addresses('unexpected.example')
+    assert len(calls) == bool(answer)
+
+
 @pytest.mark.parametrize('market,exchange,prefix', [
     ('US', 'NASDAQ', 'WIRE'), ('HK', 'HKEX', '0200'), ('CN', 'SSE', '60010'),
 ])
