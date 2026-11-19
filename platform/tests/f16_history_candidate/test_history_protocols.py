@@ -1,6 +1,6 @@
 """Four legacy capabilities consume preserved source facts without fetching on GET."""
 from dataclasses import asdict, replace
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 from alcor_api.market_contract import Query, canonical, digest
@@ -99,6 +99,93 @@ async def test_history_fact_without_original_evidence_is_rejected_by_old_and_can
         response = await client.get(path,headers=headers if path.startswith('/api/kline/') else {})
         assert response.status_code == 503,response.text
     assert transport.calls == 4
+
+
+async def test_native_stock_history_declares_only_verified_requested_adjustment(market):  # noqa: F811
+    client, app, authority, revision, original, headers = await seeded(market)
+    end = date(2026, 10, 21)
+    dates = sorted(end - timedelta(days=offset) for offset in range(90))
+    days = [day.isoformat() for day in dates if day.weekday() < 5][-62:]
+    query = Query('bars', 'US', 'AAPL', 'day', 'none', start=days[0], through=days[-1])
+
+    class UnadjustedOriginal:
+        fixture = True
+        calls = 0
+
+        async def read(self, policy, selected, cursor):
+            self.calls += 1
+            assert selected == query and cursor is None
+            facts = [{'at': day + 'T14:00:00+00:00', 'o': '21', 'h': '22', 'l': '19', 'c': '20',
+                      'currency': 'USD', 'session': 'REGULAR'} for day in days]
+            return canonical({'query': asdict(selected), 'licenseRevision': policy.license_revision,
+                              'facts': facts}).encode(), 'controlled_original'
+
+    raw = UnadjustedOriginal()
+    await demand(client, revision, query)
+    assert await schedule(authority) == 1
+    task = await claim(authority.db, uuid4(), kind='market.history')
+    assert await execute(authority, task, raw) == 'complete'
+
+    for version in (1, 2):
+        base = f'/api/v{version}'
+        config = await client.get(base + '/auth/config')
+        assert config.json()['data']['stock_history'] == {
+            'version': 1, 'path': base + '/stock-detail', 'view': 'history',
+            'adjustments': ['qfq', 'none'], 'default_adjust': 'qfq',
+            'verified_adjust_field': 'adjust', 'read_scope': 'portfolio.read',
+        }
+        path = base + '/stock-detail?market=US&code=AAPL&view=history'
+        default = await client.get(path, headers=headers)
+        assert default.status_code == 200, default.text
+        default_data = default.json()['data']
+        assert set(default_data) == {'market', 'code', 'historyLimit', 'kline'}
+        assert [bar['c'] for bar in default_data['kline']] == [10, 11]
+        adjusted = await client.get(path + '&adjust=qfq', headers=headers)
+        assert adjusted.status_code == 200 and adjusted.json()['data']['adjust'] == 'qfq'
+        assert adjusted.json()['data']['kline'] == default_data['kline']
+
+        for limit, expected in ((60, days[-60:]), (12000, days)):
+            selected_headers = {'authorization': headers['authorization']} if limit == 60 else headers
+            response = await client.get(path + f'&adjust=none&limit={limit}', headers=selected_headers)
+            assert response.status_code == 200, response.text
+            data = response.json()['data']
+            assert (data['adjust'], data['source'], data['sourceRevision']) == ('none', 'controlled_market', revision)
+            assert response.headers['x-alcor-market-source'] == revision
+            assert data['historyLimit'] == limit
+            assert [bar['d'] for bar in data['kline']] == expected
+            assert {bar['c'] for bar in data['kline']} == {20}
+
+        absent = await client.get(path.replace('AAPL', 'SPY') + '&adjust=none', headers=headers)
+        assert absent.status_code == 503 and absent.json()['code'] == 50002 and 'data' not in absent.json()
+        for invalid in ('&adjust=', '&adjust=hfq', '&adjust=none&adjust=qfq'):
+            response = await client.get(path + invalid, headers=headers)
+            assert response.status_code == 400 and 'data' not in response.json()
+        unauthenticated = await client.get(path + '&adjust=none', headers={'authorization': 'Bearer fat_invalid'})
+        assert unauthenticated.status_code == 401 and 'data' not in unauthenticated.json()
+
+    async with app.state.db.connection() as conn:
+        proof = await (await conn.execute('SELECT count(*) AS n FROM market_source_pages')).fetchone()
+        assert proof['n'] == 5
+        jobs = await (await conn.execute('SELECT count(*) AS n FROM market_data_jobs')).fetchone()
+        assert jobs['n'] == 5
+        raw_fact = await (await conn.execute('''SELECT f.* FROM market_facts f JOIN market_data_jobs j
+            ON j.owner_id=f.owner_id AND j.stream_id=f.stream_id WHERE j.task_id=%s LIMIT 1''', (task['id'],))).fetchone()
+        unproved = {**raw_fact['contents'], 'at': '2026-10-21T15:00:00+00:00', 'c': '21.5'}
+        await conn.execute('''INSERT INTO market_facts(owner_id,source_revision,series_fingerprint,stream_id,page_id,id,source_time,contents,fingerprint)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (raw_fact['owner_id'], raw_fact['source_revision'],
+            raw_fact['series_fingerprint'], raw_fact['stream_id'], raw_fact['page_id'], uuid4(),
+            datetime.fromisoformat(unproved['at']), Jsonb(unproved), digest(unproved)))
+    assert original.calls == 4 and raw.calls == 1
+
+    for version in (1, 2):
+        path = f'/api/v{version}/stock-detail?market=US&code=AAPL&view=history&adjust=none'
+        response = await client.get(path, headers=headers)
+        assert response.status_code == 503 and 'data' not in response.json()
+    revoked = await client.request('DELETE', f'/api/market/sources/{revision}', json={'request_id': str(uuid4())})
+    assert revoked.status_code == 200
+    for version in (1, 2):
+        response = await client.get(f'/api/v{version}/stock-detail?market=US&code=AAPL&view=history&adjust=none', headers=headers)
+        assert response.status_code == 403 and 'data' not in response.json()
 
 
 async def test_legacy_default_history_uses_one_current_authorized_source_and_preserves_explicit_choice(market):  # noqa: F811

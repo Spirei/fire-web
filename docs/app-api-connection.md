@@ -103,6 +103,14 @@ Web、v1、v2 共享同一份来源配置、证券身份、PG 观测和后台采
 
 原 App 未显式指定来源的个股历史沿共享自动选择：同一证券、周期、时段和复权口径只读取一个当前许可来源。日线先比较已观测的市场本地日期，同日按设置中的来源优先级选择，较旧补采片段不遮挡较新来源；不拼接不同来源的数据。显式 `X-Alcor-Market-Source` 继续严格绑定，普通规范历史读取仍保留多来源需显式选择的 409 语义。
 
+### 原生个股未复权日线
+
+`GET /api/v1/auth/config` 和 v2 对应入口在 `data.stock_history` 公布此能力。`version=1`、`view=history`、`adjustments` 含 `none`，`path` 指向同版本 `stock-detail`。发现只表示接口支持，数据仍需本人授权。
+
+持有 `portfolio.read` 的 App 使用 `GET /api/v2/stock-detail?market=CN&code=002602&view=history&adjust=none&limit=60` 读取已有常规盘未复权日线。v1 参数相同。`limit` 为 60–12000，默认 320。近期及较长窗口都从同一口径、同一已许可来源的已观测序列取最近记录。可用 `X-Alcor-Market-Source` 指定本人来源版本。
+
+显式请求 `adjust=none` 或 `adjust=qfq` 成功后，原来的 `data.market`、`data.code`、`data.historyLimit`、`data.kline` 保留，并返回核验后的 `data.adjust`、`data.source`、`data.sourceRevision`。App 只有在证券身份匹配、`data.adjust == "none"` 且所需交易日存在时才能使用该日收盘。该口径无任何已采集日线时返回 HTTP 503 / `50002`。身份、许可及来源冲突维持原错误响应。省略 `adjust` 时沿用当前个股图的前复权行为及旧响应结构。GET 只读现有原件，缺日线可走已授权的 `kline/prepare` 并使用原 UUID 查询进度。
+
 指数的 `GET /api/v1/indices`、`GET /api/v2/indices` 在本人已有兼容行情配置时，与顶部及自选页读取同一份指数观测；显式指定的发现来源和匿名公共许可保持各自边界。`POST /api/v1/indices/prepare`、`POST /api/v2/indices/prepare` 接受 `{requestId}`，需要 `portfolio.write`，仅登记服务器固定指数身份。`open: null` 表示尚无已核实开市状态，不可当作休市；价格和时间的缺项保持未知。
 
 腾讯 `tencent-minute-v1` 仅采集 CN/HK 常规盘单证券分钟价格，走同一来源许可、Worker 与原件核对；不视为 OHLC、实时成交时间或已规范化成交量。美股 ALL 分时继续使用明确许可的富途真实时间帧。指数与股票代码命名空间独立，App 不会把上证指数 000001 读作深圳同代码股票。

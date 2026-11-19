@@ -12607,7 +12607,23 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "adjust",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "qfq",
+                "none"
+              ],
+              "default": "qfq"
+            },
+            "description": "For view=history. A successful explicit request returns data.adjust and data.sourceRevision after verifying the selected adjustment against the licensed original bars."
+          }
+        ]
       }
     },
     "/api/v2/stock-detail": {
@@ -12623,7 +12639,23 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "adjust",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "qfq",
+                "none"
+              ],
+              "default": "qfq"
+            },
+            "description": "For view=history. A successful explicit request returns data.adjust and data.sourceRevision after verifying the selected adjustment against the licensed original bars."
+          }
+        ]
       }
     },
     "/api/v1/index-kline": {

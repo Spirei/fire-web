@@ -59,6 +59,11 @@ def discovery(version):
         'market_amount_ranking': {
             'version': 1, 'path': base + '/market-ranking', 'markets': ['US', 'HK', 'CN'], 'metric': 'amount',
         },
+        'stock_history': {
+            'version': 1, 'path': base + '/stock-detail', 'view': 'history',
+            'adjustments': ['qfq', 'none'], 'default_adjust': 'qfq',
+            'verified_adjust_field': 'adjust', 'read_scope': 'portfolio.read',
+        },
         'chart_series': {
             'version': 1, 'path': base + '/chart-series', 'markets': ['US', 'HK', 'CN'],
         },

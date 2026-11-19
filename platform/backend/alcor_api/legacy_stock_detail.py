@@ -62,6 +62,14 @@ QUOTE_FIELDS = (
     "marketCapBasis",
 )
 CURRENCIES_OUT = ("USD", "HKD", "CNY", "SGD", "JPY", "KRW", "EUR")
+HISTORY_QUERY_DOC = {
+    "parameters": [{
+        "name": "adjust", "in": "query", "required": False,
+        "schema": {"type": "string", "enum": ["qfq", "none"], "default": "qfq"},
+        "description": "For view=history. A successful explicit request returns data.adjust and data.sourceRevision "
+        "after verifying the selected adjustment against the licensed original bars.",
+    }],
+}
 
 
 def observed_caps(cap, currency, rates):
@@ -127,7 +135,13 @@ def mount_legacy_stock_detail(app, settings, authority):
                 raise HTTPException(429, "请求过于频繁，请稍后再试", headers={"Retry-After":"60"})
             history_only = request.query_params.get("view") == "history"
             limit = 320
+            explicit_adjust = None
             if history_only:
+                requested_adjustments = request.query_params.getlist("adjust")
+                if requested_adjustments:
+                    if len(requested_adjustments) != 1 or requested_adjustments[0] not in ("qfq", "none"):
+                        raise HTTPException(400, "历史复权口径须为 qfq 或 none")
+                    explicit_adjust = requested_adjustments[0]
                 raw = request.query_params.get("limit")
                 if raw is not None and (not re.fullmatch(r"[0-9]{1,5}", raw) or not 60 <= int(raw) <= 12000):
                     raise HTTPException(400, "历史条数须为60至12000的整数")
@@ -140,13 +154,15 @@ def mount_legacy_stock_detail(app, settings, authority):
                         market,
                         symbol,
                         frame="day",
-                        adjust="qfq",
+                        adjust=explicit_adjust or "qfq",
                         source_revision=request.headers.get("x-alcor-market-source"),
                         limit=limit,
                     )
                     kline = bar_rows(
                         rows, policy, query, authority.clock() if authority.clock else datetime.now(UTC)
                     )
+                    if explicit_adjust and (query.adjust != explicit_adjust or not kline):
+                        raise HTTPException(503, "未取得可核对的指定复权历史")
                     kline_state = "observed"
                     headers["X-Alcor-Market-Source"] = revision
                 except HTTPException as exc:
@@ -155,6 +171,8 @@ def mount_legacy_stock_detail(app, settings, authority):
                     kline_state = "unavailable"
             if history_only:
                 data = {"market": market, "code": symbol, "historyLimit": limit, "kline": kline}
+                if explicit_adjust:
+                    data.update(adjust=query.adjust, source=policy.source, sourceRevision=revision)
             else:
                 identifier = market + ":" + symbol
                 latest = await configured_quotes(
@@ -212,10 +230,10 @@ def mount_legacy_stock_detail(app, settings, authority):
                 headers=headers,
             )
 
-    @app.get("/api/v1/stock-detail")
+    @app.get("/api/v1/stock-detail", openapi_extra=HISTORY_QUERY_DOC)
     async def v1(request: Request):
         return await execute(request, 1)
 
-    @app.get("/api/v2/stock-detail")
+    @app.get("/api/v2/stock-detail", openapi_extra=HISTORY_QUERY_DOC)
     async def v2(request: Request):
         return await execute(request, 2)
