@@ -8400,6 +8400,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "feature", title: "同步本机成交记录", desc: "Fire 按本人和原成交编号保存设备已成交记录，金额和币种保持原值。" },
     { kind: "fix", title: "减少资产和报价重复查库", desc: "批量读取需核对的富途快照原件，逐笔验证来源、许可、金额和时间。" },
     { kind: "fix", title: "热门榜单解析支持备用路径", desc: "系统解析未提供可用公网地址时，在同一时间预算内尝试固定的 HTTPS DNS 解析服务。" },
+    { kind: "fix", title: "修复盘前成交额榜", desc: "美股盘前仍展示上一常规交易日经核实的成交额前十，行情源短时故障时保留最近已核实榜单及原交易日。" },
   ],
 };
 

@@ -11,6 +11,29 @@ from alcor_api import legacy_amount_ranking as ranking
 from alcor_api.market_discovery_protocol import CURRENCIES, stock_symbol
 
 
+def test_us_premarket_recovers_previous_bar_bound():
+    now = datetime(2026, 11, 20, 13, 0, tzinfo=UTC)
+    today = int(datetime(2026, 11, 20, tzinfo=UTC).timestamp())
+    previous = today - 86400
+    advanced = {'s': 'NASDAQ:SNDK', 'd': ['SNDK', 'SNDK', 90, 10, today, 'stock', 'NASDAQ', 'USD', 105, 1000]}
+    rest = [
+        {'s': f'NASDAQ:WIRE{i}', 'd': [f'WIRE{i}', f'WIRE{i}', 80, 100, previous, 'stock', 'NASDAQ', 'USD', 85, 150]}
+        for i in range(9)
+    ]
+    rows = {'totalCount': 10, 'data': [advanced, *rest]}
+    result = ranking.previous_regular_universe(json.dumps(rows).encode(), today)
+    target = ranking.Target('test', 'tradingview', ranking.SCANNER, ('1.0.0.1',), True)
+    parsed = ranking.parse(result, target, {'kind': 'ranking', 'metric': 'amount', 'market': 'US'}, now)
+    assert parsed['tradeDate'] == '2026-11-19'
+    assert len(parsed['candidates']) == 10
+    assert parsed['candidates'][0] == {
+        'market': 'US', 'code': 'SNDK', 'name': 'SNDK', 'date': '2026-11-19', 'upper': '110250.00',
+    }
+    advanced['d'][-1] = None
+    with pytest.raises(ValueError, match='scanner_previous_bound_unknown'):
+        ranking.previous_regular_universe(json.dumps(rows).encode(), today)
+
+
 @pytest.mark.parametrize('system,answer,expected', [
     (['1.0.0.1'], [], ('1.0.0.1',)),
     (['198.18.0.1'], [{'type': 1, 'data': '1.0.0.1'}], ('1.0.0.1',)),
@@ -99,7 +122,9 @@ async def test_app_amount_ranking_uses_observed_amounts_and_shared_cache(
     async def answer(host, url, **kwargs):
         calls.append(host)
         if host == ranking.SCANNER:
-            return json.dumps({'totalCount': len(rows), 'data': rows}).encode()
+            includes_previous = 'high[1]' in json.loads(kwargs['body'])['columns']
+            wire = [{**row, 'd': [*row['d'], None, None]} for row in rows] if includes_previous else rows
+            return json.dumps({'totalCount': len(wire), 'data': wire}).encode()
         if host == ranking.SINA_LIST:
             if 'sort=symbol' in url:
                 return b'[{"symbol":"bj920000"}]'
@@ -141,5 +166,16 @@ async def test_app_amount_ranking_uses_observed_amounts_and_shared_cache(
     assert calls.count(ranking.SINA_QUOTES) == (1 if market == 'CN' else 0)
 
     if market == 'US':
+        async def temporarily_unavailable(_market):
+            raise TimeoutError
+
+        service = app.state.legacy_amount_ranking
+        _, verified = service.cache[market]
+        service.cache[market] = (0, verified)
+        monkeypatch.setattr(ranking, 'collect', temporarily_unavailable)
+        retry = await client.get(f'/api/v2/{path}')
+        assert retry.status_code == 200
+        assert retry.json() == responses[1].json()
+
         assert (await client.get('/api/v2/market-ranking?market=US')).status_code == 503
         assert (await client.get(f'/api/v2/{path}', headers={'x-alcor-market-source': 'explicit'})).status_code == 400

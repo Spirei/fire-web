@@ -1,10 +1,11 @@
 """Live amount ranking for the original App routes."""
 
 import asyncio
+import json
 import logging
 import re
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from urllib.parse import urlencode
@@ -17,7 +18,7 @@ from fastapi import HTTPException
 from .fx_provider_transport import PinnedBackend, resolve
 from .fx_reference import external_delivery_blocked
 from .market_contract import Query, number
-from .market_discovery_protocol import CURRENCIES, LIMIT, Target, document, iso, parse
+from .market_discovery_protocol import CURRENCIES, LIMIT, RANKING_MAX_AGE, Target, document, iso, numeric, parse
 from .market_public_dns import public_addresses
 from .market_quote_proxy import TunnelBackend, quote_backend
 from .market_tencent_latest import parse as parse_tencent
@@ -118,11 +119,47 @@ async def ranking_addresses(host):
 
 async def scanner_universe(market, now):
     value = {'kind': 'ranking', 'metric': 'amount', 'market': market}
+    local = now.astimezone(ZoneInfo(ZONES[market]))
+    premarket = market == 'US' and local.time() < time(9, 30)
     async with source_pool(SCANNER) as (pool, addresses):
         target = Target('legacy-amount-scanner', 'tradingview', SCANNER, addresses, True)
         _, url, body, _ = target.request(value)
+        if premarket:
+            request = document(body)
+            request['columns'].extend(('high[1]', 'volume[1]'))
+            body = json.dumps(request, separators=(',', ':')).encode()
         raw = await scanner_bytes(pool, addresses, url, body)
+    if premarket:
+        today = datetime.combine(local.date(), time.min, UTC).timestamp()
+        raw = previous_regular_universe(raw, today)
     return parse(raw, target, value, now)
+
+
+def previous_regular_universe(raw, today):
+    data = document(raw)
+    rows = data.get('data')
+    if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get('d'), list)
+                                         or len(row['d']) != 10 for row in rows):
+        raise ValueError('scanner_previous_bar_shape_invalid')
+    days = [numeric(row['d'][4], positive=True) for row in rows]
+    if today in days:
+        previous = max((day for row, day in zip(rows, days, strict=True)
+                        if day is not None and day < today and (numeric(row['d'][3]) or 0) > 0), default=None)
+        if previous is None:
+            raise ValueError('scanner_previous_session_unknown')
+        for row, day in zip(rows, days, strict=True):
+            if day != today:
+                continue
+            fields = row['d']
+            high, volume = fields[-2:]
+            if numeric(high, positive=True) is None or numeric(volume, positive=True) is None:
+                raise ValueError('scanner_previous_bound_unknown')
+            # An advanced symbol's previous daily bar supplies only its candidate
+            # bound. Tencent still has to prove the amount and the trading date.
+            fields[2:5] = high, volume, int(previous)
+    for row in rows:
+        del row['d'][8:]
+    return json.dumps(data, default=str, separators=(',', ':')).encode()
 
 
 async def scanner_bytes(pool, addresses, url, body):
@@ -293,11 +330,17 @@ class LegacyAmountRanking:
                         raise HTTPException(503, '恢复隔离禁止行情采集')
                 try:
                     async with asyncio.timeout(12):
-                        result = await collect(market)
+                        fresh = await collect(market)
                 except EXPECTED_SOURCE_FAILURES as error:
                     LOG.warning('market_amount_ranking_unavailable market=%s category=%s', market, type(error).__name__)
-                    result = None
-                self.cache[market] = (clock() + (180 if result else 15), result)
+                    if (result is not None and datetime.fromisoformat(result['tradeDate']).replace(tzinfo=UTC)
+                            < datetime.now(UTC) - RANKING_MAX_AGE):
+                        result = None
+                    self.cache[market] = (clock() + 15, result)
+                else:
+                    if result is None or fresh['tradeDate'] >= result['tradeDate']:
+                        result = fresh
+                    self.cache[market] = (clock() + 180, result)
             if result is None:
                 raise HTTPException(503, '热门股票暂时不可用')
             return result
