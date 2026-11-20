@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, time, timedelta
@@ -18,9 +19,9 @@ from fastapi import HTTPException
 from .fx_provider_transport import PinnedBackend, resolve
 from .fx_reference import external_delivery_blocked
 from .market_contract import Query, number
-from .market_discovery_protocol import CURRENCIES, LIMIT, RANKING_MAX_AGE, Target, document, iso, numeric, parse
+from .market_discovery_protocol import CURRENCIES, EXCHANGES, FILTERS, LIMIT, RANKING_MAX_AGE, Target, document, iso, numeric, parse
 from .market_public_dns import public_addresses
-from .market_quote_proxy import TunnelBackend, quote_backend
+from .market_quote_proxy import TunnelBackend, configured_tunnel, quote_backend
 from .market_tencent_latest import parse as parse_tencent
 from .market_tencent_latest import symbol as tencent_symbol
 
@@ -28,7 +29,9 @@ SCANNER = 'scanner.tradingview.com'
 TENCENT = 'qt.gtimg.cn'
 SINA_LIST = 'vip.stock.finance.sina.com.cn'
 SINA_QUOTES = 'hq.sinajs.cn'
-RANKING_HOSTS = frozenset({SCANNER, TENCENT, SINA_LIST, SINA_QUOTES})
+US_AMOUNT_FEED = 'push2.eastmoney.com'
+US_AMOUNT_ROWS = 20
+RANKING_HOSTS = frozenset({SCANNER, TENCENT, SINA_LIST, SINA_QUOTES, US_AMOUNT_FEED})
 DNS_FALLBACKS = (('1.1.1.1', '/dns-query'), ('8.8.8.8', '/resolve'))
 SINA_RANK_LIMIT = 30
 ZONES = {'US': 'America/New_York', 'HK': 'Asia/Hong_Kong', 'CN': 'Asia/Shanghai'}
@@ -78,10 +81,13 @@ async def response_bytes(pool, url, *, body=None, referer=None, limit=131072, ac
         return bytes(result)
 
 
-async def resolve_rank_source(host, address, path):
-    async with httpcore.AsyncConnectionPool(
-        network_backend=PinnedBackend(address, 443, address), max_connections=1,
-    ) as pool:
+async def resolve_rank_source(host, address, path, *, proxied=False):
+    backend = PinnedBackend(address, 443, address)
+    if proxied:
+        backend = await configured_tunnel(address, 443, (address,), resolver=resolve)
+        if backend is None:
+            raise ValueError('ranking_dns_proxy_unavailable')
+    async with httpcore.AsyncConnectionPool(network_backend=backend, max_connections=1) as pool:
         params = urlencode({'name': host, 'type': 'A'})
         raw = await response_bytes(pool, f'https://{address}{path}?{params}',
                                    accept='application/dns-json', limit=8192)
@@ -104,6 +110,9 @@ async def ranking_addresses(host):
         async with asyncio.timeout(3):
             tasks = [asyncio.create_task(resolve_rank_source(host, address, path))
                      for address, path in DNS_FALLBACKS]
+            if os.environ.get('STOCKLOG_PROXY') and not proxy_bypass_environment(host):
+                tasks.extend(asyncio.create_task(resolve_rank_source(host, address, path, proxied=True))
+                             for address, path in DNS_FALLBACKS)
             try:
                 last_error = None
                 for lookup in asyncio.as_completed(tasks):
@@ -283,8 +292,96 @@ async def beijing_ranking(date, now):
     return beijing_rows(raw, selected, date, now), ranked[-1][1] + 1
 
 
+async def us_stock_codes():
+    # The stock inventory does not depend on which daily bars have advanced.
+    async with source_pool(SCANNER) as (pool, addresses):
+        target = Target('legacy-amount-scanner', 'tradingview', SCANNER, addresses, True)
+        _, url, body, _ = target.request({'kind': 'ranking', 'metric': 'amount', 'market': 'US'})
+        query = document(body)
+        query['columns'] = ['name', 'type', 'exchange', 'currency']
+        raw = await scanner_bytes(pool, addresses, url, json.dumps(query, separators=(',', ':')).encode())
+    data = document(raw)
+    rows, total = data.get('data'), data.get('totalCount')
+    if not isinstance(rows, list) or type(total) is not int or not COUNT <= total <= 20000 or len(rows) != total:
+        raise ValueError('us_stock_inventory_incomplete')
+    codes = set()
+    for row in rows:
+        fields = row['d']
+        if not isinstance(fields, list) or len(fields) != 4:
+            raise ValueError('us_stock_inventory_invalid')
+        code, kind, exchange, currency = fields
+        if (not isinstance(code, str) or not re.fullmatch(r'[A-Z0-9./\-]{1,24}', code)
+                or kind != 'stock' or exchange not in EXCHANGES['US'] or currency != 'USD'
+                or row['s'] != f'{exchange}:{code}' or code in codes):
+            raise ValueError('us_stock_inventory_invalid')
+        codes.add(code)
+    return codes
+
+
+async def us_amount_table():
+    query = urlencode(dict(pn=1, pz=US_AMOUNT_ROWS, po=1, np=1, fltt=2, invt=2, fid='f6',
+                           fs=FILTERS['US'], fields='f12,f14,f2,f3,f6,f124'))
+    async with source_pool(US_AMOUNT_FEED) as (pool, _):
+        raw = await retry_read(pool, f'https://{US_AMOUNT_FEED}/api/qt/clist/get?{query}')
+    return document(raw)['data']
+
+
+def verified_us_amount_items(table, stock_codes, now):
+    rows, total = table.get('diff'), table.get('total')
+    if not isinstance(rows, list) or len(rows) != US_AMOUNT_ROWS or type(total) is not int or total < len(rows):
+        raise ValueError('us_amount_table_incomplete')
+    zone = ZoneInfo(ZONES['US'])
+    today = now.astimezone(zone).date().isoformat()
+    items, seen, previous = [], set(), Decimal('Infinity')
+    for row in rows:
+        code = row['f12']
+        amount = number(row['f6'], positive=True)
+        if (not isinstance(code, str) or not re.fullmatch(r'[A-Z0-9./\-]{1,24}', code)
+                or code in seen or amount > previous):
+            raise ValueError('us_amount_table_identity_or_order_invalid')
+        seen.add(code)
+        previous = amount
+        if code in stock_codes and len(items) < COUNT:
+            stamp = numeric(row['f124'], positive=True)
+            if stamp is None:
+                raise ValueError('us_amount_table_timestamp_missing')
+            at = datetime.fromtimestamp(stamp, UTC)
+            if not time(9, 30) <= at.astimezone(zone).time() <= time(16, 0):
+                raise ValueError('us_amount_table_session_invalid')
+            items.append(ranking_item('US', code, row['f14'], amount, number(row['f2'], positive=True),
+                                      number(row['f3'], signed=True), at, today, now))
+    if len(items) != COUNT:
+        raise ValueError('us_amount_table_stock_coverage_incomplete')
+    return ranking_result('US', today, items)
+
+
+async def us_regular_amount_ranking(now):
+    async with asyncio.timeout(8):
+        codes, table = await asyncio.gather(us_stock_codes(), us_amount_table(), return_exceptions=True)
+    if isinstance(codes, BaseException):
+        raise codes
+    if isinstance(table, BaseException):
+        raise table
+    return verified_us_amount_items(table, codes, now)
+
+
+def ranking_result(market, date, items):
+    return {
+        'market': market, 'metric': 'amount', 'tradeDate': date, 'currency': CURRENCIES[market],
+        'updatedAt': iso(datetime.now(UTC)),
+        'items': [{**item, 'amount': float(item['amount'])} for item in items[:COUNT]],
+        'coverage': {'complete': True, 'observedCount': COUNT},
+    }
+
+
 async def collect(market):
     now = datetime.now(UTC)
+    if market == 'US' and time(9, 30) <= now.astimezone(ZoneInfo(ZONES['US'])).time() < time(16, 0):
+        try:
+            return await us_regular_amount_ranking(now)
+        except EXPECTED_SOURCE_FAILURES:
+            # Retain the same verified original route when the turnover table fails.
+            pass
     universe = await scanner_universe(market, now)
     date = universe['tradeDate']
     candidates = universe['candidates']
@@ -305,12 +402,7 @@ async def collect(market):
             rest = candidates[offset + len(batch):]
             unseen = Decimal(rest[0]['upper']) if rest else Decimal(0)
             if len(items) >= COUNT and items[COUNT - 1]['amount'] > max(remaining, unseen):
-                return {
-                    'market': market, 'metric': 'amount', 'tradeDate': date, 'currency': CURRENCIES[market],
-                    'updatedAt': iso(datetime.now(UTC)),
-                    'items': [{**item, 'amount': float(item['amount'])} for item in items[:COUNT]],
-                    'coverage': {'complete': True, 'observedCount': COUNT},
-                }
+                return ranking_result(market, date, items)
     raise ValueError('ranking_top_ten_unverified')
 
 

@@ -70,16 +70,10 @@ class TunnelBackend:
         await asyncio.sleep(seconds)
 
 
-async def quote_backend(url, pins, *, resolver=resolve, value=None):
-    parsed = urlsplit(url)
-    host, port = parsed.hostname, parsed.port or 443
-    yahoo = host in ('query1.finance.yahoo.com', 'query2.finance.yahoo.com') and parsed.path.startswith('/v8/finance/chart/')
-    scanner = host == 'scanner.tradingview.com' and parsed.path in ('/america/scan', '/hongkong/scan', '/china/scan')
-    if parsed.scheme != 'https' or port != 443 or not (yahoo or scanner):
-        return PinnedBackend(host, port, pins)
+async def configured_tunnel(host, port, pins, *, resolver=resolve, value=None):
     address = proxy_address(os.environ.get('STOCKLOG_PROXY', '') if value is None else value)
     if address is None:
-        return PinnedBackend(host, port, pins)
+        return None
     proxy_host, proxy_port = address
     proxy_ips = await resolver(proxy_host, proxy_port)
     if not 1 <= len(proxy_ips) <= 32:
@@ -91,3 +85,14 @@ async def quote_backend(url, pins, *, resolver=resolve, value=None):
     except ValueError:
         raise ValueError('quote_proxy_configuration_invalid') from None
     return TunnelBackend(host, port, pins, proxy_host, proxy_port, proxy_ips)
+
+
+async def quote_backend(url, pins, *, resolver=resolve, value=None):
+    parsed = urlsplit(url)
+    host, port = parsed.hostname, parsed.port or 443
+    yahoo = host in ('query1.finance.yahoo.com', 'query2.finance.yahoo.com') and parsed.path.startswith('/v8/finance/chart/')
+    scanner = host == 'scanner.tradingview.com' and parsed.path in ('/america/scan', '/hongkong/scan', '/china/scan')
+    if parsed.scheme != 'https' or port != 443 or not (yahoo or scanner):
+        return PinnedBackend(host, port, pins)
+    tunnel = await configured_tunnel(host, port, pins, resolver=resolver, value=value)
+    return tunnel if tunnel is not None else PinnedBackend(host, port, pins)

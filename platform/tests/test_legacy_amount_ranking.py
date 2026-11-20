@@ -54,6 +54,7 @@ async def test_ranking_dns_recovers_without_accepting_local_addresses(monkeypatc
         return json.dumps({'Status': 0, 'TC': False, 'Answer': answer,
                            'Question': [{'name': ranking.SCANNER if expected else ranking.SCANNER + '.', 'type': 1}]}).encode()
 
+    monkeypatch.delenv('STOCKLOG_PROXY', raising=False)
     monkeypatch.setattr(ranking, 'resolve', resolve)
     monkeypatch.setattr(ranking, 'response_bytes', fetch)
     if expected is None:
@@ -88,10 +89,61 @@ async def test_ranking_dns_uses_a_valid_alternative_during_primary_timeout(monke
                            'Question': [{'name': ranking.SCANNER + '.', 'type': 1}],
                            'Answer': [{'type': 1, 'data': '1.0.0.1'}]}).encode()
 
+    monkeypatch.delenv('STOCKLOG_PROXY', raising=False)
     monkeypatch.setattr(ranking, 'resolve', fake_system)
     monkeypatch.setattr(ranking, 'response_bytes', lookup)
     assert await ranking.ranking_addresses(ranking.SCANNER) == ('1.0.0.1',)
     assert cancelled_primary.is_set()
+
+
+async def test_ranking_dns_can_recover_with_configured_proxy_when_direct_times_out(monkeypatch):
+    cancelled_direct = 0
+
+    async def system(_host, _port):
+        return ['198.18.0.1']
+
+    async def lookup(host, address, _path, *, proxied=False):
+        nonlocal cancelled_direct
+        assert host == ranking.SCANNER
+        if not proxied:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled_direct += 1
+        assert address in {address for address, _ in ranking.DNS_FALLBACKS}
+        return ('1.0.0.1',)
+
+    monkeypatch.setenv('STOCKLOG_PROXY', 'http://proxy.example:8080')
+    monkeypatch.setattr(ranking, 'proxy_bypass_environment', lambda _host: False)
+    monkeypatch.setattr(ranking, 'resolve', system)
+    monkeypatch.setattr(ranking, 'resolve_rank_source', lookup)
+    assert await ranking.ranking_addresses(ranking.SCANNER) == ('1.0.0.1',)
+    assert cancelled_direct == len(ranking.DNS_FALLBACKS)
+
+
+def test_us_regular_amount_uses_verified_inventory_and_observed_amount():
+    now = datetime(2026, 11, 20, 15, 0, tzinfo=UTC)
+    observed = datetime(2026, 11, 20, 14, 55, tzinfo=UTC)
+    rows = [
+        {'f12': f'WIRE{i}', 'f14': f'Security {i}', 'f2': 10, 'f3': -0.1,
+         'f6': 8000 - i, 'f124': int(observed.timestamp())}
+        for i in range(ranking.US_AMOUNT_ROWS)
+    ]
+    table = {'total': 100, 'diff': rows}
+    membership = {f'WIRE{i}' for i in range(1, 12)}
+    result = ranking.verified_us_amount_items(table, membership, now)
+    assert result['tradeDate'] == '2026-11-20' and result['currency'] == 'USD'
+    assert result['coverage'] == {'complete': True, 'observedCount': 10}
+    assert [item['code'] for item in result['items']] == [f'WIRE{i}' for i in range(1, 11)]
+    assert result['items'][0]['amount'] == 7999
+    with pytest.raises(ValueError, match='us_amount_table_stock_coverage_incomplete'):
+        ranking.verified_us_amount_items(table, {'WIRE1'}, now)
+    rows[1]['f124'] = int((observed - timedelta(days=1)).timestamp())
+    with pytest.raises(ValueError, match='ranking_quote_date_or_name_invalid'):
+        ranking.verified_us_amount_items(table, membership, now)
+    rows[-1]['f6'] = 9000
+    with pytest.raises(ValueError, match='us_amount_table_identity_or_order_invalid'):
+        ranking.verified_us_amount_items(table, set(), now)
 
 
 @pytest.mark.parametrize('market,exchange,prefix', [
@@ -100,6 +152,10 @@ async def test_ranking_dns_uses_a_valid_alternative_during_primary_timeout(monke
 async def test_app_amount_ranking_uses_observed_amounts_and_shared_cache(
     app, client, monkeypatch, market, exchange, prefix,
 ):
+    async def unavailable_regular_route(_now):
+        raise ValueError('regular_source_unavailable')
+
+    monkeypatch.setattr(ranking, 'us_regular_amount_ranking', unavailable_regular_route)
     zone = ZoneInfo(ranking.ZONES[market])
     date = datetime.now(zone).date() - timedelta(days=1)
     observed = datetime.combine(date, datetime.min.time(), zone).replace(hour=12)
