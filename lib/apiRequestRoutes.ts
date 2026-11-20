@@ -269,6 +269,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v2/account-assets/fee-repairs/preview",
   "/api/v2/account-assets/fee-repairs/submissions",
   "/api/v2/account-assets/instruments/[recordId]",
+  "/api/v2/account-assets/native-fills",
   "/api/v2/account-assets/operations/[requestId]",
   "/api/v2/account-assets/orders",
   "/api/v2/account-assets/orders/cancellations",

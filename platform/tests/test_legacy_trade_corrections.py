@@ -28,6 +28,10 @@ def draft(owner,record,snapshot,**change):
 async def test_four_old_correction_methods_share_native_history_and_frozen_original_uuid_views(client,admin,db,version):
     _account,record=await setup(client,name='Legacy client existing manual account')
     headers=await native_headers(db,admin);prefix=f'/api/v{version}/account-assets'
+    config=(await client.get(f'/api/v{version}/auth/config')).json()['data']['account_trading']
+    assert config['snapshot_path']==prefix+'/trading' and config['submit_path']==prefix+'/trading/submissions'
+    caps=(await client.get(f'/api/v{version}/auth/me',headers=headers)).json()['data']['capabilities']
+    assert caps['orders.read'] and caps['orders.write'] and not caps['orders.cancel']
     first=await client.get(prefix+'/trading',headers=headers);assert first.status_code==200,first.text
     initial=first.json()['data'];assert initial['cash']['nativeBalancesByCurrency']=={'USD':1000}
     same=await client.get(prefix+'/trading',headers=headers);assert same.json()['data']['snapshotRevision']==initial['snapshotRevision']

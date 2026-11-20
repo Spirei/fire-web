@@ -849,6 +849,8 @@ def create_app(settings: Settings | None = None):
     mount_trade_amendments(app)
     from .legacy_trade_api import mount_legacy_trade_commands
     mount_legacy_trade_commands(app)
+    from .native_trade_sync import mount_native_trade_sync
+    mount_native_trade_sync(app)
     from .legacy_native_orders import mount_legacy_native_orders
     mount_legacy_native_orders(app)
     from .legacy_flat_orders import mount_legacy_flat_orders

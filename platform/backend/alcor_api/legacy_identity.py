@@ -174,7 +174,7 @@ def profile_value(user,*,scope=None,email_availability=None):
         from .native_identity_capabilities import email_verification_capable
         scopes=set(scope.split());read='security.read' in scopes;write='security.write' in scopes;profile='profile.write' in scopes
         value['scope']=scope
-        value['capabilities']={'twoFactorRead':read,'twoFactorWrite':write,'passkeysRead':read,'passkeysWrite':write,'passkeyRegistration':False,'devicesRead':read,'devicesWrite':write,'emailVerification':email_verification_capable(scope,email_availability),'passwordRecovery':True,'profileWrite':profile,'avatarUpload':profile,'emailWrite':True,'passwordWrite':True,'overviewTotalAssets':False,'feedRead':False,'feedWrite':False,**{s:False for s in ('assets.read','positions.read','cash.read','orders.read','orders.write','orders.cancel')}}
+        value['capabilities']={'twoFactorRead':read,'twoFactorWrite':write,'passkeysRead':read,'passkeysWrite':write,'passkeyRegistration':False,'devicesRead':read,'devicesWrite':write,'emailVerification':email_verification_capable(scope,email_availability),'passwordRecovery':True,'profileWrite':profile,'avatarUpload':profile,'emailWrite':True,'passwordWrite':True,'overviewTotalAssets':False,'feedRead':False,'feedWrite':False,**{s:s in scopes for s in ('assets.read','positions.read','cash.read','orders.read','orders.write','orders.cancel')}}
     return value
 
 

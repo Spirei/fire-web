@@ -8377,7 +8377,7 @@ export const V0_1_84_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_85_ENTRY: VersionEntry = {
   ...V0_1_84_ENTRY,
   version: "v0.1.85", date: "2026-11-19", summary: "减少搜索和行情采集的数据库争用",
   software: V0_1_84_ENTRY.software.map(item => ({...item,version:"v0.1.85"})),
@@ -8391,10 +8391,21 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_85_ENTRY,
+  version: "v0.1.86", date: "2026-11-20", summary: "恢复 App 交易兼容与本机成交同步",
+  software: V0_1_85_ENTRY.software.map(item => ({ ...item, version: "v0.1.86" })),
+  changes: [
+    { kind: "fix", title: "恢复 App 交易能力声明", desc: "v1、v2 声明交易预览、登记、改单和回执路径，权限沿用当前连接授权。" },
+    { kind: "feature", title: "同步本机成交记录", desc: "Fire 按本人和原成交编号保存设备已成交记录，金额和币种保持原值。" },
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_85_ENTRY,
   V0_1_84_ENTRY,
   V0_1_83_ENTRY,
   V0_1_82_ENTRY,
