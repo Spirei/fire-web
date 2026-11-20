@@ -8398,6 +8398,8 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   changes: [
     { kind: "fix", title: "恢复 App 交易能力声明", desc: "v1、v2 声明交易预览、登记、改单和回执路径，权限沿用当前连接授权。" },
     { kind: "feature", title: "同步本机成交记录", desc: "Fire 按本人和原成交编号保存设备已成交记录，金额和币种保持原值。" },
+    { kind: "fix", title: "减少资产和报价重复查库", desc: "批量读取需核对的富途快照原件，逐笔验证来源、许可、金额和时间。" },
+    { kind: "fix", title: "热门榜单解析支持备用路径", desc: "系统解析未提供可用公网地址时，在同一时间预算内尝试固定的 HTTPS DNS 解析服务。" },
   ],
 };
 

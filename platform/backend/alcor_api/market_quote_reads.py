@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from .card_preferences import JS_WHITESPACE
 from .market_authority import query_from
 from .market_contract import CURRENCIES, code, number
-from .market_snapshot_metrics import SnapshotMetricMismatch, with_snapshot_metrics
+from .market_snapshot_metrics import SnapshotMetricMismatch, prefetch_snapshot_pages, with_snapshot_metrics
 from .native_app_auth import CLIENT
 from .security import lock_read_identity
 
@@ -439,8 +439,27 @@ class BatchQuotes:
                 )
                 for market, symbol, revision in recent_failures:
                     failures_by_security[market, symbol].add(revision)
+            authorized_streams = {}
+            for stream in all_streams:
+                try:
+                    approved = await policy(stream["source_revision"])
+                except HTTPException:
+                    if source_revision is not None:
+                        raise
+                    continue
+                market = stream["query"]["market"]
+                if source_revision is None and source_preference in ("futu", "tencent") and market != "ASSET" and approved.source != source_preference:
+                    continue
+                query = query_from(stream["query"])
+                self.authority.validate_query(approved, query)
+                authorized_streams[stream["id"]] = (query, approved)
+
+            snapshot_pages = await prefetch_snapshot_pages(conn, who, (
+                (*authorized_streams[stream_id], fact)
+                for stream_id, fact in latest_facts.items()
+                if stream_id in authorized_streams
+            ))
             resolved = {}
-            snapshot_pages = {}
             for identifier, (market, symbol) in normalized.items():
                 if identifier in ambiguous:
                     states[identifier] = {"state": "ambiguous_request_id"}
@@ -466,19 +485,15 @@ class BatchQuotes:
                     retained_policy_ids = set()
                     current_policy_ids = set()
                     for stream in streams:
-                        try:
-                            approved = await policy(stream["source_revision"])
-                        except HTTPException:
-                            if source_revision is not None:
-                                raise
-                            retained_source = True
-                            retained_policy_ids.add(stream["policy_id"])
+                        authorization = authorized_streams.get(stream["id"])
+                        if authorization is None:
+                            if stream["source_revision"] in unavailable_policies:
+                                retained_source = True
+                                retained_policy_ids.add(stream["policy_id"])
                             continue
-                        if source_revision is None and source_preference in ("futu","tencent")and market!="ASSET"and approved.source!=source_preference:continue
+                        query, approved = authorization
                         if stream.get('task_status')=='failed' and stream.get('task_finished_at') and (now-stream['task_finished_at']).total_seconds()<60:
                             cooling_sources.add(stream['source_revision'])
-                        query = query_from(stream["query"])
-                        self.authority.validate_query(approved, query)
                         sources.add(stream["source_revision"])
                         source_families[stream["source_revision"]] = approved.source
                         source_instruments.setdefault(stream["source_revision"], set()).add(query.instrument)

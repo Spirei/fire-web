@@ -25,11 +25,42 @@ class SnapshotMetricMismatch(ValueError):
     pass
 
 
+def needs_snapshot_recovery(policy, fact):
+    version = fact["contents"].get("snapshotMetricsVersion")
+    return (policy.source == "futu" and policy.source_version == "futu-sdk-records-v1"
+            and not (type(version) is int and version in (1, 2)))
+
+
+async def prefetch_snapshot_pages(conn, who, candidates):
+    """Read cold originals together after the caller verifies each source and query."""
+    keys = {}
+    for query, policy, fact in candidates:
+        if not needs_snapshot_recovery(policy, fact):
+            continue
+        shared = (str(who.id), str(fact["page_id"]), digest(asdict(query)))
+        if shared not in _PAGE_CACHE:
+            keys[(fact["page_id"], fact["source_revision"])] = None
+    if len(keys) < 2:
+        return {}
+    ids, revisions = zip(*keys)
+    rows = await (await conn.execute(
+        """WITH candidates AS (
+            SELECT p.id, p.source_revision, p.raw_bytes, p.raw_sha256, p.representation,
+                   sum(octet_length(p.raw_bytes)) OVER (ORDER BY requested.position) AS total_bytes
+            FROM unnest(%s::uuid[], %s::uuid[]) WITH ORDINALITY requested(id, revision, position)
+            JOIN market_source_pages p ON p.id=requested.id AND p.source_revision=requested.revision
+            WHERE p.owner_id=%s AND octet_length(p.raw_bytes)<=%s
+        )
+        SELECT id, source_revision, raw_bytes, raw_sha256, representation
+        FROM candidates WHERE total_bytes<=%s""",
+        (list(ids), list(revisions), who.id, _PAGE_CACHE_MAX_BYTES, _PAGE_CACHE_TOTAL_BYTES),
+    )).fetchall()
+    return {("raw", row["id"], row["source_revision"]): row for row in rows}
+
+
 async def with_snapshot_metrics(conn, who, query, policy, fact, cache):
     value = fact["contents"]
-    if policy.source != "futu" or policy.source_version != "futu-sdk-records-v1":
-        return fact
-    if type(value.get("snapshotMetricsVersion")) is int and value["snapshotMetricsVersion"] in (1, 2):
+    if not needs_snapshot_recovery(policy, fact):
         return fact
     key = (str(fact["page_id"]), digest(asdict(query)))
     shared = (str(who.id), str(fact["page_id"]), digest(asdict(query)))
@@ -39,13 +70,15 @@ async def with_snapshot_metrics(conn, who, query, policy, fact, cache):
             _PAGE_CACHE.move_to_end(shared)
             cache[key] = entry
         else:
-            page = await (
-                await conn.execute(
-                    """SELECT raw_bytes,raw_sha256,representation FROM market_source_pages
-                WHERE owner_id=%s AND id=%s AND source_revision=%s""",
-                    (who.id, fact["page_id"], fact["source_revision"]),
-                )
-            ).fetchone()
+            page = cache.get(("raw", fact["page_id"], fact["source_revision"]))
+            if page is None:
+                page = await (
+                    await conn.execute(
+                        """SELECT raw_bytes,raw_sha256,representation FROM market_source_pages
+                    WHERE owner_id=%s AND id=%s AND source_revision=%s""",
+                        (who.id, fact["page_id"], fact["source_revision"]),
+                    )
+                ).fetchone()
             if not page:
                 raise SnapshotMetricMismatch("source_page_missing")
             if page["representation"] != "sdk_json_representation_not_wire_bytes":

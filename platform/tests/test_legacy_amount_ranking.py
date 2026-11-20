@@ -25,7 +25,8 @@ async def test_ranking_dns_recovers_without_accepting_local_addresses(monkeypatc
 
     async def fetch(pool, url, **options):
         calls.append(url)
-        assert url == f'https://1.1.1.1/dns-query?name={ranking.SCANNER}&type=A'
+        assert url in {f'https://{ip}{path}?name={ranking.SCANNER}&type=A'
+                       for ip, path in ranking.DNS_FALLBACKS}
         assert options == dict(accept='application/dns-json', limit=8192)
         return json.dumps({'Status': 0, 'TC': False, 'Answer': answer,
                            'Question': [{'name': ranking.SCANNER if expected else ranking.SCANNER + '.', 'type': 1}]}).encode()
@@ -39,7 +40,35 @@ async def test_ranking_dns_recovers_without_accepting_local_addresses(monkeypatc
         assert await ranking.ranking_addresses(ranking.SCANNER) == expected
     with pytest.raises(ValueError, match='ranking_source_not_approved'):
         await ranking.ranking_addresses('unexpected.example')
-    assert len(calls) == bool(answer)
+    assert bool(calls) == bool(answer)
+    if expected is None:
+        assert len(calls) == len(ranking.DNS_FALLBACKS)
+
+
+async def test_ranking_dns_uses_a_valid_alternative_during_primary_timeout(monkeypatch):
+    entered_primary = asyncio.Event()
+    cancelled_primary = asyncio.Event()
+
+    async def fake_system(_host, _port):
+        return ['198.18.0.1']
+
+    async def lookup(_pool, url, **_kwargs):
+        if urlsplit(url).hostname == '1.1.1.1':
+            entered_primary.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled_primary.set()
+        assert urlsplit(url).hostname == '8.8.8.8'
+        await entered_primary.wait()
+        return json.dumps({'Status': 0, 'TC': False,
+                           'Question': [{'name': ranking.SCANNER + '.', 'type': 1}],
+                           'Answer': [{'type': 1, 'data': '1.0.0.1'}]}).encode()
+
+    monkeypatch.setattr(ranking, 'resolve', fake_system)
+    monkeypatch.setattr(ranking, 'response_bytes', lookup)
+    assert await ranking.ranking_addresses(ranking.SCANNER) == ('1.0.0.1',)
+    assert cancelled_primary.is_set()
 
 
 @pytest.mark.parametrize('market,exchange,prefix', [

@@ -186,3 +186,62 @@ async def test_fund_units_are_exact_observation_and_aum_is_not_market_cap(market
             assert dto['marketCapBasis']=='observed_fund_units_times_observed_quote'
         else:
             assert metrics['calculatedMarketCap'] is None and 'marketCap' not in dto
+
+
+async def test_cold_original_snapshot_pages_are_read_together_under_the_same_grant(market, monkeypatch):
+    from alcor_api import market_worker
+    from alcor_api.request_timing import TimedConnection
+
+    client, _app, authority, _transport, _revision = market
+    policy = replace(authority.policies[0], id="futu-legacy-cold", source="futu",
+                     source_version="futu-sdk-records-v1")
+    authority.policies = (policy,)
+    authority.clock = lambda: datetime(2026, 10, 20, 14, 1, tzinfo=UTC)
+    configured = await client.post("/api/market/sources", json={"request_id": str(uuid4()), "policy_id": policy.id})
+    assert configured.status_code == 200, configured.text
+    revision = configured.json()["revision"]
+
+    class SDK:
+        fixture = True
+
+        async def read(self, _policy, query, _cursor):
+            price = "100" if query.code == "AAPL" else "200"
+            payload = {"records": [{"code": f"US.{query.code}", "name": "Synthetic SDK",
+                                     "update_time": "2026-10-20 10:00:00", "last_price": price,
+                                     "prev_close_price": "90", "volume": "10", "turnover": "1000"}]}
+            return canonical(payload).encode(), "sdk_json_representation_not_wire_bytes"
+
+    original_decode = market_worker.decode
+
+    def legacy_decode(*args, **kwargs):
+        rows, issues, cursor = original_decode(*args, **kwargs)
+        return [{key: value for key, value in row.items() if key != "snapshotMetricsVersion"}
+                for row in rows], issues, cursor
+
+    with monkeypatch.context() as older_worker:
+        older_worker.setattr(market_worker, "decode", legacy_decode)
+        for code in ("AAPL", "MSFT"):
+            await demand(client, revision, Query("latest", "US", code, session="REGULAR"))
+            assert await schedule(authority) == 1
+            task = await claim(authority.db, uuid4(), kind="market.latest")
+            assert task and await execute(authority, task, SDK()) == "observed"
+
+    raw_reads = []
+    original_execute = TimedConnection.execute
+
+    async def observed_execute(self, query, *args, **kwargs):
+        if isinstance(query, str) and "market_source_pages" in query:
+            raw_reads.append(query)
+        return await original_execute(self, query, *args, **kwargs)
+
+    monkeypatch.setattr(TimedConnection, "execute", observed_execute)
+    request = {"items": [{"id": code, "market": "US", "code": code} for code in ("AAPL", "MSFT")],
+               "session": "REGULAR"}
+    headers = {"x-alcor-market-source": revision}
+    reply = await client.post("/api/market/quotes/read", headers=headers, json=request)
+    assert reply.status_code == 200, reply.text
+    assert {key: row["price"] for key, row in reply.json()["quotes"].items()} == {"AAPL": 100, "MSFT": 200}
+    assert len(raw_reads) == 1 and "WITH ORDINALITY" in raw_reads[0]
+    warm = await client.post("/api/market/quotes/read", headers=headers, json=request)
+    assert warm.json() == reply.json()
+    assert len(raw_reads) == 1

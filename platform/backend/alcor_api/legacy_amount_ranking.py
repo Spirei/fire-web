@@ -28,7 +28,7 @@ TENCENT = 'qt.gtimg.cn'
 SINA_LIST = 'vip.stock.finance.sina.com.cn'
 SINA_QUOTES = 'hq.sinajs.cn'
 RANKING_HOSTS = frozenset({SCANNER, TENCENT, SINA_LIST, SINA_QUOTES})
-DNS_RESOLVER = '1.1.1.1'
+DNS_FALLBACKS = (('1.1.1.1', '/dns-query'), ('8.8.8.8', '/resolve'))
 SINA_RANK_LIMIT = 30
 ZONES = {'US': 'America/New_York', 'HK': 'Asia/Hong_Kong', 'CN': 'Asia/Shanghai'}
 TENCENT_CLOCKS = SimpleNamespace(timestamp_zones=tuple(ZONES.items()))
@@ -77,6 +77,20 @@ async def response_bytes(pool, url, *, body=None, referer=None, limit=131072, ac
         return bytes(result)
 
 
+async def resolve_rank_source(host, address, path):
+    async with httpcore.AsyncConnectionPool(
+        network_backend=PinnedBackend(address, 443, address), max_connections=1,
+    ) as pool:
+        params = urlencode({'name': host, 'type': 'A'})
+        raw = await response_bytes(pool, f'https://{address}{path}?{params}',
+                                   accept='application/dns-json', limit=8192)
+    data = document(raw)
+    if (not isinstance(data, dict) or data.get('Status') != 0 or data.get('TC') is not False
+            or data.get('Question') not in ([{'name': host, 'type': 1}], [{'name': host + '.', 'type': 1}])):
+        raise ValueError('ranking_public_dns_response_invalid')
+    return public_addresses([row['data'] for row in data.get('Answer', []) if row['type'] == 1])
+
+
 async def ranking_addresses(host):
     if host not in RANKING_HOSTS:
         raise ValueError('ranking_source_not_approved')
@@ -84,20 +98,23 @@ async def ranking_addresses(host):
         async with asyncio.timeout(2):
             return public_addresses(await resolve(host, 443))
     except (OSError, ValueError):
-        # Some local resolvers return synthetic addresses for proxied domains.
-        # Resolve only fixed market hosts; TLS still verifies the provider's name.
-        async with (asyncio.timeout(3), httpcore.AsyncConnectionPool(
-            network_backend=PinnedBackend(DNS_RESOLVER, 443, DNS_RESOLVER), max_connections=1,
-        ) as pool):
-            params = urlencode({'name': host, 'type': 'A'})
-            raw = await response_bytes(pool, f'https://{DNS_RESOLVER}/dns-query?{params}',
-                                       accept='application/dns-json', limit=8192)
-        data = document(raw)
-        if (not isinstance(data, dict) or data.get('Status') != 0 or data.get('TC') is not False
-                or data.get('Question') not in ([{'name': host, 'type': 1}], [{'name': host + '.', 'type': 1}])):
-            raise ValueError('ranking_public_dns_response_invalid')
-        return public_addresses([row['data'] for row in data.get('Answer', []) if row['type'] == 1])
-
+        # A local resolver can return synthetic addresses. Try the fixed,
+        # certificate-checked DNS endpoints within one fallback time budget.
+        async with asyncio.timeout(3):
+            tasks = [asyncio.create_task(resolve_rank_source(host, address, path))
+                     for address, path in DNS_FALLBACKS]
+            try:
+                last_error = None
+                for lookup in asyncio.as_completed(tasks):
+                    try:
+                        return await lookup
+                    except EXPECTED_SOURCE_FAILURES as error:
+                        last_error = error
+                raise last_error or ValueError('ranking_public_dns_unavailable')
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
 
 async def scanner_universe(market, now):
     value = {'kind': 'ranking', 'metric': 'amount', 'market': market}
