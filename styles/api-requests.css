@@ -26,3 +26,6 @@
 
 .rq-api-path{display:inline-flex;align-items:center;gap:6px;min-width:0}.rq-api-path-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rq-sort{display:inline-flex;align-items:center;gap:3px;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer;transition:color .15s}.rq-sort:hover,.rq-sort.is-active{color:var(--rq-text)}.rq-sort svg{opacity:.8}
+
+.rq-latest{padding-inline:10px;font-size:12px}
+@media(max-width:767px){.rq-search input{font-size:16px}.rq-pagination button{min-height:44px}.rq-pagination .rq-icon-button{width:44px}}

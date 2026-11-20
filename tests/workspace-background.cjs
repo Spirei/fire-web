@@ -18,7 +18,11 @@ function network() {
 }
 function timers() {
   const pending = new Map(); let id = 0;
-  return { pending, setTimeout: (fn, delay) => { pending.set(++id, { fn, delay }); return id; }, clearTimeout: id => pending.delete(id), run() { const batch = [...pending.values()]; pending.clear(); batch.forEach(timer => timer.fn()); } };
+  return { pending, setTimeout: (fn, delay) => { pending.set(++id, { fn, delay }); return id; }, clearTimeout: id => pending.delete(id), run(maxDelay = Infinity) {
+    for (const [key, timer] of [...pending]) {
+      if (timer.delay <= maxDelay) { pending.delete(key); timer.fn(); }
+    }
+  } };
 }
 
 module.exports = async function workspaceBackground() {
@@ -27,17 +31,17 @@ module.exports = async function workspaceBackground() {
   const net = network(), clock = timers(), commits = [];
   const apiContext = { exports: {}, ...net, ...clock, AbortController, Date, document: { hidden: false }, foreground: true, foregroundRef: ref(true), filtersRef: ref({ q: 'first' }), filterParams: value => new URLSearchParams(value), flight: ref(null), flightKey: ref(''), changedDuringRead: ref(false), confirmed: ref({ key: '', at: 0 }), queueRefresh: ref(null), timer: ref(null), loadingShape: ref({}), useCallback: fn => fn, setRefreshing() {}, setResult: value => commits.push(value), setError() {}, setBlocked() {}, setCheckedAt() {} };
   vm.runInNewContext(apiCode, apiContext);
-  apiContext.exports.scheduleRefresh(0, true); clock.run();
+  apiContext.exports.scheduleRefresh(0, true); clock.run(1000);
   for (let i = 0; i < 20; i++) apiContext.exports.scheduleRefresh();
-  assert.equal(clock.pending.size, 1); clock.run();
+  assert.equal([...clock.pending.values()].filter(timer => timer.delay < 1000).length, 1); clock.run(1000);
   assert.equal(net.requests.length, 1, 'live events share the current query');
   assert(!net.requests[0].signal.aborted, 'a slow valid query must not be restarted');
   const payload = { code: 0, data: { logs: [], endpoints: [] } };
   net.requests[0].resolve(payload); await settle();
   assert.equal(commits.length, 1); assert.equal(clock.pending.size, 1, 'changes during the read leave one trailing refresh');
-  clock.run(); assert.equal(net.requests.length, 2);
+  clock.run(1000); assert.equal(net.requests.length, 2);
   apiContext.filtersRef.current = { q: 'second' };
-  apiContext.exports.scheduleRefresh(0, true); clock.run();
+  apiContext.exports.scheduleRefresh(0, true); clock.run(1000);
   assert(net.requests[1].signal.aborted); assert.equal(net.requests.length, 3);
   const current = apiContext.flight.current;
   net.requests[1].resolve(payload); await settle();
@@ -56,12 +60,35 @@ module.exports = async function workspaceBackground() {
   const cleanups = [];
   apiContext.useEffect = fn => cleanups.push(fn()); apiContext.filterKey = 'q=second';
   vm.runInNewContext(slice(api, '  useEffect(() => {\n    if (foreground)', '  useEffect(() => {'), apiContext);
-  apiContext.exports.scheduleRefresh(0, true); clock.run();
+  apiContext.exports.scheduleRefresh(0, true); clock.run(1000);
   apiContext.foregroundRef.current = false; cleanups.pop()();
-  assert(net.requests.at(-1).signal.aborted); assert.equal(clock.pending.size, 0);
+  assert(net.requests.at(-1).signal.aborted); assert(![...clock.pending.values()].some(timer => timer.delay < 1000));
   net.requests.at(-1).resolve(payload); await settle(); assert.equal(commits.length, 2);
   apiContext.exports.scheduleRefresh(); await apiContext.exports.refresh(); assert.equal(net.requests.length, 4);
   console.log('PASS live logs coalesce slow reads, retain one trailing update and reject hidden/old-filter results');
+
+  const pageContext = { exports: {}, URLSearchParams };
+  vm.runInNewContext(slice(api, 'function sameLogPage', 'function Method', '\nexports.same=sameLogPage;'), pageContext);
+  const same = pageContext.exports.same;
+  assert(same('rPage=2&rAnchor=80', 'rSort=status&rDir=asc&rPage=2&rAnchor=80'));
+  for (const next of ['rQ=other', 'rPeriod=30d', 'rStatus=5xx', 'rPage=3&rAnchor=80', 'rPage=2&rAnchor=81']) {
+    assert(!same('rPage=2&rAnchor=80', next));
+  }
+  const timeoutNet = network(), timeoutClock = timers(), errors = [], spins = [], snapshots = [];
+  const timeoutContext = { ...apiContext, ...timeoutNet, ...timeoutClock, exports: {},
+    foregroundRef:ref(true), flight:ref(null), changedDuringRead:ref(false), document:{hidden:false},
+    setError: value=>errors.push(value), setRefreshing: value=>spins.push(value), setResult: value=>snapshots.push(value) };
+  vm.runInNewContext(apiCode, timeoutContext);
+  const timedOut = timeoutContext.exports.refresh();
+  timeoutClock.run();
+  assert(timeoutNet.requests[0].signal.aborted);
+  timeoutNet.requests[0].reject(new Error('abort'));
+  await timedOut;
+  assert.match(errors.at(-1), /超时/); assert.equal(spins.at(-1), false);
+  const recovered = timeoutContext.exports.refresh();
+  timeoutNet.requests[1].resolve(payload); await recovered;
+  assert.equal(snapshots.length,1); assert.equal(errors.at(-1),''); assert.equal(timeoutClock.pending.size,0);
+  console.log('PASS only sort retains the current log page, stalled reads time out and a retry recovers');
 
   const streams = [], intervals = new Map(), connections = [], streamCleanups = [];
   class EventSource { constructor() { this.listeners = {}; this.closed = false; streams.push(this); } addEventListener(key, fn) { this.listeners[key] = fn; } close() { this.closed = true; } }

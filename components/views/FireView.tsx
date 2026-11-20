@@ -516,6 +516,11 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
   const [currentInput, setCurrentInput] = useState(() => inputAmount(currentAssets * baseRate));
   const currentDirty = useRef(false);
   const currentInputEdited = useRef(false);
+  function editCurrentAssets(value: string) {
+    currentDirty.current = true;
+    currentInputEdited.current = true;
+    setCurrentInput(value);
+  }
   const effCurUsd = currentDirty.current && Number(currentInput) > 0 ? Number(currentInput) / baseRate : currentAssets;
   const curAssets = effCurUsd * curRate;
   const curCost = costAssets * baseRate; // 主货币：总成本/原始资产
@@ -539,7 +544,7 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
   const effTargetDisplay = legacyTargetUsd !== null ? legacyTargetUsd * curRate : fireTargetBase * k;
 
   const progress = fireTargetUsd > 0 ? (effCurUsd / fireTargetUsd) * 100 : Number.NaN;
-  const passiveIncome = (curAssets * withdrawalRate) / 100;
+  const passiveIncome = (effCurUsd * baseRate * withdrawalRate) / 100;
   // 顶部 3 个汇总值：未手动改时跟随计算值，改了才固定（且持久化）
   const [passiveInput, setPassiveInput] = useState(() => inputAmount(passiveIncome));
   const [originalInput, setOriginalInput] = useState(() => inputAmount(curCost));
@@ -563,17 +568,17 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
   });
   // 还需年数：从手填表格推导（当前资产 ÷ FIRE目标 ≥100% 的第一个年份）；未达成则为 null（保留用户填/占位）
   const tableYearsToFire = useMemo(() => {
-    const idx = tableRows.findIndex((r) => Number(r.current) > 0 && Number(r.target) > 0 && (Number(r.current) / Number(r.target)) * 100 >= 100);
+    const idx = tableRows.findIndex(row => {
+      const target = Number(row.target) > 0 ? Number(row.target) : fireTargetBase;
+      return target > 0 && Number(row.current) >= target;
+    });
     if (idx < 0) return null;
     return tableRows[idx].year - currentYear;
-  }, [tableRows, currentYear]);
+  }, [tableRows, currentYear, fireTargetBase]);
   useEffect(() => {
     if (!yearsDirty.current) setYearsInput(tableYearsToFire == null ? "" : String(tableYearsToFire));
   }, [tableYearsToFire]);
-  // 今年的行始终按真实账户数据重算（仅会话内可临时改），不因持久化而冻结
-  const currentRowTouched = useRef(false);
   const updateRow = (year: number, key: "original" | "current" | "extra" | "profit" | "rate" | "target" | "progress", value: string) => {
-    if (year === currentYear && key !== "target") currentRowTouched.current = true;
     if (year === currentYear && key === "target") {
       fireTargetTouched.current = true;
       setFireTargetBase(Number(value) || 0);
@@ -596,6 +601,26 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
       return r;
     }));
   };
+  function changeBaseCurrency(next: CurrencyCode) {
+    setCurrencyMenuOpen(false);
+    if (next === baseCurrency) { setDisplayCurrency(next); return; }
+    const scale = convertAccountAmount(1, baseCurrency, rates, next);
+    if (!(scale > 0)) return;
+    const convert = (amount: number) => Number((amount * scale).toPrecision(15));
+    const convertInput = (value: string) => value.trim() && Number.isFinite(Number(value)) ? String(convert(Number(value))) : value;
+    if (!editing) startEdit();
+    setAnnualExpense(convert(annualExpense));
+    setFireTargetBase(convert(fireTargetBase));
+    if (currentDirty.current) setCurrentInput(convertInput(currentInput));
+    if (originalDirty.current) setOriginalInput(convertInput(originalInput));
+    if (passiveDirty.current) setPassiveInput(convertInput(passiveInput));
+    setTableRows(rows => rows.map(row => ({
+      ...row, original: convertInput(row.original), current: convertInput(row.current),
+      extra: convertInput(row.extra), profit: convertInput(row.profit), target: convertInput(row.target),
+    })));
+    setBaseCurrency(next);
+    setDisplayCurrency(next);
+  }
   // 追加一年（默认只到 2030，点加号往后扩；上限 currentYear+40）
   const addYear = () => {
     if (!editing) startEdit();
@@ -620,7 +645,7 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
     displayCurrency: CurrencyCode;
     baseCurrency: CurrencyCode;
     tableRows: typeof tableRows;
-    dirty: { current: boolean; passive: boolean; original: boolean; years: boolean; currentRow: boolean; fireTarget: boolean };
+    dirty: { current: boolean; passive: boolean; original: boolean; years: boolean; fireTarget: boolean };
   } | null>(null);
   function startEdit() {
     currentInputEdited.current = false;
@@ -631,7 +656,7 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
       tableRows: structuredClone(tableRows),
       dirty: {
         current: currentDirty.current, passive: passiveDirty.current, original: originalDirty.current,
-        years: yearsDirty.current, currentRow: currentRowTouched.current, fireTarget: fireTargetTouched.current
+        years: yearsDirty.current, fireTarget: fireTargetTouched.current
       }
     };
     setEditing(true);
@@ -645,25 +670,27 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
       setCurrentInput(s.currentInput); setPassiveInput(s.passiveInput); setOriginalInput(s.originalInput); setYearsInput(s.yearsInput);
       setBaseCurrency(s.baseCurrency); setDisplayCurrency(s.displayCurrency); setTableRows(s.tableRows);
       currentDirty.current = s.dirty.current; passiveDirty.current = s.dirty.passive; originalDirty.current = s.dirty.original;
-      yearsDirty.current = s.dirty.years; currentRowTouched.current = s.dirty.currentRow;
+      yearsDirty.current = s.dirty.years;
       fireTargetTouched.current = s.dirty.fireTarget;
     }
     setEditing(false);
   }
-  // 今年这一行预填真实账户数据；用户一旦手动改过就不再覆盖
+  // 今年的成本、当前资产和追加投入共用表单里实际显示的值。
+  const originalBase = originalDirty.current && originalInput.trim() ? Number(originalInput) : curCost;
+  const currentExtra = tableRows.find(row => row.year === currentYear)?.extra ?? "";
   useEffect(() => {
-    if (!serverLoaded || currentRowTouched.current || ![effCurUsd, curCost, baseRate, fireTargetUsd].every(Number.isFinite)) return;
+    if (!serverLoaded || ![effCurUsd, originalBase, Number(currentExtra), baseRate, fireTargetUsd].every(Number.isFinite)) return;
     setTableRows((prev) => prev.map((r) => {
       if (r.year !== currentYear) return r;
       const netBase = effCurUsd * baseRate;          // 主货币：当前资产（与上方「当前资产」一致，含手动覆盖）
-      const costBase = costAssets * baseRate;        // 主货币：原始资产
-      const profitBase = netBase - costBase;
-      const rate = costBase > 0 ? (profitBase / costBase) * 100 : 0;
+      const investedBase = originalBase + Number(currentExtra);
+      const profitBase = netBase - investedBase;
+      const rate = investedBase > 0 ? (profitBase / investedBase) * 100 : 0;
       const targetBase = Number(r.target) > 0 ? Number(r.target) : fireTargetUsd * baseRate;
       const pct = targetBase > 0 ? (netBase / targetBase) * 100 : 0;
-      return { ...r, original: String(round2(costBase)), current: String(round2(netBase)), profit: String(round2(profitBase)), rate: String(round2(rate)), progress: String(round2(pct)) };
+      return { ...r, original: String(round2(originalBase)), current: String(round2(netBase)), profit: String(round2(profitBase)), rate: String(round2(rate)), progress: String(round2(pct)) };
     }));
-  }, [serverLoaded, effCurUsd, currentAssets, costAssets, fireTargetUsd, baseRate, currentYear]);
+  }, [serverLoaded, effCurUsd, originalBase, currentExtra, fireTargetUsd, baseRate, currentYear]);
 
   // —— 跨设备同步：把 FIRE 手填配置存到服务端（按用户），登录同一账号任何设备一致 ——
   const revision = useRef<number | null>(null);
@@ -879,14 +906,8 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
                       <button
                         type="button"
                         title={baseCurrency === option.value ? "当前默认/主货币" : baseFrozen ? "已保存的历史年份固定了主货币" : "设为默认/主货币"}
-                        disabled={baseFrozen || !serverLoaded || saving || !Number.isFinite(fireTargetUsd) || !Number.isFinite(rates[option.value])}
-                        onClick={() => {
-                          if (!editing) startEdit();
-                          updateAnnualFireTarget(round2(fireTargetUsd * rates[option.value]));
-                          setBaseCurrency(option.value);
-                          setDisplayCurrency(option.value);
-                          setCurrencyMenuOpen(false);
-                        }}
+                        disabled={baseFrozen || !serverLoaded || saving || !Number.isFinite(fireTargetUsd) || !(rates[option.value] > 0)}
+                        onClick={() => changeBaseCurrency(option.value)}
                         className={`flex h-6 w-6 flex-none items-center justify-center rounded-full transition-colors ${baseCurrency === option.value ? "text-emerald-500" : "text-muted hover:text-emerald-500"}`}
                       >
                         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill={baseCurrency === option.value ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -920,6 +941,7 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
             )}
           </div>
         </div>
+        {editing && <p className="mt-2 text-xs text-muted">金额按 {baseCurrency} 填写</p>}
         {legacyDownload}
         {saveError && <p className="mt-2 text-right text-xs text-red-500" role="alert">{saveError}
           {planConflict && <button type="button" className="ml-2 underline" onClick={() => window.location.reload()}>重新载入已保存规划</button>}
@@ -1072,14 +1094,14 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
             {editing ? (
               <input type="number" value={passiveInput} onChange={(e) => { passiveDirty.current = true; setPassiveInput(e.target.value); }} className={inputCls} />
             ) : (
-              <div className="text-[20px] font-semibold leading-tight tabular-nums text-ink-2 dark:text-white">{passiveInput.trim() ? fmtPlan(Number(passiveInput)) : "—"}</div>
+              <div className="text-[20px] font-semibold leading-tight tabular-nums text-ink-2 dark:text-white">{passiveDirty.current ? (passiveInput.trim() ? fmtPlan(Number(passiveInput) * k) : "—") : fmtPlan(passiveIncome * k)}</div>
             )}
           </div>
           <div>
             <label className={labelCls}>当前资产</label>
             {editing ? (
               <div className="flex items-center gap-1">
-                <input type="number" value={currentInput} onChange={(e) => { currentDirty.current = true; currentInputEdited.current = true; setCurrentInput(e.target.value); }} className={inputCls} />
+                <input type="number" value={currentInput} onChange={(e) => editCurrentAssets(e.target.value)} className={inputCls} />
                 {currentDirty.current && (
                   <button
                     type="button"
@@ -1124,7 +1146,7 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
                 className={inputCls}
               />
             ) : (
-              <div className="text-lg font-semibold tabular-nums text-ink-2 dark:text-white">{val as number}</div>
+              <div className="text-lg font-semibold tabular-nums text-ink-2 dark:text-white">{label === "年支出" ? fmtPlan(annualExpense * k) : val as number}</div>
             )}
           </div>
         ))}
@@ -1204,7 +1226,9 @@ export default function FireView({ records, quotes, livePrice, csrf, ownerId }: 
                     </td>
                     <td className={`${tdCls} text-right`}>{totalInvest != null ? fmtPlan(totalInvest * k) : "—"}</td>
                     <td className={`${tdCls} text-right`}>
-                      <span className="text-ink-2 dark:text-white">{editing && !isPast ? input("current") : money(row.current)}</span>
+                      <span className="text-ink-2 dark:text-white">{editing && !isPast ? (isCurYear
+                        ? <input value={currentInput} onChange={e => editCurrentAssets(e.target.value)} inputMode="decimal" placeholder="—" className={cellCls} />
+                        : input("current")) : money(row.current)}</span>
                     </td>
                     <td className={`${tdCls} text-right`}>
                       <span className={`${profitN == null || profitN >= 0 ? "text-up" : "text-down"}`}>{profitDisplay}</span>

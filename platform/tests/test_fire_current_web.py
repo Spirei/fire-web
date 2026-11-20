@@ -99,6 +99,11 @@ async def test_search_history_cas_limit_dedup_owner_and_clear(client, admin, set
     await create_user(settings,'HistoryOther','Synthetic9Pass',role='user')
     await fire_login(client,'HistoryOther')
     assert (await record('other')).status_code==200
+    old_page = {"X-Alcor-Expected-Account": str(admin)}
+    assert (await client.get(url, headers=old_page)).status_code == 403
+    clear = await client.request("DELETE", url, headers=old_page, json={"action": "clear", "revision": 1})
+    assert clear.status_code == 403
+    assert [item["query"] for item in (await get())["items"]] == ["other"]
     await fire_login(client)
     assert (await get())['items']==[]
 

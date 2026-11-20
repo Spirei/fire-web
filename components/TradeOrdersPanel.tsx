@@ -1,4 +1,5 @@
 "use client";
+import AppModal from "@/components/AppModal";
 import { IconButton, Capsule } from "@/components/Capsule";
 
 import { clientRequestId } from "@/lib/randomId";
@@ -429,7 +430,8 @@ export default function TradeOrdersPanel({
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = tab === "history" ? 5 : 9;
   const [importOpen, setImportOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [importPhase, setImportPhase] = useState<"preview" | "submit" | "receipt" | null>(null);
+  const importing = importPhase !== null;
   const [importPreview, setImportPreview] = useState<ImportResultData | null>(null);
   const [importError, setImportError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -806,7 +808,7 @@ export default function TradeOrdersPanel({
 
   async function previewImport(file: File) {
     if (importing) return;
-    setImporting(true);
+    setImportPhase("preview");
     setImportError("");
     setImportPreview(null);
     importBinding.current = null;
@@ -823,14 +825,14 @@ export default function TradeOrdersPanel({
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "导入预览失败");
     } finally {
-      setImporting(false);
+      setImportPhase(null);
     }
   }
 
   async function confirmImport() {
     const binding = importBinding.current;
     if (importing || !importPreview?.dryRun || !readyCount || !binding) return;
-    setImporting(true);
+    setImportPhase("submit");
     setImportError("");
     const headers = { ...accountReadHeaders(ownerId), "x-csrf-token": binding.csrf };
     try {
@@ -846,6 +848,7 @@ export default function TradeOrdersPanel({
           throw error;
         }
         // A lost submit response may already have committed this exact request.
+        setImportPhase("receipt");
         try {
           data = await platformRequest<ImportResultData>(`/api/trading/history/import/operations/${binding.requestId}`, { headers });
         } catch { throw error; }
@@ -857,7 +860,7 @@ export default function TradeOrdersPanel({
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "导入失败");
     } finally {
-      setImporting(false);
+      setImportPhase(null);
     }
   }
 
@@ -1522,223 +1525,187 @@ export default function TradeOrdersPanel({
         document.body
       )}
 
-      {exportOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setExportOpen(false)} />
-          <div className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[620px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
-            <div className="flex items-center justify-between gap-2 border-b border-edge px-5 py-4">
-              <div>
-                <h3 className="text-base font-bold text-ink">导出订单</h3>
-                <p className="mt-0.5 text-xs text-muted">Excel · .xlsx</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setExportOpen(false)}
-                aria-label="关闭"
-                className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
-                  <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-3 px-5 py-4">
-              <div className="rounded-[12px] bg-bg-gray/70 px-4 py-3 text-xs dark:bg-white/5">
-                <p className="font-semibold text-ink">当前筛选</p>
-                <p className="mt-1.5 text-muted">
-                  时间：<span className="text-ink">{timeFilter.mode === "all" ? (tab === "today" ? "当日" : "历史") : timeDisplay(timeFilter).replace("委托时间:", "")}</span>
-                  <span className="mx-2 text-faint">·</span>
-                  市场：<span className="text-ink">{marketFilter === "ALL" ? "全部" : marketMeta(marketFilter).label}</span>
-                  <span className="mx-2 text-faint">·</span>
-                  类型：<span className="text-ink">{typeFilter === "all" ? "全部" : typeFilter === "stock" ? "股票" : "ETF"}</span>
-                  <span className="mx-2 text-faint">·</span>
-                  状态：<span className="text-ink">{statusFilter === "all" ? "全部" : STATUS_LABEL[statusFilter] ?? "其他"}</span>
-                </p>
-              </div>
-              <MobileExplanation className="text-xs leading-relaxed text-muted" summary="导出当前筛选范围"><p>订单表包含成交数量、成交均价、原币金额、实付费用及已有的结算记录。缺少依据的单元格留空。</p></MobileExplanation>
-              <label className="flex cursor-pointer items-start gap-2.5 rounded-[12px] bg-bg-gray/70 px-4 py-3 dark:bg-white/5">
-                <span className={`mt-px flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[3px] border transition-colors ${
-                  exportDetail ? "border-transparent bg-ink text-white dark:bg-white dark:text-black" : "border-edge-strong bg-transparent text-transparent"
-                }`}>
-                  <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
-                    <path d="m2.4 6.4 2.5 2.5 4.7-5.8" />
-                  </svg>
-                </span>
-                <input type="checkbox" checked={exportDetail} onChange={(event) => setExportDetail(event.target.checked)} className="sr-only" />
-                <span>
-                  <span className="text-xs font-semibold text-ink">包含订单明细</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">另附「订单明细」表：费用、已实现盈亏、成交后持仓和备注等。</span>
-                </span>
-              </label>
-            </div>
-            <div className="border-t border-edge px-5 py-4">
-              <div className="mb-2 flex items-baseline justify-between">
-                <h4 className="text-xs font-bold text-ink">最近导出</h4>
-                {recentExports.length > 0 && <span className="text-[11px] text-faint">最近 20 条</span>}
-              </div>
-              {recentExports.length === 0 ? (
-                <div className="rounded-[12px] bg-bg-gray/60 py-8 text-center text-xs text-faint dark:bg-white/5">暂无导出记录</div>
-              ) : (
-                <div className="overflow-x-auto rounded-[12px] border border-edge">
-                  <table className="w-full min-w-[620px] whitespace-nowrap text-[11px]">
-                    <thead>
-                      <tr className="bg-bg-gray text-muted dark:bg-white/5">
-                        <th className="px-3 py-2 text-left font-semibold">订单导出时间范围</th>
-                        <th className="px-3 py-2 text-left font-semibold">状态</th>
-                        <th className="px-3 py-2 text-left font-semibold">文件名称</th>
-                        <th className="px-3 py-2 text-left font-semibold">导出时间</th>
-                        <th className="px-3 py-2 text-right font-semibold">文件大小</th>
-                        <th className="px-3 py-2 text-center font-semibold">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentExports.map((record) => (
-                        <tr key={record.id} className="border-t border-edge">
-                          <td className="px-3 py-2 text-muted">{record.range}</td>
-                          <td className="px-3 py-2"><span className="inline-flex items-center gap-1 text-down"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.5 6.4 2.4 2.4 4.7-5.4" /></svg>{record.status}</span></td>
-                          <td className="max-w-[160px] truncate px-3 py-2 text-ink" title={record.fileName}>{record.fileName}</td>
-                          <td className="px-3 py-2 tabular-nums text-muted">{record.time}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-muted">{record.size}</td>
-                          <td className="px-3 py-2 text-center"><button type="button" disabled={exporting} onClick={() => void downloadExport(record)} className="text-[11px] font-semibold text-muted transition-colors hover:text-ink">重新导出</button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2.5 border-t border-edge px-5 py-3.5">
-              <Capsule variant="ghost" size="sm" type="button" onClick={() => setExportOpen(false)} className="">取消</Capsule>
-              <Capsule variant="secondary" size="sm" type="button" disabled={exporting} onClick={() => void downloadExport()} className="disabled:opacity-60">{exporting ? "导出中…" : "导出"}</Capsule>
-            </div>
+      {exportOpen && (
+        <AppModal title="导出订单" desc="Excel · .xlsx" size="lg" onClose={() => setExportOpen(false)} footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Capsule variant="ghost" size="sm" type="button" onClick={() => setExportOpen(false)} className="">取消</Capsule>
+            <Capsule variant="secondary" size="sm" type="button" disabled={exporting} onClick={() => void downloadExport()} className="disabled:opacity-60">{exporting ? "导出中…" : "导出"}</Capsule>
           </div>
-        </div>, document.body
+        }>
+          <div className="space-y-3">
+            <div className="rounded-[12px] bg-bg-gray/70 px-4 py-3 text-xs dark:bg-white/5">
+              <p className="font-semibold text-ink">当前筛选</p>
+              <p className="mt-1.5 text-muted">
+                时间：<span className="text-ink">{timeFilter.mode === "all" ? (tab === "today" ? "当日" : "历史") : timeDisplay(timeFilter).replace("委托时间:", "")}</span>
+                <span className="mx-2 text-faint">·</span>
+                市场：<span className="text-ink">{marketFilter === "ALL" ? "全部" : marketMeta(marketFilter).label}</span>
+                <span className="mx-2 text-faint">·</span>
+                类型：<span className="text-ink">{typeFilter === "all" ? "全部" : typeFilter === "stock" ? "股票" : "ETF"}</span>
+                <span className="mx-2 text-faint">·</span>
+                状态：<span className="text-ink">{statusFilter === "all" ? "全部" : STATUS_LABEL[statusFilter] ?? "其他"}</span>
+              </p>
+            </div>
+            <MobileExplanation className="text-xs leading-relaxed text-muted" summary="导出当前筛选范围"><p>订单表包含成交数量、成交均价、原币金额、实付费用及已有的结算记录。缺少依据的单元格留空。</p></MobileExplanation>
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-[12px] bg-bg-gray/70 px-4 py-3 dark:bg-white/5">
+              <span className={`mt-px flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[3px] border transition-colors ${
+                exportDetail ? "border-transparent bg-ink text-white dark:bg-white dark:text-black" : "border-edge-strong bg-transparent text-transparent"
+              }`}>
+                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+                  <path d="m2.4 6.4 2.5 2.5 4.7-5.8" />
+                </svg>
+              </span>
+              <input type="checkbox" checked={exportDetail} onChange={(event) => setExportDetail(event.target.checked)} className="sr-only" />
+              <span>
+                <span className="text-xs font-semibold text-ink">包含订单明细</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted">另附「订单明细」表：费用、已实现盈亏、成交后持仓和备注等。</span>
+              </span>
+            </label>
+          </div>
+          <div className="mt-4 border-t border-edge pt-4">
+            <div className="mb-2 flex items-baseline justify-between">
+              <h4 className="text-xs font-bold text-ink">最近导出</h4>
+              {recentExports.length > 0 && <span className="text-[11px] text-faint">最近 20 条</span>}
+            </div>
+            {recentExports.length === 0 ? (
+              <div className="rounded-[12px] bg-bg-gray/60 py-8 text-center text-xs text-faint dark:bg-white/5">暂无导出记录</div>
+            ) : (
+              <div className="overflow-x-auto rounded-[12px] border border-edge">
+                <table className="w-full min-w-[620px] whitespace-nowrap text-[11px]">
+                  <thead>
+                    <tr className="bg-bg-gray text-muted dark:bg-white/5">
+                      <th className="px-3 py-2 text-left font-semibold">订单导出时间范围</th>
+                      <th className="px-3 py-2 text-left font-semibold">状态</th>
+                      <th className="px-3 py-2 text-left font-semibold">文件名称</th>
+                      <th className="px-3 py-2 text-left font-semibold">导出时间</th>
+                      <th className="px-3 py-2 text-right font-semibold">文件大小</th>
+                      <th className="px-3 py-2 text-center font-semibold">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentExports.map((record) => (
+                      <tr key={record.id} className="border-t border-edge">
+                        <td className="px-3 py-2 text-muted">{record.range}</td>
+                        <td className="px-3 py-2"><span className="inline-flex items-center gap-1 text-down"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.5 6.4 2.4 2.4 4.7-5.4" /></svg>{record.status}</span></td>
+                        <td className="max-w-[160px] truncate px-3 py-2 text-ink" title={record.fileName}>{record.fileName}</td>
+                        <td className="px-3 py-2 tabular-nums text-muted">{record.time}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted">{record.size}</td>
+                        <td className="px-3 py-2 text-center"><button type="button" disabled={exporting} onClick={() => void downloadExport(record)} className="text-[11px] font-semibold text-muted transition-colors hover:text-ink">重新导出</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </AppModal>
       )}
 
-      {importOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6">
-          <div className="absolute inset-0 bg-black/40" onClick={() => { if (!importing) setImportOpen(false); }} />
-          <div className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
-            <div className="flex items-center justify-between gap-2 border-b border-edge px-5 py-4">
-              <div>
-                <h3 className="text-base font-bold text-ink">导入订单</h3>
-                <p className="mt-0.5 text-xs text-muted">券商历史订单 · .xlsx</p>
-              </div>
-              <button
+      {importOpen && (
+        <AppModal title="导入订单" desc="券商历史订单 · .xlsx" size="lg" closeDisabled={importing} onClose={() => setImportOpen(false)} footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Capsule variant="ghost" size="sm" type="button" disabled={importing} onClick={() => setImportOpen(false)}>关闭</Capsule>
+            {importPreview && importPreview.dryRun && (
+              <Capsule variant="secondary" size="sm"
                 type="button"
-                onClick={() => { if (!importing) setImportOpen(false); }}
-                aria-label="关闭"
-                className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                disabled={importing}
+                onClick={() => fileInputRef.current?.click()}
+                className="disabled:opacity-60"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
-                  <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-3 px-5 py-4">
-              <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => void onPickImportFile(event)} />
-              {!importPreview && !importing && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex w-full flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed border-edge-strong bg-bg-gray/50 px-6 py-10 text-center transition-colors hover:bg-bg-gray dark:bg-white/5 dark:hover:bg-white/10"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8 text-muted">
-                      <path d="M12 15V3m0 0 4 4m-4-4-4 4" />
-                      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-                    </svg>
-                    <span className="text-sm font-semibold text-ink">选择 .xlsx 文件</span>
-                    <span className="max-w-[420px] text-[11px] leading-relaxed text-muted">
-                      选择包含实际成交、费用和明确时区的原始订单表，预览后确认导入。
-                    </span>
-                  </button>
-                  <a href="/docs/broker-orders-format.md" target="_blank" rel="noreferrer" className="block text-center text-[11px] text-muted hover:text-ink">查看导入格式规范</a>
-                </>
-              )}
-              {importing && (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-[14px] bg-bg-gray/50 py-10 dark:bg-white/5">
-                  <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 animate-spin text-brand"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.2" /><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
-                  <span className="text-xs text-muted">正在解析文件…</span>
-                </div>
-              )}
-              {importError && (
-                <div className="rounded-[12px] border border-down/30 bg-down/10 px-4 py-3 text-xs leading-relaxed text-down">{importError}</div>
-              )}
-              {importPreview && (
-                <>
-                  <div className="rounded-[12px] bg-bg-gray/70 px-4 py-3 text-xs dark:bg-white/5">
-                    <p className="font-semibold text-ink">{importPreview.fileName}</p>
-                    <p className="mt-1.5 text-muted">
-                      共识别 <span className="text-ink">{importPreview.totalFilled}</span> 笔已成交 · {importPreview.dryRun ? "可导入" : "已导入"} <span className="font-semibold text-ink">{importPreview.dryRun ? readyCount : importPreview.imported}</span> 笔 · 跳过 <span className="text-ink">{importPreview.skipped}</span> 笔 · 重复 <span className="text-ink">{importPreview.duplicated}</span> 笔
-                    </p>
-                  </div>
-                  {importPreview.dryRun && <ul className="max-h-64 space-y-1 overflow-y-auto text-xs text-muted" aria-label="订单逐行预览">
-                    {importPreview.rows.map(row => <li key={row.rowIndex}>第 {row.rowIndex} 笔 · {row.market} {row.code} · {row.state === "ready" ? `可导入 · 数量 ${row.quantity} · 费用 ${row.fees} ${row.currency}` : row.state === "ignored" ? "非已成交订单" : row.state === "duplicate" ? "重复成交" : row.reason || "待核对"}</li>)}
-                  </ul>}
-                  {importPreview.groups.length > 0 && (
-                    <div className="overflow-x-auto rounded-[12px] border border-edge">
-                      <table className="w-full min-w-[520px] whitespace-nowrap text-[11px]">
-                        <thead>
-                          <tr className="bg-bg-gray text-muted dark:bg-white/5">
-                            <th className="px-3 py-2 text-left font-semibold">市场</th>
-                            <th className="px-3 py-2 text-left font-semibold">代码</th>
-                            <th className="px-3 py-2 text-right font-semibold">订单数</th>
-                            <th className="px-3 py-2 text-left font-semibold">结果</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {importPreview.groups.map((group) => (
-                            <tr key={group.recordId} className="border-t border-edge">
-                              <td className="px-3 py-2 text-ink">
-                                <span className="mr-1.5 inline-flex flex-none items-center justify-center rounded-[4px] px-1.5 py-px text-[10px] font-semibold text-white" style={{ backgroundColor: marketMeta(group.market).code === "USD" ? "#3b82f6" : marketMeta(group.market).code === "HKD" ? "#8b5cf6" : "#e0919f" }}>{group.market}</span>
-                              </td>
-                              <td className="px-3 py-2 font-mono text-muted">{group.code}</td>
-                              <td className="px-3 py-2 text-right tabular-nums text-muted">{group.orderCount}</td>
-                              <td className="px-3 py-2">
-                                {group.action === "imported" ? (
-                                  <span className="inline-flex items-center gap-1 text-up">
-                                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.5 6.4 2.4 2.4 4.7-5.4" /></svg>
-                                    已导入
-                                  </span>
-                                ) : (
-                                  <span className="text-faint">{group.reason || "跳过"}</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="flex justify-end gap-2.5 border-t border-edge px-5 py-3.5">
-              <Capsule variant="ghost" size="sm" type="button" onClick={() => { if (!importing) setImportOpen(false); }} className="">关闭</Capsule>
-              {importPreview && importPreview.dryRun && (
-                <Capsule variant="secondary" size="sm"
-                  type="button"
-                  disabled={importing}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="disabled:opacity-60"
-                >
-                  选择其他文件
-                </Capsule>
-              )}
-              {importPreview && importPreview.dryRun && (
-                <Capsule variant="secondary" size="sm"
-                  type="button"
-                  disabled={importing || readyCount === 0 || !importBinding.current}
-                  onClick={() => void confirmImport()}
-                  className="disabled:opacity-60"
-                >
-                  {importing ? "导入中…" : `确认导入 ${readyCount} 笔`}
-                </Capsule>
-              )}
-            </div>
+                选择其他文件
+              </Capsule>
+            )}
+            {importPreview && importPreview.dryRun && (
+              <Capsule variant="secondary" size="sm"
+                type="button"
+                disabled={importing || readyCount === 0 || !importBinding.current}
+                onClick={() => void confirmImport()}
+                className="disabled:opacity-60"
+              >
+                {importing ? "导入中…" : `确认导入 ${readyCount} 笔`}
+              </Capsule>
+            )}
           </div>
-        </div>, document.body
+        }>
+          <div className="space-y-3">
+            <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => void onPickImportFile(event)} />
+            {!importPreview && !importing && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed border-edge-strong bg-bg-gray/50 px-6 py-10 text-center transition-colors hover:bg-bg-gray dark:bg-white/5 dark:hover:bg-white/10"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8 text-muted">
+                    <path d="M12 15V3m0 0 4 4m-4-4-4 4" />
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                  </svg>
+                  <span className="text-sm font-semibold text-ink">选择 .xlsx 文件</span>
+                  <span className="max-w-[420px] text-[11px] leading-relaxed text-muted">
+                    选择包含实际成交、费用和明确时区的原始订单表，预览后确认导入。
+                  </span>
+                </button>
+                <a href="/docs/broker-orders-format.md" target="_blank" rel="noreferrer" className="block text-center text-[11px] text-muted hover:text-ink">查看导入格式规范</a>
+              </>
+            )}
+            {importing && (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-[14px] bg-bg-gray/50 py-10 dark:bg-white/5">
+                <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6 animate-spin text-brand"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.2" /><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
+                <span role="status" className="text-xs text-muted">{importPhase === "preview" ? "正在解析文件…" : importPhase === "submit" ? "正在导入订单…" : "正在核对导入回执…"}</span>
+              </div>
+            )}
+            {importError && (
+              <div role="alert" className="rounded-[12px] border border-down/30 bg-down/10 px-4 py-3 text-xs leading-relaxed text-down">{importError}</div>
+            )}
+            {importPreview && (
+              <>
+                <div className="rounded-[12px] bg-bg-gray/70 px-4 py-3 text-xs dark:bg-white/5">
+                  <p className="font-semibold text-ink">{importPreview.fileName}</p>
+                  <p role="status" className="mt-1.5 text-muted">
+                    共识别 <span className="text-ink">{importPreview.totalFilled}</span> 笔已成交 · {importPreview.dryRun ? "可导入" : "已导入"} <span className="font-semibold text-ink">{importPreview.dryRun ? readyCount : importPreview.imported}</span> 笔 · 跳过 <span className="text-ink">{importPreview.skipped}</span> 笔 · 重复 <span className="text-ink">{importPreview.duplicated}</span> 笔
+                  </p>
+                </div>
+                {importPreview.dryRun && <ul className="max-h-64 space-y-1 overflow-y-auto text-xs text-muted" aria-label="订单逐行预览">
+                  {importPreview.rows.map(row => <li key={row.rowIndex}>第 {row.rowIndex} 笔 · {row.market} {row.code} · {row.state === "ready" ? `可导入 · 数量 ${row.quantity} · 费用 ${row.fees} ${row.currency}` : row.state === "ignored" ? "非已成交订单" : row.state === "duplicate" ? "重复成交" : row.reason || "待核对"}</li>)}
+                </ul>}
+                {importPreview.groups.length > 0 && (
+                  <div className="overflow-x-auto rounded-[12px] border border-edge">
+                    <table className="w-full min-w-[520px] whitespace-nowrap text-[11px]">
+                      <thead>
+                        <tr className="bg-bg-gray text-muted dark:bg-white/5">
+                          <th className="px-3 py-2 text-left font-semibold">市场</th>
+                          <th className="px-3 py-2 text-left font-semibold">代码</th>
+                          <th className="px-3 py-2 text-right font-semibold">订单数</th>
+                          <th className="px-3 py-2 text-left font-semibold">结果</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importPreview.groups.map((group) => (
+                          <tr key={group.recordId} className="border-t border-edge">
+                            <td className="px-3 py-2 text-ink">
+                              <span className="mr-1.5 inline-flex flex-none items-center justify-center rounded-[4px] px-1.5 py-px text-[10px] font-semibold text-white" style={{ backgroundColor: marketMeta(group.market).code === "USD" ? "#3b82f6" : marketMeta(group.market).code === "HKD" ? "#8b5cf6" : "#e0919f" }}>{group.market}</span>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-muted">{group.code}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted">{group.orderCount}</td>
+                            <td className="px-3 py-2">
+                              {group.action === "imported" ? (
+                                <span className="inline-flex items-center gap-1 text-up">
+                                  <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.5 6.4 2.4 2.4 4.7-5.4" /></svg>
+                                  已导入
+                                </span>
+                              ) : (
+                                <span className="text-faint">{group.reason || "跳过"}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </AppModal>
       )}
 
       {detailOrder && (() => {

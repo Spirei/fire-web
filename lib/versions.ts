@@ -8391,7 +8391,7 @@ export const V0_1_85_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_86_ENTRY: VersionEntry = {
   ...V0_1_85_ENTRY,
   version: "v0.1.86", date: "2026-11-20", summary: "恢复 App 交易兼容与本机成交同步",
   software: V0_1_85_ENTRY.software.map(item => ({ ...item, version: "v0.1.86" })),
@@ -8409,10 +8409,23 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_86_ENTRY,
+  version: "v0.1.87", date: "2026-11-21", summary: "修正 FIRE 规划换算、订单弹窗、请求日志和搜索历史",
+  software: V0_1_86_ENTRY.software.map(item => ({ ...item, version: "v0.1.87" })),
+  changes: [
+    { kind: "fix", title: "修正 FIRE 规划的币种换算", desc: "切换主币种时同步换算支出、资产和年度规划金额。今年明细中的当前资产与规划摘要同步，取消编辑可还原。" },
+    { kind: "fix", title: "优化小屏订单导入导出", desc: "小屏和横屏可滚动预览订单并操作底部按钮。提交和核对回执分别显示进度。" },
+    { kind: "fix", title: "修复请求日志切换筛选和翻页", desc: "切换筛选后及时更新表格与热力图，过期的分页链接可回到有效页。" },
+    { kind: "security", title: "搜索历史绑定打开页面的账号", desc: "在其他标签页切换账号后，旧页面清除已显示的历史，并提示刷新。旧页面的操作无法清空新账号的历史。" },
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_86_ENTRY,
   V0_1_85_ENTRY,
   V0_1_84_ENTRY,
   V0_1_83_ENTRY,

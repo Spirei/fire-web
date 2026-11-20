@@ -9,7 +9,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import AppSelect from "@/components/AppSelect";
 import ApiPathText from "@/components/ApiPathText";
 import { usePersistedState } from "@/lib/usePersistedState";
-import { parseRequestFilters, requestDay, type RequestFilters, type RequestSnapshot } from "@/lib/apiRequestTypes";
+import { parseRequestFilters, type RequestFilters, type RequestSnapshot } from "@/lib/apiRequestTypes";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 
 const SOURCE_NAMES = { web: "网页", ios: "iOS", app: "App", other: "其他" };
@@ -28,6 +28,14 @@ function filterParams(filters: RequestFilters) {
   }
   return params;
 }
+// A pending sort can retain the same page. Other dimensions select different records.
+function sameLogPage(left: string, right: string) {
+  if (left === right) return true;
+  const previous = new URLSearchParams(left), next = new URLSearchParams(right);
+  for (const field of ["rSort", "rDir"]) { previous.delete(field); next.delete(field); }
+  return previous.toString() === next.toString();
+}
+
 function Method({ value }: { value: string }) { return <span className={`rq-method rq-method-${value.toLowerCase()}`}>{value}</span>; }
 function ApiPath({ path, className = "" }: { path: string; className?: string }) {
   return <span className={`rq-api-path ${className}`}>
@@ -77,9 +85,14 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
   const filters = useMemo(() => parseRequestFilters(new URLSearchParams(query)), [query]);
   const filterKey = filterParams(filters).toString();
   const [result, setResult] = useState<{ key: string; snapshot: RequestSnapshot } | null>(null);
-  // Keep the last result visible while a sort/filter repaint is loading: the
-  // pending key must not blank the table, chart and cards into skeletons.
-  const snapshot = result?.snapshot ?? null;
+  const snapshot = foreground && result && sameLogPage(result.key, filterKey) ? result.snapshot : null;
+  const sorting = Boolean(snapshot && result?.key !== filterKey);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const composing = useRef(false);
+  useEffect(() => {
+    const input = searchInput.current;
+    if (input && !composing.current && input.value.trim() !== filters.q) input.value = filters.q;
+  }, [filters.q]);
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -111,6 +124,10 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
     flightKey.current = key;
     setRefreshing(true);
     const isCurrent = () => !controller.signal.aborted && foregroundRef.current && !document.hidden && key === filterParams(filtersRef.current).toString();
+    const deadline = setTimeout(() => {
+      if (isCurrent()) setError("请求日志读取超时，请重试");
+      controller.abort();
+    }, 20_000);
     try {
       const response = await fetch(`/api/request-logs?${key}`, { cache: "no-store", signal: controller.signal, headers: { "x-alcor-request-log-timing": "1" } });
       if (!isCurrent()) return;
@@ -130,6 +147,7 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
       setResult({ key, snapshot: data.data }); setError(""); setCheckedAt(at);
     } catch (error) { if (isCurrent()) setError(error instanceof Error ? error.message : "请求日志读取失败"); }
     finally {
+      clearTimeout(deadline);
       if (flight.current === controller) {
         flight.current = null;
         setRefreshing(false);
@@ -153,7 +171,12 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
     if (foreground) {
       setError("");
       if (confirmed.current.key !== filterKey || Date.now() - confirmed.current.at >= 30_000) scheduleRefresh(180, true);
-    } else setRefreshing(false);
+    } else {
+      setRefreshing(false);
+      setResult(null);
+      setCheckedAt(0);
+      confirmed.current = { key: "", at: 0 };
+    }
     return () => {
       flight.current?.abort(); flight.current = null; changedDuringRead.current = false;
       if (timer.current) clearTimeout(timer.current);
@@ -184,12 +207,12 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
 
   const change = (patch: Partial<RequestFilters>) => {
     if (!canUseWorkspaceUrl()) return;
-    const next = { ...filters, page: 1, anchor: 0, ...patch };
-    if (patch.period) next.day = "";
     const url = new URL(window.location.href);
+    const next = { ...parseRequestFilters(url.searchParams), page: 1, anchor: 0, ...patch };
+    if (patch.period) next.day = "";
     for (const key of Object.values(FILTER_KEYS)) url.searchParams.delete(key);
     filterParams(next).forEach((value, key) => url.searchParams.set(key, value));
-    window.history.replaceState(null, "", url.pathname + "?" + url.searchParams.toString());
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
   };
   const toggleSort = (sort: "time" | "status" | "duration") => {
     const dir = filters.sort === sort && filters.dir === "desc" ? "asc" : "desc";
@@ -224,28 +247,35 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
     const x = clientX === undefined ? (index + 0.5) / chart.length * bounds.width : clientX - bounds.left;
     setChartHover({ index, x: Math.max(80, Math.min(bounds.width - 80, x)) });
   };
-  const totalPages = Math.max(1, Math.ceil((snapshot?.pagination.total || 0) / 20));
+  const totalPages = snapshot ? Math.max(1, Math.ceil(snapshot.pagination.total / snapshot.pagination.pageSize)) : 1;
   const safePage = snapshot?.pagination.page || filters.page;
 
   return <div className="rq-dashboard">
-    <header className="rq-header"><div className="rq-title"><span className="rq-title-icon"><IconActivity size={22} stroke={1.6} /></span><div>{standalone ? <h1>API 请求</h1> : <h2>API 请求</h2>}{checkedAt > 0 && <span className="rq-meta">{time(checkedAt)}</span>}</div></div>
+    <header className="rq-header"><div className="rq-title"><span className="rq-title-icon"><IconActivity size={22} stroke={1.6} /></span><div>{standalone ? <h1>API 请求</h1> : <h2>API 请求</h2>}{snapshot && checkedAt > 0 && <span className="rq-meta">更新于 {time(checkedAt)}</span>}</div></div>
       <div className="rq-actions">
         {standalone && <ThemeToggle />}
-        <button type="button" className="rq-live rq-control" aria-pressed={live} onClick={() => setLive(!live)} title={live ? "暂停实时刷新" : "开启实时刷新"}>
-          {live ? <><i className={`rq-live-dot ${connection === "live" ? "is-live" : ""}`} /><IconPlayerPause size={13} /></> : <IconPlayerPlay size={14} />}{live ? connection === "reconnecting" ? "重连中" : "实时" : "已暂停"}
+        <button type="button" className="rq-live rq-control" aria-pressed={live} disabled={blocked} onClick={() => setLive(!live)} title={live ? "暂停实时刷新" : "开启实时刷新"}>
+          {live ? <><i className={`rq-live-dot ${connection === "live" ? "is-live" : ""}`} /><IconPlayerPause size={13} /></> : <IconPlayerPlay size={14} />}{!live || connection === "paused" ? "已暂停" : connection === "connecting" ? "连接中" : connection === "reconnecting" ? "重连中" : "实时"}
         </button>
         <button type="button" className="rq-icon-button" aria-label="刷新请求日志" title="刷新" disabled={refreshing} onClick={() => scheduleRefresh(0, true)}><IconRefresh size={17} className={refreshing ? "rq-spinning" : ""} /></button>
         <Link className="rq-icon-button" href={standalone ? "/activities?scope=requests" : `/api-requests?${filterParams(filters)}`} aria-label={standalone ? "返回日志" : "打开 API 请求页"} title={standalone ? "返回日志" : "独立页面"}>{standalone ? <IconArrowLeft size={17} /> : <IconArrowUpRight size={17} />}</Link>
       </div>
     </header>
-    {error && <div role="alert" className="rq-error">{error}</div>}
+    {error && <div role="alert" className="rq-error">{error}{snapshot && " · 显示上次读取结果"}</div>}
+    {sorting && !error && <p role="status" className="rq-meta">正在更新排序</p>}
     {!blocked && <>
       <div className="rq-filters">
         <AppSelect ariaLabel="请求时间范围" value={filters.period} options={[{ value: "today", label: "今天" }, { value: "7d", label: "近 7 天" }, { value: "30d", label: "近 30 天" }]} onChange={period => change({ period: period as RequestFilters["period"] })} className={selectClass} />
         <AppSelect ariaLabel="请求状态" value={filters.status} options={[{ value: "all", label: "全部状态" }, { value: "success", label: "成功" }, { value: "4xx", label: "客户端错误" }, { value: "5xx", label: "服务端错误" }, { value: "cancelled", label: "连接中断" }]} onChange={status => change({ status: status as RequestFilters["status"] })} className={selectClass} />
         <AppSelect ariaLabel="请求来源" value={filters.source} options={[{ value: "all", label: "全部来源" }, ...Object.entries(SOURCE_NAMES).map(([value, label]) => ({ value, label }))]} onChange={source => change({ source: source as RequestFilters["source"] })} className={selectClass} />
         <AppSelect ariaLabel="请求方法" value={filters.method} options={[{ value: "all", label: "全部方法" }, ...["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map(value => ({ value, label: value }))]} onChange={method => change({ method })} className={selectClass} />
-        <label className="rq-search"><IconSearch size={16} /><input aria-label="搜索请求接口" placeholder="搜索接口" value={filters.q} onChange={event => change({ q: event.target.value.slice(0, 120) })} /></label>
+        <label className="rq-search"><IconSearch size={16} /><input ref={searchInput} type="search" enterKeyHint="search"
+          aria-label="搜索请求接口" placeholder="搜索接口" maxLength={120} defaultValue={filters.q}
+          onCompositionStart={() => { composing.current = true; }}
+          onCompositionEnd={event => { composing.current = false; change({ q: event.currentTarget.value.trim() }); }}
+          onChange={event => { if (!composing.current) change({ q: event.currentTarget.value.trim() }); }}
+          onKeyDown={event => { if (event.key === "Enter" && !composing.current && !event.nativeEvent.isComposing) event.currentTarget.blur(); }}
+        /></label>
         {(filters.sort !== "time" || filters.dir !== "desc") && <button type="button" className="rq-day-chip" onClick={() => change({ sort: "time", dir: "desc" })}>恢复最新</button>}
         {filters.day && <button type="button" className="rq-day-chip" onClick={() => change({ day: "" })}>{filters.day}<IconX size={13} /></button>}
       </div>
@@ -266,15 +296,16 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
         </section>
         <section className="rq-card rq-sources"><div className="rq-section-head"><h2>请求来源</h2><IconActivity size={17} className="rq-muted" /></div><div className="rq-source-total">{summary ? fmt(summary.total) : "—"}<span>次请求</span></div><div className="rq-source-track">{Object.keys(SOURCE_NAMES).map((key, index) => <i key={key} className={`rq-source-${index}`} style={{ width: `${summary?.total ? summary.sources[key as keyof typeof SOURCE_NAMES] / summary.total * 100 : 0}%` }} />)}</div><div className="rq-source-list">{Object.entries(SOURCE_NAMES).map(([key, label], index) => <div key={key}><span><i className={`rq-source-${index}`} />{label}</span><strong>{summary ? fmt(summary.sources[key as keyof typeof SOURCE_NAMES]) : "—"}</strong></div>)}</div></section>
       </div>
-      <section className="rq-card rq-ranking"><div className="rq-section-head is-inline"><h2>常用接口</h2><span className="rq-meta">{snapshot?.endpoints.length || 0} 个</span></div>
+      <section className="rq-card rq-ranking"><div className="rq-section-head is-inline"><h2>常用接口</h2><span className="rq-meta">{snapshot ? `${snapshot.endpoints.length} 个` : "—"}</span></div>
         {snapshot?.endpoints.length ? snapshot.endpoints.map(row => <button type="button" key={`${row.method}:${row.path}`} className="rq-endpoint" onClick={() => change({ q: row.path, method: row.method })}><Method value={row.method} /><ApiPath path={row.path} className="rq-endpoint-path" /><span className="rq-endpoint-track"><i style={{ width: `${row.count / snapshot.endpoints[0].count * 100}%` }} /></span><strong>{fmt(row.count)}</strong><span className="rq-meta">{ms(row.averageMs)}</span></button>) : snapshot ? <div className="rq-empty">暂无请求</div> : Array.from({ length: Math.max(1, loadingShape.current.endpoints) }, (_, index) => <div className="rq-endpoint rq-placeholder" aria-hidden="true" key={index}><i className="rq-skeleton" /></div>)}
       </section>
       <section className="rq-card rq-records"><div className="rq-section-head is-inline"><h2>请求日志</h2><span className="rq-count">{snapshot ? fmt(snapshot.pagination.total) : "—"}</span></div>
         <div className="rq-table-scroll"><table><thead><tr>{sortHeader("time", "时间")}<th>接口</th>{sortHeader("status", "状态")}{sortHeader("duration", "耗时")}<th>来源</th></tr></thead><tbody>{snapshot ? snapshot.logs.map(row => <tr key={row.id}><td><time dateTime={new Date(row.at).toISOString()} title={new Date(row.at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}>{stamp(row.at)}</time></td><td><div className="rq-table-path"><Method value={row.method} /><ApiPath path={row.path} /></div></td><td><span className={`rq-status ${row.status >= 500 ? "is-error" : row.status >= 400 ? "is-warn" : "is-success"}`}>{row.status < 400 && <IconCheck size={11} />}{row.status}</span></td><td className={row.duration >= 1000 ? "rq-slow" : "rq-fast"} title={row.timing || undefined}>{ms(row.duration)}</td><td>{SOURCE_NAMES[row.source]}</td></tr>) : Array.from({ length: Math.max(1, loadingShape.current.rows) }, (_, index) => <tr className="rq-placeholder" aria-hidden="true" key={index}>{[0, 1, 2, 3, 4].map(column => <td key={column}><i className="rq-skeleton" /></td>)}</tr>)}</tbody></table></div>
-        {snapshot && !snapshot.logs.length && <div className="rq-empty">{filters.day && Date.parse(`${filters.day}T23:59:59+08:00`) < snapshot.detailFrom ? "该日期的请求明细已过保留期" : "暂无请求记录"}</div>}
-        {totalPages > 1 && <div className="rq-pagination"><span>第 {safePage} / {totalPages} 页</span><div><button type="button" className="rq-icon-button" disabled={safePage <= 1 || refreshing} aria-label="上一页请求" onClick={() => change({ page: safePage - 1, anchor: safePage === 2 ? 0 : snapshot?.pagination.anchor || 0 })}><IconChevronLeft size={15} /></button><button type="button" className="rq-icon-button" disabled={safePage >= totalPages || refreshing} aria-label="下一页请求" onClick={() => change({ page: safePage + 1, anchor: snapshot?.pagination.anchor || 0 })}><IconChevronRight size={15} /></button></div></div>}
+        {snapshot && !snapshot.logs.length && <div className="rq-empty">{filters.anchor > 0 ? "此分页范围内暂无请求记录" : filters.day && Date.parse(`${filters.day}T23:59:59+08:00`) < snapshot.detailFrom ? "该日期的请求明细已过保留期" : "暂无请求记录"}</div>}
+        {snapshot && (totalPages > 1 || filters.anchor > 0) && <div className="rq-pagination"><span>第 {safePage} / {totalPages} 页</span><div>{filters.anchor > 0 && <button type="button" className="rq-control rq-latest" onClick={() => change({ page: 1, anchor: 0 })}>返回最新请求</button>}<button type="button" className="rq-icon-button" disabled={safePage <= 1 || refreshing} aria-label="上一页请求" onClick={() => change({ page: safePage - 1, anchor: safePage === 2 ? 0 : snapshot?.pagination.anchor || 0 })}><IconChevronLeft size={15} /></button><button type="button" className="rq-icon-button" disabled={safePage >= totalPages || refreshing} aria-label="下一页请求" onClick={() => change({ page: safePage + 1, anchor: snapshot?.pagination.anchor || 0 })}><IconChevronRight size={15} /></button></div></div>}
       </section>
-      <RequestHeatmap counts={snapshot?.heatmap || {}} today={snapshot?.today || requestDay()} filters={filters} onChange={change} />
+      {snapshot ? <RequestHeatmap counts={snapshot.heatmap} today={snapshot.today} filters={filters} onChange={change} />
+        : <section className="rq-card rq-heatmap"><div className="rq-section-head"><h2>请求热力图</h2><span className="rq-meta">—</span></div></section>}
     </>}
   </div>;
 }

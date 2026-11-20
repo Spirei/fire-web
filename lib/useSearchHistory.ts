@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { normalizeSearchQuery, type SearchHistoryMutation, type SearchHistorySnapshot } from "./searchHistory";
+import { accountReadHeaders } from "./privateReadContext";
+import { readFailure } from "./readFailure";
 import { showToast } from "./toast";
 
 export function useSearchHistory(ownerId: string, open: boolean) {
@@ -17,15 +19,31 @@ export function useSearchHistory(ownerId: string, open: boolean) {
     if (current.current && next.revision < current.current.revision) return;
     current.current = next; setHistory(next);
   }, []);
+  const resetScope = useCallback(() => {
+    generation.current++;
+    writeEpoch.current++;
+    current.current = null;
+    loadPromise.current = null;
+    writes.current = Promise.resolve();
+    pendingCount.current = 0;
+    setHistory(null); setBusy(false); setLoading(false); setError("");
+  }, []);
+  const retireDeniedHistory = useCallback((status: number) => {
+    if (status !== 401 && status !== 403) return false;
+    resetScope();
+    setError(status === 401 ? "登录已失效，请重新登录" : "当前账号无法读取这份搜索历史，请刷新页面");
+    return true;
+  }, [resetScope]);
   const refresh = useCallback(() => {
     if (loadPromise.current) return loadPromise.current;
     const token = generation.current;
     setLoading(true);
     const promise = (async () => {
       try {
-        const response = await fetch("/api/auth/search-history", { cache: "no-store" });
+        const response = await fetch("/api/auth/search-history", { cache: "no-store", headers: accountReadHeaders(ownerId), signal: AbortSignal.timeout(15000) });
+        if (token !== generation.current || retireDeniedHistory(response.status)) return;
         const data = await response.json();
-        if (!response.ok) throw Error(data.error || "搜索历史暂不可用");
+        if (!response.ok) throw Error(readFailure(data, "搜索历史暂不可用"));
         if (token !== generation.current) return;
         apply(data); setError("");
       } catch (e) {
@@ -36,19 +54,19 @@ export function useSearchHistory(ownerId: string, open: boolean) {
     })();
     loadPromise.current = promise;
     return promise;
-  }, [apply]);
+  }, [apply, ownerId, retireDeniedHistory]);
   useEffect(() => {
-    generation.current++; current.current = null; writes.current = Promise.resolve(); pendingCount.current = 0; writeEpoch.current++; loadPromise.current = null;
-    setHistory(null); setError(""); setBusy(false); setLoading(false);
+    resetScope();
     return () => { generation.current++; };
-  }, [ownerId]);
+  }, [ownerId, resetScope]);
   useEffect(() => {
     if (!open) return;
     void refresh();
     const reload = () => { if (!document.hidden) void refresh(); };
     window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", reload);
     const timer = window.setInterval(reload, 15000);
-    return () => { window.removeEventListener("focus", reload); window.clearInterval(timer); };
+    return () => { window.removeEventListener("focus", reload); document.removeEventListener("visibilitychange", reload); window.clearInterval(timer); };
   }, [open, ownerId, refresh]);
   async function mutate(change: Omit<Extract<SearchHistoryMutation, {action:"record"}>, "revision"> | Omit<Extract<SearchHistoryMutation, {action:"remove"}>, "revision"> | {action:"clear"}) {
     const token = generation.current;
@@ -61,15 +79,16 @@ export function useSearchHistory(ownerId: string, open: boolean) {
     writes.current = writes.current.then(async () => {
       try {
         if (token !== generation.current || epoch !== writeEpoch.current) return;
-        const response = await fetch("/api/auth/search-history", { method: change.action === "record" ? "POST" : "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...change, revision }) });
+        const response = await fetch("/api/auth/search-history", { method: change.action === "record" ? "POST" : "DELETE", headers: { ...accountReadHeaders(ownerId), "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ ...change, revision }) });
+        if (token !== generation.current || retireDeniedHistory(response.status)) return;
         const data = await response.json();
         if (token !== generation.current) return;
-        if (response.status === 409) {
+        if (response.status === 409 && data.conflict === true) {
           writeEpoch.current++; apply(data);
           if (change.action !== "record") showToast("历史已在其他设备更新，请重新操作");
           return;
         }
-        if (!response.ok) throw Error(data.error || "历史保存失败");
+        if (!response.ok) throw Error(readFailure(data, "历史保存失败"));
         apply(data); setError("");
       } catch (e) {
         if (token !== generation.current) return;

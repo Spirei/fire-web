@@ -6,22 +6,28 @@ const root=path.resolve(__dirname,'..');
 (async()=>{
  const fixture=`import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import HoldingsView from '@/components/views/HoldingsView';import FireView from '@/components/views/FireView';import IndexTicker from '@/components/IndexTicker';import {accountHoldingPrice} from '@/lib/accountCash';
  const records=[{id:'usd',market:'US',code:'AAPL',name:'Synthetic USD',qty:10,cost:20,price:25,group:'Synthetic',accountMarket:'US'}, {id:'cny',market:'CN',code:'600000',name:'Synthetic CNY',qty:5,cost:15,price:location.search.includes('missing=1')?0:20,group:'Synthetic',accountMarket:'CN'}];
- window.fixtureRates={USD:1};window.planWrites=0;window.planRevision=3;window.receiptReads=0;
+ const editingFixture=location.search.includes('editFlow');
+ const planYear=Number(new Intl.DateTimeFormat('en-US',{year:'numeric',timeZone:'Asia/Shanghai'}).format(new Date()));
+ const seededEditPlan={baseCurrency:'CNY',fireTargetBase:14000,annualExpense:7000,currentInput:'7000',originalInput:'3500',passiveInput:'700',yearsInput:'4',tableRows:[{year:planYear+2,original:'3500',current:'7000',extra:'700',profit:'2800',rate:'25',target:'14000',progress:'50'}]};
+ const saved=editingFixture?JSON.parse(sessionStorage.getItem('test.saved-edit-plan')||'null'):null;
+ window.fixtureRates=editingFixture?{USD:1,CNY:7}:{USD:1};window.planWrites=0;window.planRevision=saved?.revision??3;window.receiptReads=0;
  window.fetch=async(input,init={})=>{
    const url=String(input);
    if(init.method&&init.method!=='GET'){
      if(url==='/api/fire-settings'){
        window.planWrites++;const body=JSON.parse(init.body);
        if(init.headers.get('x-csrf-token')!=='test-binding'||init.headers.get('X-Alcor-Expected-Account')!=='test-owner'||body.expectedRevision!==window.planRevision)return Response.json({error:'规划已变化，请重新读取'},{status:409});
+       if(window.slowSave)await new Promise(resolve=>window.releaseSave=resolve);
        window.savedPlan=body;
        window.receipt={revision:++window.planRevision,state:'completed',requestId:body.requestId,assetHistory:[]};
+       if(editingFixture)sessionStorage.setItem('test.saved-edit-plan',JSON.stringify({revision:window.planRevision,fire:body.fire}));
        if(window.dropReply){window.dropReply=false;throw new TypeError('response lost');}
        return Response.json(window.receipt);
      }
      return Response.json({});
    }
    if(url.startsWith('/api/fire-settings/operations/')){window.receiptReads++;return Response.json(window.receipt);}
-   if(url==='/api/fire-settings')return Response.json({revision:window.planRevision,fire:{baseCurrency:'CNY',fireTargetBase:12000,additionalField:'retained',tableRows:location.search.includes('oldRows')?[{year:2022,current:25000,target:'40000'}]:undefined}});
+   if(url==='/api/fire-settings')return Response.json({revision:window.planRevision,fire:editingFixture?(saved?.fire??seededEditPlan):{baseCurrency:'CNY',fireTargetBase:12000,additionalField:'retained',tableRows:location.search.includes('oldRows')?[{year:2022,current:25000,target:'40000'}]:undefined}});
    return Response.json(url==='/api/fire/ticker'?{items:[{key:'index',market:'US',secid:'100.DJIA',price:100,source:'controlled',sourceRevision:'fixture',observedAt:'2026-11-12T00:00:00Z'}]}:url==='/api/rates'?{base:'USD',rates:window.fixtureRates,quoted:[],updatedAt:null}:url.includes('/funds')?{data:{balances:{USD:0,CNY:0}}}:url.includes('/assets')?{assets:[]}:{settings:{}});
  };
  function Harness(){const[collapsed,setCollapsed]=useState(false);return <><header className="app-shell-header"><div className="app-shell-header-inner flex"><div className="app-shell-ticker"><IndexTicker configuration={{items:[{key:'index',label:'示例指数',secid:'100.DJIA',market:'US'}],interval:5}}/></div></div></header><div className="records-app" data-sidebar-collapsed={collapsed}><button onClick={()=>setCollapsed(v=>!v)}>Toggle sidebar</button>{location.search.includes('fire=1')?<FireView csrf="test-binding" ownerId="test-owner" records={records} quotes={{}} livePrice={r=>accountHoldingPrice(r,{})}/>:<HoldingsView records={records} quotes={{}} livePrice={r=>accountHoldingPrice(r,{})} onAddMatch={async()=>{}} onUpdate={async()=>true} onRemove={async()=>{}} groups={[]} markets={['US','CN']} marketLabels={[]} marketOptions={[]} initialFundBalances={{USD:0,CNY:0}} valuationReady={true}/>}</div></>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
@@ -90,6 +96,56 @@ const root=path.resolve(__dirname,'..');
   assert((await page.locator('tbody').last().innerText()).includes('2022'));
   await page.getByRole('button',{name:'切换显示币种'}).click();
   assert(await page.getByTitle('已保存的历史年份固定了主货币').first().isDisabled());
-  assert.deepEqual(errors,[]);console.log('PASS native USD/CNY values, unavailable daily observations/FX totals, settled loading, 320/390/1280 dark/light rendering, local-only legacy backup, frozen plan currency, idempotent save receipt and revision conflict');
+  await page.goto(base+'/?fire=1&editFlow');
+  const metric=label=>page.locator('label').filter({hasText:new RegExp('^'+label+'$')}).locator('..');
+  const usd=page.getByRole('button',{name:/USD 美元/});
+  const currencyMenu=page.getByRole('button',{name:'切换显示币种'});
+  const chooseUsdBase=async()=>{await currencyMenu.click();await usd.locator('..').getByTitle('设为默认/主货币').click();};
+  await metric('当前资产').getByText('¥7,000.00',{exact:true}).waitFor();
+  await currencyMenu.click();await usd.click();
+  assert((await metric('当前资产').innerText()).includes('$1,000.00'));
+  assert((await metric('年被动收入').innerText()).includes('$100.00'),'manual passive income follows the display currency');
+  await chooseUsdBase();
+  assert.equal(await metric('当前资产').locator('input').inputValue(),'1000','changing the base preserves the manual asset value');
+  assert.equal(await metric('年支出').locator('input').inputValue(),'1000');
+  await page.getByRole('button',{name:'取消',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.planWrites),0);
+  assert((await metric('当前资产').innerText()).includes('$1,000.00'),'cancel restores the previous display currency and amount');
+  await chooseUsdBase();
+  await page.evaluate(()=>window.slowSave=true);
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await page.waitForFunction(()=>typeof window.releaseSave==='function');
+  assert(await page.getByRole('button',{name:'取消',exact:true}).isDisabled());
+  assert(await metric('年支出').locator('input').isDisabled());
+  await page.evaluate(()=>window.releaseSave());
+  await page.getByRole('button',{name:'编辑',exact:true}).waitFor();
+  const written=await page.evaluate(()=>window.savedPlan);
+  assert.equal(written.assetRecord,undefined,'a currency change creates no new historical observation');
+  assert.equal(written.fire.baseCurrency,'USD');assert.equal(written.fire.fireTargetBase,2000);
+  assert.equal(written.fire.originalInput,'500');assert.equal(written.fire.passiveInput,'100');
+  const future=written.fire.tableRows.find(row=>row.extra==='100');
+  assert.deepEqual([future.original,future.current,future.profit,future.target,future.rate,future.progress],['500','1000','400','2000','25','50']);
+  assert.equal(written.fire.yearsInput,'4');
+  await page.reload();await metric('当前资产').getByText('$1,000.00',{exact:true}).waitFor();
+  assert((await metric('年被动收入').innerText()).includes('$100.00'));
+  const currentYear=Number(new Intl.DateTimeFormat('en-US',{year:'numeric',timeZone:'Asia/Shanghai'}).format(new Date()));
+  const currentYearRow=page.locator('.fire-yearly-table tbody tr').filter({has:page.locator('td:first-child').filter({hasText:String(currentYear)})});
+  await page.getByRole('button',{name:'编辑',exact:true}).click();
+  await currentYearRow.locator('td').nth(4).locator('input').fill('1400');
+  assert.equal(await metric('当前资产').locator('input').inputValue(),'1400','this-year and summary editors use one draft');
+  await metric('当前资产').locator('input').fill('1500');
+  assert.equal(await currentYearRow.locator('td').nth(4).locator('input').inputValue(),'1500');
+  await page.getByRole('button',{name:'取消',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.planWrites),0);
+  assert((await metric('当前资产').innerText()).includes('$1,000.00'));
+  await page.getByRole('button',{name:'编辑',exact:true}).click();
+  await currentYearRow.locator('td').nth(4).locator('input').fill('1600');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await page.getByRole('button',{name:'编辑',exact:true}).waitFor();
+  const fromTable=await page.evaluate(()=>window.savedPlan);
+  assert.deepEqual(fromTable.assetRecord,{currency:'USD',amountBase:1600,amountUsd:1600});
+  assert.equal(fromTable.fire.tableRows.find(row=>row.year===currentYear).current,'1600');
+  await page.reload();await metric('当前资产').getByText('$1,600.00',{exact:true}).waitFor();
+  assert.deepEqual(errors,[]);console.log('PASS native USD/CNY values, unavailable daily observations/FX totals, settled loading, 320/390/1280 dark/light rendering, local-only legacy backup, frozen plan currency, idempotent save receipt, revision conflict, display/base currency changes, edit cancellation, in-flight controls, annual amounts and persisted observations');
  }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
