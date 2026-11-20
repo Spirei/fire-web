@@ -264,4 +264,8 @@
   .archiveAction { padding-inline: 10px; gap: 8px; }
   .result { padding-inline: 11px; }
   .result dl { column-gap: 6px; }
+  .rate > summary { grid-template-columns: 14px minmax(0, 1fr) auto; gap: 1px 6px; padding-block: 6px; }
+  .rateValue { grid-column: 2 / -1; grid-row: 1; }
+  .rate > summary > strong { grid-column: 2; grid-row: 2; }
+  .rateDate { grid-column: 3; grid-row: 2; }
 }
