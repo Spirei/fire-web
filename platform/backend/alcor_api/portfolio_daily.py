@@ -14,9 +14,8 @@ from .card_preferences_protocol import wire_response
 from .market_contract import CURRENCIES, ZONES
 from .market_history_evidence import verify_history_rows
 from .personal_data_transfer import digest
-from .personal_ledger_archive import PRIVATE
+from .personal_ledger_archive import PRIVATE, investment_file_actor
 from .portfolio_series import packed
-from .record_file_api import actor
 from .security import assert_expected_account, lock_read_identity
 
 LOG = logging.getLogger(__name__)
@@ -334,12 +333,13 @@ async def daily_result_loop(db, history, stop, ready):
 
 
 def mount_portfolio_daily(app, db, authority):
+    @app.get("/api/v2/investment-files/daily-results", operation_id="native_investment_files_daily_results")
     @app.get("/api/personal-data-transfer/daily-results", operation_id="portfolio_daily_results")
     async def read(request: Request, kind: str = "real", before: date | None = None,
                    day: date | None = None, revision: int | None = None, folders: bool = False,
                    year: int | None = None, month: int | None = None):
         try:
-            who = await actor(request, db)
+            who = await investment_file_actor(request, db)
             assert_expected_account(request, who.id)
             if (kind not in ("real", "simulated") or (revision is not None and (revision < 1 or day is None))
                     or (day and (before or folders or year is not None or month is not None))

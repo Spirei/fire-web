@@ -64,6 +64,16 @@ TABLES = tuple(table for tables in SECTIONS.values() for table in tables)
 EXTERNAL_REFERENCES = ("legacy_source_grants", "tasks")
 
 
+def native_files_discovery():
+    return {"version": 1, "path": "/api/v2/investment-files", "read_scope": "portfolio.read"}
+
+
+async def investment_file_actor(request, db):
+    if request.url.path.startswith("/api/v2/investment-files/") and not request.headers.get("authorization", "").startswith("Bearer fat_"):
+        raise HTTPException(401, "请通过 App 授权查看")
+    return await actor(request, db)
+
+
 async def capture(db, who):
     output = SpooledTemporaryFile(max_size=2 * 1024 * 1024, mode="w+b")  # noqa: SIM115 -- stream owns the finished file
     checksum = sha256()

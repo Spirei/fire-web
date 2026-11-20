@@ -12,9 +12,8 @@ from fastapi.responses import Response
 from psycopg import sql
 
 from .card_preferences_protocol import wire_response
-from .personal_ledger_archive import PRIVATE
+from .personal_ledger_archive import PRIVATE, investment_file_actor
 from .portfolio_series import packed
-from .record_file_api import actor
 from .security import assert_expected_account, lock_read_identity
 
 
@@ -210,10 +209,11 @@ async def detail(conn, owner, kind, identifier, revision=None):
 
 
 def mount_ledger_trace(app, db):
+    @app.get("/api/v2/investment-files/original", operation_id="native_investment_file_original")
     @app.get("/api/personal-data-transfer/original", operation_id="personal_ledger_original")
     async def original(request: Request, type: str, id: str):
         try:
-            who = await actor(request, db)
+            who = await investment_file_actor(request, db)
             assert_expected_account(request, who.id)
             if not id or len(id) > 200:
                 raise HTTPException(400, "原件编号无效")
@@ -229,11 +229,12 @@ def mount_ledger_trace(app, db):
         except HTTPException as exc:
             return wire_response({"error": exc.detail}, {**PRIVATE, **(exc.headers or {})}, exc.status_code)
 
+    @app.get("/api/v2/investment-files/records", operation_id="native_investment_files_records")
     @app.get("/api/personal-data-transfer/records", operation_id="personal_ledger_records")
     async def read(request: Request, section: str = "", type: str = "", id: str = "",
                    beforeAt: datetime | None = None, beforeType: str = "", beforeId: str = "", revision: int | None = None):
         try:
-            who = await actor(request, db)
+            who = await investment_file_actor(request, db)
             assert_expected_account(request, who.id)
             cursor = (beforeAt, beforeType, beforeId) if beforeAt else None
             if (beforeAt and (beforeAt.tzinfo is None or beforeType not in TYPES or not beforeId)

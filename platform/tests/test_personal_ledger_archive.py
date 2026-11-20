@@ -16,6 +16,7 @@ from psycopg import sql
 from pydantic import SecretStr
 from test_cash_ledger import command as cash_command
 from test_cash_ledger import submit as cash_submit
+from test_legacy_trade_corrections import native_headers
 from test_trade_amendments import case, complete
 from test_trade_amendments import command as amend_command
 from test_trading import command as trade_command
@@ -195,3 +196,21 @@ async def test_personal_ledger_spools_large_original_and_keeps_all_rows(client, 
     exported = read_archive(response.content)["tables"]["legacy_order_import_sources"]
     assert len(exported) == 1 and exported[0]["id"] == str(identifier)
     assert sha256(bytes.fromhex(exported[0]["raw"][2:])).hexdigest() == sha256(raw).hexdigest()
+
+
+async def test_native_investment_file_discovery_and_account_isolation(client, admin, db):
+    _, record = await setup(client)
+    config = (await client.get("/api/v2/auth/config")).json()["data"]["investment_files"]
+    assert config == {"version": 1, "path": "/api/v2/investment-files", "read_scope": "portfolio.read"}
+    assert "investment_files" not in (await client.get("/api/v1/auth/config")).json()["data"]
+    base = config["path"]
+    assert (await client.get(base + "/records", params={"section": "positions"})).status_code == 401
+    headers = {**await native_headers(db, admin, "portfolio.read"), "x-alcor-expected-account": admin}
+    response = await client.get(base + "/records", params={"section": "positions"}, headers=headers)
+    assert response.status_code == 200 and response.headers["X-Alcor-API-Version"] == "2", response.text
+    assert [row["id"] for row in response.json()["items"]] == [record["id"]]
+    response = await client.get(base + "/records", params={"type": "position", "id": record["id"]}, headers=headers)
+    assert response.status_code == 200 and response.json()["data"]["id"] == record["id"]
+    assert (await client.get(base + "/daily-results", params={"folders": True}, headers=headers)).json() == {"items": [], "next": None}
+    assert (await client.get(base + "/records", params={"section": "positions"},
+                            headers={**headers, "x-alcor-expected-account": "other"})).status_code == 403
