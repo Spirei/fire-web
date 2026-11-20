@@ -19,6 +19,8 @@ const FOLDERS = [
   { key: "archive", title: "账本档案", icon: IconArchive },
 ] as const;
 type Folder = typeof FOLDERS[number]["key"];
+type AccountKind = "real" | "simulated";
+type DailyPath = { year?: number; month?: number };
 type Data = Record<string, unknown>;
 type LedgerRow = { type: string; id: string; at: string; data: Data };
 type DailyRow = { day: string; revision: number; state: string; pnl: string | null; currency: string };
@@ -38,8 +40,9 @@ type DailyDocument = DailyRow & {
   missing: (Data & { reason: string })[];
 };
 type DailyDetail = DailyDocument & { revisions: number[] };
-type FileDetail = { data: DailyDetail | LedgerDetail; source: string };
 type Selection = { day: string; revision: number } | { type: string; id: string; revision?: number; filename?: string };
+type FileView = "file" | "json" | "sources";
+type FileDetail = { selection: Selection; kind: AccountKind; data: DailyDetail | LedgerDetail; source: string };
 
 const LABELS: Record<string, string> = {
   position: "持仓", trade: "成交", appFill: "App 成交", declaration: "历史订单",
@@ -108,7 +111,7 @@ function Values({ data }: { data: Data }) {
 }
 
 function Evidence({ title, children }: { title: string; children: ReactNode }) {
-  return <details className={styles.evidence}><summary><IconChevronRight size={14} />{title}</summary>{children}</details>;
+  return <details className={styles.evidence}><summary><IconChevronRight size={14} aria-hidden="true" />{title}</summary>{children}</details>;
 }
 
 const JSON_TOKEN = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)|\b(true|false|null)\b/gi;
@@ -187,28 +190,43 @@ function JsonPreview({ source, format = false }: { source: string; format?: bool
   </div>;
 }
 
+const SHEET_PREVIEW_ROWS = 50;
+
 function sheetRows(text: string, delimiter: string) {
   const rows: string[][] = [];
-  let row: string[] = [], field = "", quoted = false;
-  for (let index = 0; index < text.length && rows.length < 50; index++) {
+  let row: string[] = [], field = "", quoted = false, hasField = false;
+  // One extra record detects truncation without counting every row.
+  for (let index = 0; index < text.length && rows.length <= SHEET_PREVIEW_ROWS + 1; index++) {
     const char = text[index];
-    if (char === '"' && (quoted || field === "")) {
+    if (char === '"' && (quoted || !hasField)) {
+      hasField = true;
       if (quoted && text[index + 1] === '"') { field += '"'; index++; }
       else quoted = !quoted;
     } else if (!quoted && char === delimiter) {
-      row.push(field); field = "";
+      row.push(field); field = ""; hasField = false;
     } else if (!quoted && (char === "\r" || char === "\n")) {
       if (char === "\r" && text[index + 1] === "\n") index++;
-      rows.push([...row, field]); row = []; field = "";
-    } else field += char;
+      rows.push([...row, field]); row = []; field = ""; hasField = false;
+    } else {
+      field += char;
+      hasField = true;
+    }
   }
-  if (rows.length < 50 && (row.length || field)) rows.push([...row, field]);
+  if (row.length || hasField) rows.push([...row, field]);
   return rows;
+}
+
+function ReadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return <div className={styles.readError}>
+    <p role="alert">{message}</p>
+    <Capsule size="sm" variant="secondary" onClick={onRetry}>重试</Capsule>
+  </div>;
 }
 
 function OriginalPreview({ ownerId, detail, file }: { ownerId: string; detail: LedgerDetail; file: OriginalFile }) {
   const [state, setState] = useState<{ format: string; text: string; url: string }>();
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     let url = "";
@@ -222,12 +240,14 @@ function OriginalPreview({ ownerId, detail, file }: { ownerId: string; detail: L
       setState({ format, text, url });
     }).catch((reason) => { if (!controller.signal.aborted) setError(reason.message); });
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [ownerId, detail.type, detail.id]);
-  if (error) return <p className={styles.notice} role="alert">{error}</p>;
+  }, [ownerId, detail.type, detail.id, attempt]);
+  if (error) return <ReadError message={error} onRetry={() => { setError(""); setAttempt((value) => value + 1); }} />;
   if (!state) return <p className={styles.notice} role="status">正在读取原件…</p>;
   const keys = [...new Set(file.rows?.flatMap(Object.keys) ?? [])];
   const rows = state.format === "csv" ? sheetRows(state.text, file.name.toLowerCase().endsWith(".tsv") ? "\t" : ",")
     : file.rows?.length ? [keys, ...file.rows.map((row) => keys.map((key) => display(row[key])))] : [];
+  const bounded = rows.length > SHEET_PREVIEW_ROWS + 1
+    || (state.format === "xlsx" && rows.length === SHEET_PREVIEW_ROWS + 1);
   return <div className={styles.originalFile}>
     <div className={styles.originalActions}>
       <a className={styles.link} download={file.name} href={state.url}>下载原件</a>
@@ -235,10 +255,13 @@ function OriginalPreview({ ownerId, detail, file }: { ownerId: string; detail: L
     </div>
     {state.format === "json" && <JsonPreview source={state.text} />}
     {state.format === "text" && <pre className={styles.originalText}>{state.text}</pre>}
-    {["csv", "xlsx"].includes(state.format) && rows.length > 0 && <div className={styles.sheet} tabIndex={0}>
-      <table><thead><tr>{rows[0].map((cell, index) => <th key={index}>{cell}</th>)}</tr></thead>
-        <tbody>{rows.slice(1).map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column}>{cell}</td>)}</tr>)}</tbody></table>
-    </div>}
+    {["csv", "xlsx"].includes(state.format) && (rows.length > 0 ? <>
+      {bounded && <p className={styles.sheetLimit}>显示前 {SHEET_PREVIEW_ROWS} 行</p>}
+      <div className={styles.sheet} tabIndex={0} role="region" aria-label="表格原件预览">
+        <table><thead><tr>{rows[0].map((cell, index) => <th key={index} scope="col">{cell}</th>)}</tr></thead>
+          <tbody>{rows.slice(1, SHEET_PREVIEW_ROWS + 1).map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column}>{cell}</td>)}</tr>)}</tbody></table>
+      </div>
+    </> : <p className={styles.notice}>暂无可预览的表格内容</p>)}
     {state.format === "download" && <p className={styles.notice}>可下载后使用对应应用打开</p>}
   </div>;
 }
@@ -281,7 +304,17 @@ function DailyEvidence({ result, choose }: { result: DailyDetail; choose: (item:
         onClick={() => choose({ type: "cash", id: posting.id })}>{display(posting.kind)} · {display(posting.amount)} {display(posting.currency)}</button>)}
       {result.cashOpenings.length > 0 && <Evidence title="现金期初依据">{result.cashOpenings.map((opening) => <Values key={String(opening.opening_request_id)} data={opening} />)}</Evidence>}
     </Evidence>
-    <Evidence title="日终汇率">{Object.entries(result.fx).map(([currency, rate]) => <Evidence key={currency} title={currency}><Values data={rate} /></Evidence>)}</Evidence>
+    <Evidence title="日终汇率">
+      {Object.entries(result.fx).map(([currency, rate]) => <details className={styles.rate} key={currency}>
+        <summary>
+          <IconChevronRight size={13} aria-hidden="true" />
+          <strong>{currency}</strong>
+          <span className={styles.rateValue}>{display(rate.rate)}</span>
+          <span className={styles.rateDate}>{display(rate.observationDay ?? rate.basis)}</span>
+        </summary>
+        <Values data={rate} />
+      </details>)}
+    </Evidence>
     <Evidence title="计算口径与版本">
       <Values data={{ "盈亏计算": "日终净值 − 前一日净值 − 当日净入金", "估值截点（UTC）": result.cutoff,
         "保存时间": result.capturedAt, "计算版本": result.rule, "输入 SHA-256": result.inputSha256 }} />
@@ -321,9 +354,9 @@ async function previewArchive(file: File, ownerId: string): Promise<Preview> {
 
 export default function InvestmentDataManager({ ownerId }: { ownerId: string }) {
   const [folder, setFolder] = useState<Folder>("daily");
-  const [year, setYear] = useState<number>();
-  const [month, setMonth] = useState<number>();
-  const [kind, setKind] = useState("real");
+  const [kind, setKind] = useState<AccountKind>("real");
+  const [dailyPaths, setDailyPaths] = useState<Record<AccountKind, DailyPath>>({ real: {}, simulated: {} });
+  const { year, month } = dailyPaths[kind];
   const [rows, setRows] = useState<Row[]>([]);
   const [next, setNext] = useState<Cursor>(null);
   const [page, setPage] = useState<Cursor>(null);
@@ -333,12 +366,13 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
   const [selection, setSelection] = useState<Selection | null>(null);
   const [file, setDetail] = useState<FileDetail | null>(null);
   const [detailError, setDetailError] = useState("");
-  const [view, setView] = useState<"file" | "json" | "sources">("file");
-  const [previous, setPrevious] = useState<Selection[]>([]);
+  const [view, setView] = useState<FileView>("file");
+  const [previous, setPrevious] = useState<{ selection: Selection; view: FileView }[]>([]);
   const [exporting, setExporting] = useState(false);
   const [fileStatus, setFileStatus] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const exportRequest = useRef<AbortController | null>(null);
+  const previewContent = useRef<HTMLDivElement>(null);
 
   useEffect(() => () => exportRequest.current?.abort(), []);
   useEffect(() => {
@@ -373,22 +407,46 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
     const params = new URLSearchParams(daily ? { kind, day: selection.day, revision: String(selection.revision) }
       : { type: selection.type, id: selection.id });
     if (!daily && selection.revision !== undefined) params.set("revision", String(selection.revision));
-    setDetail(null); setDetailError("");
     void ownRequest(ownerId, `${daily ? "/daily-results" : "/records"}?${params}`, controller.signal)
       .then((response) => response.text()).then((source) => {
-        if (!controller.signal.aborted) setDetail({ data: JSON.parse(source), source });
+        if (!controller.signal.aborted) setDetail({ selection, kind, data: JSON.parse(source), source });
       })
       .catch((error) => { if (!controller.signal.aborted) setDetailError(error.message); });
     return () => controller.abort();
   }, [kind, ownerId, selection]);
 
-  function reset(nextFolder: Folder, nextYear?: number, nextMonth?: number) {
-    setFolder(nextFolder); setYear(nextYear); setMonth(nextMonth); setRows([]); setPage(null); setNext(null); setSelection(null); setPrevious([]); setListError("");
+  function closeFile() {
+    setSelection(null);
+    setDetail(null);
+    setPrevious([]);
+  }
+  function resetList(nextFolder: Folder) {
+    setFolder(nextFolder); setRows([]); setPage(null); setNext(null); setListError("");
     setLoading(nextFolder !== "archive");
+    closeFile();
+  }
+  function openPeriod(nextYear?: number, nextMonth?: number) {
+    setDailyPaths((paths) => ({ ...paths, [kind]: { year: nextYear, month: nextMonth } }));
+    resetList("daily");
+  }
+  function showView(nextView: FileView) {
+    setView(nextView);
+    previewContent.current?.closest(".app-modal-body")?.scrollTo(0, 0);
+  }
+  function readFile(item: Selection, nextView: FileView) {
+    setDetailError("");
+    setSelection({ ...item });
+    showView(nextView);
   }
   function choose(item: Selection) {
-    if (selection) setPrevious((current) => [...current, selection]);
-    setView("file"); setDetail(null); setDetailError(""); setSelection(item);
+    if (selection) setPrevious((current) => [...current, { selection, view }]);
+    readFile(item, "file");
+  }
+  function returnToSource() {
+    const source = previous.at(-1);
+    if (!source) return;
+    setPrevious(previous.slice(0, -1));
+    readFile(source.selection, source.view);
   }
   async function download() {
     if (exportRequest.current) return;
@@ -411,21 +469,25 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
     }
   }
 
-  const detail = file?.data;
+  const activeFile = file?.selection === selection && file.kind === kind ? file : null;
+  const detail = activeFile?.data;
+  const dailySelection = selection && "day" in selection ? selection : null;
   const snapshot = detail && "day" in detail ? detail : null;
+  const dailyVersions = dailySelection && file?.kind === kind && "day" in file.data && file.data.day === dailySelection.day
+    ? file.data.revisions : [];
   const original = detail && "type" in detail ? detail.file : undefined;
   const fileTitle = original?.name ?? (selection && ("day" in selection ? dailyFilename(selection.day)
     : selection.filename ?? (detail ? `${status(selection.type)}.json` : status(selection.type))));
   const dailyFolder = folder === "daily" && month === undefined;
   const dailyFiles = folder === "daily" && month !== undefined;
-  const currentVersion = detail && ("day" in detail ? detail.revision : detail.version?.revision);
+  const currentVersion = dailySelection?.revision ?? (detail && "type" in detail ? detail.version?.revision : undefined);
   const empty = folder === "daily" ? "暂无已保存的日终快照" : "暂无记录";
 
   return <div className={styles.workspace}>
     <div className={styles.layout}>
     <nav className={styles.categories} aria-label="投资数据分类">
       {FOLDERS.map(({ key, title, icon: Icon }) => <button key={key} type="button" aria-pressed={folder === key}
-        onClick={() => { if (folder !== key) reset(key); }}><Icon size={17} stroke={1.7} aria-hidden="true" />{title}</button>)}
+        onClick={() => { if (folder !== key) resetList(key); }}><Icon size={17} stroke={1.7} aria-hidden="true" />{title}</button>)}
     </nav>
     <section className={styles.browser} aria-label={FOLDERS.find(({ key }) => key === folder)?.title}>
     {folder === "archive" ? <div className={styles.archive}>
@@ -453,14 +515,19 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
     </div> : <>
       {folder === "daily" && <div className={styles.toolbar}>
         <nav aria-label="每日盈亏目录" className={styles.breadcrumb}>
-          {year === undefined ? <span aria-current="page">全部年份</span> : <button type="button" onClick={() => reset("daily")}>全部年份</button>}
+          {year === undefined ? <span aria-current="page">全部年份</span> : <button type="button" onClick={() => openPeriod()}>全部年份</button>}
           {year !== undefined && <><IconChevronRight size={13} aria-hidden="true" />
-            {month === undefined ? <span aria-current="page">{year} 年</span> : <button type="button" onClick={() => reset("daily", year)}>{year} 年</button>}
+            {month === undefined ? <span aria-current="page">{year} 年</span> : <button type="button" onClick={() => openPeriod(year)}>{year} 年</button>}
           </>}
           {month !== undefined && <><IconChevronRight size={13} aria-hidden="true" /><span aria-current="page">{month} 月</span></>}
         </nav>
         <AppSelect ariaLabel="账户类型" value={kind} options={[{ value: "real", label: "真实账户" }, { value: "simulated", label: "模拟账户" }]}
-          onChange={(value) => { if (value !== kind) { reset("daily"); setKind(value); } }} />
+          onChange={(value) => {
+            if ((value === "real" || value === "simulated") && value !== kind) {
+              setKind(value);
+              resetList("daily");
+            }
+          }} />
       </div>}
       <div className={styles.fileList} aria-label={dailyFolder ? "盈亏文件夹" : "资料列表"}>
         <div className={styles.listHead} aria-hidden="true">
@@ -471,7 +538,7 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
           if ("year" in row) {
             const label = row.month === undefined ? `${row.year} 年` : `${row.month} 月`;
             return <button type="button" className={styles.listRow} key={`${row.year}:${row.month ?? 0}`}
-              onClick={() => reset("daily", row.year, row.month)}>
+              onClick={() => openPeriod(row.year, row.month)}>
               <span className={styles.fileName}><IconFolder size={21} stroke={1.65} aria-hidden="true" />{label}</span>
               <span className={styles.secondary}>{row.count} 天</span><IconChevronRight size={16} aria-hidden="true" />
             </button>;
@@ -481,7 +548,7 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
           const item: Selection = daily ? { day: row.day, revision: row.revision } :
             { type: row.type, id: row.id, filename: folder === "originals" ? title : undefined };
           return <button type="button" className={styles.listRow} key={daily ? row.day : `${row.type}:${row.id}`} aria-haspopup="dialog"
-            onClick={() => { setPrevious([]); setView("file"); setDetail(null); setDetailError(""); setSelection(item); }}>
+            onClick={() => { setPrevious([]); readFile(item, "file"); }}>
             <span className={styles.fileName}><IconFileDescription size={19} stroke={1.65} aria-hidden="true" />{title}</span>
             {daily ? <span className={styles.amount}>{row.pnl === null ? <small>{status(row.state)}</small> : <><b className={amountTone(row.pnl)}>{row.pnl}</b> <small>{row.currency}</small></>}</span>
               : <span className={styles.secondary}>{datePart(row.at)}</span>}
@@ -495,39 +562,37 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
     </>}
     </section>
     </div>
-    {selection && <AppModal title={fileTitle ?? "文件预览"} size="xl" className={styles.previewDialog}
-      titleAddon={currentVersion && !(snapshot && snapshot.revisions.length > 1) ? <span className={styles.version}>第 {currentVersion} 版</span> : undefined}
-      headerActions={previous.length > 0 ? <Capsule size="sm" variant="ghost" onClick={() => {
-        setView("file"); setDetail(null); setDetailError("");
-        setSelection(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1));
-      }}>返回上一条</Capsule> : undefined}
-      onClose={() => { setSelection(null); setDetail(null); setPrevious([]); }}>
-      {detailError ? <p className={styles.notice} role="alert">{detailError}</p> : !file || !detail ? <p className={styles.notice} role="status">读取文件…</p> : <>
-        <div className={styles.previewToolbar}>
-        <nav className={styles.previewNav} aria-label="文件视图">
-          <button type="button" aria-pressed={view === "file"} onClick={() => setView("file")}>{original ? "原始文件" : "文件内容"}</button>
-          {original && <button type="button" aria-pressed={view === "json"} onClick={() => setView("json")}>记录 JSON</button>}
-          <button type="button" aria-pressed={view === "sources"} onClick={() => setView("sources")}>数据依据</button>
-        </nav>
-        {snapshot && snapshot.revisions.length > 1 && <AppSelect ariaLabel="日终快照版本"
-          value={String(snapshot.revision)} options={snapshot.revisions.map((number) => ({ value: String(number), label: `第 ${number} 版` }))}
-          onChange={(value) => {
-            const revision = Number(value);
-            if (revision === snapshot.revision) return;
-            setDetail(null);
-            setDetailError("");
-            setSelection({ day: snapshot.day, revision });
-          }} />}
-        </div>
-        {snapshot && <DailySnapshot result={snapshot} />}
-        {(view === "json" || view === "file" && !original) && <JsonPreview key={"day" in detail ? `${detail.day}:${detail.revision}` : `${detail.id}:${detail.version?.revision ?? "current"}`} source={file.source} format />}
-        {view === "file" && original && "type" in detail && <OriginalPreview key={detail.id} ownerId={ownerId} detail={detail} file={original} />}
-        {view === "sources" && ("day" in detail ? <DailyEvidence result={detail} choose={choose} /> : <Values data={{ "记录编号": detail.id, ...detail.data }} />)}
-        {!("day" in detail) && detail.links.length > 0 && <Evidence title="关联记录">{detail.links.map((link, index) => <button type="button" className={styles.link}
-          key={`${link.type}:${link.id}:${index}`} onClick={() => choose(link)}>{status(link.type)} · {link.id}</button>)}</Evidence>}
-        {!("day" in detail) && detail.versions && detail.versions.length > 1 && <Evidence title="持仓版本">{detail.versions.map((version) => <button type="button" className={styles.link}
-          disabled={version.revision === detail.version?.revision} key={version.revision} onClick={() => choose({ type: detail.type, id: detail.id, revision: version.revision })}>第 {version.revision} 版{version.action === "baseline" ? " · 首次留存" : ""}</button>)}</Evidence>}
-      </>}
+    {selection && <AppModal title={fileTitle ?? "文件预览"} size="xl"
+      className={`${styles.previewDialog} ${dailySelection ? styles.snapshotDialog : ""}`}
+      titleAddon={currentVersion && dailyVersions.length <= 1 ? <span className={styles.version}>第 {currentVersion} 版</span> : undefined}
+      headerActions={previous.length > 0 ? <Capsule size="sm" variant="ghost" onClick={returnToSource}>返回上一条</Capsule> : undefined}
+      onClose={closeFile}>
+      <div ref={previewContent}>
+        {(dailySelection || detail) && <div className={styles.previewToolbar}>
+          <nav className={styles.previewNav} aria-label="文件视图">
+            <button type="button" aria-pressed={view === "file"} onClick={() => showView("file")}>{original ? "原始文件" : "文件内容"}</button>
+            {original && <button type="button" aria-pressed={view === "json"} onClick={() => showView("json")}>记录 JSON</button>}
+            <button type="button" aria-pressed={view === "sources"} onClick={() => showView("sources")}>数据依据</button>
+          </nav>
+          {dailySelection && dailyVersions.length > 1 && <AppSelect ariaLabel="日终快照版本"
+            value={String(dailySelection.revision)} options={dailyVersions.map((number) => ({ value: String(number), label: `第 ${number} 版` }))}
+            onChange={(value) => {
+              const revision = Number(value);
+              if (revision !== dailySelection.revision) readFile({ day: dailySelection.day, revision }, view);
+            }} />}
+        </div>}
+        {detailError ? <ReadError message={detailError} onRetry={() => readFile(selection, view)} /> :
+          !activeFile || !detail ? <p className={styles.notice} role="status">读取文件…</p> : <>
+            {snapshot && <DailySnapshot result={snapshot} />}
+            {(view === "json" || view === "file" && !original) && <JsonPreview key={"day" in detail ? `${detail.day}:${detail.revision}` : `${detail.id}:${detail.version?.revision ?? "current"}`} source={activeFile.source} format />}
+            {view === "file" && original && "type" in detail && <OriginalPreview key={detail.id} ownerId={ownerId} detail={detail} file={original} />}
+            {view === "sources" && ("day" in detail ? <DailyEvidence result={detail} choose={choose} /> : <Values data={{ "记录编号": detail.id, ...detail.data }} />)}
+            {!("day" in detail) && detail.links.length > 0 && <Evidence title="关联记录">{detail.links.map((link, index) => <button type="button" className={styles.link}
+              key={`${link.type}:${link.id}:${index}`} onClick={() => choose(link)}>{status(link.type)} · {link.id}</button>)}</Evidence>}
+            {!("day" in detail) && detail.versions && detail.versions.length > 1 && <Evidence title="持仓版本">{detail.versions.map((version) => <button type="button" className={styles.link}
+              disabled={version.revision === detail.version?.revision} key={version.revision} onClick={() => choose({ type: detail.type, id: detail.id, revision: version.revision })}>第 {version.revision} 版{version.action === "baseline" ? " · 首次留存" : ""}</button>)}</Evidence>}
+          </>}
+      </div>
     </AppModal>}
   </div>;
 }

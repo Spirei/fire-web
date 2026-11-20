@@ -128,6 +128,8 @@
 .amount { overflow-wrap: anywhere; max-width: 14rem; }
 .amount b { font-weight: 650; }
 .notice, .loadMore { padding: 13px 15px; color: var(--data-muted); font-size: 13px; }
+.readError { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 13px 15px; font-size: 13px; }
+.readError p { min-width: 0; color: var(--data-muted); overflow-wrap: anywhere; }
 .empty {
   display: flex;
   align-items: center;
@@ -155,6 +157,16 @@
 .previewDialog { background: var(--data-surface); }
 .previewDialog :global(.app-modal-header) h3 { overflow-wrap: anywhere; }
 .previewDialog :global(.app-modal-body) { min-width: 0; }
+.snapshotDialog { height: min(42rem, calc(100dvh - 2 * var(--modal-gutter, 16px))); }
+.snapshotDialog :global(.app-modal-body) { flex: 1; }
+.snapshotDialog .previewToolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-top: 0;
+  background: var(--data-surface);
+}
+.snapshotDialog .jsonPreview > pre { max-height: none; overflow: visible; }
 .version { color: var(--data-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .previewToolbar {
   display: flex;
@@ -176,9 +188,25 @@
 .result dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 12px; margin-top: 9px; }
 .result dd { overflow-wrap: anywhere; font-size: 13px; font-variant-numeric: tabular-nums; }
 .evidence { padding: 0 8px; border-bottom: 1px solid var(--data-edge); }
-.evidence summary { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 10px 0; list-style: none; font-size: 14px; }
+.evidence > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 10px 0; list-style: none; font-size: 14px; }
 .evidence summary::-webkit-details-marker { display: none; }
-.evidence[open] > summary svg { transform: rotate(90deg); }
+.evidence[open] > summary svg, .rate[open] > summary svg { transform: rotate(90deg); }
+.rate { margin: 0 0 6px; padding-inline: 8px; border-radius: 8px; background: var(--data-soft); }
+.rate > summary {
+  display: grid;
+  grid-template-columns: 14px 2.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  font-size: 13px;
+  list-style: none;
+  cursor: pointer;
+}
+.rate strong { font-weight: 650; }
+.rateValue, .rateDate { font-variant-numeric: tabular-nums; }
+.rateValue { overflow-wrap: anywhere; }
+.rateDate { color: var(--data-muted); text-align: end; font-size: 12px; }
+.rate > .values { margin-top: 0; padding-bottom: 6px; }
 .gaps { margin: 12px 0; font-size: 13px; }
 .gaps h4 { font-weight: 650; }
 .gaps li { display: flex; gap: 6px; align-items: baseline; padding: 3px 0; }
@@ -221,6 +249,7 @@
 :global(.dark) .jsonLiteral { color: #ffbd9f; }
 .originalFile { min-width: 0; }
 .originalActions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
+.sheetLimit { margin: 0 0 6px; color: var(--data-muted); font-size: 12px; }
 .originalText, .sheet { border: 1px solid var(--data-edge); border-radius: 9px; background: var(--data-soft); }
 .sheet { max-height: 44rem; overflow: auto; }
 .sheet table { border-collapse: collapse; min-width: 100%; font-size: 13px; white-space: nowrap; }
