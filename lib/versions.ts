@@ -8414,6 +8414,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.87", date: "2026-11-21", summary: "修正 FIRE 规划换算、订单弹窗、请求日志和搜索历史",
   software: V0_1_86_ENTRY.software.map(item => ({ ...item, version: "v0.1.87" })),
   changes: [
+    { kind: "fix", title: "整理网页数据管理与日终文件预览", desc: "文件目录适配桌面和窄屏，日终文件采用 YYYYMMDD.json 命名。打开快照即可查看盈亏、净值和保存版本，JSON 预览及复制保留原始数字精度。" },
     { kind: "feature", title: "投资数据管理与每日盈亏留档", desc: "从设置查看持仓、成交、资金流水、更正和来源文件，原件按文件格式预览。日终盈亏按年和月归档，同日核算沿用已冻结的汇率。完整个人账本保留原始记录及更正链，Alcor App 可通过本人授权读取 Fire 文件。" },
     { kind: "fix", title: "修正 FIRE 规划的币种换算", desc: "切换主币种时同步换算支出、资产和年度规划金额。今年明细中的当前资产与规划摘要同步，取消编辑可还原。" },
     { kind: "fix", title: "优化小屏订单导入导出", desc: "小屏和横屏可滚动预览订单并操作底部按钮。提交和核对回执分别显示进度。" },
