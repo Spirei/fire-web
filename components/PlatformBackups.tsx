@@ -1,4 +1,5 @@
 "use client";
+import { clientRequestId } from "@/lib/randomId";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppModal from "./AppModal";
 import BackupHistory, { type BackupHistoryItem } from "./BackupHistory";
@@ -198,7 +199,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
   async function start() {
     if (!ready || !saved || busy || !data?.key_fingerprint) return;
     const ticket = ++operation.current;
-    const id = crypto.randomUUID();
+    const id = clientRequestId();
     setBusy(true);
     setTask(null);
     setRequestId(id);

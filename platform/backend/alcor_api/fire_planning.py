@@ -95,7 +95,7 @@ class FirePlanning:
         from .account_signals import guard
 
         async with self.db.connection() as conn, conn.transaction():
-            await guard(conn, who, "portfolio.read")
+            await guard(conn, who, "portfolio.read", allow_fire_web=True)
             row = await (
                 await conn.execute(
                     "SELECT value,revision FROM fire_planning_settings WHERE owner_id=%s", (who.id,)
@@ -150,9 +150,9 @@ class FirePlanning:
             asset = {key: asset[key] for key in ("amountBase", "amountUsd", "currency")}
             asset["recordedAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         async with self.db.connection() as conn, conn.transaction():
+            await guard(conn, who, "portfolio.write", allow_fire_web=True)
             await conn.execute("SELECT id FROM users WHERE id=%s FOR UPDATE", (who.id,))
             await lock_mutation_identity(conn, who, require_admin=False)
-            await guard(conn, who, "portfolio.write")
             if request_id:
                 prior = await (
                     await conn.execute(
@@ -203,7 +203,7 @@ class FirePlanning:
         from .account_signals import guard
 
         async with self.db.connection() as conn, conn.transaction():
-            await guard(conn, who, "portfolio.read")
+            await guard(conn, who, "portfolio.read", allow_fire_web=True)
             row = await (
                 await conn.execute(
                     "SELECT result FROM fire_planning_operations WHERE owner_id=%s AND request_id=%s",

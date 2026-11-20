@@ -18,7 +18,7 @@ from .admin_verification import VerificationInput, verify_admin_access
 from .connection_models import ConnectionInput, ConnectionReceiptOut, ConnectionSettingsOut, Kind
 from .legacy_identity import OLD_COOKIE, WEB_COOKIE, public_profile, web_identity
 from .models import OverviewOut, TaskDetail, TaskInput, TaskList, TaskOut, TaskStatus
-from .security import Identity, csrf_token, trusted_origin
+from .security import COOKIE, Identity, csrf_token, identity, trusted_origin
 from .system_overview import read_overview
 
 router = APIRouter(prefix="/api/fire", tags=["fire-web"])
@@ -53,6 +53,23 @@ async def member(request: Request):
         )
     who.csrf = expected
     return who
+
+
+async def bound_member(request: Request):
+    """Select the session proved by the displayed browser surface."""
+    if "authorization" in request.headers:
+        raise HTTPException(403, "请使用当前网页会话")
+    token = request.cookies.get(COOKIE, "")
+    binding = request.headers.get("x-csrf-token")
+    if binding is not None and not re.fullmatch(r"[0-9a-f]{64}", binding):
+        raise HTTPException(403, "操作校验已失效，请刷新页面")
+    if COOKIE in request.cookies and (binding is None or (
+        token and secrets.compare_digest(binding, csrf_token(token))
+    )):
+        return await identity(request)
+    if request.cookies.get(WEB_COOKIE) or request.cookies.get(OLD_COOKIE):
+        return await member(request)
+    return await identity(request)
 
 
 async def administrator(who: Annotated[Identity, Depends(member)]):

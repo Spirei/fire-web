@@ -1,6 +1,9 @@
 "use client";
 import { IconButton, Capsule } from "@/components/Capsule";
 
+import { clientRequestId } from "@/lib/randomId";
+import { accountReadHeaders } from "@/lib/privateReadContext";
+import { PlatformRequestError, platformRequest } from "@/lib/platformRequest";
 import { formatOrderTime,isOrderToday,orderDateKey } from "@/lib/orderTime";
 import { holdingAccountMarket } from "@/lib/stockAccount";
 import StockConnectBadge from "@/components/StockConnectBadge";
@@ -88,16 +91,15 @@ interface ExportRecord {
 interface ImportGroupResult {
   market: string;
   code: string;
-  name: string;
-  recordName: string | null;
-  createdRecord: boolean;
+  recordId: string;
   orderCount: number;
-  finalQty: number;
   action: "imported" | "skipped" | "option";
   reason?: string;
 }
 
 interface ImportResultData {
+  previewId: string;
+  rows: { rowIndex: number; state: "ready" | "blocked" | "ignored" | "duplicate"; market?: string; code?: string; quantity?: string; fees?: string; currency?: string; reason?: string }[];
   dryRun: boolean;
   fileName: string;
   totalFilled: number;
@@ -181,10 +183,10 @@ function shiftMonth(value: Date, delta: number) {
   return new Date(value.getFullYear(), value.getMonth() + delta, 1);
 }
 
-function loadExportHistory(): ExportRecord[] {
+function loadExportHistory(ownerId: string): ExportRecord[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(EXPORT_HISTORY_KEY) || "[]");
-    return Array.isArray(raw) ? raw.filter((item): item is ExportRecord => !!item && typeof item === "object") : [];
+    const raw = JSON.parse(localStorage.getItem(`${EXPORT_HISTORY_KEY}:${ownerId}`) || "[]");
+    return Array.isArray(raw) ? raw.filter((item): item is ExportRecord => item && typeof item.url === "string" && item.url.startsWith("/api/trading/history/export?")) : [];
   } catch {
     return [];
   }
@@ -369,6 +371,7 @@ function FilterSelect({
 
 export default function TradeOrdersPanel({
   orders,
+  ownerId,
   stockIcons = {},
   storageKey = "fire:orders:tab",
   onEdit,
@@ -380,6 +383,7 @@ export default function TradeOrdersPanel({
   onRefresh
 }: {
   orders: TradeOrder[];
+  ownerId: string;
   stockIcons?: Record<string, string>;
   storageKey?: string;
   onEdit?: (order: TradeOrder) => void;
@@ -416,7 +420,7 @@ export default function TradeOrdersPanel({
   });
   const [exportDetail, setExportDetail] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [recentExports, setRecentExports] = useState<ExportRecord[]>(() => typeof window === "undefined" ? [] : loadExportHistory());
+  const [recentExports, setRecentExports] = useState<ExportRecord[]>(() => typeof window === "undefined" ? [] : loadExportHistory(ownerId));
   // 搜索（带联想）与分页
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -429,7 +433,8 @@ export default function TradeOrdersPanel({
   const [importPreview, setImportPreview] = useState<ImportResultData | null>(null);
   const [importError, setImportError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const previewFileRef = useRef<File | null>(null);
+  const importBinding = useRef<{ csrf: string; requestId: string } | null>(null);
+  const readyCount = importPreview?.rows.filter(row => row.state === "ready").length ?? 0;
   const [detailOrder, setDetailOrder] = useState<TradeOrder | null>(null);
   const dragIndex = useRef<number | null>(null);
   const timeBtnRef = useRef<HTMLButtonElement>(null);
@@ -735,14 +740,14 @@ export default function TradeOrdersPanel({
   };
 
   const exportUrl = useMemo(() => {
-    const params = new URLSearchParams({ scope: tab, market: marketFilter, type: typeFilter, status: statusFilter });
+    const params = new URLSearchParams({ scope: tab, accountMarket: marketFilter, type: typeFilter, status: statusFilter, calendarZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
     if (timeFilter.mode !== "all") {
       const range = timeFilter.mode === "custom" ? { start: timeFilter.start, end: timeFilter.end } : timeRangeFor(timeFilter.mode);
       if (range.start) params.set("start", range.start);
       if (range.end) params.set("end", range.end);
     }
     if (recordId) params.set("recordId", recordId);
-    return `/api/v1/orders/export?${params.toString()}`;
+    return `/api/trading/history/export?${params.toString()}`;
   }, [tab, marketFilter, typeFilter, statusFilter, timeFilter, recordId]);
 
   async function copyOrderNo(order: TradeOrder) {
@@ -756,12 +761,13 @@ export default function TradeOrdersPanel({
     }
   }
 
-  async function downloadExport() {
+  async function downloadExport(previous?: ExportRecord) {
     if (exporting) return;
     setExporting(true);
     try {
-      const url = `${exportUrl}${exportDetail ? "&detail=1" : ""}`;
-      const response = await fetch(url, { cache: "no-store" });
+      const url = previous?.url ?? `${exportUrl}${exportDetail ? "&detail=1" : ""}`;
+      const { csrf } = await platformRequest<{ csrf: string }>("/api/fire/session", { headers: accountReadHeaders(ownerId) });
+      const response = await fetch(url, { cache: "no-store", headers: { ...accountReadHeaders(ownerId), "x-csrf-token": csrf } });
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.message || "导出失败");
@@ -780,7 +786,7 @@ export default function TradeOrdersPanel({
       URL.revokeObjectURL(objectUrl);
       const record: ExportRecord = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        range: `${timeFilter.mode === "all" ? (tab === "today" ? "当日" : "历史") : timeDisplay(timeFilter).replace("委托时间:", "")} · ${marketFilter === "ALL" ? "全部市场" : marketMeta(marketFilter).label} · ${typeFilter === "all" ? "全部类型" : typeFilter === "stock" ? "股票" : "ETF"} · ${statusFilter === "all" ? "全部状态" : STATUS_LABEL[statusFilter] ?? "其他"}`,
+        range: previous?.range ?? `${timeFilter.mode === "all" ? (tab === "today" ? "当日" : "历史") : timeDisplay(timeFilter).replace("委托时间:", "")} · ${marketFilter === "ALL" ? "全部市场" : marketMeta(marketFilter).label} · ${typeFilter === "all" ? "全部类型" : typeFilter === "stock" ? "股票" : "ETF"} · ${statusFilter === "all" ? "全部状态" : STATUS_LABEL[statusFilter] ?? "其他"}`,
         status: "成功",
         fileName,
         time: new Date().toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }),
@@ -789,7 +795,7 @@ export default function TradeOrdersPanel({
       };
       const next = [record, ...recentExports].slice(0, 20);
       setRecentExports(next);
-      try { localStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(next)); } catch { /* 忽略存储失败 */ }
+      try { localStorage.setItem(`${EXPORT_HISTORY_KEY}:${ownerId}`, JSON.stringify(next)); } catch { /* 忽略存储失败 */ }
       showToast("订单已导出");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "导出失败", "err");
@@ -802,13 +808,18 @@ export default function TradeOrdersPanel({
     if (importing) return;
     setImporting(true);
     setImportError("");
+    setImportPreview(null);
+    importBinding.current = null;
     try {
+      const { csrf } = await platformRequest<{ csrf: string }>("/api/fire/session", { headers: accountReadHeaders(ownerId) });
       const form = new FormData();
       form.append("file", file);
-      const response = await fetch("/api/v1/orders/import?dryRun=1", { method: "POST", body: form });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || "导入预览失败");
-      setImportPreview(data as ImportResultData);
+      const data = await platformRequest<ImportResultData>("/api/trading/history/import/preview", {
+        method: "POST", headers: { ...accountReadHeaders(ownerId), "x-csrf-token": csrf }, body: form,
+      });
+      if (!data.dryRun || !data.previewId || !Array.isArray(data.rows)) throw new Error("未取得有效订单预览");
+      importBinding.current = { csrf, requestId: clientRequestId() };
+      setImportPreview(data);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "导入预览失败");
     } finally {
@@ -816,20 +827,33 @@ export default function TradeOrdersPanel({
     }
   }
 
-  async function confirmImport(file: File) {
-    if (importing) return;
+  async function confirmImport() {
+    const binding = importBinding.current;
+    if (importing || !importPreview?.dryRun || !readyCount || !binding) return;
     setImporting(true);
     setImportError("");
+    const headers = { ...accountReadHeaders(ownerId), "x-csrf-token": binding.csrf };
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch("/api/v1/orders/import", { method: "POST", body: form });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data) throw new Error(data?.error || "导入失败");
-      setImportPreview(data as ImportResultData);
+      let data: ImportResultData;
+      try {
+        data = await platformRequest<ImportResultData>("/api/trading/history/import/submissions", {
+          method: "POST", headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ previewId: importPreview.previewId, requestId: binding.requestId, confirm: true }),
+        });
+      } catch (error) {
+        if (error instanceof PlatformRequestError && error.status && error.status < 500) {
+          if ([401, 403, 409].includes(error.status)) importBinding.current = null;
+          throw error;
+        }
+        // A lost submit response may already have committed this exact request.
+        try {
+          data = await platformRequest<ImportResultData>(`/api/trading/history/import/operations/${binding.requestId}`, { headers });
+        } catch { throw error; }
+      }
+      setImportPreview(data);
       showToast(`已导入 ${data.imported} 笔订单`);
       window.dispatchEvent(new Event("fire:orders-updated"));
-      if (onRefresh) await onRefresh();
+      if (onRefresh) void Promise.resolve().then(onRefresh).catch(() => showToast("订单已导入，请刷新列表", "err"));
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "导入失败");
     } finally {
@@ -841,7 +865,6 @@ export default function TradeOrdersPanel({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    previewFileRef.current = file;
     await previewImport(file);
   }
 
@@ -1499,10 +1522,10 @@ export default function TradeOrdersPanel({
         document.body
       )}
 
-      {exportOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center p-6 pt-[14vh]">
+      {exportOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6">
           <div className="absolute inset-0 bg-black/40" onClick={() => setExportOpen(false)} />
-          <div className="relative max-h-[85vh] w-full max-w-[620px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
+          <div className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[620px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
             <div className="flex items-center justify-between gap-2 border-b border-edge px-5 py-4">
               <div>
                 <h3 className="text-base font-bold text-ink">导出订单</h3>
@@ -1532,9 +1555,7 @@ export default function TradeOrdersPanel({
                   状态：<span className="text-ink">{statusFilter === "all" ? "全部" : STATUS_LABEL[statusFilter] ?? "其他"}</span>
                 </p>
               </div>
-              <MobileExplanation className="text-xs leading-relaxed text-muted" summary={<>导出 {sortedOrders.length} 笔 · 21 列</>}><p>
-                将导出当前筛选条件下的 <strong className="text-ink">{sortedOrders.length}</strong> 笔订单，共 21 列：订单状态、市场、股票代码、股票名称、方向、委托类型、委托数量、委托价格、触发价格、币种、委托时间、成交均价、成交数量、成交金额、剩余挂单数量、撤/废单数量、有效期、时段、触发状态、订单号、驳回原因。
-              </p></MobileExplanation>
+              <MobileExplanation className="text-xs leading-relaxed text-muted" summary="导出当前筛选范围"><p>订单表包含成交数量、成交均价、原币金额、实付费用及已有的结算记录。缺少依据的单元格留空。</p></MobileExplanation>
               <label className="flex cursor-pointer items-start gap-2.5 rounded-[12px] bg-bg-gray/70 px-4 py-3 dark:bg-white/5">
                 <span className={`mt-px flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[3px] border transition-colors ${
                   exportDetail ? "border-transparent bg-ink text-white dark:bg-white dark:text-black" : "border-edge-strong bg-transparent text-transparent"
@@ -1578,7 +1599,7 @@ export default function TradeOrdersPanel({
                           <td className="max-w-[160px] truncate px-3 py-2 text-ink" title={record.fileName}>{record.fileName}</td>
                           <td className="px-3 py-2 tabular-nums text-muted">{record.time}</td>
                           <td className="px-3 py-2 text-right tabular-nums text-muted">{record.size}</td>
-                          <td className="px-3 py-2 text-center"><a href={record.url} download className="text-[11px] font-semibold text-muted transition-colors hover:text-ink">重新导出</a></td>
+                          <td className="px-3 py-2 text-center"><button type="button" disabled={exporting} onClick={() => void downloadExport(record)} className="text-[11px] font-semibold text-muted transition-colors hover:text-ink">重新导出</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1591,13 +1612,13 @@ export default function TradeOrdersPanel({
               <Capsule variant="secondary" size="sm" type="button" disabled={exporting} onClick={() => void downloadExport()} className="disabled:opacity-60">{exporting ? "导出中…" : "导出"}</Capsule>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
-      {importOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center p-6 pt-[14vh]">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setImportOpen(false)} />
-          <div className="relative max-h-[85vh] w-full max-w-[640px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
+      {importOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { if (!importing) setImportOpen(false); }} />
+          <div className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
             <div className="flex items-center justify-between gap-2 border-b border-edge px-5 py-4">
               <div>
                 <h3 className="text-base font-bold text-ink">导入订单</h3>
@@ -1605,7 +1626,7 @@ export default function TradeOrdersPanel({
               </div>
               <button
                 type="button"
-                onClick={() => setImportOpen(false)}
+                onClick={() => { if (!importing) setImportOpen(false); }}
                 aria-label="关闭"
                 className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
               >
@@ -1629,10 +1650,10 @@ export default function TradeOrdersPanel({
                     </svg>
                     <span className="text-sm font-semibold text-ink">选择 .xlsx 文件</span>
                     <span className="max-w-[420px] text-[11px] leading-relaxed text-muted">
-                      格式与「导出订单」一致（21 列：订单状态、市场、股票代码…），长桥等券商的历史订单导出可直接导入；仅导入「已成交」订单，按订单号去重。
+                      选择包含实际成交、费用和明确时区的原始订单表，预览后确认导入。
                     </span>
                   </button>
-                  <a href="/docs/broker-orders-format.md" target="_blank" rel="noreferrer" className="block text-center text-[11px] text-muted transition-colors hover:text-ink">查看导入格式规范</a>
+                  <a href="/docs/broker-orders-format.md" target="_blank" rel="noreferrer" className="block text-center text-[11px] text-muted hover:text-ink">查看导入格式规范</a>
                 </>
               )}
               {importing && (
@@ -1649,26 +1670,28 @@ export default function TradeOrdersPanel({
                   <div className="rounded-[12px] bg-bg-gray/70 px-4 py-3 text-xs dark:bg-white/5">
                     <p className="font-semibold text-ink">{importPreview.fileName}</p>
                     <p className="mt-1.5 text-muted">
-                      共识别 <span className="text-ink">{importPreview.totalFilled}</span> 笔已成交 · 将导入 <span className="font-semibold text-ink">{importPreview.imported}</span> 笔 · 跳过 <span className="text-ink">{importPreview.skipped}</span> 笔 · 重复 <span className="text-ink">{importPreview.duplicated}</span> 笔
+                      共识别 <span className="text-ink">{importPreview.totalFilled}</span> 笔已成交 · {importPreview.dryRun ? "可导入" : "已导入"} <span className="font-semibold text-ink">{importPreview.dryRun ? readyCount : importPreview.imported}</span> 笔 · 跳过 <span className="text-ink">{importPreview.skipped}</span> 笔 · 重复 <span className="text-ink">{importPreview.duplicated}</span> 笔
                     </p>
                   </div>
+                  {importPreview.dryRun && <ul className="max-h-64 space-y-1 overflow-y-auto text-xs text-muted" aria-label="订单逐行预览">
+                    {importPreview.rows.map(row => <li key={row.rowIndex}>第 {row.rowIndex} 笔 · {row.market} {row.code} · {row.state === "ready" ? `可导入 · 数量 ${row.quantity} · 费用 ${row.fees} ${row.currency}` : row.state === "ignored" ? "非已成交订单" : row.state === "duplicate" ? "重复成交" : row.reason || "待核对"}</li>)}
+                  </ul>}
                   {importPreview.groups.length > 0 && (
                     <div className="overflow-x-auto rounded-[12px] border border-edge">
                       <table className="w-full min-w-[520px] whitespace-nowrap text-[11px]">
                         <thead>
                           <tr className="bg-bg-gray text-muted dark:bg-white/5">
-                            <th className="px-3 py-2 text-left font-semibold">股票</th>
+                            <th className="px-3 py-2 text-left font-semibold">市场</th>
                             <th className="px-3 py-2 text-left font-semibold">代码</th>
                             <th className="px-3 py-2 text-right font-semibold">订单数</th>
                             <th className="px-3 py-2 text-left font-semibold">结果</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {importPreview.groups.map((group, index) => (
-                            <tr key={`${group.market}:${group.code}`} className="border-t border-edge">
+                          {importPreview.groups.map((group) => (
+                            <tr key={group.recordId} className="border-t border-edge">
                               <td className="px-3 py-2 text-ink">
                                 <span className="mr-1.5 inline-flex flex-none items-center justify-center rounded-[4px] px-1.5 py-px text-[10px] font-semibold text-white" style={{ backgroundColor: marketMeta(group.market).code === "USD" ? "#3b82f6" : marketMeta(group.market).code === "HKD" ? "#8b5cf6" : "#e0919f" }}>{group.market}</span>
-                                {group.name}
                               </td>
                               <td className="px-3 py-2 font-mono text-muted">{group.code}</td>
                               <td className="px-3 py-2 text-right tabular-nums text-muted">{group.orderCount}</td>
@@ -1676,8 +1699,7 @@ export default function TradeOrdersPanel({
                                 {group.action === "imported" ? (
                                   <span className="inline-flex items-center gap-1 text-up">
                                     <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5"><path d="m2.5 6.4 2.4 2.4 4.7-5.4" /></svg>
-                                    {group.createdRecord ? "新建记录" : "导入"}
-                                    {!importPreview.dryRun && ` · 持仓 ${group.finalQty}`}
+                                    已导入
                                   </span>
                                 ) : (
                                   <span className="text-faint">{group.reason || "跳过"}</span>
@@ -1693,11 +1715,11 @@ export default function TradeOrdersPanel({
               )}
             </div>
             <div className="flex justify-end gap-2.5 border-t border-edge px-5 py-3.5">
-              <Capsule variant="ghost" size="sm" type="button" onClick={() => setImportOpen(false)} className="">关闭</Capsule>
+              <Capsule variant="ghost" size="sm" type="button" onClick={() => { if (!importing) setImportOpen(false); }} className="">关闭</Capsule>
               {importPreview && importPreview.dryRun && (
                 <Capsule variant="secondary" size="sm"
                   type="button"
-                  disabled={importing || importPreview.imported === 0}
+                  disabled={importing}
                   onClick={() => fileInputRef.current?.click()}
                   className="disabled:opacity-60"
                 >
@@ -1707,16 +1729,16 @@ export default function TradeOrdersPanel({
               {importPreview && importPreview.dryRun && (
                 <Capsule variant="secondary" size="sm"
                   type="button"
-                  disabled={importing || importPreview.imported === 0}
-                  onClick={() => confirmImport(previewFileRef.current!)}
+                  disabled={importing || readyCount === 0 || !importBinding.current}
+                  onClick={() => void confirmImport()}
                   className="disabled:opacity-60"
                 >
-                  {importing ? "导入中…" : `确认导入 ${importPreview.imported} 笔`}
+                  {importing ? "导入中…" : `确认导入 ${readyCount} 笔`}
                 </Capsule>
               )}
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
 
       {detailOrder && (() => {

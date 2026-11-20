@@ -43,6 +43,16 @@ module.exports = async function workspaceBackground() {
   net.requests[1].resolve(payload); await settle();
   assert.equal(commits.length, 1); assert.equal(apiContext.flight.current, current, 'old finally cannot unlock the new filter');
   net.requests[2].resolve(payload); await settle(); assert.equal(commits.at(-1).key, 'q=second');
+  const deniedNet = network(), accessStates = [];
+  const accessContext = { ...apiContext, exports: {}, flight: ref(null), confirmed: ref({key:'old',at:1}),
+    fetch: async () => ({status:403}), setBlocked: state => accessStates.push(state), setResult() {} };
+  vm.runInNewContext(apiCode, accessContext);
+  await accessContext.exports.refresh();
+  assert.equal(accessContext.confirmed.current.at, 0);
+  accessContext.fetch = deniedNet.fetch;
+  const retry = accessContext.exports.refresh();
+  deniedNet.requests[0].resolve(payload); await retry;
+  assert.deepEqual(accessStates, [true, false], 'a successful authorized retry restores the log view');
   const cleanups = [];
   apiContext.useEffect = fn => cleanups.push(fn()); apiContext.filterKey = 'q=second';
   vm.runInNewContext(slice(api, '  useEffect(() => {\n    if (foreground)', '  useEffect(() => {'), apiContext);

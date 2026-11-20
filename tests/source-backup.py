@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Exercise archive recovery, rotation and failures using disposable repositories."""
+"""Exercise archive recovery, retention and failures using disposable repositories."""
 
 import fcntl
 import importlib.util
 import json
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import shutil
@@ -54,7 +55,7 @@ class SourceBackupTests(unittest.TestCase):
         return backup.backup(self.source, self.destination)
 
     def owned(self):
-        return sorted(path for path in self.destination.iterdir() if backup.NAME.fullmatch(path.name))
+        return sorted(self.destination.glob('*/*/backup-*'))
 
     def test_recover_current_source_and_exclude_private_runtime(self):
         (self.source / 'readme-link').symlink_to('README.md')
@@ -71,7 +72,7 @@ class SourceBackupTests(unittest.TestCase):
         self.assertEqual((restored / 'readme-link').read_text(), 'current uncommitted source\n')
         self.assertEqual((result / 'source.tar.gz').stat().st_mode & 0o777, 0o600)
 
-    def test_rotation_keeps_latest_two_and_leaves_unrelated_files(self):
+    def test_retention_keeps_all_monthly_and_legacy_backups(self):
         first = self.run_backup()
         second = self.run_backup()
         os.utime(first, (2_000_000_000, 2_000_000_000))  # NAS mtime must not decide age.
@@ -83,11 +84,35 @@ class SourceBackupTests(unittest.TestCase):
         note = self.destination / 'keep.txt'
         note.write_text('unrelated')
         third = self.run_backup()
-        self.assertFalse(first.exists())
+        created = backup.datetime.fromisoformat(backup.verify(first)['createdAt'])
+        self.assertEqual(first.parent.relative_to(self.destination), Path(created.strftime('%Y/%m')))
+        self.assertTrue(first.exists())
         self.assertTrue(second.exists())
         self.assertTrue(third.exists())
         self.assertTrue(foreign.exists())
         self.assertEqual(note.read_text(), 'unrelated')
+
+    def test_beijing_month_boundary_and_legacy_root_archive(self):
+        instant = datetime(2026, 12, 31, 16, 1, tzinfo=timezone.utc)
+        with patch.object(backup, 'datetime', wraps=datetime) as clock:
+            clock.now.side_effect = lambda zone: instant.astimezone(zone)
+            archive = self.run_backup()
+        self.assertEqual(archive.parent.relative_to(self.destination), Path('2027/01'))
+        self.assertTrue(archive.name.startswith('backup-20270101-000100-'))
+        legacy = self.destination / archive.name
+        archive.rename(legacy)
+        for _ in range(3):
+            self.run_backup()
+        backup.verify(legacy)
+
+    def test_reject_linked_year_without_writing_outside_destination(self):
+        external = Path(self.temporary.name) / 'other'
+        external.mkdir()
+        year = datetime.now(backup.ZoneInfo('Asia/Shanghai')).strftime('%Y')
+        (self.destination / year).symlink_to(external)
+        with self.assertRaisesRegex(RuntimeError, '符号链接'):
+            self.run_backup()
+        self.assertEqual(list(external.iterdir()), [])
 
     def test_corrupted_nas_copy_never_replaces_previous_backups(self):
         self.run_backup()
@@ -106,7 +131,7 @@ class SourceBackupTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'SHA-256'):
                 self.run_backup()
         self.assertEqual(self.owned(), before)
-        self.assertFalse(list(self.destination.glob('.pending-*')))
+        self.assertFalse(list(self.destination.rglob('.pending-*')))
         for folder in before:
             backup.verify(folder)
 
@@ -116,7 +141,7 @@ class SourceBackupTests(unittest.TestCase):
             with self.assertRaisesRegex(OSError, 'disk unavailable'):
                 self.run_backup()
         self.assertEqual(self.owned(), [previous])
-        self.assertFalse(list(self.destination.glob('.pending-*')))
+        self.assertFalse(list(self.destination.rglob('.pending-*')))
         backup.verify(previous)
 
     def test_source_change_during_pack_preserves_previous_backup(self):
@@ -135,7 +160,7 @@ class SourceBackupTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, '源码发生变化'):
                 self.run_backup()
         self.assertEqual(self.owned(), [previous])
-        self.assertFalse(list(self.destination.glob('.pending-*')))
+        self.assertFalse(list(self.destination.rglob('.pending-*')))
 
     def test_missing_mount_and_overlapping_run_keep_old_archive(self):
         previous = self.run_backup()

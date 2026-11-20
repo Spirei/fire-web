@@ -8396,6 +8396,10 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.86", date: "2026-11-20", summary: "恢复 App 交易兼容与本机成交同步",
   software: V0_1_85_ENTRY.software.map(item => ({ ...item, version: "v0.1.86" })),
   changes: [
+    { kind: "fix", title: "修复网页 FIRE 规划保存", desc: "网页按当前账号读取规划，编辑后按版本保存，保留已记录的历史年份；旧浏览器规划可手动导出。" },
+    { kind: "fix", title: "修复订单导入预览和确认", desc: "订单导入逐行显示可导入数量和待核对原因，确认与重试复用原预览和回执，导出按账户市场和交易日筛选并保留已知费用。" },
+    { kind: "fix", title: "修复请求日志与接口文档", desc: "恢复权限后可重新查看请求日志。App 成交同步接口的读写操作在 OpenAPI 文档中各自使用唯一编号。" },
+    { kind: "fix", title: "修复局域网操作与源码备份保留", desc: "局域网 HTTP 可生成迁移、备份和素材操作编号。源码备份按北京时间年月归档并保留全部已校验副本。" },
     { kind: "fix", title: "恢复 App 交易能力声明", desc: "v1、v2 声明交易预览、登记、改单和回执路径，权限沿用当前连接授权。" },
     { kind: "feature", title: "同步本机成交记录", desc: "Fire 按本人和原成交编号保存设备已成交记录，金额和币种保持原值。" },
     { kind: "fix", title: "减少资产和报价重复查库", desc: "批量读取需核对的富途快照原件，逐笔验证来源、许可、金额和时间。" },

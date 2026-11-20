@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from .fire_planning import FirePlanning
 from .legacy_identity import assert_native_origin, native_identity
 from .profile_http import bounded_body
-from .security import identity
+from .fire_web import bound_member
 
 
 def mount_fire_planning(app, settings, db):
@@ -27,9 +27,7 @@ def mount_fire_planning(app, settings, db):
                         request, db, "portfolio.write" if request.method == "PUT" else "portfolio.read"
                     )
                 else:
-                    if "authorization" in request.headers:
-                        raise HTTPException(403, "请使用当前网页登录会话")
-                    who = await identity(request)
+                    who = await bound_member(request)
                 if request.method == "GET":
                     result = await service.read(who, metadata=version == 0)
                 else:
@@ -81,13 +79,12 @@ def mount_fire_planning(app, settings, db):
         from uuid import UUID
 
         assert_native_origin(request, settings)
-        if "authorization" in request.headers:
-            raise HTTPException(403, "请使用当前网页登录会话")
+        who = await bound_member(request)
         try:
             identifier = UUID(request_id)
         except ValueError:
             raise HTTPException(400, "操作编号无效") from None
         return JSONResponse(
-            await service.receipt(await identity(request), identifier),
+            await service.receipt(who, identifier),
             headers={"Cache-Control": "private, no-store"},
         )

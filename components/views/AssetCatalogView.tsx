@@ -1,4 +1,5 @@
 "use client";
+import { clientRequestId } from "@/lib/randomId";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IconTrash,
@@ -376,7 +377,7 @@ export default function AssetCatalogView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
-          requestId: crypto.randomUUID(),
+          requestId: clientRequestId(),
           ids,
           revision: listing.revision,
           ...extra,

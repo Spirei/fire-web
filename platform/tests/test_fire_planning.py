@@ -284,3 +284,43 @@ async def test_canonical_fire_missing_command_identity_cannot_bypass_cas(client,
     result = await client.request("PUT", "/api/fire-settings", json={"fire": {"target": 12}})
     assert result.status_code == 400
     assert (await client.get("/api/fire-settings")).json() == {"fire": {}, "revision": 0}
+
+
+async def test_fire_browser_planning_uses_displayed_session_and_owns_receipts(client, admin, settings):
+    from uuid import uuid4
+
+    from test_fire_web import fire_login
+
+    platform_csrf = client.headers["x-csrf-token"]
+    browser_owner = await create_user(settings, "PlanningMember", "Synthetic9Pass", role="user")
+    session = await fire_login(client, "PlanningMember")
+    assert session["user"]["id"] == browser_owner
+    browser_headers = {"x-csrf-token": session["csrf"], "x-alcor-expected-account": browser_owner}
+    platform_headers = {"x-csrf-token": platform_csrf, "x-alcor-expected-account": admin}
+    path = "/api/fire-settings"
+    key = str(uuid4())
+    body = {
+        "fire": {"target": 1200},
+        "requestId": key,
+        "expectedRevision": 0,
+        "assetRecord": {"amountBase": 20, "amountUsd": 20, "currency": "USD"},
+    }
+    # Both browser cookies are present and belong to different accounts.
+    assert (await client.get(path, headers=browser_headers)).json() == {"fire": {}, "revision": 0}
+    for denied in (
+        {**browser_headers, "x-alcor-expected-account": admin},
+        {**browser_headers, "x-csrf-token": platform_csrf},
+        {**browser_headers, "origin": "http://unrelated.invalid"},
+    ):
+        assert (await client.put(path, headers=denied, json=body)).status_code == 403
+    first = await client.put(path, headers=browser_headers, json=body)
+    assert first.status_code == 200, first.text
+    assert (await client.put(path, headers=browser_headers, json=body)).json() == first.json()
+    assert (await client.get(path + "/operations/" + key, headers=browser_headers)).json() == first.json()
+    stale = await client.put(path, headers=browser_headers, json={**body, "requestId": str(uuid4())})
+    assert stale.status_code == 409
+    stored = (await client.get(path, headers=browser_headers)).json()
+    assert stored["revision"] == 1 and stored["fire"]["target"] == 1200
+    assert len(stored["fire"]["assetHistory"]) == 1
+    assert (await client.get(path, headers=platform_headers)).json() == {"fire": {}, "revision": 0}
+    assert (await client.get(path + "/operations/" + key, headers=platform_headers)).status_code == 404

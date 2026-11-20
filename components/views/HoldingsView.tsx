@@ -954,6 +954,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
             </div>
           </div>
           <TradeOrdersPanel
+            ownerId={ownerId}
             bare
             orders={orders}
             stockIcons={stockIcons}

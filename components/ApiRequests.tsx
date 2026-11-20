@@ -113,12 +113,18 @@ export default function ApiRequests({ standalone = false }: { standalone?: boole
     const isCurrent = () => !controller.signal.aborted && foregroundRef.current && !document.hidden && key === filterParams(filtersRef.current).toString();
     try {
       const response = await fetch(`/api/request-logs?${key}`, { cache: "no-store", signal: controller.signal, headers: { "x-alcor-request-log-timing": "1" } });
+      if (!isCurrent()) return;
+      if (response.status === 401 || response.status === 403) {
+        setBlocked(true);
+        setResult(null);
+        setCheckedAt(0);
+        confirmed.current = { key: "", at: 0 };
+        throw new Error(response.status === 403 ? "需要管理员权限才能查看请求日志" : "请先登录再查看请求日志");
+      }
       const data = await response.json();
       if (!isCurrent()) return;
-      if (!response.ok || data.code !== 0) {
-        if (response.status === 401 || response.status === 403) { setBlocked(true); setResult(null); }
-        throw new Error(data.message || "请求日志读取失败");
-      }
+      if (!response.ok || data.code !== 0) throw new Error(data.message || "请求日志读取失败");
+      setBlocked(false);
       loadingShape.current = { rows: data.data.logs.length, endpoints: data.data.endpoints.length };
       const at = Date.now(); confirmed.current = { key, at };
       setResult({ key, snapshot: data.data }); setError(""); setCheckedAt(at);
