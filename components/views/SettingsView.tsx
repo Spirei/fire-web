@@ -26,6 +26,7 @@ import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
 import PlatformBackups from "@/components/PlatformBackups";
+import InvestmentDataManager from "@/components/InvestmentDataManager";
 import { lockScroll, trapModalTab } from "@/lib/overlayLifecycle";
 import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
@@ -1184,7 +1185,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   }
 
   async function exportSiteBackup() {
-    if (!await appConfirm("备份包含全部站点配置与用户数据，请妥善保管。", { title: "导出网站数据" })) return;
+    if (!await appConfirm("旧版档案用于兼容旧版数据格式，下载后请妥善保管。", { title: "导出旧版网站数据" })) return;
     setBackupBusy("export");
     try {
       const res = await fetch("/api/v1/data/export");
@@ -1200,7 +1201,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
       a.remove();
       URL.revokeObjectURL(url);
       const c = payload?.manifest?.counts;
-      showToast(`已导出：持仓 ${c?.records ?? 0}、订单 ${c?.tradeOrders ?? 0}、分组 ${c?.watchGroups ?? 0}、设置 ${c?.siteSettings ?? 0}、名人持仓 ${c?.celebs ?? 0}`);
+      if (payload?.manifest?.portable === false) {
+        showToast("旧版文件仅含部分记录，完整记录请下载个人账本");
+      } else {
+        showToast(`已导出：持仓 ${c?.records ?? 0}、订单 ${c?.tradeOrders ?? 0}、分组 ${c?.watchGroups ?? 0}、设置 ${c?.siteSettings ?? 0}、名人持仓 ${c?.celebs ?? 0}`);
+      }
     } catch (e) {
       showToast(e instanceof Error ? e.message : "导出失败", "err");
     } finally {
@@ -3253,10 +3258,11 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </form>
                   {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}
                 </SettingsSection>
-                <SettingsSection id="data" icon="data" title="导入与导出" desc="备份或迁移你的数据">
+                <SettingsSection id="data" icon="data" title="数据管理">
+                  <InvestmentDataManager key={user.id} ownerId={user.id} />
                   <div className="settings-profile-actions">
                   <SettingsManagedGroup scope="data" inline headings={false}>
-                  <SettingsManagedPane name="export" title="导出网站数据" summary="备份持仓、订单、分组与个人设置">
+                  <SettingsManagedPane name="export" title="导出旧版网站数据" summary="导出旧版格式支持的记录">
                   <p className="settings-managed-note">包含持仓、订单、自选分组、个人偏好与昵称；不含图片、图标和数据库连接信息。管理员导出另含站点设置与名人持仓。</p>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>网站数据</b><span>下载为 JSON 文件</span></div>
@@ -3266,7 +3272,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                   </div>
                   </SettingsManagedPane>
                   {user.role === "admin" && <SettingsManagedPane name="platform-backup" title="联合备份" summary="数据库与私有原件"><PlatformBackups ownerId={user.id} /></SettingsManagedPane>}
-                  <SettingsManagedPane name="import" title="导入网站数据" summary="从 Alcor 备份文件恢复数据">
+                  <SettingsManagedPane name="import" title="导入旧版网站数据" summary="从旧版 Alcor 备份文件导入">
                   <p className="settings-managed-note">选择 Alcor 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
                   <div className="sw-row">
                     <div className="sw-row-label"><b>备份文件</b><span>JSON 格式</span></div>

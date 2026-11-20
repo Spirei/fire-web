@@ -533,6 +533,8 @@ def create_app(settings: Settings | None = None):
     mount_portfolio_overview(app, db, app.state.market_authority)
     from .portfolio_series_api import mount_portfolio_series
     mount_portfolio_series(app, db, app.state.market_authority)
+    from .portfolio_daily import mount_portfolio_daily
+    mount_portfolio_daily(app, db, app.state.market_authority)
     from .daily_activity_summary_api import mount_daily_activity_summary
     mount_daily_activity_summary(app, db)
     from .legacy_portfolio_analysis import mount_legacy_portfolio_analysis
@@ -588,6 +590,10 @@ def create_app(settings: Settings | None = None):
     mount_record_file_imports(app, db)
     from .personal_data_transfer_api import mount_personal_data_transfer
     mount_personal_data_transfer(app,db)
+    from .personal_ledger_archive import mount_personal_ledger_archive
+    mount_personal_ledger_archive(app, db)
+    from .ledger_trace import mount_ledger_trace
+    mount_ledger_trace(app, db)
     from .simple_ledger_api import mount_simple_ledger
     mount_simple_ledger(app,db)
     from .agent_runtime_api import mount_agent_runtime

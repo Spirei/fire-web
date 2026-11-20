@@ -175,6 +175,7 @@ async def run(settings=None, stop=None):
     pulse_task=None
     alerts_task=None
     market_task=None
+    daily_results_task=None
     async def pulse():
         while True:
             if not reference_task.done() and reference_state.current(db):
@@ -197,9 +198,13 @@ async def run(settings=None, stop=None):
         rollup_at = 0.0
         backfill_at = 0.0
         from .market_authority import Authority, Policy
+        from .market_history_reads import LicensedHistory
+        from .portfolio_daily import daily_result_loop
         def chart_policies():
             return tuple(Policy(**raw) for raw in getattr(db.settings, "market_data_policies", []))
         chart_authority = Authority(db, chart_policies(), policy_provider=chart_policies)
+        daily_history = LicensedHistory(chart_authority, automatic=True)
+        daily_results_task = asyncio.create_task(daily_result_loop(db, daily_history, stop, lambda: reference_state.current(db)))
         while not stop.is_set():
             if reference_task.done():
                 await reference_task
@@ -330,6 +335,9 @@ async def run(settings=None, stop=None):
             except TimeoutError:
                 pass
     finally:
+        if daily_results_task is not None:
+            daily_results_task.cancel()
+            await asyncio.gather(daily_results_task, return_exceptions=True)
         if market_task is not None:
             market_task.cancel()
             await asyncio.gather(market_task,return_exceptions=True)
