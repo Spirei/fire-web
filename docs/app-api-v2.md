@@ -213,3 +213,10 @@ POST cash 为 `{requestId,accountId,snapshotRevision,currency,balance,note?}`；
 
 
 </details>
+
+
+## 港股每手股数
+
+客户端先检查同版本 `auth/config` 的 `hk_board_lot` 声明。带本人有效连接调用 `GET /api/v2/hk-board-lot?code=5`，读取权限为 `portfolio.read`。v1 对应路径为 `/api/v1/hk-board-lot`。代码接受 1 至 5 位 ASCII 数字，响应统一补齐五位。
+
+成功时，`data` 包含 `market`（HK）、`code`、正整数 `lotSize`（每手股数）、`source` 和 `observedAt`（来源观测时刻）。只读查询本人许可来源已观察到的证券资料，沿用 `X-Alcor-Market-Source` 来源选择；不触发采集或登记订阅。缺少单位或只有陈旧观察时返回 503。无效代码、登录失效和权限不足分别返回 400、401、403。

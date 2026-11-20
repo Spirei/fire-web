@@ -90,6 +90,7 @@ def discovery(version):
             'collection_revision_field': 'collectionRevision',
             'idempotency': 'reject-duplicate-query-original', 'automatic_mutation_replay': False,
         },
+        'hk_board_lot': {'version': 1, 'path': base + '/hk-board-lot', 'read_scope': 'portfolio.read'},
         'market_amount_ranking': {
             'version': 1, 'path': base + '/market-ranking', 'markets': ['US', 'HK', 'CN'], 'metric': 'amount',
         },

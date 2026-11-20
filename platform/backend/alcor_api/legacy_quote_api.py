@@ -143,6 +143,46 @@ def mount_legacy_quote_reads(app,settings,authority):
             else:payload={"error":str(exc.detail)}
             return Response(json.dumps(payload,ensure_ascii=False),media_type="application/json",status_code=exc.status_code,headers=headers)
 
+    async def board_lot(request, version):
+        from fastapi.responses import JSONResponse
+
+        headers = {"Cache-Control": "private, no-store", "Vary": "Authorization, Cookie",
+                   "X-Alcor-API-Version": str(version)}
+        try:
+            assert_native_origin(request, settings)
+            who = await member(request, version, False)
+            if not await app.state.read_rate_limit(authority.db, digest("hk-board-lot:" + who.id), 120, window_seconds=60):
+                raise HTTPException(429, "每手股数读取过于频繁")
+            codes = request.query_params.getlist("code")
+            if (set(request.query_params) != {"code"} or len(codes) != 1
+                    or not re.fullmatch(r"[0-9]{1,5}", codes[0]) or int(codes[0]) == 0):
+                raise HTTPException(400, "请提供一个有效的港股代码")
+            code = codes[0].zfill(5)
+            result = await service.read(who, [{"id": code, "market": "HK", "code": code}],
+                                        request.headers.get("x-alcor-market-source"), instrument="equity",
+                                        include_market_cap=False, strict_sources=True)
+            quote = result["quotes"].get(code) or {}
+            size = quote.get("lotSize")
+            if (type(size) not in (int, float) or not 1 <= size <= 2147483647 or int(size) != size
+                    or quote.get("displayStale") is not False or not quote.get("time") or not quote.get("source")):
+                raise HTTPException(503, "当前许可来源尚无可核对的每手股数")
+            data = {"market": "HK", "code": code, "lotSize": int(size),
+                    "observedAt": quote["time"], "source": quote["source"]}
+            return JSONResponse({"code": 0, "message": "ok", "data": data}, headers=headers)
+        except HTTPException as exc:
+            if exc.status_code in (401, 403):
+                headers["X-Alcor-Retire-Context"] = "true"
+            return JSONResponse({"code": 50001 if exc.status_code >= 500 else exc.status_code * 100 + 1,
+                                 "message": str(exc.detail)}, status_code=exc.status_code, headers=headers)
+
+    @app.get("/api/v1/hk-board-lot")
+    async def native_v1_board_lot(request: Request):
+        return await board_lot(request, 1)
+
+    @app.get("/api/v2/hk-board-lot")
+    async def native_v2_board_lot(request: Request):
+        return await board_lot(request, 2)
+
     @app.post("/api/quotes")
     async def web_quotes(request:Request):return await execute(request)
 
