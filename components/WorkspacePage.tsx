@@ -125,6 +125,7 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
           initialSymbol={initialSymbol}
           initialCelebAvatars={celebAvatars}
           initialCelebs={initialCelebs}
+          sessionCsrf={identity.csrf}
           initialUser={user}
           initialRecords={initialRecords}
           initialRecordsReady={initialRecordsReady}

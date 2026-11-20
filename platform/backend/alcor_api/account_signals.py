@@ -132,7 +132,7 @@ def fingerprint(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-async def guard(conn, who, required_scope=None):
+async def guard(conn, who, required_scope=None, *, allow_fire_web=False):
     """Revalidate within the read transaction; hold the same owner before session/grant locks."""
     await conn.execute(
         "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("identity-management:" + who.id,)
@@ -158,11 +158,13 @@ async def guard(conn, who, required_scope=None):
             "lastUsedEvidence": "grant_created_or_renewed",
         }
     else:
+        fire_web = allow_fire_web and getattr(who, "legacy_client", False) and not getattr(who, "legacy_platform", False)
+        session_client = "legacy-web" if fire_web else "new-web"
         row = await (
             await conn.execute(
-                "SELECT * FROM sessions WHERE token_hash=%s AND user_id=%s AND client_id='new-web' "
+                "SELECT * FROM sessions WHERE token_hash=%s AND user_id=%s AND client_id=%s "
                 "AND session_version=%s AND expires_at>clock_timestamp() FOR SHARE",
-                (who.token_hash, who.id, user["session_version"]),
+                (who.token_hash, who.id, session_client, user["session_version"]),
             )
         ).fetchone()
         if not row:
@@ -176,7 +178,7 @@ async def guard(conn, who, required_scope=None):
             ).fetchone()
         ):
             raise HTTPException(401, "会话凭据已撤销")
-        principal, scopes = web_device_id(who.token_hash), ["new-web-owner"]
+        principal, scopes = web_device_id(who.token_hash), [session_client + "-owner"]
         device = {
             "id": principal,
             "kind": "web",

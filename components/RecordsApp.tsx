@@ -123,6 +123,7 @@ export default function RecordsApp({
   initialCelebAvatars,
   initialCelebs,
   initialUser,
+  sessionCsrf,
   initialRecords,
   initialRecordsReady = true,
   initialSettingsVersion,
@@ -149,6 +150,7 @@ export default function RecordsApp({
   initialCelebAvatars?: Record<string, string>;
   initialCelebs?: import("@/lib/celebsData").CelebsResult | null;
   initialUser: User;
+  sessionCsrf: string;
   initialRecords: StockRecord[];
   initialRecordsReady?: boolean;
   initialWatchGroups?: WatchGroup[];
@@ -1151,6 +1153,9 @@ export default function RecordsApp({
           )}
           {activeTab === "fire" && (
             <FireView
+              key={user.id}
+              csrf={sessionCsrf}
+              ownerId={user.id}
               records={records}
               quotes={quotes}
               livePrice={livePrice}

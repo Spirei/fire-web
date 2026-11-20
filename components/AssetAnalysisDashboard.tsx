@@ -1238,6 +1238,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
 
         <div {...moduleDragProps("right", "orders")} className={moduleWrapperClass("right", "orders")} style={{ order: moduleOrderIndex("right", "orders") }}>
           {ordersError && !orders.length ? <div role="alert" className="rounded-2xl border border-edge bg-white p-4 text-sm text-muted"><span>{ordersError}</span><button type="button" className="ml-3 font-semibold text-ink" disabled={ordersLoading} onClick={()=>void handleRefresh("orders")}>{ordersLoading?"读取中…":"重新读取"}</button></div> : <TradeOrdersPanel
+            ownerId={ownerId}
             orders={orders}
             loading={ordersLoading}
             stockIcons={stockIcons}

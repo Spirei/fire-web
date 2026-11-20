@@ -1,3 +1,4 @@
+import { clientRequestId } from "./randomId";
 import { readFailure } from "./readFailure";
 
 type Target = {id:string;type:string;market:string;code:string;name:string};
@@ -17,7 +18,7 @@ export async function uploadMaterialImage(file:File,item:Target) {
     read<{revision:number}>(`/api/assets/catalog?type=${encodeURIComponent(item.type)}`),
     read<{revision:number}>("/api/admin/shared-assets",{headers})
   ]);
-  const requestId=crypto.randomUUID(), form=new FormData();
+  const requestId=clientRequestId(), form=new FormData();
   for(const [key,value] of Object.entries({kind:"asset",folder:item.type,market:item.market,code:item.code,name:item.name,
     assetId:item.id,catalogRevision:String(catalog.revision),expectedRevision:String(scope.revision),requestId,publicMetadataConfirmed:"true"}))form.set(key,value);
   form.set("file",file);

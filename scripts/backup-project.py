@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the working source tree, verify the NAS copy, then retain two backups."""
+"""Package the working source tree, verify the NAS copy, and retain each successful backup."""
 
 import argparse
 import fcntl
@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
-import re
 import shutil
 import stat
 import subprocess
@@ -21,8 +20,6 @@ from zoneinfo import ZoneInfo
 SOURCE = Path(__file__).resolve().parents[1]
 CONFIG = SOURCE / 'data' / 'source-backup-config.json'
 FORMAT = 'alcor-web-source-backup-v1'
-KEEP = 2
-NAME = re.compile(r'backup-\d{8}-\d{6}-[0-9a-f]{8}')
 EXCLUDED = {'.git', 'node_modules', '.cache', 'out', 'dist', '__pycache__', '.DS_Store'}
 
 
@@ -160,30 +157,6 @@ def pack(source, folder):
     return metadata
 
 
-def prune(source, destination, final):
-    previous = []
-    for folder in destination.iterdir():
-        if folder == final or not NAME.fullmatch(folder.name) or folder.is_symlink() or not folder.is_dir():
-            continue
-        try:
-            if {entry.name for entry in folder.iterdir()} != {'source.tar.gz', 'manifest.json'}:
-                continue
-            if any(not stat.S_ISREG((folder / name).lstat().st_mode) for name in ('source.tar.gz', 'manifest.json')):
-                continue
-            if (folder / 'manifest.json').stat().st_size > 16 * 1024 * 1024:
-                continue
-            record = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
-            if record.get('format') == FORMAT and record.get('source') == str(source):
-                created = datetime.fromisoformat(record['createdAt'])
-                if created.tzinfo is not None:
-                    previous.append((folder, created.timestamp()))
-        except (OSError, ValueError, KeyError, TypeError):
-            continue
-    # NAS mtimes can change on rename. The new verified backup always stays.
-    for folder, _ in sorted(previous, key=lambda item: (item[1], item[0].name), reverse=True)[KEEP - 1:]:
-        shutil.rmtree(folder)
-
-
 def backup(source, destination, required_mount=None):
     source = source.resolve(strict=True)
     if Path(os.fsdecode(git(source, 'rev-parse', '--show-toplevel')).strip()).resolve() != source:
@@ -197,19 +170,30 @@ def backup(source, destination, required_mount=None):
     destination = destination.resolve(strict=True)
     if not destination.is_dir() or destination == source or destination.is_relative_to(source):
         raise RuntimeError('备份目录必须是项目外部的现有目录')
+    destination_stat = destination.stat()
     lock_path = Path(os.fsdecode(git(source, 'rev-parse', '--git-path', 'alcor-source-backup.lock')).strip())
     if not lock_path.is_absolute():
         lock_path = source / lock_path
     with lock_path.open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        stamp = datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y%m%d-%H%M%S')
-        final = destination / f'backup-{stamp}-{uuid4().hex[:8]}'
         stage = None
         try:
             with tempfile.TemporaryDirectory(prefix='alcor-source-backup-') as temporary:
                 local = Path(temporary)
                 metadata = pack(source, local)
-                stage = Path(tempfile.mkdtemp(prefix='.pending-', dir=destination))
+                created = datetime.fromisoformat(metadata['createdAt'])
+                if not os.path.samestat(destination_stat, destination.stat()):
+                    raise RuntimeError('打包期间备份目录发生变化')
+                if required_mount is not None and not os.path.ismount(required_mount):
+                    raise RuntimeError('打包期间备份外部卷已卸载')
+                year = destination / created.strftime('%Y')
+                month = year / created.strftime('%m')
+                for directory in (year, month):
+                    if directory.is_symlink():
+                        raise RuntimeError('备份年月目录不能经过符号链接')
+                    directory.mkdir(exist_ok=True)
+                final = month / f"backup-{created:%Y%m%d-%H%M%S}-{uuid4().hex[:8]}"
+                stage = Path(tempfile.mkdtemp(prefix='.pending-', dir=month))
                 for name in ('source.tar.gz', 'manifest.json'):
                     shutil.copyfile(local / name, stage / name)
                     os.chmod(stage / name, 0o600)
@@ -222,9 +206,10 @@ def backup(source, destination, required_mount=None):
             if stage is not None and stage.exists():
                 shutil.rmtree(stage)
             raise
-        prune(source, destination, final)
-        print(f'已创建并校验：{final}')
-        print(f'源码文件：{len(metadata["entries"])}；滚动保留 {KEEP} 份 source.tar.gz 压缩备份')
+        archive = final / 'source.tar.gz'
+        size = archive.stat().st_size
+        print(f'已创建并校验：{archive}')
+        print(f'源码文件：{len(metadata["entries"])}；压缩包大小：{size / 1024**2:.2f} MiB（{size} 字节）')
         return final
 
 

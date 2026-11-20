@@ -9,7 +9,9 @@ PATH = '/api/v2/account-assets/native-fills'
 
 
 @pytest.mark.asyncio
-async def test_native_fill_mirror_is_idempotent_and_leaves_cloud_accounting_untouched(client, admin, db):
+async def test_native_fill_mirror_is_idempotent_and_leaves_cloud_accounting_untouched(app, client, admin, db):
+    operations = app.openapi()['paths'][PATH]
+    assert operations['get']['operationId'] != operations['post']['operationId']
     read_only = await native_headers(db, admin, 'portfolio.read')
     headers = await native_headers(db, admin, 'portfolio.read portfolio.write')
     fill = dict(tradeId=str(uuid4()), market='HK', code='00700', name='腾讯验收', side='buy',

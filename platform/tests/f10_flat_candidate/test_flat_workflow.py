@@ -308,3 +308,52 @@ async def test_recorded_conditional_declaration_preserves_original_metadata_with
         context=await(await conn.execute('SELECT context FROM trade_registration_contexts WHERE owner_id=%s AND trade_id=%s',(admin,trade['id']))).fetchone()
         assert context['context']['expiresAt']=='2026-09-30'
         assert context['context']['conditionExecutionVerified'] is False
+
+
+@pytest.mark.asyncio
+async def test_fire_browser_workbook_preview_confirmation_receipt_and_reimport(client, admin, app):
+    await setup(client)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://testserver",
+        headers={"origin": "http://testserver"},
+    ) as browser:
+        login = await browser.post("/api/auth/login", json={"username": "AdminOne", "password": "Synthetic9Pass"})
+        assert login.status_code == 200, login.text
+        browser.headers["x-alcor-expected-account"] = str(admin)
+        session = await browser.get("/api/fire/session")
+        assert session.status_code == 200, session.text
+        browser.headers["x-csrf-token"] = session.json()["csrf"]
+        base = "/api/trading/history/import"
+        preview = await browser.post(base + "/preview", files={"file": ("orders.xlsx", workbook())})
+        assert preview.status_code == 200, preview.text
+        plan = preview.json()
+        assert plan["imported"] == 0 and [row["state"] for row in plan["rows"]] == ["ready"]
+        command = {"previewId": plan["previewId"], "requestId": str(uuid4()), "confirm": True}
+        saved = await browser.post(base + "/submissions", json=command)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["imported"] == 1 and saved.json()["groups"][0]["action"] == "imported"
+        assert (await browser.get(base + "/operations/" + command["requestId"])).json() == saved.json()
+        assert (await browser.post(base + "/submissions", json=command)).json() == saved.json()
+        exported = await browser.get("/api/trading/history/export?scope=all&accountMarket=US&calendarZone=UTC")
+        assert exported.status_code == 200, exported.text
+        assert read_sheet(exported.content)[0]["费用"] == "1"
+        repeated = await browser.post(base + "/preview", files={"file": ("exported.xlsx", exported.content)})
+        assert repeated.status_code == 200, repeated.text
+        assert [row["state"] for row in repeated.json()["rows"]] == ["duplicate"]
+
+
+def test_browser_export_filters_market_local_day_and_type_before_limit():
+    from datetime import UTC, datetime
+    from alcor_api.legacy_order_export import export_selection
+
+    order = {"market": "US", "status": "filled", "name": "Synthetic", "tradedAt": "2026-09-01T22:30:00Z"}
+    etf = {**order, "name": "Synthetic ETF"}
+    connect = {**order, "market": "HK", "accountMarket": "CN"}
+    view = {"orders": [order, etf, connect], "snapshotRevision": "synthetic"}
+    now = datetime(2026, 9, 2, 0, 0, tzinfo=UTC)
+    query = {"calendarZone": "Asia/Shanghai", "scope": "today", "start": "2026-09-01", "end": "2026-09-01", "limit": "1"}
+    rows, _ = export_selection(view, {**query, "accountMarket": "US", "type": "etf"}, canonical=True, now=now)
+    assert rows == [etf]
+    rows, _ = export_selection(view, {**query, "start": "2026-09-02", "end": "2026-09-02", "accountMarket": "CN"}, canonical=True, now=now)
+    assert rows == [connect]

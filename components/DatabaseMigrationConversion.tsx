@@ -1,5 +1,6 @@
 "use client";
 
+import { clientRequestId } from "@/lib/randomId";
 import { useEffect, useRef, useState } from 'react';
 import { IconCheck, IconLoader2, IconAlertCircle, IconChevronDown, IconShieldLock, IconBuildingBank, IconChartPie, IconArrowsExchange, IconWallet, IconChartHistogram, IconPhoto } from '@tabler/icons-react';
 import AppSelect from '@/components/AppSelect';
@@ -165,7 +166,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   },[active,needLogin,historyRequest,ownerId,preparationId,task?.id]);
   async function importHistory(){
     const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!task?.result?.plan_sha256||!unchanged)return;
-    pending.current=true;setBusy(true);setError('');const id=crypto.randomUUID();setHistoryTask(null);setHistoryRequest(id);writeHistoryUrl(id);
+    pending.current=true;setBusy(true);setError('');const id=clientRequestId();setHistoryTask(null);setHistoryRequest(id);writeHistoryUrl(id);
     try{const accepted=await request<HistoryTask>('/api/fire/database-migration/conversions/'+task.id+'/complete',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id,plan_sha256:task.result.plan_sha256,confirmed_registered_values:true})});if(!signal.aborted){setHistoryTask(accepted);setHistoryRequest(accepted.request_id);writeHistoryUrl(accepted.request_id);}}
     catch(e){if(signal.aborted)return;const failure=e as PlatformRequestError;setError(failure.message);if(failure.reauthentication)setVerify(true);if(failure.status&&failure.status<500){setHistoryRequest('');writeHistoryUrl('');}}
     finally{if(!signal.aborted){pending.current=false;setBusy(false);}}
@@ -176,7 +177,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   }
   async function importPortfolio(){
     const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!task?.result?.plan_sha256||!unchanged)return;
-    pending.current=true;setBusy(true);setError('');setPortfolioTask(null);const id=crypto.randomUUID();setPortfolioRequest(id);writePortfolioUrl(id);
+    pending.current=true;setBusy(true);setError('');setPortfolioTask(null);const id=clientRequestId();setPortfolioRequest(id);writePortfolioUrl(id);
     try{const accepted=await request<PortfolioTask>('/api/fire/database-migration/conversions/'+task.id+'/portfolio',{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id,plan_sha256:task.result.plan_sha256,confirmed_registered_values:true})});if(!signal.aborted)setPortfolioTask(accepted);}
     catch(e){if(signal.aborted)return;const failure=e as PlatformRequestError;setError(failure.message);if(failure.reauthentication)setVerify(true);if(failure.status&&failure.status<500){setPortfolioRequest('');writePortfolioUrl('');}}
     finally{if(!signal.aborted){pending.current=false;setBusy(false);}}
@@ -187,7 +188,7 @@ export default function DatabaseMigrationConversion({preparationId,ownerId,activ
   }
   async function start(){
     const signal=lifetime.current?.signal;if(!signal||signal.aborted||pending.current||revalidating||!sourceOwner)return;
-    pending.current=true;setBusy(true);setError('');const id=crypto.randomUUID();
+    pending.current=true;setBusy(true);setError('');const id=clientRequestId();
     unknown.current=id;writeUrl(id);
     try{
       const accepted=await request<ConversionTask>(`/api/fire/database-migration/preparations/${preparationId}/conversion`,{method:'POST',signal,headers:headers(),body:JSON.stringify({request_id:id,source_owner:sourceOwner,timezone:'Asia/Shanghai',account_kinds:kinds,broker_labels:labels,market_accounts:markets,order_accounts:orders})});

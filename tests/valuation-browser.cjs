@@ -6,8 +6,25 @@ const root=path.resolve(__dirname,'..');
 (async()=>{
  const fixture=`import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import HoldingsView from '@/components/views/HoldingsView';import FireView from '@/components/views/FireView';import IndexTicker from '@/components/IndexTicker';import {accountHoldingPrice} from '@/lib/accountCash';
  const records=[{id:'usd',market:'US',code:'AAPL',name:'Synthetic USD',qty:10,cost:20,price:25,group:'Synthetic',accountMarket:'US'}, {id:'cny',market:'CN',code:'600000',name:'Synthetic CNY',qty:5,cost:15,price:location.search.includes('missing=1')?0:20,group:'Synthetic',accountMarket:'CN'}];
- window.fixtureRates={USD:1};window.fixtureWrites=0;window.fetch=async(input,init={})=>{if(init.method&&init.method!=='GET'){window.fixtureWrites++;return Response.json({});}const url=String(input);return Response.json(url==='/api/fire/ticker'?{items:[{key:'index',market:'US',secid:'100.DJIA',price:100,source:'controlled',sourceRevision:'fixture',observedAt:'2026-11-12T00:00:00Z'}]}:url==='/api/rates'?{base:'USD',rates:window.fixtureRates,quoted:[],updatedAt:null}:url.includes('/fire-settings')?{fire:{baseCurrency:'CNY',fireTargetBase:12000}}:url.includes('/funds')?{data:{balances:{USD:0,CNY:0}}}:url.includes('/assets')?{assets:[]}:{settings:{}});};
- function Harness(){const[collapsed,setCollapsed]=useState(false);return <><header className="app-shell-header"><div className="app-shell-header-inner flex"><div className="app-shell-ticker"><IndexTicker configuration={{items:[{key:'index',label:'示例指数',secid:'100.DJIA',market:'US'}],interval:5}}/></div></div></header><div className="records-app" data-sidebar-collapsed={collapsed}><button onClick={()=>setCollapsed(v=>!v)}>Toggle sidebar</button>{location.search.includes('fire=1')?<FireView records={records} quotes={{}} livePrice={r=>accountHoldingPrice(r,{})}/>:<HoldingsView records={records} quotes={{}} livePrice={r=>accountHoldingPrice(r,{})} onAddMatch={async()=>{}} onUpdate={async()=>true} onRemove={async()=>{}} groups={[]} markets={['US','CN']} marketLabels={[]} marketOptions={[]} initialFundBalances={{USD:0,CNY:0}} valuationReady={true}/>}</div></>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
+ window.fixtureRates={USD:1};window.planWrites=0;window.planRevision=3;window.receiptReads=0;
+ window.fetch=async(input,init={})=>{
+   const url=String(input);
+   if(init.method&&init.method!=='GET'){
+     if(url==='/api/fire-settings'){
+       window.planWrites++;const body=JSON.parse(init.body);
+       if(init.headers.get('x-csrf-token')!=='test-binding'||init.headers.get('X-Alcor-Expected-Account')!=='test-owner'||body.expectedRevision!==window.planRevision)return Response.json({error:'规划已变化，请重新读取'},{status:409});
+       window.savedPlan=body;
+       window.receipt={revision:++window.planRevision,state:'completed',requestId:body.requestId,assetHistory:[]};
+       if(window.dropReply){window.dropReply=false;throw new TypeError('response lost');}
+       return Response.json(window.receipt);
+     }
+     return Response.json({});
+   }
+   if(url.startsWith('/api/fire-settings/operations/')){window.receiptReads++;return Response.json(window.receipt);}
+   if(url==='/api/fire-settings')return Response.json({revision:window.planRevision,fire:{baseCurrency:'CNY',fireTargetBase:12000,additionalField:'retained',tableRows:location.search.includes('oldRows')?[{year:2022,current:25000,target:'40000'}]:undefined}});
+   return Response.json(url==='/api/fire/ticker'?{items:[{key:'index',market:'US',secid:'100.DJIA',price:100,source:'controlled',sourceRevision:'fixture',observedAt:'2026-11-12T00:00:00Z'}]}:url==='/api/rates'?{base:'USD',rates:window.fixtureRates,quoted:[],updatedAt:null}:url.includes('/funds')?{data:{balances:{USD:0,CNY:0}}}:url.includes('/assets')?{assets:[]}:{settings:{}});
+ };
+ function Harness(){const[collapsed,setCollapsed]=useState(false);return <><header className="app-shell-header"><div className="app-shell-header-inner flex"><div className="app-shell-ticker"><IndexTicker configuration={{items:[{key:'index',label:'示例指数',secid:'100.DJIA',market:'US'}],interval:5}}/></div></div></header><div className="records-app" data-sidebar-collapsed={collapsed}><button onClick={()=>setCollapsed(v=>!v)}>Toggle sidebar</button>{location.search.includes('fire=1')?<FireView csrf="test-binding" ownerId="test-owner" records={records} quotes={{}} livePrice={r=>accountHoldingPrice(r,{})}/>:<HoldingsView records={records} quotes={{}} livePrice={r=>accountHoldingPrice(r,{})} onAddMatch={async()=>{}} onUpdate={async()=>true} onRemove={async()=>{}} groups={[]} markets={['US','CN']} marketLabels={[]} marketOptions={[]} initialFundBalances={{USD:0,CNY:0}} valuationReady={true}/>}</div></>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
  const workspace=`export const useWorkspaceActive=()=>true;export const useWorkspaceSearchParams=()=>new URLSearchParams(location.search);export const useWorkspaceLocationGuard=()=>()=>true;export const useWorkspaceScrollRef=()=>({current:null});export const useWorkspaceState=()=>null;`;
  const js=await esbuild.build({stdin:{contents:fixture,resolveDir:root,loader:'tsx'},bundle:true,write:false,jsx:'automatic',alias:{'@':root},define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'context',setup(b){b.onResolve({filter:/^(?:@\/lib\/workspacePanel|.*\/workspacePanel)$/},()=>({path:'workspace',namespace:'mock'}));b.onResolve({filter:/^next\/navigation$/},()=>({path:'next',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},args=>({contents:args.path==='workspace'?workspace:`export const useRouter=()=>({push:()=>{},replace:()=>{},refresh:()=>{}});export const useSearchParams=()=>new URLSearchParams(location.search);export const usePathname=()=>location.pathname;`,loader:'js'}));}}]});
  const mod={exports:{}};new Function('exports','require',ts.transpileModule(fs.readFileSync('tailwind.config.ts','utf8'),{compilerOptions:{module:1}}).outputText)(mod.exports,require);
@@ -45,9 +62,34 @@ const root=path.resolve(__dirname,'..');
    if(process.env.UI_CAPTURE_DIR){fs.mkdirSync(process.env.UI_CAPTURE_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.UI_CAPTURE_DIR,`valuation-${width}-${dark?'dark':'light'}.png`),fullPage:true});}
   }
   await page.goto(base+'/?market=CN&missing=1');await page.getByText('Synthetic CNY',{exact:true}).waitFor();assert(!/NaN|Infinity|[+−]—/.test(await page.locator('body').innerText()),'missing mark cells do not render invalid rates or signed placeholders');
+  await page.evaluate(()=>{localStorage.setItem('fire:fire-current-ovr','987654');localStorage.setItem('fire:fire-asset-history','[{"amountBase":25,"amountUsd":5,"currency":"CNY","recordedAt":"2020-09-01T00:00:00Z"}]');});
   await page.goto(base+'/?fire=1');await page.getByText('当前资产',{exact:true}).first().waitFor();
-  await page.waitForTimeout(900);assert.equal(await page.evaluate(()=>window.fixtureWrites),0,'missing FX must not overwrite a saved FIRE plan');assert(!(await page.locator('body').innerText()).includes('NaN'));assert((await page.locator('body').innerText()).includes('暂无汇率'));
+  assert(!(await page.locator('body').innerText()).includes('987654'));
+  await page.getByText('此浏览器的旧规划',{exact:true}).click();
+  const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'导出本机旧规划'}).click();
+  const backup=JSON.parse(fs.readFileSync(await (await downloaded).path(),'utf8'));
+  const localPlan=JSON.parse(backup.data.userSettings[0].fire);
+  assert.equal(backup.format,'fire-site-backup');assert.equal(localPlan.currentInput,'987654');assert.equal(localPlan.assetHistory[0].amountUsd,5);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('fire:fire-current-ovr')),'987654');
+  await page.waitForTimeout(900);assert.equal(await page.evaluate(()=>window.planWrites),0,'missing FX must not overwrite a saved FIRE plan');assert(!(await page.locator('body').innerText()).includes('NaN'));assert((await page.locator('body').innerText()).includes('暂无汇率'));
   await page.evaluate(()=>{window.fixtureRates={USD:1,CNY:7};window.dispatchEvent(new Event('fire:rates-updated'));});await page.getByText('¥1,850.00',{exact:true}).first().waitFor();
-  assert.deepEqual(errors,[]);console.log('PASS native USD/CNY values, unavailable daily observations/FX totals, settled loading and 320/390/1280 dark/light rendering');
+  await page.getByRole('button',{name:'编辑',exact:true}).click();
+  await page.evaluate(()=>window.dropReply=true);
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await page.waitForFunction(()=>window.savedPlan?.expectedRevision===3 && window.receiptReads===1);
+  const plan=await page.evaluate(()=>window.savedPlan);
+  assert.equal(plan.fire.currentInput,null);assert(!('assetHistory' in plan.fire));assert.equal(plan.fire.additionalField,'retained');
+  assert.equal(await page.evaluate(()=>window.planWrites),1);assert(!JSON.stringify(plan).includes('NaN'));
+
+  await page.getByRole('button',{name:'编辑',exact:true}).click();
+  await page.evaluate(()=>window.planRevision++);
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'规划已变化'}).waitFor();
+  await page.goto(base+'/?fire=1&oldRows=1');
+  await page.getByText('已冻结',{exact:true}).first().waitFor();
+  assert((await page.locator('tbody').last().innerText()).includes('2022'));
+  await page.getByRole('button',{name:'切换显示币种'}).click();
+  assert(await page.getByTitle('已保存的历史年份固定了主货币').first().isDisabled());
+  assert.deepEqual(errors,[]);console.log('PASS native USD/CNY values, unavailable daily observations/FX totals, settled loading, 320/390/1280 dark/light rendering, local-only legacy backup, frozen plan currency, idempotent save receipt and revision conflict');
  }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

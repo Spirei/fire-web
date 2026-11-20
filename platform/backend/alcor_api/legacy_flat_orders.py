@@ -89,6 +89,11 @@ async def order_identity(request, db, *, write=False):
     # Shared by canonical history import/export/receipts and order observations.
     # /api/orders and versioned old protocols retain their original realm.
     canonical = request.url.path.startswith("/api/trading/")
+    history_file = request.url.path == "/api/trading/history/export" or request.url.path.startswith("/api/trading/history/import/")
+    if history_file and "authorization" not in request.headers:
+        from .fire_web import bound_member
+
+        return await bound_member(request)
     if "authorization" in request.headers or COOKIE not in request.cookies or not canonical:
         credentials_present(request)
     if request.headers.get("authorization", "").startswith("Bearer fat_") or request.url.path.startswith(

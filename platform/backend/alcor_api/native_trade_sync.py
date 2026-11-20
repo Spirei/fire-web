@@ -75,7 +75,8 @@ def validate_fill(fill):
 def mount_native_trade_sync(app):
     db = app.state.db
 
-    @app.api_route(PATH, methods=['GET', 'POST'])
+    @app.get(PATH)
+    @app.post(PATH)
     async def native_fills(request: Request):
         headers = {'Cache-Control': 'private, no-store', 'Vary': 'Authorization', 'X-Alcor-API-Version': '2'}
         upload = request.method == 'POST'

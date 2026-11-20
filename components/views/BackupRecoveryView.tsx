@@ -1,5 +1,6 @@
 "use client";
 
+import { clientRequestId } from "@/lib/randomId";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconDatabase, IconEdit, IconRefresh,IconCheck,IconCircle,IconLoader2,IconAlertCircle } from "@tabler/icons-react";
 import { Capsule, IconButton } from "@/components/Capsule";
@@ -174,7 +175,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
   }
   async function saveSource() {
     if (unknown) return;
-    const id = crypto.randomUUID();
+    const id = clientRequestId();
     await run("save", async signal => {
       let committed = false;
       url("sourceRequest", id);
@@ -217,7 +218,7 @@ export default function BackupRecoveryView({ ownerId, initial, initialNow }: {
       const existing=selectMigrationPreparation(preparations,data.source.revision);
       if(existing&&(verifiedMigrationPreparation(existing)||['queued','running','cancel_requested'].includes(existing.status))){selectPreparation(existing,true);return;}
     }
-    const requestId=crypto.randomUUID(),revision=data.source.revision;
+    const requestId=clientRequestId(),revision=data.source.revision;
     await run('prepare',async signal=>{
       setTask(null);setPreparationRequest(requestId);url('conversionRequest','');url('portfolioRequest','');url('historyRequest','');url('migrationRequest',requestId);url('migrationStep','preparation');
       try{
