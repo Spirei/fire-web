@@ -6325,7 +6325,20 @@ button.PhotoView-Slider__toolbarIcon {
 .sc-detail-dialog .settings-form-message.is-ok { color:var(--sc-dialog-success); background:color-mix(in srgb,var(--sc-dialog-success) 7%,var(--sc-dialog-bg)); }
 .settings-form-message > svg { flex:none; width:20px; height:20px; margin-top:1px; }
 .settings-managed[data-scope="trade"] .settings-managed-content:not([hidden]) { border: 1px solid var(--sc-dialog-border); border-radius: 16px; overflow: hidden; }
-.settings-managed[data-scope="data"] .settings-managed-content .sw-row { border: 1px solid var(--sc-dialog-border) !important; border-radius: 16px; }
+.data-management-page .sw-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  padding: 16px;
+  border: 1px solid rgb(var(--site-edge));
+  border-radius: 16px;
+  background: rgb(var(--site-surface));
+  color: rgb(var(--site-ink));
+}
+.data-management-page .sw-row-label { display: grid; gap: 4px; min-width: 0; }
+.data-management-page .sw-row-label span { color: rgb(var(--site-muted)); font-size: 13px; }
 .settings-managed-content .settings-full-action { margin-top: 16px; }
 .settings-managed-note { font-size: 13px; line-height: 20px; color: var(--sc-dialog-muted, #656b73); margin-bottom: 16px; }
 .dark .settings-managed-entry { background: var(--sc-dialog-bg, #20252d); }

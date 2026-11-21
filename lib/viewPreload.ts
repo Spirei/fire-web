@@ -14,6 +14,7 @@ const loaders: Record<string, () => Promise<unknown>> = {
   ]),
   fire: () => import("@/components/views/FireView"),
   activities: () => import("@/components/views/ActivitiesView"),
+  "data-management": () => import("@/components/views/DataManagementView"),
   earnings: () => import("@/components/views/EarningsCalendarView"),
   celebs: () => import("@/components/views/CelebsView"),
   trading: () => import("@/components/views/FeedView"),

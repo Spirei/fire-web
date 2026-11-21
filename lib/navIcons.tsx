@@ -1,11 +1,13 @@
 "use client";
 import {IconLayoutDashboard,IconClipboardList,IconApi,IconDatabaseExport} from "@tabler/icons-react";
+import { SubNavIcon } from "@/components/SettingsHeader";
 
 /**
  * 导航默认图标（主侧栏 / 移动端标签 / 设置-导航菜单预览共用）。
  * 系统导航固定使用内置矢量图标，避免上传素材或旧缓存改变导航语义。
  */
 export const NAV_ICONS: Record<string, React.ReactNode> = {
+  "data-management": <SubNavIcon name="data-management" />,
  "system-overview":<IconLayoutDashboard size={18}/>,"background-tasks":<IconClipboardList size={18}/>,"backup-recovery":<IconDatabaseExport size={18}/>,"api-migration":<IconApi size={18}/>,
   "profile-home": (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[17px] w-[17px]">

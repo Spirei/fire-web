@@ -22,6 +22,7 @@ const ICON_PATHS: Record<string, React.ReactNode> = {
   website: (<><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M6 6.5h.01M9 6.5h.01M6 13h2M6 16h2"/><path d="m15 11 .9 2.1L18 14l-2.1.9L15 17l-.9-2.1L12 14l2.1-.9Z"/></>),
   account: (<><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></>),
   data: (<><path d="M4 4h16v16H4zM4 9h16M9 9v11"/><path d="m13 14 2 2 3-3"/></>),
+  "data-management": (<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8m-8 4h5"/></>),
   password: (<><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M7 11v2m5-2v2m5-2v2"/></>),
   danger: (<><path d="m12 3 10 18H2Z"/><path d="M12 9v5m0 3h.01"/></>),
   badges: (<><rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="8" rx="2"/><rect x="14" y="15" width="7" height="6" rx="2"/></>),

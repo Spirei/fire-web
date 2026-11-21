@@ -285,7 +285,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
           {buttonOnly ? requestId&&(!task||["queued","running","cancel_requested"].includes(task.status))?"查看备份进度":"创建备份" : "管理备份"}
         </Capsule>
       </div>
-      {open && taskOwner.current===ownerId && (
+      {open && active && taskOwner.current===ownerId && (
         <AppModal
           title="联合备份"
           size="lg"

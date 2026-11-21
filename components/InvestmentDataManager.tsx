@@ -6,6 +6,7 @@ import AppModal from "@/components/AppModal";
 import AppSelect from "@/components/AppSelect";
 import { Capsule } from "@/components/Capsule";
 import { copyText } from "@/lib/clipboard";
+import { useWorkspaceActive } from "@/lib/workspacePanel";
 import styles from "./InvestmentDataManager.module.css";
 
 const ROOT = "/api/personal-data-transfer";
@@ -353,6 +354,7 @@ async function previewArchive(file: File, ownerId: string): Promise<Preview> {
 }
 
 export default function InvestmentDataManager({ ownerId }: { ownerId: string }) {
+  const workspaceActive = useWorkspaceActive();
   const [folder, setFolder] = useState<Folder>("daily");
   const [kind, setKind] = useState<AccountKind>("real");
   const [dailyPaths, setDailyPaths] = useState<Record<AccountKind, DailyPath>>({ real: {}, simulated: {} });
@@ -562,7 +564,7 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
     </>}
     </section>
     </div>
-    {selection && <AppModal title={fileTitle ?? "文件预览"} size="xl"
+    {workspaceActive && selection && <AppModal title={fileTitle ?? "文件预览"} size="xl"
       className={`${styles.previewDialog} ${dailySelection ? styles.snapshotDialog : ""}`}
       titleAddon={currentVersion && dailyVersions.length <= 1 ? <span className={styles.version}>第 {currentVersion} 版</span> : undefined}
       headerActions={previous.length > 0 ? <Capsule size="sm" variant="ghost" onClick={returnToSource}>返回上一条</Capsule> : undefined}

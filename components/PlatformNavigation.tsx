@@ -11,7 +11,7 @@ const groups = [
   { key: "feed", label: "动态", icon: IconNews, keys: ["trading"] },
   { key: "resources", label: "资源", icon: IconPhoto, keys: ["library", "cards"] },
   { key: "data", label: "数据", icon: IconDatabase, keys: ["global", "quote-pool", "earnings", "celebs"] },
-  { key: "management", label: "管理", icon: IconFolder, keys: ["activities"] },
+  { key: "management", label: "管理", icon: IconFolder, keys: ["activities", "data-management"] },
   { key: "system", label: "系统", icon: IconAdjustmentsHorizontal, keys: ["system-overview", "background-tasks", "backup-recovery", "api-migration", "settings"] },
   { key: "personal", label: "个人", icon: IconUser, keys: ["users"] }
 ];

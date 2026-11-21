@@ -21,7 +21,12 @@ export default function PlatformSidebarHeader({ collapsed, onToggle, items, onSe
   const previousFocus = useRef<HTMLElement | null>(null);
   const titleId = useId(), history = useSearchHistory(ownerId, open);
   const destinations = [
-    ...items.map(item => ({ ...item, keywords: item.key, group: "", run: () => onSelect(item.key) })),
+    ...items.map(item => ({
+      ...item,
+      keywords: item.key === "data-management" ? "每日盈亏 日终 快照 备份 账本 更正 流水 持仓 导出 导入" : item.key,
+      group: item.key === "data-management" ? "管理" : "",
+      run: () => onSelect(item.key),
+    })),
     { key: "profile-home", label: "个人主页", icon: NAV_ICONS["profile-home"], keywords: "头像 昵称 简介 请求统计 profile", group: "", run: () => onSettings("profile-home") },
     { key: "palette", label: "外观", icon: NAV_ICONS.palette, keywords: SETTINGS_SEARCH_INDEX.find(item => item.sub === "palette")!.keywords, group: "", run: () => onSettings("palette") },
     ...SETTINGS_SEARCH_INDEX.filter(item => item.sub !== "palette" && (admin || (!ADMIN_SUB_KEYS.has(item.sub) && !item.adminOnly))).map(item => ({

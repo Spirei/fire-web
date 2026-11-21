@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { isTransientPlatformError, platformJsonRetry, PlatformError } from "./platformTransport";
 import { DEFAULT_SETTINGS } from "./settingsDefaults";
 import type { SiteSettings } from "./types";
+import { withDataManagementTab } from "./workspaceRouting";
 export {
   DEFAULT_HOME_NAV,
   DEFAULT_GROUPS,
@@ -29,6 +30,7 @@ export const getSiteSettingsSnapshot = cache(async () => {
   const value = { ...DEFAULT_SETTINGS, ...result.settings };
   value.tabs = value.tabs.filter((tab) => tab.key !== "attachments");
   if (!value.tabs.length) value.tabs = DEFAULT_SETTINGS.tabs;
+  value.tabs = withDataManagementTab(value.tabs);
   return { settings: value, version: Number.isSafeInteger(result.revision) && Number(result.revision) >= 0 ? { revision: result.revision!, privateRevision: result.privateRevision } : undefined };
 });
 export const getSiteSettings = cache(async (): Promise<SiteSettings> => (await getSiteSettingsSnapshot()).settings);

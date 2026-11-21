@@ -25,8 +25,6 @@ import { createPasskeySettingsData } from "@/lib/passkeySettingsData";
 import SecurityCheck from "@/components/SecurityCheck";
 import SettingsManagedGroup, { SettingsManagedPane } from "@/components/SettingsManagedGroup";
 import AppModal from "@/components/AppModal";
-import PlatformBackups from "@/components/PlatformBackups";
-import InvestmentDataManager from "@/components/InvestmentDataManager";
 import { lockScroll, trapModalTab } from "@/lib/overlayLifecycle";
 import AppAuthorizationSettings from "@/components/AppAuthorizationSettings";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
@@ -56,6 +54,7 @@ import { CURRENT_VERSION } from "@/lib/versions";
 import { useAssetIcons } from "@/lib/useAssetIcons";
 import { NAV_ICONS } from "@/lib/navIcons";
 import SafeAssetImage from "@/components/SafeAssetImage";
+import { withDataManagementTab } from "@/lib/workspaceRouting";
 import MobileNavigationSettings from "@/components/MobileNavigationSettings";
 import type { BackupConfig } from "@/lib/backup";
 import { DEFAULT_HOLDING_COLUMNS } from "@/lib/holdingColumns";
@@ -81,9 +80,7 @@ const DEFAULT_TICKER: TickerConfig = {
 interface Props {
   user: { id: string; username: string; nickname?: string; uid?: string; email?: string; emailVerified?: boolean; avatar?: string; role?: string };
   recordsCount: number | null;
-  onExport: () => void;
   onClearAll: (password: string) => Promise<boolean>;
-  onTabsChange: (tabs: TabConfig[]) => void;
   initialSub?: string;
   initialSettingsVersion?: import("@/lib/siteSettingsCommand").SettingsVersion;
   initialPasskeys?: import("@/lib/passkeySettingsData").PasskeySettingsSnapshot | null;
@@ -172,7 +169,7 @@ const SETTINGS_CATEGORIES = [
   { key: "investing", label: "投资与行情", icon: "stocks", desc: "管理券商、行情来源与金额显示。", anchors: ["groups", "market-badges", "currency-display", "trade", "quote-sources", "sources", "source-reports", "source-icons", "source-content"] },
   { key: "services", label: "功能与模型", icon: "model", desc: "配置模型服务与内容更新。", anchors: ["translation", "trading-square"] },
   { key: "social", label: "通知与配置", icon: "social", desc: "配置企业微信、Telegram、飞书、QQ、Discord、WebPush 和邮件。", anchors: ["wechat", "telegram", "feishu", "qq", "discord", "webpush", "mail", "mail-templates"] },
-  { key: "system", label: "数据与系统", icon: "data", desc: "备份个人数据，管理存储与定时任务。", anchors: ["data", "cron", "backups", "danger", "delete-account"] },
+  { key: "system", label: "数据与系统", icon: "data", desc: "管理备份、定时任务和账户数据。", anchors: ["cron", "backups", "danger", "delete-account"] },
   { key: "developer", label: "开发与关于", icon: "api", desc: "查看接口文档、版本与技术信息。", anchors: ["api", "about"] }
 ];
 const SETTINGS_ANCHORS = SETTINGS_SEARCH_INDEX.map((item) => item.anchor);
@@ -261,7 +258,7 @@ const SUB_GROUPS: { label: string; items: { key: SubKey; label: string; desc: st
   {
     label: "账号",
     items: [
-      { key: "profile", label: "个人信息", desc: "头像、资料、密码、数据管理" },
+      { key: "profile", label: "个人信息", desc: "头像、资料与密码" },
       { key: "totp", label: "2FA", desc: "验证器与备用码" },
       { key: "passkeys", label: "通行密钥", desc: "设备验证与密码管理器" },
       { key: "authorizations", label: "管理授权", desc: "App 连接与访问权限" }
@@ -692,7 +689,7 @@ const SOURCE_ICON_PATHS: Record<string, React.ReactNode> = {
 // 连续点击则目标不断前移，弹簧持续追赶，产生连续顺滑的转动。
 // 临界阻尼（无过冲、无回弹）+ 弹簧自身正是“起步缓、中间快、收尾柔”的缘故，
 // 比直接给速度/摩擦更流畅，不会有速度突跳或生硬停下的卡顿感。
-export default function SettingsView({ user, recordsCount, onExport, onClearAll, onTabsChange, initialSub, initialSettings, initialPasskeys, initialSettingsVersion }: Props) {
+export default function SettingsView({ user, recordsCount, onClearAll, initialSub, initialSettings, initialPasskeys, initialSettingsVersion }: Props) {
   const foreground = useWorkspaceForeground();
   const avatarCrop = useImageCrop();
   const futuSave = useMemo(() => new SiteSettingsCommand(user.id), [user.id]);
@@ -751,7 +748,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
   function captureSettingsVersion(data: { revision?: number; privateRevision?: number }) {
     settingsVersion.current = Number.isSafeInteger(data.revision) && Number(data.revision) >= 0 ? { revision: data.revision!, ...(Number.isSafeInteger(data.privateRevision) ? {privateRevision:data.privateRevision} : {}) } : null;
   }
-  const [tabs, setTabs] = useState<TabConfig[]>(initialSettings?.tabs ?? DEFAULT_TABS);
+  const [tabs, setTabs] = useState<TabConfig[]>(() => withDataManagementTab(initialSettings?.tabs ?? DEFAULT_TABS));
   const [stockGroups, setStockGroups] = useState<GroupConfig[]>(initialSettings?.groups ?? []);
   const [blockSaving, setBlockSaving] = useState<Record<string, boolean>>({});
   const [blockMsg, setBlockMsg] = useState<Record<string, { type: "ok" | "err"; text: string } | undefined>>({});
@@ -828,7 +825,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
           captureSettingsVersion(data);
           setSite({ ...DEFAULT_SETTINGS, ...data.settings, marketBadges: normalizeMarketBadges(data.settings.marketBadges), marketBadgesVisible: data.settings.marketBadgesVisible !== false });
           captureSaved(data.settings);
-          setTabs(data.settings.tabs ?? DEFAULT_TABS);
+          setTabs(withDataManagementTab(data.settings.tabs ?? DEFAULT_TABS));
           setStockGroups(data.settings.groups ?? []);
           setGroupsLoaded(true);
           applyMarketBadges(data.settings.marketBadges, data.settings.marketBadgesVisible !== false);
@@ -1184,74 +1181,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     }
   }
 
-  async function exportSiteBackup() {
-    if (!await appConfirm("旧版档案用于兼容旧版数据格式，下载后请妥善保管。", { title: "导出旧版网站数据" })) return;
-    setBackupBusy("export");
-    try {
-      const res = await fetch("/api/v1/data/export");
-      if (!res.ok) throw new Error("导出失败");
-      const payload = await res.json();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `alcor-backup-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      const c = payload?.manifest?.counts;
-      if (payload?.manifest?.portable === false) {
-        showToast("旧版文件仅含部分记录，完整记录请下载个人账本");
-      } else {
-        showToast(`已导出：持仓 ${c?.records ?? 0}、订单 ${c?.tradeOrders ?? 0}、分组 ${c?.watchGroups ?? 0}、设置 ${c?.siteSettings ?? 0}、名人持仓 ${c?.celebs ?? 0}`);
-      }
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "导出失败", "err");
-    } finally {
-      setBackupBusy(null);
-    }
-  }
-
-  async function importSiteBackup(file: File) {
-    if (file.size > 10 * 1024 * 1024) {
-      showToast("备份文件超过 10MB 限制", "err");
-      return;
-    }
-    let payload: Record<string, any>;
-    try {
-      payload = JSON.parse(await file.text());
-    } catch {
-      showToast("文件解析失败，请选择 Alcor 或旧版备份 JSON", "err");
-      return;
-    }
-    setBackupBusy("import");
-    try {
-      // 第一步：服务端校验 + 试算条数（不写入）
-      const checkRes = await fetch("/api/v1/data/import?preview=1", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const checkData = await checkRes.json().catch(() => null);
-      if (!checkRes.ok) throw new Error(checkData?.error || "备份文件校验失败");
-      const counts = checkData?.counts ?? {};
-      const summary = [
-        `版本：${payload?.appVersion ?? "未知"} · 导出：${(payload?.exportedAt ?? "").replace("T", " ").slice(0, 16)}`,
-        `持仓 ${counts.records ?? 0}、订单 ${counts.tradeOrders ?? 0}、分组 ${counts.watchGroups ?? 0}、设置 ${counts.siteSettings ?? 0}、名人持仓 ${counts.celebs ?? 0}${counts.profile ? "、昵称" : ""}`
-      ].join("\n");
-      if (!await appConfirm(`${summary}\n\n数据将按 id 合并，导入前会自动备份当前数据库。`, { title: "导入网站数据" })) return;
-      // 第二步：真正导入
-      const res = await fetch("/api/v1/data/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || "导入失败");
-      const c = data?.counts ?? {};
-      showToast(`导入成功：持仓 ${c.records ?? 0}、订单 ${c.tradeOrders ?? 0}、分组 ${c.watchGroups ?? 0}、设置 ${c.siteSettings ?? 0}、名人持仓 ${c.celebs ?? 0}`);
-      setTimeout(() => window.location.reload(), 1200);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "导入失败", "err");
-    } finally {
-      setBackupBusy(null);
-      if (importBackupRef.current) importBackupRef.current.value = "";
-    }
-  }
-
   async function doDeleteAccount() {
     try {
       const res = await fetch("/api/v1/auth/delete-account", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: deletePassword, code: deleteTotpCode }) });
@@ -1519,7 +1448,7 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     const snapshot = lastSavedRef.current;
     if (snapshot) {
       setSite(snapshot.site);
-      setTabs(snapshot.tabs);
+      setTabs(withDataManagementTab(snapshot.tabs));
       captureSaved(snapshot.site);
     }
     exitActiveEdit();
@@ -1537,8 +1466,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
     window.addEventListener("fire:settings-edit-complete", onComplete);
     return () => window.removeEventListener("fire:settings-edit-complete", onComplete);
   }, []);
-  const [backupBusy, setBackupBusy] = useState<"export" | "import" | null>(null);
-  const importBackupRef = useRef<HTMLInputElement | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
@@ -3257,39 +3184,6 @@ export default function SettingsView({ user, recordsCount, onExport, onClearAll,
                     <label className="settings-signout-option"><input type="checkbox" checked={signOutOtherDevices} onChange={(event) => setSignOutOtherDevices(event.target.checked)} /><span>在其他设备上退出登录。如果有人使用了你的账户，请选择此项。</span></label>
                   </form>
                   {pwdMsg && <p className={`settings-form-message ${pwdMsg.type === "ok" ? "is-ok" : "is-error"}`}>{pwdMsg.text}</p>}
-                </SettingsSection>
-                <SettingsSection id="data" icon="data" title="数据管理">
-                  <InvestmentDataManager key={user.id} ownerId={user.id} />
-                  <div className="settings-profile-actions">
-                  <SettingsManagedGroup scope="data" inline headings={false}>
-                  <SettingsManagedPane name="export" title="导出旧版网站数据" summary="导出旧版格式支持的记录">
-                  <p className="settings-managed-note">包含持仓、订单、自选分组、个人偏好与昵称；不含图片、图标和数据库连接信息。管理员导出另含站点设置与名人持仓。</p>
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>网站数据</b><span>下载为 JSON 文件</span></div>
-                    <div className="ctrl">
-                      <Capsule variant="ghost" size="sm" type="button" disabled={backupBusy === "export"} onClick={exportSiteBackup} className="disabled:opacity-60">{backupBusy === "export" ? "导出中…" : "导出"}</Capsule>
-                    </div>
-                  </div>
-                  </SettingsManagedPane>
-                  {user.role === "admin" && <SettingsManagedPane name="platform-backup" title="联合备份" summary="数据库与私有原件"><PlatformBackups ownerId={user.id} /></SettingsManagedPane>}
-                  <SettingsManagedPane name="import" title="导入旧版网站数据" summary="从旧版 Alcor 备份文件导入">
-                  <p className="settings-managed-note">选择 Alcor 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>备份文件</b><span>JSON 格式</span></div>
-                    <div className="ctrl">
-                      <Capsule variant="ghost" size="sm" type="button" disabled={backupBusy === "import"} onClick={() => importBackupRef.current?.click()} className="disabled:opacity-60">{backupBusy === "import" ? "导入中…" : "导入"}</Capsule>
-                      <input ref={importBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importSiteBackup(f); }} />
-                    </div>
-                  </div>
-                  </SettingsManagedPane>
-                  <SettingsManagedPane name="holdings" title="持仓数据" summary={`导出持仓与自选记录 · ${recordsCount ?? "—"} 条`}>
-                  <div className="sw-row">
-                    <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount ?? "—"} 条</span></div>
-                    <Capsule variant="ghost" size="sm" type="button" disabled={recordsCount === null} onClick={onExport} className="">导出</Capsule>
-                  </div>
-                  </SettingsManagedPane>
-                  </SettingsManagedGroup>
-                  </div>
                 </SettingsSection>
                 <SettingsSection id="danger" icon="danger" title="清空投资数据" desc="删除持仓、自选与相关投资记录；操作不可恢复">
                   <div className="settings-danger-zone">

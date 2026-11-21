@@ -6,7 +6,7 @@ import re
 from fastapi import HTTPException
 
 COLUMNS=('identity','marketValue','cost','price','qty','dayPnl','dayPnlRate','pnl','pnlRate','weight')
-TABS={'holdings':'账户资产','assets':'资产分析','watchlist':'自选股','global':'全球经济','trading':'动态','earnings':'财报日历','celebs':'名人持仓','users':'用户管理','attachments':'附件管理','library':'素材库','cards':'卡面库','activities':'日志','settings':'设置'}
+TABS={'holdings':'账户资产','assets':'资产分析','watchlist':'自选股','global':'全球经济','trading':'动态','earnings':'财报日历','celebs':'名人持仓','users':'用户管理','attachments':'附件管理','library':'素材库','cards':'卡面库','activities':'日志','data-management':'数据管理','settings':'设置'}
 DEFAULTS={'tabs':[],'markets':[],'marketLabels':[],'assetMarketOrder':[],'assetAnalysisOrder':{'left':[],'right':[]},'indicesOrder':[],
     'holdingColumns':[{'key':key,'visible':key!='dayPnlRate'}for key in COLUMNS],'stockIconCdn':False,'appDisplayName':'','appDisplayIcon':None}
 

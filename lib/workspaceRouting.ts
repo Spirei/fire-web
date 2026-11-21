@@ -1,5 +1,16 @@
+import type { TabConfig } from "./types";
+
 type WorkspaceRoute = { key:string; url?:string };
 export type WorkspaceVisit = "tab"|"link"|"history";
+
+export const DATA_MANAGEMENT_TAB = { key: "data-management", label: "数据管理", url: "/data-management" } as const;
+
+export function withDataManagementTab(tabs: TabConfig[]): TabConfig[] {
+  if (tabs.some(tab => tab.key === DATA_MANAGEMENT_TAB.key)) return tabs;
+  const afterLogs = tabs.findIndex(tab => tab.key === "activities") + 1;
+  const index = afterLogs || tabs.length;
+  return [...tabs.slice(0, index), DATA_MANAGEMENT_TAB, ...tabs.slice(index)];
+}
 
 /** Match the longest owning route; a detail URL belongs to the same retained page. */
 export function workspaceForPath(path:string,tabs:readonly WorkspaceRoute[]) {

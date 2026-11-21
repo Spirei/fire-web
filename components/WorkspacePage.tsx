@@ -18,6 +18,7 @@ import {displayCurrencyFlagCode} from '@/lib/flagAssets';
 import {CURRENT_VERSION} from '@/lib/versions';
 import {readStockIcons,stockIconPreloads} from '@/lib/stockIconRequests';
 import {parsePrefsCookie} from '@/lib/prefsCookie';
+import {DATA_MANAGEMENT_TAB} from '@/lib/workspaceRouting';
 export const dynamic='force-dynamic';
 export default async function WorkspacePage({params,searchParams}:{params:Promise<{slug?:string[]}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){
   const path='/'+((await params).slug||[]).join('/');
@@ -43,8 +44,15 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   let initialSymbol:string|undefined;
   if(!tab){const base=settings.tabs.find(t=>t.key==='watchlist');const baseUrl=base?.url||'/watchlist';if(path.startsWith(baseUrl+'/')){const code=path.slice(baseUrl.length+1);if(/^[A-Za-z]{2,5}\.[A-Z0-9._-]+$/.test(code)){tab=base;initialSymbol=code.toUpperCase();}}}
   if(!tab)notFound();
+  if(tab.key==='settings'&&query.get('sub')==='profile'&&query.get('anchor')==='data'){
+    const dataUrl=settings.tabs.find(item=>item.key===DATA_MANAGEMENT_TAB.key)?.url||DATA_MANAGEMENT_TAB.url;
+    query.delete('sub');
+    query.delete('anchor');
+    const rest=query.toString();
+    redirect(rest?`${dataUrl}?${rest}`:dataUrl);
+  }
   const cookieHeaders={cookie:rawCookie};
-  const financial=['holdings','watchlist','assets','pnl','fire','earnings','global'].includes(tab.key) || tab.key==='settings'&&query.get('sub')==='profile'&&['data','danger'].includes(query.get('anchor')||'');
+  const financial=['holdings','watchlist','assets','pnl','fire','earnings','global','data-management'].includes(tab.key) || tab.key==='settings'&&query.get('sub')==='profile'&&query.get('anchor')==='danger';
   // A transient failure in one of these heavy reads must not replace the whole
   // workspace with the global error page; the client can retry or show its own
   // empty state. Only settings/session are required to render the shell.
@@ -58,11 +66,14 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const needBrokerIcons=['holdings','watchlist','assets','pnl'].includes(tab.key);
   // Artwork reads start as soon as records are known instead of waiting for
   // funds and the tab bootstrap; the three icon sets already run in parallel.
-  const iconRequests=recordsRequest.then(({value})=>Promise.all([
-    readStockIcons(value,iconRead),
-    value.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market&icons=1').catch(()=>({assets:[]})):Promise.resolve({assets:[]}),
-    value.length&&needBrokerIcons?iconRead<{assets:{name:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=broker&icons=1').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
-  ]));
+  const iconRequests=recordsRequest.then(({value})=>{
+    const artworkRecords=tab.key===DATA_MANAGEMENT_TAB.key?[]:value;
+    return Promise.all([
+      readStockIcons(artworkRecords,iconRead),
+      artworkRecords.length?iconRead<{assets:{market:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=market&icons=1').catch(()=>({assets:[]})):Promise.resolve({assets:[]}),
+      artworkRecords.length&&needBrokerIcons?iconRead<{assets:{name:string;imageUrl?:string;url?:string}[]}>('/api/assets?type=broker&icons=1').catch(()=>({assets:[]})):Promise.resolve({assets:[]})
+    ]);
+  });
   const [initialRecordsRead,funds,initialWorkspace,[recordIcons,marketAssets,brokerAssets]]=await Promise.all([
     recordsRequest,
     fundsRequest,

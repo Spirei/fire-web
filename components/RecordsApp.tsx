@@ -48,7 +48,7 @@ import { useDesktopViewport, useTabletDevice } from "@/lib/useDesktopViewport";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { preloadView } from "@/lib/viewPreload";
 import { prefetchMaterialCatalog } from "@/lib/materialCatalogCache";
-import { workspaceForPath, workspaceDestination, type WorkspaceVisit } from "@/lib/workspaceRouting";
+import { withDataManagementTab, workspaceForPath, workspaceDestination, type WorkspaceVisit } from "@/lib/workspaceRouting";
 import { observeWorkspaceReady } from "@/lib/workspaceTiming";
 import { animateWorkspaceEntrance } from "@/lib/workspaceMotion";
 import { ownWorkspaceScroll, restoreWorkspaceScroll } from "@/lib/workspaceScroll";
@@ -62,6 +62,7 @@ const HoldingsView = preloadedWorkspace("holdings", dynamic(() => import("@/comp
 const AssetAnalysisView = preloadedWorkspace("assets", dynamic(() => import("@/components/views/AssetAnalysisView"), { loading: WorkspaceLoading }));
 const FireView = preloadedWorkspace("fire", dynamic(() => import("@/components/views/FireView"), { loading: WorkspaceLoading }));
 const ActivitiesView = preloadedWorkspace("activities", dynamic(() => import("@/components/views/ActivitiesView"), { loading: WorkspaceLoading }));
+const DataManagementView = preloadedWorkspace("data-management", dynamic(() => import("@/components/views/DataManagementView"), { loading: WorkspaceLoading }));
 const EarningsCalendarView = preloadedWorkspace("earnings", dynamic(() => import("@/components/views/EarningsCalendarView"), { loading: WorkspaceLoading }));
 const CelebsView = preloadedWorkspace("celebs", dynamic(() => import("@/components/views/CelebsView"), { loading: WorkspaceLoading }));
 const FeedView = preloadedWorkspace("trading", dynamic(() => import("@/components/views/FeedView"), { loading: WorkspaceLoading }));
@@ -76,7 +77,7 @@ const AssetPnlAnalysisView = preloadedWorkspace("pnl", dynamic(() => import("@/c
 
 import SystemView from '@/components/views/SystemView';
 
-type TabKey = "system-overview" | "background-tasks" | "backup-recovery" | "api-migration" | "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "global" | "trading" | "earnings" | "celebs" | "users" | "library" | "cards" | "settings" | "pnl";
+type TabKey = "system-overview" | "background-tasks" | "backup-recovery" | "api-migration" | "quote-pool" | "watchlist" | "holdings" | "assets" | "fire" | "activities" | "data-management" | "global" | "trading" | "earnings" | "celebs" | "users" | "library" | "cards" | "settings" | "pnl";
 
 function NoPermission() {
   return (
@@ -106,8 +107,8 @@ const DEFAULT_TABS: TabConfig[] = [
 
 // 保证 FIRE 页签始终存在且固定在「资产分析」下方（即使数据库里的导航菜单未包含它）。
 const SYSTEM_TABS:TabConfig[]=[{key:'system-overview',label:'系统总览',url:'/system-overview'},{key:'background-tasks',label:'后台任务',url:'/background-tasks'},{key:'backup-recovery',label:'备份与恢复',url:'/backup-recovery'},{key:'api-migration',label:'API 接口',url:'/api-migration'}];
-function withFireTab(tabs: TabConfig[]): TabConfig[] {
-  tabs=[...tabs.filter(tab=>!SYSTEM_TABS.some(item=>item.key===tab.key)),...SYSTEM_TABS];
+function withWorkspaceTabs(tabs: TabConfig[]): TabConfig[] {
+  tabs=withDataManagementTab([...tabs.filter(tab=>!SYSTEM_TABS.some(item=>item.key===tab.key)),...SYSTEM_TABS]);
   if (tabs.some((t) => t.key === "fire")) return tabs;
   const idx = tabs.findIndex((t) => t.key === "assets");
   const fireTab: TabConfig = { key: "fire", label: "FIRE", url: "/fire" };
@@ -274,7 +275,7 @@ export default function RecordsApp({
       document.documentElement.classList.remove("fire-workspace-switching");
     }
   }, [activeTab]);
-  const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withFireTab(initialSettings.tabs));
+  const [navTabs, setNavTabs] = useState<TabConfig[]>(() => withWorkspaceTabs(initialSettings.tabs));
   const [mobileNavigationOrder, setMobileNavigationOrder] = useState(initialSettings.mobileNavigationOrder ?? []);
   const settingsReloadGeneration = useRef(0);
   const mobilePrimaryOrder = useMemo(() => mobileWorkspaceGroups(navTabs, mobileNavigationOrder).primary.map(tab => tab.key), [navTabs, mobileNavigationOrder]);
@@ -390,7 +391,7 @@ export default function RecordsApp({
         if (!s) return;
         if (Array.isArray(s.tabs) && s.tabs.length) {
           setNavTabs(
-            withFireTab(
+            withWorkspaceTabs(
               s.tabs.some((t: TabConfig) => t.key === "settings")
                 ? s.tabs
                 : [...s.tabs, { key: "settings", label: "设置", url: "/settings" }]
@@ -599,7 +600,7 @@ export default function RecordsApp({
       .map((t) => byKey.get(t.key))
       .filter((t): t is TabConfig => Boolean(t));
     const hidden = navTabs.filter((t) => !ordered.some((o) => o.key === t.key));
-    const nextTabs = withFireTab([...ordered, ...hidden]);
+    const nextTabs = withWorkspaceTabs([...ordered, ...hidden]);
     if (tabOrderBusy.current) return;
     tabOrderBusy.current = true;
     const previous = navTabs;
@@ -698,7 +699,7 @@ export default function RecordsApp({
       setValuationReady(next.filter(record => Number(record.qty) > 0 && record.code.trim()).every(record => Number.isFinite(Number(retained[record.id]?.price))));
     }, Date.now, () => router.refresh(), () => setRecordsError("投资记录读取失败"), initialRecordsReady ? initialNow : -Infinity);
     recordsSyncRef.current = sync;
-    const activate = () => sync.setActive(!document.hidden && (RECORDS_WORKSPACES.has(activeTabRef.current) || activeTabRef.current === "settings" && new URLSearchParams(window.location.search).get("sub") === "profile" && ["data", "danger"].includes(new URLSearchParams(window.location.search).get("anchor") || "")));
+    const activate = () => sync.setActive(!document.hidden && (activeTabRef.current === "data-management" || RECORDS_WORKSPACES.has(activeTabRef.current) || activeTabRef.current === "settings" && new URLSearchParams(window.location.search).get("sub") === "profile" && new URLSearchParams(window.location.search).get("anchor") === "danger"));
     const resume = () => { activate(); sync.resume(); };
     const changed = () => sync.changed();
     activate();
@@ -717,7 +718,7 @@ export default function RecordsApp({
   }, [user.id, router]);
 
   useEffect(() => {
-    recordsSyncRef.current?.setActive(!document.hidden && (RECORDS_WORKSPACES.has(activeTab) || activeTab === "settings" && settingsSub === "profile" && ["data", "danger"].includes(searchParams.get("anchor") || "")));
+    recordsSyncRef.current?.setActive(!document.hidden && (activeTab === "data-management" || RECORDS_WORKSPACES.has(activeTab) || activeTab === "settings" && settingsSub === "profile" && searchParams.get("anchor") === "danger"));
   }, [activeTab, settingsSub, searchParams]);
 
   useEffect(() => {
@@ -999,15 +1000,16 @@ export default function RecordsApp({
     initialSettings, initialAssetLibrary, initialCardLibrary, initialFeed, initialWorkspace
   ]);
   // A quote refresh must not rebuild settings, calendars or other non-price views.
-  // Keep records in the settings stamp because its export action captures them.
+  // The clear-data action in settings and the holding export use the current records.
   const settingsPanelDataStamp = useMemo(() => ({}), [records, recordsReady, user, settingsSub, settingsSubReady, initialSettings, initialPasskeys, initialVersion]);
+  const dataManagementPanelDataStamp = useMemo(() => ({}), [records, recordsReady, user]);
   const globalPanelDataStamp = useMemo(() => ({}), [initialNow, records, recordsReady, recordsError, quotes, valuationReady]);
   const feedPanelDataStamp = useMemo(() => ({}), [initialNow, initialFeed]);
   const celebsPanelDataStamp = useMemo(() => ({}), [user, initialCelebAvatars, initialCelebs]);
   const earningsPanelDataStamp = useMemo(() => ({}), [records, recordsReady, recordsError, initialNow, initialUser]);
   const managementPanelDataStamp = useMemo(() => ({}), [user, initialSettings, initialAssetLibrary, initialCardLibrary]);
   const independentPanelStamps: Partial<Record<TabKey, object>> = {
-    settings: settingsPanelDataStamp, global: globalPanelDataStamp, "quote-pool": globalPanelDataStamp,
+    settings: settingsPanelDataStamp, "data-management": dataManagementPanelDataStamp, global: globalPanelDataStamp, "quote-pool": globalPanelDataStamp,
     trading: feedPanelDataStamp, celebs: celebsPanelDataStamp, earnings: earningsPanelDataStamp,
     users: managementPanelDataStamp,
     library: managementPanelDataStamp, cards: managementPanelDataStamp
@@ -1033,9 +1035,7 @@ export default function RecordsApp({
             role: user?.role ?? "user"
           }}
           recordsCount={recordsReady ? records.length : null}
-          onExport={exportJson}
           onClearAll={clearAllRecords}
-          onTabsChange={setNavTabs}
           initialSub={settingsSub ?? undefined}
           initialPasskeys={initialPasskeys}
           initialSettings={initialSettings}
@@ -1171,6 +1171,7 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" && initialWorkspace.logs ? initialNow : 0} />}
+          {activeTab === "data-management" && <DataManagementView key={user.id} ownerId={user.id} admin={user.role === "admin"} recordsCount={recordsReady ? records.length : null} onExport={exportJson} />}
           {activeTab === "global" && <GlobalPreviewView initialFx={initialWorkspace.global?.fx} initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} ledger={
             <HoldingsView
               ownerId={user.id}

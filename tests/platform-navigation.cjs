@@ -19,6 +19,13 @@ assert(opened.includes('用户管理'));
 const ordinary=render(items.filter(item=>!['users','library','activities'].includes(item.key)));
 assert(!ordinary.includes('用户管理')&&!ordinary.includes('素材库'),'private destinations do not reappear after filtering');
 assert(!ordinary.includes('platform-group-management'),'empty groups are absent');
+const { withDataManagementTab, workspaceDestination, workspaceForPath }=require('../lib/workspaceRouting.ts');
+const managementTabs=withDataManagementTab(items.filter(item=>item.key!=='users'&&item.key!=='library'));
+const management=render(managementTabs,{'fire:platform-navigation-expanded':{management:true}});
+assert.match(management, /id="platform-group-management"[^>]*>.*aria-label="日志".*aria-label="数据管理"/);
+assert.equal(withDataManagementTab(managementTabs),managementTabs,'a saved tab keeps its configured order');
+assert.equal(workspaceForPath('/data-management',managementTabs),'data-management');
+assert.equal(workspaceDestination('data-management',managementTabs,new Map(),'tab').url,'/data-management');
 const {serializePrefs,parsePrefsCookie}=require('../lib/prefsCookie.ts');
 const crowded=Object.fromEntries(Array.from({length:100},(_,i)=>['fire:optional-'+i,'saved']));
 const layout={investment:true,feed:false,resources:true,data:false,management:false,system:true,personal:false};
@@ -70,7 +77,7 @@ Module._load=function(id,parent,...rest){
 global.document={body:{},activeElement:null};global.HTMLElement=class{};
 try{
  const Search=require('../components/PlatformSidebarHeader.tsx').default;
- const props={collapsed:false,onToggle(){},ownerId:'fixture',admin:true,items:[{key:'users',label:'用户管理',icon:navigationIcons.users}],onSelect:key=>selected.push(key),onSettings:(sub,anchor)=>selected.push([sub,anchor])};
+ const props={collapsed:false,onToggle(){},ownerId:'fixture',admin:true,items:[{key:'users',label:'用户管理',icon:navigationIcons.users},{key:'data-management',label:'数据管理',icon:navigationIcons['data-management']}],onSelect:key=>selected.push(key),onSettings:(sub,anchor)=>selected.push([sub,anchor])};
  const flatten=node=>Array.isArray(node)?node.flatMap(flatten):node&&typeof node==='object'?[node,...flatten(node.props?.children)]:[];
  const view=(extra={})=>{stateCursor=0;refCursor=0;return flatten(Search({...props,...extra}));};
  let tree=view();tree.find(n=>n.props?.['aria-label']==='搜索功能').props.onClick();tree=view();
@@ -82,6 +89,8 @@ try{
  const options=nodes=>nodes.filter(n=>n.props?.role==='option');
  let results=options(tree);assert.equal(results.length,1);results[0].props.onClick();
  assert.deepEqual(historyActions.at(-1),['record','市场色块']);assert.deepEqual(selected.at(-1),['stocks','market-badges']);
+ searchStates=[true,'每日盈亏'];results=options(view({admin:false}));assert.equal(results.length,1);results[0].props.onClick();
+ assert.equal(selected.at(-1),'data-management','the former settings search opens the new workspace');
  searchStates=[true,'市场色块'];assert.equal(options(view({admin:false})).length,0,'ordinary users cannot search administrator settings');
  searchStates=[true,'不存在的功能'];tree=view();input=tree.find(n=>n.type==='input');input.props.onKeyDown({key:'Enter',nativeEvent:{isComposing:false},preventDefault(){}});assert.deepEqual(historyActions.at(-1),['record','不存在的功能']);
  input.props.onChange({target:{value:'正在输入'}});assert.deepEqual(historyActions.at(-1),['record','不存在的功能'],'typing never writes history');
