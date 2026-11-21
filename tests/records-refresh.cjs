@@ -10,7 +10,7 @@ function harness(){let time=0;const requests=[],applied=[],ownerChanges=[];
 let count=0;async function test(name,fn){await fn();count++;console.log('PASS '+name);}
 (async()=>{
  await test('entry and repeated focus/pageshow events coalesce, including slow reads',async()=>{
-  assert.deepEqual([...RECORDS_WORKSPACES],['holdings','watchlist','assets','pnl','fire','earnings','global']);
+  assert.deepEqual([...RECORDS_WORKSPACES],['holdings','watchlist','assets','pnl','fire','earnings']);
   const h=harness();h.sync.setActive(true);h.sync.resume();await tick();assert.equal(h.requests.length,1);
   h.advance(2000);h.sync.resume();h.sync.refresh();await tick();assert.equal(h.requests.length,1);
   h.requests[0].resolve({ownerId:'owner',records:['first']});await tick();assert.deepEqual(h.applied,[['first']]);

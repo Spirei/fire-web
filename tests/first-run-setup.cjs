@@ -5,6 +5,7 @@ require.extensions['.ts']=(module,file)=>module._compile(ts.transpileModule(fs.r
 Module._load=function(id,parent,...rest){
   if(id==='@/lib/randomId')return require('../lib/randomId.ts');
   if(id==='@/lib/platformRequest')return require('../lib/platformRequest.ts');
+  if(id==='@/lib/workspaceRouting')return require('../lib/workspaceRouting.ts');
   if(parent?.filename===path.join(root,'app/setup/page.tsx')){
     if(id==='@/components/FirstRunSetup')return {__esModule:true,default:function FirstRunSetup(){}};
     if(id==='@/lib/auth')return {needsSetup:async()=>true};

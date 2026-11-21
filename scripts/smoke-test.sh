@@ -27,9 +27,9 @@ check() {
 code() { curl -s --max-time 45 -o /dev/null -w '%{http_code}' "$@"; }
 
 echo "== 页面加载 =="
-check "GET / 进入全球预览" 307 "$(code "$BASE/")"
+check "GET / 进入账户资产" 307 "$(code "$BASE/")"
 HOME_LOC=$(curl -s -o /dev/null -w '%{redirect_url}' "$BASE/")
-check "首页跳到全球预览" 1 "$(printf '%s' "$HOME_LOC" | grep -c '/global')"
+check "首页跳到账户资产" "$BASE/holdings" "$HOME_LOC"
 check "GET /login"     200 "$(code "$BASE/login")"
 check "GET /api/auth/setup-status" 200 "$(code "$BASE/api/auth/setup-status")"
 check "已初始化实例不需要首次设置" 0 "$(curl -s "$BASE/api/auth/setup-status" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("needsSetup") else 0)')"
@@ -71,6 +71,8 @@ for PAGE in /holdings /watchlist /fire /global /trading /celebs /earnings /activ
 done
 DATA_REDIRECT=$(curl -s -b "$JAR_ACCOUNT" -o /dev/null -w '%{redirect_url}' "$BASE/settings?sub=profile&anchor=data")
 check "旧数据管理链接直达新页面" "$BASE/data-management" "$DATA_REDIRECT"
+LEDGER_REDIRECT=$(curl -s -b "$JAR_ACCOUNT" -o /dev/null -w '%{redirect_url}' "$BASE/global?section=ledger&market=HK")
+check "旧投资账本链接保留市场" "$BASE/holdings?market=HK" "$LEDGER_REDIRECT"
 check "Retired attachments page" 404 "$(code -b "$JAR_ACCOUNT" "$BASE/attachments")"
 DEPLOY_STATUS_EXPECT=404
 if [ "$ACCOUNT_ROLE" = admin ]; then DEPLOY_STATUS_EXPECT=200; fi

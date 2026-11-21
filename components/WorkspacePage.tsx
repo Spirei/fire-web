@@ -18,7 +18,7 @@ import {displayCurrencyFlagCode} from '@/lib/flagAssets';
 import {CURRENT_VERSION} from '@/lib/versions';
 import {readStockIcons,stockIconPreloads} from '@/lib/stockIconRequests';
 import {parsePrefsCookie} from '@/lib/prefsCookie';
-import {DATA_MANAGEMENT_TAB} from '@/lib/workspaceRouting';
+import {ACCOUNT_ASSETS_PATH,DATA_MANAGEMENT_TAB,legacyInvestmentLedgerDestination} from '@/lib/workspaceRouting';
 export const dynamic='force-dynamic';
 export default async function WorkspacePage({params,searchParams}:{params:Promise<{slug?:string[]}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){
   const path='/'+((await params).slug||[]).join('/');
@@ -41,6 +41,17 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
   const specialTab=system[systemKey]?{key:systemKey}:path==='/quote-pool'?{key:'quote-pool'}:path==='/asset-pnl-analysis'?{key:'pnl'}:null;
   if(system[systemKey]&&!isAdmin(user))notFound();
   let tab=specialTab??settings.tabs.find(t=>(t.url||`/${t.key}`)===path);
+  if(path==='/global'||tab?.key==='global'){
+    const legacyLedger=legacyInvestmentLedgerDestination(query,settings.tabs);
+    if(legacyLedger)redirect(legacyLedger);
+  }
+  if(path===ACCOUNT_ASSETS_PATH&&!tab){
+    const assets=settings.tabs.find(item=>item.key==='holdings');
+    if(assets?.url&&assets.url!==path){
+      const rest=query.toString();
+      redirect(rest?`${assets.url}?${rest}`:assets.url);
+    }
+  }
   let initialSymbol:string|undefined;
   if(!tab){const base=settings.tabs.find(t=>t.key==='watchlist');const baseUrl=base?.url||'/watchlist';if(path.startsWith(baseUrl+'/')){const code=path.slice(baseUrl.length+1);if(/^[A-Za-z]{2,5}\.[A-Z0-9._-]+$/.test(code)){tab=base;initialSymbol=code.toUpperCase();}}}
   if(!tab)notFound();
@@ -52,14 +63,14 @@ export default async function WorkspacePage({params,searchParams}:{params:Promis
     redirect(rest?`${dataUrl}?${rest}`:dataUrl);
   }
   const cookieHeaders={cookie:rawCookie};
-  const financial=['holdings','watchlist','assets','pnl','fire','earnings','global','data-management'].includes(tab.key) || tab.key==='settings'&&query.get('sub')==='profile'&&query.get('anchor')==='danger';
+  const financial=['holdings','watchlist','assets','pnl','fire','earnings','data-management'].includes(tab.key) || tab.key==='settings'&&query.get('sub')==='profile'&&query.get('anchor')==='danger';
   // A transient failure in one of these heavy reads must not replace the whole
   // workspace with the global error page; the client can retry or show its own
   // empty state. Only settings/session are required to render the shell.
   const recordsRequest=financial
     ?platformJson<StockRecord[]>('/api/records',cookieHeaders).then(value=>({ready:true,value})).catch(()=>({ready:false,value:[] as StockRecord[]}))
     :Promise.resolve({ready:true,value:[] as StockRecord[]});
-  const fundsRequest=['holdings','global'].includes(tab.key)
+  const fundsRequest=tab.key==='holdings'
     ?platformJson<{balances:Record<string,number|null>}>('/api/fire/funds',cookieHeaders).catch(()=>({balances:{}}))
     :Promise.resolve({balances:{}});
   const iconRead=<T,>(path:string)=>platformJson<T>(path,cookieHeaders,{signal:AbortSignal.timeout(8000)});

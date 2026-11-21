@@ -1,12 +1,13 @@
 "use client";
 import type { FxRatesInitial } from "@/lib/fxRatesClient";
 import DataUnavailable from "@/components/DataUnavailable";
+import { CapsuleLink } from "@/components/Capsule";
 import { readFailure } from "@/lib/readFailure";
 import Pagination from "@/components/Pagination";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import FxConverter from "@/components/FxConverter";
 import MarketCalendarView from "@/components/MarketCalendarView";
 import { fmtPct } from "@/lib/format";
@@ -91,18 +92,8 @@ function fmtPrice(price: number, rate: number, symbol: string, currency: Currenc
 }
 
 // ---------- 月 K mini 图（后端代理新浪日 K 聚合月收盘，懒加载 + 缓存） ----------
-const TOP_CACHE_KEY = "fire:topstocks:cache";
 const RANK_CACHE_KEY = "fire:topstocks:rank";
-
-function readTopCache(): TopAsset[] {
-  try {
-    const raw = localStorage.getItem(TOP_CACHE_KEY);
-    const parsed = raw ? JSON.parse(raw) as TopAsset[] : null;
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [];
-  } catch {
-    return [];
-  }
-}
+const MARKET_CAP_SOURCE = "https://companiesmarketcap.com/assets-by-market-cap/";
 
 function todayStr() {
   const d = new Date();
@@ -228,23 +219,27 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   const [page, setPage] = useState(1);
   const { currency, rate, symbol } = useDisplayCurrency();
 
-  useLayoutEffect(() => {
-    const cached = readTopCache();
-    if (!cached.length) return;
-    setItems(cached);
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
     setLoading(true);
     fetch("/api/top-stocks?market=ALL", {signal:controller.signal,cache:"no-store"})
-      .then(async res => { const data = await res.json(); if (!res.ok) throw Error(readFailure(data,"全球市值排行暂不可用")); return data; })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) {
+          const detail = readFailure(data, "全球市值排行暂不可用");
+          if (res.status === 503 && detail.startsWith("公共发现")) {
+            if (!cancelled) setItems([]);
+            throw new Error("本站暂无可展示的市值快照");
+          }
+          throw new Error(detail);
+        }
+        return data;
+      })
       .then((data) => {
         if (cancelled) return;
-        if (data?.items) {
+        if (Array.isArray(data?.items) && data.items.length > 0) {
           // 排名对比基准每天只更新一次：同一天内多次刷新都对比当日基准，跨天时用昨日基准并刷新为新一天
           const today = todayStr();
           const daily = loadDailyRank();
@@ -260,13 +255,9 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
           }
           setItems(rankedItems);
           setErr("");
-          try {
-            localStorage.setItem(TOP_CACHE_KEY, JSON.stringify(rankedItems));
-          } catch {
-            /* 忽略 */
-          }
         } else {
-          setErr("获取全球市值排行失败，请稍后重试");
+          setItems([]);
+          setErr("本站暂无可展示的市值快照");
         }
       })
       .catch(error => !cancelled && setErr(controller.signal.aborted ? "读取超时，请重新读取" : error instanceof Error ? error.message : "无法读取全球市值排行"))
@@ -293,9 +284,10 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
           <h2 className="min-w-0 text-lg font-bold">全球资产市值排行</h2>
           <CurrencySelect align="left" />
         </div>
-        <p className="mt-0.5 text-xs text-muted">
-          {items.length ? `全球市值前 ${items.length} 名 · 市值与价格有延迟` : "CompaniesMarketCap"}
-        </p>
+        {items.length > 0 && <p className="mt-0.5 text-xs text-muted">
+          {`全球市值前 ${items.length} 名 · 市值与价格有延迟 · `}
+          <a className="underline underline-offset-2" href={MARKET_CAP_SOURCE} target="_blank" rel="noreferrer">CompaniesMarketCap</a>
+        </p>}
       </div>
 
       {err && items.length > 0 && <p role="status" className="text-xs text-muted">{err}，保留上次数据。</p>}
@@ -307,7 +299,8 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
           ))}
         </div>
       ) : err && items.length === 0 ? (
-        <DataUnavailable title="市值排行暂不可用" detail={err} onRetry={() => setReadAttempt(value => value + 1)} />
+        <DataUnavailable title="市值排行暂不可用" detail={err} onRetry={() => setReadAttempt(value => value + 1)}
+          action={<CapsuleLink href={MARKET_CAP_SOURCE} target="_blank" rel="noreferrer" variant="secondary" size="sm">查看来源榜单</CapsuleLink>} />
       ) : (
         <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
           <div className="data-table-scroll">
@@ -404,11 +397,10 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
 }
 
 function parseGlobalSection(value: string | null): GlobalSection {
-  if (value === "assets" || value === "convert" || value === "calendar" || value === "ledger") return value;
-  return "ledger";
+  return value === "convert" || value === "calendar" ? value : "assets";
 }
 
-export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePool, ledger, initialFx }: { pageSize?: number; initialNow?: number; onOpenQuotePool?: () => void; ledger?: ReactNode; initialFx?: FxRatesInitial }) {
+export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePool, initialFx }: { pageSize?: number; initialNow?: number; onOpenQuotePool?: () => void; initialFx?: FxRatesInitial }) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const searchParams = useSearchParams();
   const section = pageSize ? "assets" : parseGlobalSection(searchParams.get("section"));
@@ -431,7 +423,7 @@ export default function GlobalPreviewView({ pageSize, initialNow, onOpenQuotePoo
     <div className="global-economy-page flex flex-col gap-6">
       <GlobalSectionNav section={section} onSelect={selectSection} />
       <div key={section} className="global-section-panel">
-        {section === "ledger" ? ledger : section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter initial={initialFx} />}
+        {section === "assets" ? <AssetMarketCapRanking /> : section === "calendar" ? <MarketCalendarView initialNow={initialNow} /> : <FxConverter initial={initialFx} />}
       </div>
     </div>
   );

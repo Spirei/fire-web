@@ -1003,7 +1003,7 @@ export default function RecordsApp({
   // The clear-data action in settings and the holding export use the current records.
   const settingsPanelDataStamp = useMemo(() => ({}), [records, recordsReady, user, settingsSub, settingsSubReady, initialSettings, initialPasskeys, initialVersion]);
   const dataManagementPanelDataStamp = useMemo(() => ({}), [records, recordsReady, user]);
-  const globalPanelDataStamp = useMemo(() => ({}), [initialNow, records, recordsReady, recordsError, quotes, valuationReady]);
+  const globalPanelDataStamp = useMemo(() => ({}), [initialNow, initialWorkspace.global, initialQuotePool, initialUser.role]);
   const feedPanelDataStamp = useMemo(() => ({}), [initialNow, initialFeed]);
   const celebsPanelDataStamp = useMemo(() => ({}), [user, initialCelebAvatars, initialCelebs]);
   const earningsPanelDataStamp = useMemo(() => ({}), [records, recordsReady, recordsError, initialNow, initialUser]);
@@ -1172,28 +1172,7 @@ export default function RecordsApp({
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" && initialWorkspace.logs ? initialNow : 0} />}
           {activeTab === "data-management" && <DataManagementView key={user.id} ownerId={user.id} admin={user.role === "admin"} recordsCount={recordsReady ? records.length : null} onExport={exportJson} />}
-          {activeTab === "global" && <GlobalPreviewView initialFx={initialWorkspace.global?.fx} initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} ledger={
-            <HoldingsView
-              ownerId={user.id}
-              isAdmin={user.role === "admin"}
-              assetMarketOrder={initialSettings.assetMarketOrder}
-              records={records}
-              quotes={quotes}
-              livePrice={livePrice}
-              refreshQuotes={refreshQuotes}
-              onAddMatch={(m) => addFromSearch(m, "holdings")}
-              onUpdate={updateRecord}
-              onRemove={removeRecord}
-              groups={groups}
-              markets={markets}
-              marketLabels={marketLabels}
-              marketOptions={marketOptions}
-              onMarketsChange={applyMarkets}
-              onOrdersChanged={reloadActivities}
-              initialFundBalances={initialFundBalances}
-              valuationReady={valuationReady}
-            />
-          } />}
+          {activeTab === "global" && <GlobalPreviewView initialFx={initialWorkspace.global?.fx} initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} />}
           {activeTab === "quote-pool" && <div className="global-economy-page flex flex-col gap-6">
             <GlobalSectionNav section="quote-pool" onSelect={section => { if (section !== "quote-pool") navigateWorkspace(`/global?section=${section}`); }} />
             <div className="global-section-panel"><QuotePoolView initial={initialQuotePool} admin={initialUser.role === "admin"} onNavigate={navigateWorkspace} /></div>

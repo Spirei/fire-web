@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import FirstRunSetup from "@/components/FirstRunSetup";
 import { getSiteSettings } from "@/lib/settings";
 import { getUserByToken, LEGACY_SESSION_COOKIE, needsSetup, SESSION_COOKIE } from "@/lib/auth";
+import { ACCOUNT_ASSETS_PATH } from "@/lib/workspaceRouting";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function SetupPage() {
   if (!await needsSetup()) {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
-    redirect(await getUserByToken(token) ? "/global" : "/login");
+    redirect(await getUserByToken(token) ? ACCOUNT_ASSETS_PATH : "/login");
   }
   const settings = await getSiteSettings();
   return (

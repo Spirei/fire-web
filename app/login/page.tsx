@@ -8,6 +8,7 @@ import { appConnectionBrand } from "@/lib/appConnectionBrand";
 import { getSiteSettings } from "@/lib/settings";
 import { logoFontClass } from "@/lib/logoFont";
 import { getUserByToken, LEGACY_SESSION_COOKIE, needsSetup, SESSION_COOKIE } from "@/lib/auth";
+import { ACCOUNT_ASSETS_PATH } from "@/lib/workspaceRouting";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const authorizationLogin = params.next?.startsWith("/app/authorize?") === true;
-  const destination = authorizationLogin ? params.next! : params.next === "/app/devices" ? "/app/devices" : "/global";
+  const destination = authorizationLogin ? params.next! : params.next === "/app/devices" ? "/app/devices" : ACCOUNT_ASSETS_PATH;
   if (await needsSetup() && params.skipSetup !== "1") redirect("/setup");
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;

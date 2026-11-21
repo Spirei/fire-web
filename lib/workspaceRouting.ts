@@ -4,6 +4,14 @@ type WorkspaceRoute = { key:string; url?:string };
 export type WorkspaceVisit = "tab"|"link"|"history";
 
 export const DATA_MANAGEMENT_TAB = { key: "data-management", label: "数据管理", url: "/data-management" } as const;
+export const ACCOUNT_ASSETS_PATH = "/holdings";
+
+export function legacyInvestmentLedgerDestination(query: URLSearchParams, tabs: readonly WorkspaceRoute[]) {
+  if (query.get("section") !== "ledger") return null;
+  const path = tabs.find(tab => tab.key === "holdings")?.url || ACCOUNT_ASSETS_PATH;
+  const market = query.get("market");
+  return market ? `${path}?${new URLSearchParams({ market })}` : path;
+}
 
 export function withDataManagementTab(tabs: TabConfig[]): TabConfig[] {
   if (tabs.some(tab => tab.key === DATA_MANAGEMENT_TAB.key)) return tabs;

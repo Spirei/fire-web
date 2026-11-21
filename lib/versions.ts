@@ -8414,6 +8414,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.87", date: "2026-11-21", summary: "修正 FIRE 规划换算、订单弹窗、请求日志和搜索历史",
   software: V0_1_86_ENTRY.software.map(item => ({ ...item, version: "v0.1.87" })),
   changes: [
+    { kind: "fix", title: "去除全球经济里的重复账本", desc: "全球经济默认打开市值排行。旧投资账本链接跳到账户资产并保留所选市场。榜单暂无可展示的快照时，可重试或查看来源榜单。" },
     { kind: "feature", title: "数据管理移到主侧栏", desc: "从「管理 → 数据管理」直接查看日终文件、账本记录与来源原件，也可办理导入、导出和备份。原设置链接仍可直达。" },
     { kind: "fix", title: "优化每日盈亏和文件查阅", desc: "真实和模拟账户各自保留本次浏览的月份。切换快照版本时保持预览布局，汇率展开即见数值和报价日，窄屏分行显示。文件读取失败可原位重试。" },
     { kind: "fix", title: "整理网页数据管理与日终文件预览", desc: "文件目录适配桌面和窄屏，日终文件采用 YYYYMMDD.json 命名。打开快照即可查看盈亏、净值和保存版本，JSON 预览及复制保留原始数字精度。" },

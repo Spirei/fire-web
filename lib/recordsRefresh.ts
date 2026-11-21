@@ -1,6 +1,6 @@
 import type { StockRecord } from "./types";
 
-export const RECORDS_WORKSPACES = new Set(["holdings", "watchlist", "assets", "pnl", "fire", "earnings", "global"]);
+export const RECORDS_WORKSPACES = new Set(["holdings", "watchlist", "assets", "pnl", "fire", "earnings"]);
 
 /** One owned read at a time; cancellation/generation protects local writes and resumed accounts. */
 export function createRecordsRefresh(ownerId: string,

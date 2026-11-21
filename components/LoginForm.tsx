@@ -9,6 +9,7 @@ import PasskeyLoginButton from "@/components/PasskeyLoginButton";
 import EmailRecoveryForm from "@/components/EmailRecoveryForm";
 import PasswordStrength from "@/components/PasswordStrength";
 import { isCompleteBackupCode, isSixDigitTotp, normalizeBackupInput, normalizeTotpDigits } from "@/lib/totpInput";
+import { ACCOUNT_ASSETS_PATH } from "@/lib/workspaceRouting";
 
 type Mode = "login" | "register";
 type AuthStep = Mode | "factor" | "register-email";
@@ -20,9 +21,9 @@ function retryDelay(response: Response) {
   return Number.isFinite(value) ? Math.min(86400, Math.max(1, value)) : 60;
 }
 
-export default function LoginForm({ onClose, returnTo = "/records" }: { onClose?: () => void; returnTo?: string }) {
+export default function LoginForm({ onClose, returnTo = ACCOUNT_ASSETS_PATH }: { onClose?: () => void; returnTo?: string }) {
   const authorizationLogin = returnTo.startsWith("/app/authorize?");
-  const destination = authorizationLogin || returnTo === "/app/devices" ? returnTo : "/global";
+  const destination = authorizationLogin || returnTo === "/app/devices" ? returnTo : ACCOUNT_ASSETS_PATH;
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");

@@ -4,6 +4,7 @@ import Script from "next/script";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconArrowDown, IconCheck, IconExclamationMark, IconLoader2 } from "@tabler/icons-react";
 import echarts from "@/lib/echarts";
+import { ACCOUNT_ASSETS_PATH } from "@/lib/workspaceRouting";
 import { SVGRenderer } from "echarts/renderers";
 
 echarts.use([SVGRenderer]);
@@ -213,7 +214,7 @@ export default function SimpleAppClient({ userId }: { userId: string }) {
     <>
       <div className="win" id="win" data-simple-ledger-user={userId}>
         <div className="win-bar" id="winBar" title="按住拖动窗口">
-          <a href="/global" aria-label="投资账本" title="投资账本">
+          <a href={ACCOUNT_ASSETS_PATH} aria-label="账户资产" title="账户资产">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16V9"/><path d="M12 16V7"/><path d="M16 16v-4"/></svg>
           </a>
           <button type="button" id="pinBtn" title="固定窗口" aria-label="固定窗口" onClick={() => window.togglePin?.()}>
