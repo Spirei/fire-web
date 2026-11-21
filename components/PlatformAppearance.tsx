@@ -6,8 +6,8 @@ import { useThemePreference } from "@/components/ThemePreferenceProvider";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { SITE_PALETTES } from "@/lib/palettes";
 import { APPEARANCE_ACCENTS } from "@/lib/appearance";
-const KEY = "fire:platform-appearance";
-const defaults = { width: "960", align: "left", font: "system", contentFont: "same", size: 14, contentSize: 14, weight: "400", contentWeight: "400", reduced: false, separate: false, translucent: true, contrast: 45, pointer: false, bg: "", ink: "", lightBg: "", lightInk: "", darkBg: "", darkInk: "" };
+import { PLATFORM_APPEARANCE_KEY as KEY } from "@/lib/platformAppearance";
+const defaults = { width: "960", align: "left", font: "system", contentFont: "same", size: 14, contentSize: 14, weight: "400", contentWeight: "400", reduced: false, separate: false, translucent: true, contrast: 45, pointer: false, pixelBackground: true, bg: "", ink: "", lightBg: "", lightInk: "", darkBg: "", darkInk: "" };
 const fonts = { system: '-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif', inter: 'Inter,-apple-system,"PingFang SC",sans-serif', serif: 'Georgia,"Songti SC",serif', mono: 'Menlo,"SFMono-Regular",monospace' };
 export function PlatformAppearanceRuntime({ children }: {
     children: ReactNode;
@@ -35,6 +35,7 @@ export function PlatformAppearanceRuntime({ children }: {
             root.dataset.platformReduced = String(prefs.reduced);
             root.dataset.platformPointer = String(prefs.pointer);
             root.dataset.platformTranslucent = String(prefs.translucent);
+            root.dataset.platformPixelBackground = String(prefs.pixelBackground !== false);
             root.style.setProperty('--platform-edge', `color-mix(in srgb,rgb(var(--site-ink)) ${8 + prefs.contrast * .09}%,rgb(var(--site-bg)))`);
         };
         apply();
@@ -44,6 +45,20 @@ export function PlatformAppearanceRuntime({ children }: {
     }, [prefs, palette, accent, mode]);
     return <>{children}</>;
 }
+
+export function PixelBackgroundSwitch() {
+    const [prefs, setPrefs] = usePersistedState(KEY, defaults);
+    return <button
+        type="button"
+        role="switch"
+        aria-label="像素网格背景"
+        aria-checked={prefs.pixelBackground !== false}
+        data-capsule="off"
+        className="platform-appearance-switch"
+        onClick={() => setPrefs(previous => ({ ...previous, pixelBackground: previous.pixelBackground === false }))}
+    ><i /></button>;
+}
+
 export default function PlatformAppearance() {
     const { palette, choose, accent, chooseAccent } = useSitePalette(), { mode, choose: chooseMode } = useThemePreference();
     const [prefs, set] = usePersistedState(KEY, defaults);
@@ -62,7 +77,9 @@ export default function PlatformAppearance() {
     const fontOptions = [['system', '系统'], ['inter', 'Inter'], ['serif', '衬线'], ['mono', '等宽']] as const;
     const color = (label: string, key: 'bg' | 'ink' | 'lightBg' | 'lightInk' | 'darkBg' | 'darkInk', fallback: string) => <label className="platform-color"><input type="color" aria-label={label} value={prefs[key] || fallback} onChange={e => update(key, e.target.value)}/><span>{(prefs[key] || fallback).toUpperCase()}</span></label>;
     return <section className="platform-appearance-page" aria-label="外观"><h2>视觉风格</h2><div className="platform-appearance-card">{row('模式', <div className="platform-mode-options">{([['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']] as const).map(([v, label]) => <button key={v} type="button" data-capsule="off" aria-pressed={mode === v} onClick={() => chooseMode(v)}><span className={`platform-mode-preview ${v}`}><i /><b /><em /></span><small>{label}</small></button>)}</div>)}</div>
- <div className="platform-appearance-card">{row('主题', select('主题', palette, SITE_PALETTES.map(p => [p.id, p.name]), v => choose(v as typeof palette)))}{row('强调色', <AppSelect ariaLabel="强调色" value={accent} options={APPEARANCE_ACCENTS.map(a => ({value:a.id,label:a.name,swatch:a.color}))} onChange={v => chooseAccent(v as typeof accent)} className="platform-appearance-select"/>)}{row('背景', color('背景', bgKey, theme[dark ? 'dark' : 'light'][0]))}{row('前景', color('前景', inkKey, theme[dark ? 'dark' : 'light'][2]))}{row('字体', select('字体', prefs.font, fontOptions, v => update('font', v)))}</div>
+ <div className="platform-appearance-card">{row('主题', select('主题', palette, SITE_PALETTES.map(p => [p.id, p.name]), v => choose(v as typeof palette)))}{row('强调色', <AppSelect ariaLabel="强调色" value={accent} options={APPEARANCE_ACCENTS.map(a => ({value:a.id,label:a.name,swatch:a.color}))} onChange={v => chooseAccent(v as typeof accent)} className="platform-appearance-select"/>)}{row('背景', color('背景', bgKey, theme[dark ? 'dark' : 'light'][0]))}
+ {row('像素网格背景', <PixelBackgroundSwitch />)}
+ {row('前景', color('前景', inkKey, theme[dark ? 'dark' : 'light'][2]))}{row('字体', select('字体', prefs.font, fontOptions, v => update('font', v)))}</div>
  <h2>页面布局</h2><div className="platform-appearance-card">{row('内容宽度', select('内容宽度', prefs.width, [['960', '紧凑 · 960 px'], ['1140', '标准 · 1140 px'], ['1440', '宽阔 · 1440 px'], ['full', '全宽']], v => update('width', v)))}{row('内容对齐', <div className="platform-align-options">{[['left', '靠左'], ['center', '居中']].map(([v, t]) => <button type="button" data-capsule="off" aria-pressed={prefs.align === v} key={v} onClick={() => update('align', v)}>{t}</button>)}</div>)}</div>
  <button type="button" className="platform-advanced" data-capsule="off" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>高级 {advanced ? '⌃' : '⌄'}</button>
  {advanced && <><div className="platform-appearance-card">{row('界面字号', <label><input type="number" aria-label="界面字号" min={12} max={20} value={prefs.size} onChange={e => update('size', Number(e.target.value))}/> px</label>)}{row('内容字体大小', <label><input type="number" aria-label="内容字体大小" min={12} max={24} value={prefs.contentSize} onChange={e => update('contentSize', Number(e.target.value))}/> px</label>)}</div>

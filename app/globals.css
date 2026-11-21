@@ -113,6 +113,71 @@
 @tailwind components;
 @tailwind utilities;
 
+.site-pixel-background {
+  --site-pixel-line: rgb(50 75 74 / .085);
+  --site-pixel-color-0: #48a7e4;
+  --site-pixel-color-1: #2bb983;
+  --site-pixel-color-2: #9c80e4;
+  --site-pixel-color-3: #e6a044;
+  --site-pixel-color-4: #e279ab;
+  --site-pixel-color-5: #3887d5;
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+}
+.dark .site-pixel-background {
+  --site-pixel-line: rgb(189 210 229 / .105);
+  --site-pixel-color-0: #68bdf0;
+  --site-pixel-color-1: #52ce9a;
+  --site-pixel-color-2: #b49aef;
+  --site-pixel-color-3: #ecc170;
+  --site-pixel-color-4: #ed9abe;
+  --site-pixel-color-5: #619ce7;
+}
+html[data-platform-pixel-background="true"] body:has(.app-shell-root, .site-login-shell) { isolation: isolate; }
+html[data-platform-pixel-background="true"] body:has(.app-shell-root, .site-login-shell) .site-pixel-background { display: block; }
+html[data-platform-pixel-background="true"] .app-shell-root {
+  --workspace-page-bg: transparent;
+  background-image: none;
+}
+html:root[data-platform-pixel-background="true"][data-palette] .site-login-shell { background-color: transparent; }
+body:has(.app-shell-root) .site-pixel-background {
+  --site-pixel-fade-start: 72px;
+  --site-pixel-fade-end: clamp(170px, 30dvh, 290px);
+}
+.site-pixel-background::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--site-pixel-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--site-pixel-line) 1px, transparent 1px);
+  background-size: var(--site-pixel-size) var(--site-pixel-size);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent var(--site-pixel-fade-start, 0px),
+    #000 var(--site-pixel-fade-end, 190px),
+    rgb(0 0 0 / .75)
+  );
+}
+.site-pixel-tile {
+  position: absolute;
+  width: var(--site-pixel-size);
+  height: var(--site-pixel-size);
+  animation: site-pixel-fade 530ms ease-out both;
+}
+@keyframes site-pixel-fade {
+  0%, 20% { opacity: .9; transform: scale(1); }
+  65% { opacity: .62; transform: scale(.72); }
+  100% { opacity: 0; transform: scale(.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-pixel-tile { display: none; }
+}
+html[data-platform-reduced="true"] .site-pixel-tile { display: none; }
+
 .watch-checkbox {
   width: 17px;
   height: 17px;
@@ -5660,18 +5725,20 @@ button.PhotoView-Slider__toolbarIcon {
 @media(prefers-reduced-motion:reduce) { .asset-mobile-holding-expanded { animation:none; } }
 .sc-mobile-brand { display:none; }
 @media(max-width:767px) {
+  html[data-platform-pixel-background="true"] .app-shell-root:has(.tab-panel:not([hidden]) .platform-appearance-page) { --mobile-settings-page-bg: transparent; }
   .app-shell-root:has(.records-app.is-settings),
   .app-shell-main:has(.records-app.is-settings),
-  .records-app.is-settings,
+  .records-app.is-settings { background:var(--mobile-settings-page-bg, #fff) !important; }
   .records-app.is-settings .sv-center,
   .records-app.is-settings .sw-window { background:#fff !important; }
   .records-app.is-settings :is(.settings-mobile-toolbar,.settings-page,.sw-content,.sw-content-scroll,.sw-page-head,.sc-landing,.tab-panel) { background:#fff !important; }
   .dark .app-shell-root:has(.records-app.is-settings),
   .dark .app-shell-main:has(.records-app.is-settings),
-  .dark .records-app.is-settings,
+  .dark .records-app.is-settings { background:var(--mobile-settings-page-bg, #15181b) !important; }
   .dark .records-app.is-settings .sv-center,
   .dark .records-app.is-settings .sw-window { background:#15181b !important; }
   .dark .records-app.is-settings :is(.settings-mobile-toolbar,.settings-page,.sw-content,.sw-content-scroll,.sw-page-head,.sc-landing,.tab-panel) { background:#15181b !important; }
+  html[data-platform-pixel-background="true"] .records-app.is-settings .tab-panel:has(.platform-appearance-page) { background:transparent !important; }
   .app-shell-root:has(.records-app.is-settings) .app-shell-header,
   .app-shell-root:has(.records-app.is-settings) .app-shell-footer { display:none; }
   /* Chrome 底栏只在文档滚动时收起。内部滚动会把「应用授权」留在底栏下面，所以手机设置改为文档滚动。 */

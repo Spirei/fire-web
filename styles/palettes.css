@@ -51,7 +51,7 @@
 }
 /* Main semantic surfaces; content imagery and financial up/down colors keep their meaning. */
 html:root[data-palette] body { background-color: rgb(var(--site-bg)); color: rgb(var(--site-ink)); }
-html:root[data-palette] .app-shell-root { background-color: rgb(var(--site-bg)); color: rgb(var(--site-ink)); }
+html:root[data-palette] .app-shell-root { background-color: var(--workspace-page-bg, rgb(var(--site-bg))); color: rgb(var(--site-ink)); }
 html:root[data-palette] :is(.bg-white, .card) { background-color: rgb(var(--site-surface)); }
 html:root[data-palette] .bg-bg-gray { background-color: rgb(var(--site-bg)); }
 html:root[data-palette] :is(.bg-brand-hover, .bg-brand-light) { background-color: rgb(var(--site-soft)); }
@@ -295,7 +295,7 @@ html:root[data-palette] .bg-brand-light\/90 { background-color: rgb(var(--site-s
 html:root[data-palette] .bg-brand-light\/95 { background-color: rgb(var(--site-soft) / 0.95); }
 html:root[data-palette] .hover\:bg-bg-gray:hover, html:root[data-palette] .hover\:bg-brand-hover:hover { background-color: rgb(var(--site-soft)); }
 /* Shell, navigation and record surfaces predate semantic Tailwind colors. */
-html:root[data-palette] :is(.app-shell-main, .records-app, .records-content) { background: rgb(var(--site-bg)); }
+html:root[data-palette] :is(.app-shell-main, .records-app, .records-content) { background: var(--workspace-page-bg, rgb(var(--site-bg))); }
 html:root[data-palette] :is(.app-shell-header, .site-header, .fire-sidebar) {
   background: rgb(var(--site-surface)); border-color: rgb(var(--site-edge)); color: rgb(var(--site-ink));
 }

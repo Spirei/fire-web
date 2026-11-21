@@ -59,6 +59,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const dark = (themeMode === "system" ? cookieTheme : themeMode) === "dark";
   const settings = await getSiteSettings();
   const palette = resolvePalette(prefs[PALETTE_KEY]);
+  const appearance = platformAppearanceServer(prefs[PLATFORM_APPEARANCE_KEY]);
 
   return (
     /* 禁止整页翻译：翻译器会在水合前改写服务端 HTML（连 title 属性都会改，比如把「繁體」改成「繁体」），
@@ -74,12 +75,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       data-palette={palette.id}
       data-accent={resolveAccent(prefs[ACCENT_KEY]).id}
       data-theme-mode={themeMode}
-      data-platform-align={platformAppearanceServer(prefs[PLATFORM_APPEARANCE_KEY]).align}
-      data-platform-reduced={platformAppearanceServer(prefs[PLATFORM_APPEARANCE_KEY]).reduced}
-      data-platform-pointer={platformAppearanceServer(prefs[PLATFORM_APPEARANCE_KEY]).pointer}
-      data-platform-translucent={platformAppearanceServer(prefs[PLATFORM_APPEARANCE_KEY]).translucent}
+      data-platform-align={appearance.align}
+      data-platform-reduced={appearance.reduced}
+      data-platform-pointer={appearance.pointer}
+      data-platform-translucent={appearance.translucent}
+      data-platform-pixel-background={appearance.pixelBackground}
       data-material={palette.glass ? "glass" : "solid"}
-      style={{ ...paletteVariables(palette.id), ...accentVariables(prefs[ACCENT_KEY]), ...typographyVariables(prefs[FONT_KEY], prefs[FONT_WEIGHT_KEY]), ...platformAppearanceServer(prefs[PLATFORM_APPEARANCE_KEY]).style }}
+      style={{ ...paletteVariables(palette.id), ...accentVariables(prefs[ACCENT_KEY]), ...typographyVariables(prefs[FONT_KEY], prefs[FONT_WEIGHT_KEY]), ...appearance.style }}
     >
       <head>
         <style>{customFontCss(prefs[FONT_KEY])}</style>

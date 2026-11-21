@@ -34,7 +34,7 @@ export default async function LoginPage({
   const settings = await getSiteSettings();
   const logoFontCls = logoFontClass(settings.logoFont);
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-bg-gray/70 px-4 py-10 dark:bg-[#0a0e19]">
+    <div className="site-login-shell flex min-h-screen flex-col items-center justify-center bg-bg-gray/70 px-4 py-10 dark:bg-[#0a0e19]">
       {/* 左右分栏大卡片（参考长桥登录页：左品牌区 + 右表单区） */}
       <div className="flex w-full max-w-[940px] overflow-hidden rounded-[22px] border border-edge bg-white shadow-[0_24px_60px_rgba(10,14,25,.12)] dark:border-[#2a3140] dark:bg-[#12161f]">
         {/* 左侧品牌区（桌面端显示） */}

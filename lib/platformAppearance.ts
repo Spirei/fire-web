@@ -12,5 +12,5 @@ export function platformAppearanceServer(raw: unknown) {
             if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value))
                 style[`--site-${name}-${mode}`] = [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16)).join(' ');
         }
-    return { style, align: p.align === 'center' ? 'center' : 'left', reduced: String(p.reduced === true), pointer: String(p.pointer === true), translucent: String(p.translucent !== false) };
+    return { style, align: p.align === 'center' ? 'center' : 'left', reduced: String(p.reduced === true), pointer: String(p.pointer === true), translucent: String(p.translucent !== false), pixelBackground: String(p.pixelBackground !== false) };
 }

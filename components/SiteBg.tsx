@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import SitePixelBackground from "@/components/SitePixelBackground";
 
 export default function SiteBg() {
   const pathname = usePathname();
@@ -29,5 +30,5 @@ export default function SiteBg() {
     return () => { active = false; window.removeEventListener("fire:settings-updated", apply); };
   }, [pathname]);
 
-  return null;
+  return <SitePixelBackground key={pathname} />;
 }

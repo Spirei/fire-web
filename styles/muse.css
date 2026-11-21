@@ -20,7 +20,8 @@ html:root.dark[data-palette="muse"] body:has([data-capsule-scope="non-home"]){
 /* Mail template picker sits on the bright Muse action blue. Label and chevron stay white together. */
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .mail-template-toolbar .btn,
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .mail-template-toolbar .btn .text-muted{color:#fff!important}
-html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.app-shell-root,.app-shell-main,.app-shell-header,.site-header,.records-app,.records-content,.rq-page){background:var(--muse-bg)!important;color:var(--muse-ink)}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.app-shell-root,.app-shell-main,.records-app,.records-content){background:var(--workspace-page-bg,var(--muse-bg))!important;color:var(--muse-ink)}
+html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.app-shell-header,.site-header,.rq-page){background:var(--muse-bg)!important;color:var(--muse-ink)}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.card,.bg-white,.appearance-card,.rq-card){background:var(--muse-surface)!important;border-color:var(--muse-edge)!important;box-shadow:none!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) :is(.text-ink,.text-ink-2){color:var(--muse-ink)!important}
 html:root[data-palette="muse"] body:has([data-capsule-scope="non-home"]) .text-muted{color:var(--muse-muted)!important}
