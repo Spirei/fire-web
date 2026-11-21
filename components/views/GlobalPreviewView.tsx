@@ -1,7 +1,8 @@
 "use client";
 import type { FxRatesInitial } from "@/lib/fxRatesClient";
+import { IconCoin, IconExternalLink, IconRefresh } from "@tabler/icons-react";
 import DataUnavailable from "@/components/DataUnavailable";
-import { CapsuleLink } from "@/components/Capsule";
+import { Capsule, CapsuleLink } from "@/components/Capsule";
 import { readFailure } from "@/lib/readFailure";
 import Pagination from "@/components/Pagination";
 
@@ -13,7 +14,8 @@ import MarketCalendarView from "@/components/MarketCalendarView";
 import { fmtPct } from "@/lib/format";
 import MarketIcon from "@/components/MarketIcon";
 import { ensureStockIcons, useAssetIcons } from "@/lib/useAssetIcons";
-import { marketCapLibraryIcon, marketCapStockKey } from "@/lib/marketCapIcons";
+import { marketCapLibraryIcon, marketCapStockKey, type RankedAsset } from "@/lib/marketCapIcons";
+import { compareMarketCapRanks } from "@/lib/marketCapRankHistory";
 import SafeAssetImage from "@/components/SafeAssetImage";
 import CurrencySelect from "@/components/CurrencySelect";
 import { useDisplayCurrency, type CurrencyCode } from "@/lib/currencyPrefs";
@@ -21,18 +23,23 @@ import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { sharedRead } from "@/lib/sharedRead";
 import { readMiniKline, writeMiniKline, validCloses } from "@/lib/miniKlineCache";
 import GlobalSectionNav, { type GlobalSection } from "@/components/GlobalSectionNav";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 
-interface TopAsset {
-  market: string;
-  code: string;
+interface TopAsset extends RankedAsset {
   name: string;
   marketCap: number;
   price: number | null;
   changePct: number | null;
   logo: string;
-  type?: "stock" | "crypto" | "metal";
-  rankChange?: number | null;
 }
+
+type MarketCapSnapshot = { items: TopAsset[]; at: number; changes: (number | null)[]; comparedAt?: number };
+const RANK_CACHE_KEY = "fire:topstocks:rank:v2";
+const MARKET_CAP_SOURCE = "https://companiesmarketcap.com/assets-by-market-cap/";
+const NO_MARKET_CAP_SNAPSHOT = "本站暂无可展示的市值快照";
+const MARKET_CAP_TIME = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
 
 // 全球资产中文名（覆盖榜单常见项，未收录的保持英文）
 const NAME_ZH: Record<string, string> = {
@@ -92,43 +99,12 @@ function fmtPrice(price: number, rate: number, symbol: string, currency: Currenc
 }
 
 // ---------- 月 K mini 图（后端代理新浪日 K 聚合月收盘，懒加载 + 缓存） ----------
-const RANK_CACHE_KEY = "fire:topstocks:rank";
-const MARKET_CAP_SOURCE = "https://companiesmarketcap.com/assets-by-market-cap/";
-
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function loadDailyRank(): { date: string; rank: Record<string, number> } | null {
-  try {
-    const raw = localStorage.getItem(RANK_CACHE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { date?: unknown; rank?: unknown };
-      if (parsed && typeof parsed.date === "string" && parsed.rank && typeof parsed.rank === "object") {
-        return { date: parsed.date, rank: parsed.rank as Record<string, number> };
-      }
-    }
-  } catch {
-    /* 忽略 */
-  }
-  return null;
-}
-
-function saveDailyRank(date: string, rank: Record<string, number>) {
-  try {
-    localStorage.setItem(RANK_CACHE_KEY, JSON.stringify({ date, rank }));
-  } catch {
-    /* 忽略 */
-  }
-}
-
-const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
+const MiniKline = memo(function MiniKline({ market, code }: { market: string; code: string }) {
   // 首帧不画（服务端也没有本地缓存）：挂载后、绘制前再恢复缓存，避免水合不一致
   const [points, setPoints] = useState<number[] | null>(null);
   useLayoutEffect(() => {
-    setPoints(readMiniKline(item.market, item.code));
-  }, [item.market, item.code]);
+    setPoints(readMiniKline(market, code));
+  }, [market, code]);
   const holderRef = useRef<HTMLSpanElement>(null);
   const [inView, setInView] = useState(false);
 
@@ -151,16 +127,14 @@ const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
 
   useEffect(() => {
     if (points || !inView) return;
-    if (item.type === "crypto" || item.type === "metal") return;
-    if (item.market !== "US" && item.market !== "CN") return;
     let cancelled = false;
-    sharedRead(`/api/kline?market=${encodeURIComponent(item.market)}&code=${encodeURIComponent(item.code)}`)
+    sharedRead(`/api/kline?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (cancelled) return;
         const closes: number[] = Array.isArray(data?.closes) ? data.closes : [];
         if (validCloses(closes)) {
-          writeMiniKline(item.market, item.code, closes);
+          writeMiniKline(market, code, closes);
           setPoints(closes);
         }
       })
@@ -168,7 +142,7 @@ const MiniKline = memo(function MiniKline({ item }: { item: TopAsset }) {
     return () => {
       cancelled = true;
     };
-  }, [item.market, item.code, item.type, points, inView]);
+  }, [market, code, points, inView]);
 
   if (!points || points.length < 2) return <span ref={holderRef} className="inline-block h-[22px] w-[60px]" />;
   const min = Math.min(...points);
@@ -196,80 +170,77 @@ function AssetLogo({ item, custom }: { item: TopAsset; custom?: string }) {
   } />;
 }
 
-function EmptyMarketIcon() {
+function EmptyMarketIcon({ label }: { label: string }) {
   return (
     <span
       className="inline-flex h-[18px] w-[18px] flex-none items-center justify-center text-[13px] leading-none text-faint"
-      title="无所属市场"
-      aria-label="无所属市场"
+      title={label}
+      role="img"
+      aria-label={label}
     >
       −
     </span>
   );
 }
 
-
-
 function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
   const { stockIcons, assetIcons } = useAssetIcons(["stock", "crypto", "metal"]);
-  const [items, setItems] = useState<TopAsset[]>([]);
+  const [snapshot, setSnapshot] = useState<MarketCapSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [readAttempt, setReadAttempt] = useState(0);
   const [page, setPage] = useState(1);
   const { currency, rate, symbol } = useDisplayCurrency();
+  const foreground = useWorkspaceForeground();
+  const rateReady = Number.isFinite(rate) && rate > 0;
+  const retry = () => setReadAttempt(value => value + 1);
 
   useEffect(() => {
+    if (!foreground) return;
     let cancelled = false;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
     setLoading(true);
-    fetch("/api/top-stocks?market=ALL", {signal:controller.signal,cache:"no-store"})
+    fetch("/api/top-stocks?market=ALL", { signal: controller.signal, cache: "no-store" })
       .then(async res => {
-        const data = await res.json();
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
         if (!res.ok) {
           const detail = readFailure(data, "全球市值排行暂不可用");
-          if (res.status === 503 && detail.startsWith("公共发现")) {
-            if (!cancelled) setItems([]);
-            throw new Error("本站暂无可展示的市值快照");
+          if (res.status === 401 || res.status === 403 || res.status === 503) {
+            setSnapshot(null);
+            if (res.status === 503 && detail.startsWith("公共发现")) throw new Error(NO_MARKET_CAP_SNAPSHOT);
           }
           throw new Error(detail);
         }
-        return data;
-      })
-      .then((data) => {
-        if (cancelled) return;
-        if (Array.isArray(data?.items) && data.items.length > 0) {
-          // 排名对比基准每天只更新一次：同一天内多次刷新都对比当日基准，跨天时用昨日基准并刷新为新一天
-          const today = todayStr();
-          const daily = loadDailyRank();
-          const baseline = daily ? daily.rank : null;
-          const nextRank: Record<string, number> = {};
-          const rankedItems: TopAsset[] = data.items.map((it: TopAsset, i: number) => {
-            nextRank[it.code] = i + 1;
-            const prev = baseline ? baseline[it.code] : undefined;
-            return { ...it, rankChange: prev === undefined ? null : prev - (i + 1) };
-          });
-          if (!daily || daily.date !== today) {
-            saveDailyRank(today, nextRank);
-          }
-          setItems(rankedItems);
-          setErr("");
-        } else {
-          setItems([]);
-          setErr("本站暂无可展示的市值快照");
+        if (!Array.isArray(data?.items)) throw new Error("榜单响应无法读取");
+        if (!data.items.length) {
+          setSnapshot(null);
+          throw new Error(NO_MARKET_CAP_SNAPSHOT);
         }
+        const items: TopAsset[] = data.items;
+        const at = typeof data.updatedAt === "string" ? Date.parse(data.updatedAt) : NaN;
+        let saved: unknown;
+        try { saved = JSON.parse(localStorage.getItem(RANK_CACHE_KEY) ?? "null"); } catch { /* Storage is optional. */ }
+        const { changes, history, comparedAt } = compareMarketCapRanks(items, at, saved);
+        if (history) {
+          try { localStorage.setItem(RANK_CACHE_KEY, JSON.stringify(history)); } catch { /* Storage is optional. */ }
+        }
+        setSnapshot({ items, at, changes, comparedAt });
+        setErr("");
       })
-      .catch(error => !cancelled && setErr(controller.signal.aborted ? "读取超时，请重新读取" : error instanceof Error ? error.message : "无法读取全球市值排行"))
+      .catch(error => !cancelled && setErr(controller.signal.aborted ? "读取超时，请重新读取" : error instanceof TypeError ? "连接失败，请重新读取" : error instanceof Error ? error.message : "无法读取全球市值排行"))
       .finally(() => { clearTimeout(timer); if (!cancelled) setLoading(false); });
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
-  }, [readAttempt]);
+  }, [foreground, readAttempt]);
 
   useEffect(() => {
-    void ensureStockIcons(items.flatMap(item => { const key = marketCapStockKey(item); return key ? [key] : []; }));
-  }, [items]);
+    if (!foreground || !snapshot) return;
+    void ensureStockIcons(snapshot.items.flatMap(item => { const key = marketCapStockKey(item); return key ? [key] : []; }));
+  }, [foreground, snapshot]);
 
   // 首页内嵌时每页展示 pageSize 条
+  const items = snapshot?.items ?? [];
   const totalPages = pageSize ? Math.max(1, Math.ceil(items.length / pageSize)) : 1;
   const safePage = Math.min(page, totalPages);
   const displayItems = pageSize ? items.slice((safePage - 1) * pageSize, safePage * pageSize) : items;
@@ -277,107 +248,115 @@ function AssetMarketCapRanking({ pageSize }: { pageSize?: number }) {
     setPage(1);
   }, [pageSize]);
 
+  const comparedAt = snapshot?.comparedAt;
+  const comparisonDate = comparedAt === undefined ? null : MARKET_CAP_TIME.format(comparedAt);
   return (
-    <div className="flex flex-col gap-4">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2.5">
+    <div className="flex min-w-0 flex-col gap-4">
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 space-y-1">
           <h2 className="min-w-0 text-lg font-bold">全球资产市值排行</h2>
-          <CurrencySelect align="left" />
+          {snapshot && <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+            <a className="inline-flex items-center gap-1 hover:underline" href={MARKET_CAP_SOURCE} target="_blank" rel="noreferrer">
+              CompaniesMarketCap <IconExternalLink size={12} aria-hidden="true" />
+            </a>
+            {Number.isFinite(snapshot.at) ? <time dateTime={new Date(snapshot.at).toISOString()}>
+              {`采集于 ${MARKET_CAP_TIME.format(snapshot.at)}（北京时间）`}
+            </time> : <span>采集时间未提供</span>}
+          </p>}
         </div>
-        {items.length > 0 && <p className="mt-0.5 text-xs text-muted">
-          {`全球市值前 ${items.length} 名 · 市值与价格有延迟 · `}
-          <a className="underline underline-offset-2" href={MARKET_CAP_SOURCE} target="_blank" rel="noreferrer">CompaniesMarketCap</a>
-        </p>}
-      </div>
+        {snapshot && <div className="flex w-full flex-none items-center gap-2 sm:w-auto">
+          <CurrencySelect align="right" />
+          <Capsule variant="secondary" size="sm" busy={loading} onClick={retry} aria-label="重新读取榜单" title="重新读取榜单">
+            <IconRefresh size={16} className={loading ? "motion-safe:animate-spin" : undefined} aria-hidden="true" />
+          </Capsule>
+        </div>}
+      </header>
 
-      {err && items.length > 0 && <p role="status" className="text-xs text-muted">{err}，保留上次数据。</p>}
-      {loading && items.length === 0 ? (
-        <div className="space-y-2.5" role="status" aria-label="正在读取全球市值排行">
-          <p className="text-sm text-muted">正在读取全球市值排行…</p>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-[60px] animate-pulse rounded-[12px] bg-bg-gray" />
-          ))}
+      {err && snapshot && <p role="status" className="text-xs text-muted">{err}。正在显示上次读取的快照。</p>}
+      {snapshot && !rateReady && <p role="status" className="text-xs text-muted">暂缺 {currency} 汇率，可切换到 USD 查看金额。</p>}
+      {!snapshot ? (
+        <div className="grid min-h-[224px] place-items-center rounded-card border border-edge bg-white">
+          {err ? <DataUnavailable title={err === NO_MARKET_CAP_SNAPSHOT ? "暂无市值快照" : "市值排行暂不可用"}
+            detail={err === NO_MARKET_CAP_SNAPSHOT ? undefined : err} onRetry={retry} retrying={loading}
+            action={<CapsuleLink href={MARKET_CAP_SOURCE} target="_blank" rel="noreferrer" variant="secondary" size="sm">查看来源榜单 <IconExternalLink size={14} aria-hidden="true" /></CapsuleLink>} /> : (
+            <p className="flex items-center gap-2 text-sm text-muted" role="status">
+              <IconRefresh size={16} className="motion-safe:animate-spin" aria-hidden="true" /> 正在读取全球市值排行…
+            </p>
+          )}
         </div>
-      ) : err && items.length === 0 ? (
-        <DataUnavailable title="市值排行暂不可用" detail={err} onRetry={() => setReadAttempt(value => value + 1)}
-          action={<CapsuleLink href={MARKET_CAP_SOURCE} target="_blank" rel="noreferrer" variant="secondary" size="sm">查看来源榜单</CapsuleLink>} />
       ) : (
         <div className="overflow-hidden rounded-card border border-edge bg-white shadow-card">
-          <div className="data-table-scroll">
-            <table className="mobile-global-table w-full min-w-[800px] table-fixed text-sm">
+          <div className="data-table-scroll focus-visible:outline-offset-[-2px]" tabIndex={0} role="region" aria-label="市值排行表格">
+            <table className="mobile-global-table w-full min-w-[720px] table-fixed text-sm">
+              <caption className="sr-only">全球资产市值排行，{items.length} 项</caption>
               <colgroup>
-                <col className="w-[54px]" /><col className="w-[184px]" /><col className="w-[112px]" /><col className="w-[104px]" /><col className="w-[116px]" /><col className="w-[158px]" /><col className="w-[72px]" />
+                <col className="w-[48px]" /><col className="w-[174px]" /><col className="w-[135px]" /><col className="w-[106px]" /><col className="w-[94px]" /><col className="w-[94px]" /><col className="w-[69px]" />
               </colgroup>
               <thead>
                 <tr className="whitespace-nowrap bg-bg-gray text-xs font-semibold text-muted">
-                  <th className="px-3 py-3 text-center">排名</th>
-                  <th className="px-3 py-3 text-left">资产</th>
-                  <th className="px-3 py-3 text-right">现价</th>
-                  <th className="min-w-[96px] px-5 py-3 text-center">涨跌幅</th>
-                  <th className="px-4 py-3 text-center">月K</th>
-                  <th className="min-w-[128px] px-5 py-3 text-center">市值</th>
-                  <th className="px-4 py-3 text-center">市场</th>
+                  <th scope="col" className="py-3 text-center">排名</th>
+                  <th scope="col" className="px-2 py-3 text-left">资产</th>
+                  <th scope="col" className="px-2 py-3 text-right">市值 <span className="font-normal">{currency}</span></th>
+                  <th scope="col" className="px-3 py-3 text-right">现价</th>
+                  <th scope="col" className="px-2 py-3 text-center">涨跌幅</th>
+                  <th scope="col" className="px-2 py-3 text-center">月 K</th>
+                  <th scope="col" className="px-2 py-3 text-center">市场</th>
                 </tr>
               </thead>
               <tbody>
                 {displayItems.map((it, i) => {
                   const up = (it.changePct ?? 0) >= 0;
-                  const rankNo = (safePage - 1) * (pageSize || 100) + i + 1;
+                  const rankNo = (safePage - 1) * (pageSize ?? 0) + i + 1;
+                  const rankChange = snapshot.changes[rankNo - 1];
+                  const stock = marketCapStockKey(it);
+                  const libraryIcon = marketCapLibraryIcon(it, stockIcons, assetIcons);
                   const rankColor = rankNo === 1 ? "#f5a623" : rankNo === 2 ? "#9aa3ad" : rankNo === 3 ? "#c8864a" : "#9298a1";
-                  const rankSize = rankNo === 1 ? "text-[18px] font-bold" : rankNo === 2 ? "text-[15px] font-bold" : rankNo === 3 ? "text-[12px] font-semibold" : "text-[12px] font-semibold";
+                  const rankSize = rankNo === 1 ? "text-[18px] font-bold" : rankNo === 2 ? "text-[15px] font-bold" : "text-[12px] font-semibold";
                   return (
-                    <tr key={`${it.market}-${it.code}`} className="whitespace-nowrap border-t border-edge transition-colors hover:bg-[#fafbfc] dark:hover:bg-[#1a212e]">
-                      <td className="px-3 py-3 text-center">
+                    <tr key={`${it.type}-${it.market}-${it.code}-${rankNo}`} className="whitespace-nowrap border-t border-edge transition-colors hover:bg-bg-gray">
+                      <td className="py-3 text-center">
                         <span className={`inline-block w-[28px] text-center tabular-nums leading-none ${rankSize}`} style={{ color: rankColor }}>
                           {rankNo}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-left">
-                        <div className="flex items-center justify-start gap-2.5">
-                          <AssetLogo item={it} custom={marketCapLibraryIcon(it, stockIcons, assetIcons)} />
+                      <td className="px-2 py-3 text-left">
+                        <div className="flex items-center gap-2">
+                          <AssetLogo item={it} custom={libraryIcon} />
                           <span className="min-w-0 max-w-[126px]">
-                            <span className="block truncate font-semibold text-ink">{zhName(it)}</span>
-                            <span className="mt-0.5 flex items-center gap-1.5"><MarketCodeBadge market={it.market} code={it.code} /><span className="text-[11px] text-faint">{it.code}</span></span>
+                            <span className="block truncate font-semibold text-ink" title={it.name}>{zhName(it)}</span>
+                            <span className="mt-0.5 flex items-center gap-1.5">
+                              {stock && <MarketCodeBadge market={stock.market} code={stock.code} />}
+                              <span className="truncate text-[11px] text-muted" title={it.code}>{it.code}</span>
+                            </span>
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-right font-medium tabular-nums text-ink-2">{it.price != null ? fmtPrice(it.price, rate, symbol, currency) : "—"}</td>
-                      <td className={`px-4 py-3 text-center tabular-nums ${it.changePct == null ? "text-faint" : up ? "text-up" : "text-down"}`}>
-                        {it.changePct == null ? "—" : `${up ? "+" : ""}${fmtPct(it.changePct / 100)}`}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <MiniKline item={it} />
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span className="font-semibold tabular-nums text-ink">{fmtMoney(it.marketCap, rate, symbol, currency)}</span>
-                          {it.rankChange != null && (
+                      <td className="px-2 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {rankChange && comparisonDate ? (
                             <span
-                              title={it.rankChange > 0 ? `较上次上升 ${it.rankChange} 位` : it.rankChange < 0 ? `较上次下降 ${Math.abs(it.rankChange)} 位` : "排名无变化"}
-                              className={`inline-flex flex-none items-center gap-0.5 rounded-[5px] px-1 py-px text-[10px] font-bold leading-none ${
-                                it.rankChange > 0 ? "bg-up-bg text-up" : it.rankChange < 0 ? "bg-down-bg text-down" : "bg-bg-gray text-faint"
-                              }`}
+                              title={`较 ${comparisonDate}（北京时间）${rankChange > 0 ? "上升" : "下降"} ${Math.abs(rankChange)} 位`}
+                              className={`flex-none rounded px-1 py-0.5 text-[10px] font-semibold leading-none ${rankChange > 0 ? "bg-up-bg text-up" : "bg-down-bg text-down"}`}
                             >
-                              {it.rankChange > 0 ? "↑" : it.rankChange < 0 ? "↓" : "—"}
-                              {it.rankChange !== 0 && Math.abs(it.rankChange)}
+                              {rankChange > 0 ? "↑" : "↓"}{Math.abs(rankChange)}
                             </span>
-                          )}
+                          ) : null}
+                          <span className="font-semibold tabular-nums text-ink">{rateReady ? fmtMoney(it.marketCap, rate, symbol, currency) : "—"}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-3 text-right font-medium tabular-nums text-ink-2">{rateReady && it.price != null ? fmtPrice(it.price, rate, symbol, currency) : "—"}</td>
+                      <td className={`px-2 py-3 text-center tabular-nums ${it.changePct == null || it.changePct === 0 ? "text-muted" : up ? "text-up" : "text-down"}`}>
+                        {it.changePct == null ? "—" : `${it.changePct > 0 ? "+" : ""}${fmtPct(it.changePct / 100)}`}
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        {stock && (stock.market === "US" || stock.market === "CN") ? <MiniKline {...stock} /> : <span className="text-muted">—</span>}
+                      </td>
+                      <td className="px-2 py-3 text-center">
                         <span className="inline-flex h-[18px] w-[18px] items-center justify-center align-middle">
-                          {it.type === "crypto" ? (
-                            (assetIcons[it.code.toUpperCase()] ?? assetIcons["BTC"]) ? (
-                              <img src={assetIcons[it.code.toUpperCase()] ?? assetIcons["BTC"]} alt="" title="加密货币" className="block h-[18px] w-[18px] rounded-full object-cover" />
-                            ) : (
-                              <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#f7931a] text-[10px] font-bold text-white" title="加密货币">
-                                ₿
-                              </span>
-                            )
-                          ) : it.type === "metal" || !/^[A-Z]{2}$/.test(it.market.trim().toUpperCase()) ? (
-                            <EmptyMarketIcon />
+                          {stock ? <MarketIcon market={stock.market} size={18} /> : it.type === "crypto" ? (
+                            <span role="img" aria-label="加密货币" title="加密货币" className="text-muted"><IconCoin size={18} aria-hidden="true" /></span>
                           ) : (
-                            <MarketIcon market={it.market} size={18} />
+                            <EmptyMarketIcon label={it.type === "metal" ? "贵金属" : "市场未确认"} />
                           )}
                         </span>
                       </td>
