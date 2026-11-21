@@ -93,6 +93,7 @@ def discovery(version):
         'hk_board_lot': {'version': 1, 'path': base + '/hk-board-lot', 'read_scope': 'portfolio.read'},
         'market_amount_ranking': {
             'version': 1, 'path': base + '/market-ranking', 'markets': ['US', 'HK', 'CN'], 'metric': 'amount',
+            **({'prepared_read': True} if version == 2 else {}),
         },
         'stock_history': {
             'version': 1, 'path': base + '/stock-detail', 'view': 'history',

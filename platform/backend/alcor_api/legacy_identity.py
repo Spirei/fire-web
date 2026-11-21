@@ -314,7 +314,9 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
         value['account_sync'] = account_sync_discovery()
         if version == 2:
             from .personal_ledger_archive import native_files_discovery
+            from .native_portfolio_analysis import discovery as portfolio_analysis_discovery
             value['investment_files'] = native_files_discovery()
+            value['portfolio_analysis_days'] = portfolio_analysis_discovery()
         return value
 
     @app.get('/api/v{version}/auth/config', tags=['legacy-native-identity'])

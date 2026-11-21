@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
+from alcor_api.cli import create_user
 from alcor_api.fx_reference import persist as store_fx
 from alcor_api.market_calendar import Calendars
 from alcor_api.market_contract import Query, canonical
@@ -10,7 +11,9 @@ from alcor_api.market_history_reads import LicensedHistory
 from alcor_api.market_worker import claim, execute, schedule
 from alcor_api.personal_data_transfer import digest
 from alcor_api.portfolio_daily import capture_day, capture_due
+from alcor_api.portfolio_daily_history import prepare_due
 from test_cash_ledger import command, submit
+from test_legacy_trade_corrections import native_headers
 from test_trading import setup
 
 from .test_market_authority import demand, market, market_settings  # noqa: F401
@@ -26,7 +29,27 @@ class DailySource:
                           "facts": facts, "nextCursor": None}).encode(), "controlled_source_body"
 
 
-async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap(market):  # noqa: F811
+async def test_worker_prepares_held_security_without_a_client_history_request(market):  # noqa: F811
+    client, _, authority, _, source_revision = market
+    account, _ = await setup(client, qty="2", cost="95")
+    await Calendars(authority.db).ensure_builtin()
+    await prepare_due(authority, date(2026, 10, 20))
+    await prepare_due(authority, date(2026, 10, 20))
+    assert await schedule(authority) == 1
+    task = await claim(authority.db, uuid4(), kind="market.history")
+    assert task and await execute(authority, task, DailySource()) == "complete"
+    async with authority.db.connection() as conn:
+        rows = await (await conn.execute("""
+            SELECT s.source_revision,s.query,d.origin FROM market_streams s
+            JOIN market_demands d ON d.owner_id=s.owner_id AND d.stream_id=s.id
+            JOIN broker_accounts b ON b.owner_id=s.owner_id AND b.id=%s
+            WHERE d.origin='portfolio.daily'
+        """, (account,))).fetchall()
+    assert len(rows) == 1 and str(rows[0]["source_revision"]) == source_revision
+    assert rows[0]["query"]["through"] == "2026-10-20"
+
+
+async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap(market, tmp_path):  # noqa: F811
     client, app, authority, _, source_revision = market
     # This isolated test supplies the same source authorization for the records API.
     app.state.market_authority.policies = authority.policies
@@ -89,6 +112,35 @@ async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap
     await capture_due(db, history, now=now)
     caught_up = (await client.get(route, params={"day": "2026-10-18"})).json()
     assert caught_up["day"] == "2026-10-18" and caught_up["revision"] == 1
+
+    contract = (await client.get("/api/v2/auth/config")).json()["data"]["portfolio_analysis_days"]
+    path = contract["path"]
+    assert contract == {"version": 1, "path": "/api/v2/account-assets/analysis-days", "read_scope": "portfolio.read"}
+    assert (await client.get(path)).status_code == 401
+    headers = await native_headers(db, owner)
+    prepared = await client.get(path, headers=headers)
+    assert prepared.status_code == 200, prepared.text
+    assert "no-store" in prepared.headers["cache-control"]
+    data = prepared.json()["data"]
+    assert data["accountId"] == owner and data["basis"] == "settled_real_ledger_v1"
+    days = {row["day"]: row for row in data["items"]}
+    latest = days["2026-10-20"]
+    assert Decimal(latest["pnl"]) == 6 and Decimal(latest["equity"]) == Decimal("1218.25")
+    assert Decimal(latest["calendar"]["profit"]["USD"]) == 6 and "rows" not in latest["calendar"]
+    detail = await client.get(path, headers=headers, params={"day": "2026-10-20"})
+    assert detail.status_code == 200, detail.text
+    assert len(detail.json()["data"]["items"]) == 1
+    [gain] = detail.json()["data"]["items"][0]["calendar"]["rows"]
+    assert gain["recordId"] == record["id"] and Decimal(gain["profit"]) == 6
+    (tmp_path / "native-prepared-analysis.json").write_bytes(prepared.content)
+    assert (await client.get(path, headers=headers, params={"day": "2026-10-20", "before": "2026-10-21"})).status_code == 400
+    other = await create_user(db.settings, "OtherDaily", "Synthetic9Pass", email="other-daily@example.invalid")
+    other_headers = await native_headers(db, other)
+    assert (await client.get(path, headers=other_headers)).json()["data"]["items"] == []
+    assert (await client.get(path, headers={**other_headers, "x-alcor-expected-account": owner})).status_code == 403
+    await submit(client, command(account, action="external_deposit", amount="1", occurredAt="2026-10-20T14:00:00Z"))
+    stale = (await client.get(path, headers=headers, params={"day": "2026-10-20"})).json()["data"]["items"][0]
+    assert stale["retired"] and stale["equity"] is None and stale["calendar"] is None
 
 
 async def test_same_day_fx_stays_frozen_when_cash_is_revised(market):  # noqa: F811

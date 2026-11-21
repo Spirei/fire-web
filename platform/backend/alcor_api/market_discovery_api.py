@@ -24,7 +24,8 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
         targets=tuple(Target(**value).validate() for value in configured)
     service=Discovery(authority,targets,transport)
     app.state.market_discovery=service
-    app.state.legacy_amount_ranking = None if settings.environment == 'test' else LegacyAmountRanking(authority.db)
+    app.state.prepared_amount_ranking = LegacyAmountRanking(authority.db)
+    app.state.legacy_amount_ranking = None if settings.environment == 'test' else app.state.prepared_amount_ranking
 
     async def member(request,version=None,write=False):
         assert_native_origin(request,settings)
@@ -164,10 +165,11 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
                     return response({'code':0,'message':'ok','data':data} if version else data,request)
             if 'x-alcor-market-source' not in request.headers:
                 public = getattr(app.state,'public_discovery',None)
-                live_amount = app.state.legacy_amount_ranking
+                prepared_only = version == 2 and request.query_params.get('prepared') == 'true'
+                live_amount = app.state.prepared_amount_ranking if prepared_only else app.state.legacy_amount_ranking
                 if (live_amount is not None and kind=='ranking' and value['metric']=='amount'
                         and (public is None or not public.has_scope(value))):
-                    data = await live_amount.read(value['market'])
+                    data = await live_amount.read(value['market'], prepared_only=prepared_only)
                     return response({'code':0,'message':'ok','data':data},request)
                 if public is None:
                     raise HTTPException(503,'公共发现再分发许可尚未配置')

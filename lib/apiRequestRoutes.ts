@@ -264,6 +264,7 @@ export const API_REQUEST_ROUTES = [
   "/api/v1/watch-groups/[id]/icon",
   "/api/v1/watch-groups/reorder",
   "/api/v2/account-assets",
+  "/api/v2/account-assets/analysis-days",
   "/api/v2/account-assets/cash",
   "/api/v2/account-assets/fee-repairs",
   "/api/v2/account-assets/fee-repairs/preview",

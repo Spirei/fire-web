@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 from .card_preferences_protocol import wire_response
 from .market_contract import CURRENCIES, ZONES
 from .market_history_evidence import verify_history_rows
+from .native_portfolio_analysis import calendar_result
 from .personal_data_transfer import digest
 from .personal_ledger_archive import PRIVATE, investment_file_actor
 from .portfolio_series import packed
@@ -24,6 +25,8 @@ MAX_POSITIONS = 200
 MAX_POSTINGS = 20000
 CAPTURE_DELAY = timedelta(minutes=30)
 REGULAR_CLOSE = {"US": time(16), "HK": time(16, 10), "CN": time(15)}
+DISPLAY_CURRENCIES = {"USD", "EUR", "HKD", "MOP", "CNY", "JPY", "KRW", "SGD", "GBP", "AUD", "CAD",
+                      "TWD", "CHF", "INR", "BRL"}
 
 
 def boundary(day):
@@ -222,7 +225,7 @@ async def calculate(conn, history, owner, kind, day):
         if row["affects_owner"] and row["kind"] in ("external_deposit", "external_withdrawal", "opening"):
             external[row["currency"]] += row["amount"]
     currencies = {code for group in (cash, stock_values, external) for code, value in group.items() if value}
-    fx = await fx_inputs(conn, currencies, day, cutoff)
+    fx = await fx_inputs(conn, currencies | DISPLAY_CURRENCIES, day, cutoff)
     for code in sorted(currencies - fx.keys()):
         issue("missing_historical_fx", currency=code)
     value = None
@@ -252,6 +255,8 @@ async def calculate(conn, history, owner, kind, day):
                 issue("unattributed_position_change", recordId=rid)
     flow = None if currencies - fx.keys() else sum((amount / Decimal(fx[code]["rate"]) for code, amount in sorted(external.items()) if amount), Decimal(0))
     pnl = value - Decimal(old_value) - flow if not missing else None
+    calendar = await calendar_result(conn, owner, kind, day, prior["result"]["positions"],
+                                     positions, daily_postings) if pnl is not None and kind == "real" else None
     return packed({"day": day, "cutoff": cutoff, "accountKind": kind, "currency": "USD", "rule": "utc_close_nav_less_net_external_cash_v1",
                    "state": "complete" if pnl is not None else "partial" if positions or balances else "missing",
                    "pnl": pnl, "equity": value, "priorEquity": old_value, "externalFlow": flow,
@@ -259,7 +264,7 @@ async def calculate(conn, history, owner, kind, day):
                    "positions": positions, "cashByCurrency": dict(cash), "closeValueByCurrency": dict(stock_values),
                    "externalFlowByCurrency": dict(external), "cashOpenings": openings, "cashPostings": daily_postings,
                    "cashPostingCount": sum(row["count"] for row in balances), "cashPostingsSha256": digest(packed(daily_postings)),
-                   "fx": fx, "missing": missing})
+                   "fx": fx, "missing": missing, **({"calendar": calendar} if calendar is not None else {})})
 
 
 async def capture_day(db, history, owner, kind, day, *, now=None):
@@ -296,7 +301,7 @@ async def capture_day(db, history, owner, kind, day, *, now=None):
         return {**result, "revision": revision} if revision else None
 
 
-async def capture_due(db, history, *, now=None):
+async def capture_due(db, history, *, now=None, backfill=False):
     now = now or datetime.now(UTC)
     day = (now - CAPTURE_DELAY).date() - DAY
     async with db.connection() as conn:
@@ -308,9 +313,11 @@ async def capture_due(db, history, *, now=None):
             WHERE b.account_kind IN ('real','simulated') AND b.created_at<(d.day+interval '1 day') AT TIME ZONE 'UTC'
               AND (b.deleted_at IS NULL OR b.deleted_at>=(d.day+interval '1 day') AT TIME ZONE 'UTC')
               AND (c.checked_at IS NULL OR c.checked_at<%s)
+              AND (NOT %s OR b.account_kind='real')
             GROUP BY b.owner_id,b.account_kind,d.day
-            ORDER BY min(c.checked_at) NULLS FIRST,d.day,b.owner_id,b.account_kind LIMIT 4
-        """, (day - 6 * DAY, day, now - timedelta(hours=2)))).fetchall()
+            ORDER BY min(c.checked_at) NULLS FIRST,d.day,b.owner_id,b.account_kind LIMIT %s
+        """, (day - (365 if backfill else 6) * DAY, day - 7 * DAY if backfill else day,
+              now - (timedelta(days=7) if backfill else timedelta(hours=2)), backfill, 2 if backfill else 4))).fetchall()
     for row in rows:
         try:
             async with asyncio.timeout(25):
@@ -320,10 +327,18 @@ async def capture_due(db, history, *, now=None):
 
 
 async def daily_result_loop(db, history, stop, ready):
+    from .portfolio_daily_history import prepare_due
+
     while not stop.is_set():
         try:
             if ready():
+                settled = (datetime.now(UTC) - CAPTURE_DELAY).date() - DAY
+                try:
+                    await prepare_due(history.authority, settled)
+                except Exception as exc:  # noqa: BLE001 -- existing evidence can still be projected
+                    LOG.warning("portfolio_daily_source_schedule_unavailable type=%s", type(exc).__name__)
                 await capture_due(db, history)
+                await capture_due(db, history, backfill=True)
         except Exception as exc:  # noqa: BLE001 -- a failed scheduler pass must never stop the worker
             LOG.warning("portfolio_daily_schedule_unavailable type=%s", type(exc).__name__)
         try:

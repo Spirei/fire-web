@@ -1643,6 +1643,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/v2/account-assets/analysis-days",
+      "owner": "platform"
+    },
+    {
+      "method": "GET",
       "path": "/api/v2/account-assets/cash",
       "owner": "platform"
     },

@@ -535,6 +535,8 @@ def create_app(settings: Settings | None = None):
     mount_portfolio_series(app, db, app.state.market_authority)
     from .portfolio_daily import mount_portfolio_daily
     mount_portfolio_daily(app, db, app.state.market_authority)
+    from .native_portfolio_analysis import mount as mount_native_portfolio_analysis
+    mount_native_portfolio_analysis(app, db, app.state.market_authority)
     from .daily_activity_summary_api import mount_daily_activity_summary
     mount_daily_activity_summary(app, db)
     from .legacy_portfolio_analysis import mount_legacy_portfolio_analysis

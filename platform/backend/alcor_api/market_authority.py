@@ -523,7 +523,7 @@ async def active_demands(conn, stream, authority=None):
             """SELECT d.* FROM market_demands d JOIN users u ON u.id=d.owner_id
         WHERE d.owner_id=%s AND d.stream_id=%s AND d.revoked_at IS NULL AND (d.expires_at IS NULL OR d.expires_at>clock_timestamp())
         AND u.active AND d.session_version=u.session_version
-        AND (d.origin='price.alert' OR d.native_grant_id IS NOT NULL OR (
+        AND (d.origin IN ('price.alert','portfolio.daily') OR d.native_grant_id IS NOT NULL OR (
           d.principal LIKE 'web:%%' AND EXISTS (
             SELECT 1 FROM sessions s WHERE s.user_id=d.owner_id AND s.token_hash=substr(d.principal,5)
             AND s.expires_at>clock_timestamp() AND s.session_version=d.session_version
@@ -535,6 +535,11 @@ async def active_demands(conn, stream, authority=None):
     ).fetchall()
     valid = []
     for row in rows:
+        if row["origin"] == "portfolio.daily":
+            from .portfolio_daily_history import demand_alive
+
+            if not await demand_alive(conn, stream):
+                continue
         if row["origin"] == "price.alert":
             from .market_alert_reader import alert_demand_alive
 

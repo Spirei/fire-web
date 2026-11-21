@@ -6,15 +6,17 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from urllib.parse import urlencode
 from urllib.request import proxy_bypass_environment
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import httpcore
 from fastapi import HTTPException
+from psycopg.types.json import Jsonb
 
 from .fx_provider_transport import PinnedBackend, resolve
 from .fx_reference import external_delivery_blocked
@@ -412,7 +414,61 @@ class LegacyAmountRanking:
         self.locks = {market: asyncio.Lock() for market in ZONES}
         self.cache = {}
 
-    async def read(self, market):
+    async def snapshot(self, market):
+        async with self.db.connection() as conn:
+            row = await (await conn.execute("""
+                SELECT result FROM market_amount_ranking_snapshots WHERE market=%s
+                AND trade_day::timestamp AT TIME ZONE 'UTC'>=%s
+            """, (market, datetime.now(UTC) - RANKING_MAX_AGE))).fetchone()
+        return row['result'] if row else None
+
+    async def refresh(self, market):
+        lease = uuid4()
+        async with self.db.connection() as conn, conn.transaction():
+            if await external_delivery_blocked(conn):
+                return
+            claimed = await (await conn.execute("""
+                INSERT INTO market_amount_ranking_snapshots(market,next_attempt_at,lease)
+                VALUES(%s,clock_timestamp()+interval '30 seconds',%s)
+                ON CONFLICT(market) DO UPDATE SET next_attempt_at=excluded.next_attempt_at,lease=excluded.lease
+                WHERE market_amount_ranking_snapshots.next_attempt_at<=clock_timestamp()
+                RETURNING market
+            """, (market, lease))).fetchone()
+        if not claimed:
+            return
+        try:
+            async with asyncio.timeout(12):
+                result = await collect(market)
+            trade_day = date.fromisoformat(result['tradeDate'])
+            observed_at = datetime.fromisoformat(result['updatedAt'])
+        except (*EXPECTED_SOURCE_FAILURES, TimeoutError) as exc:
+            LOG.warning('market_amount_ranking_refresh_unavailable market=%s category=%s', market, type(exc).__name__)
+            async with self.db.connection() as conn, conn.transaction():
+                await conn.execute("""
+                    UPDATE market_amount_ranking_snapshots SET lease=NULL,next_attempt_at=clock_timestamp()+interval '1 minute'
+                    WHERE market=%s AND lease=%s
+                """, (market, lease))
+            return
+        async with self.db.connection() as conn, conn.transaction():
+            if await external_delivery_blocked(conn):
+                return
+            await conn.execute("""
+                UPDATE market_amount_ranking_snapshots
+                SET lease=NULL,next_attempt_at=clock_timestamp()+interval '3 minutes',
+                    (trade_day,observed_at,result)=(
+                        SELECT day,observed,payload FROM (VALUES (%s::date,%s::timestamptz,%s::jsonb),
+                                (trade_day,observed_at,result)) AS results(day,observed,payload)
+                        ORDER BY day DESC NULLS LAST,observed DESC NULLS LAST LIMIT 1
+                    )
+                WHERE market=%s AND lease=%s
+            """, (trade_day, observed_at, Jsonb(result), market, lease))
+
+    async def read(self, market, *, prepared_only=False):
+        settled = await self.snapshot(market)
+        if settled is not None:
+            return settled
+        if prepared_only:
+            raise HTTPException(503, '榜单正在准备，请稍后重试')
         async with self.locks[market]:
             clock = asyncio.get_running_loop().time
             until, result = self.cache.get(market, (0, None))
@@ -423,7 +479,7 @@ class LegacyAmountRanking:
                 try:
                     async with asyncio.timeout(12):
                         fresh = await collect(market)
-                except EXPECTED_SOURCE_FAILURES as error:
+                except (*EXPECTED_SOURCE_FAILURES, TimeoutError) as error:
                     LOG.warning('market_amount_ranking_unavailable market=%s category=%s', market, type(error).__name__)
                     if (result is not None and datetime.fromisoformat(result['tradeDate']).replace(tzinfo=UTC)
                             < datetime.now(UTC) - RANKING_MAX_AGE):
@@ -436,3 +492,21 @@ class LegacyAmountRanking:
             if result is None:
                 raise HTTPException(503, '热门股票暂时不可用')
             return result
+
+
+async def amount_ranking_loop(db, stop, ready):
+    from .public_discovery import PublicDiscovery
+
+    service = LegacyAmountRanking(db)
+    public = PublicDiscovery(db, policy_provider=lambda: db.settings.public_discovery_policies)
+    while not stop.is_set():
+        if ready():
+            markets = [market for market in ZONES if not public.has_scope({'kind': 'ranking', 'market': market, 'metric': 'amount'})]
+            results = await asyncio.gather(*(service.refresh(market) for market in markets), return_exceptions=True)
+            for market, result in zip(markets, results, strict=True):
+                if isinstance(result, Exception):
+                    LOG.warning('market_amount_ranking_schedule_unavailable market=%s category=%s', market, type(result).__name__)
+        try:
+            await asyncio.wait_for(stop.wait(), 30)
+        except TimeoutError:
+            pass

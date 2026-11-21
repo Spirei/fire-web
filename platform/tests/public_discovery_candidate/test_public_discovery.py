@@ -212,6 +212,7 @@ async def test_public_amount_ranking_retains_ten_original_quote_facts_and_rechec
         assert config.status_code==200,config.text
         assert config.json()['data']['market_amount_ranking']=={
             'version':1,'path':path,'markets':['US','HK','CN'],'metric':'amount',
+            **({'prepared_read':True} if version==2 else {}),
         }
         unavailable=await client.get(path,params={'market':market,'metric':'amount'})
         assert unavailable.status_code==503,unavailable.text

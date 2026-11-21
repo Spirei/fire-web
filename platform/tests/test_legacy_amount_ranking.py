@@ -1,7 +1,7 @@
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -235,3 +235,39 @@ async def test_app_amount_ranking_uses_observed_amounts_and_shared_cache(
 
         assert (await client.get('/api/v2/market-ranking?market=US')).status_code == 503
         assert (await client.get(f'/api/v2/{path}', headers={'x-alcor-market-source': 'explicit'})).status_code == 400
+
+
+async def test_worker_snapshot_survives_restarts_failure_and_concurrent_refresh(client, app, monkeypatch):
+    db = app.state.db
+    endpoint = '/api/v2/market-ranking?market=US&metric=amount&prepared=true'
+    assert (await client.get(endpoint)).status_code == 503
+    now = datetime.now(UTC)
+    trade_day = now.astimezone(ZoneInfo(ranking.ZONES['US'])).date()
+    at = datetime.combine(trade_day, time(16), ZoneInfo(ranking.ZONES['US']))
+    expected = ranking.ranking_result('US', trade_day.isoformat(), [
+        {'market': 'US', 'code': f'QA{i}', 'name': f'QA {i}', 'amount': 1000 - i,
+         'price': 100, 'changePct': 0, 'time': at.isoformat()} for i in range(10)
+    ])
+    requested = []
+
+    async def collect(market):
+        requested.append(market)
+        return expected
+
+    monkeypatch.setattr(ranking, 'collect', collect)
+    await asyncio.gather(ranking.LegacyAmountRanking(db).refresh('US'), ranking.LegacyAmountRanking(db).refresh('US'))
+    assert requested == ['US']
+    response = await client.get(endpoint)
+    assert response.status_code == 200, response.text
+    assert response.json()['data'] == expected
+    assert await ranking.LegacyAmountRanking(db).read('US', prepared_only=True) == expected
+    async with db.connection() as conn:
+        await conn.execute("UPDATE market_amount_ranking_snapshots SET next_attempt_at=clock_timestamp() WHERE market='US'")
+
+    async def failed(_market):
+        raise TimeoutError
+
+    monkeypatch.setattr(ranking, 'collect', failed)
+    await ranking.LegacyAmountRanking(db).refresh('US')
+    assert (await client.get(endpoint)).json()['data'] == expected
+    assert (await client.get(endpoint.replace('market=US', 'market=HK'))).status_code == 503
