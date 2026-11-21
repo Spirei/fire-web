@@ -1,12 +1,15 @@
 "use client";
 
-import { IconArchive, IconArrowsExchange, IconBriefcase, IconChartLine, IconChevronRight, IconCopy, IconFileDescription, IconFolder, IconDownload, IconHistory, IconReceipt } from "@tabler/icons-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { IconArchive, IconArrowsExchange, IconBriefcase, IconChartLine, IconChevronLeft, IconChevronRight, IconCopy, IconFileDescription, IconFolder, IconDownload, IconHistory, IconReceipt, IconRefresh } from "@tabler/icons-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import AppModal from "@/components/AppModal";
 import AppSelect from "@/components/AppSelect";
 import { Capsule } from "@/components/Capsule";
 import { copyText } from "@/lib/clipboard";
+import { MARKET_BADGE_ITEMS } from "@/lib/marketBadge";
 import { useWorkspaceActive } from "@/lib/workspacePanel";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
+import { useInvestmentDirectoryPages } from "@/lib/useInvestmentDirectoryPages";
 import styles from "./InvestmentDataManager.module.css";
 
 const ROOT = "/api/personal-data-transfer";
@@ -26,8 +29,35 @@ type Data = Record<string, unknown>;
 type LedgerRow = { type: string; id: string; at: string; data: Data };
 type DailyRow = { day: string; revision: number; state: string; pnl: string | null; currency: string };
 type PeriodFolder = { year: number; month?: number; count: number };
-type Row = LedgerRow | DailyRow | PeriodFolder;
+type MarketFolder = { market: string; count: number };
+type Row = LedgerRow | DailyRow | PeriodFolder | MarketFolder;
 type Cursor = [string, string, string] | string | null;
+type DirectoryPage = { items: Row[]; next: Cursor };
+const OTHER_LISTS = FOLDERS.filter(({ key }) => key !== "daily" && key !== "archive").map(({ key }) => key);
+const FIRST_PAGE = { index: 0, starts: [null] as Cursor[] };
+const MARKET_NAMES = new Map([...MARKET_BADGE_ITEMS.map(({ key, name }) => [key, name] as const),
+  ["CN", "A 股"], ["ASSET", "其他资产"], ["brokers", "券商"]]);
+const marketName = (market: string) => MARKET_NAMES.get(market) ?? market;
+
+function directoryPath(folder: Folder, kind: AccountKind, { year, month }: DailyPath, cursor: Cursor, market?: string) {
+  if (folder === "archive") return null;
+  const daily = folder === "daily";
+  const params = new URLSearchParams(daily ? { kind } : { section: folder });
+  if (daily) {
+    if (month === undefined) params.set("folders", "true");
+    if (year !== undefined) params.set("year", String(year));
+    if (month !== undefined) params.set("month", String(month));
+  }
+  if (folder === "positions") {
+    if (market === undefined) params.set("groupBy", "market");
+    else params.set("market", market);
+  }
+  if (typeof cursor === "string") params.set("before", cursor);
+  if (Array.isArray(cursor)) {
+    params.set("beforeAt", cursor[0]); params.set("beforeType", cursor[1]); params.set("beforeId", cursor[2]);
+  }
+  return `${daily ? "/daily-results" : "/records"}?${params}`;
+}
 type OriginalFile = { name: string; rows?: Data[] };
 type LedgerDetail = { type: string; id: string; data: Data; links: { type: string; id: string; field: string }[];
   version?: { revision: number; action: string }; versions?: { revision: number; action: string }[]; file?: OriginalFile };
@@ -100,7 +130,7 @@ async function ownRequest(ownerId: string, path: string, signal: AbortSignal) {
   const response = await fetch(`${ROOT}${path}`, { signal, cache: "no-store", headers: { "X-Alcor-Expected-Account": ownerId } });
   if (!response.ok) {
     const value = await response.json().catch(() => null);
-    throw new Error(typeof value?.error === "string" ? value.error : "读取失败，请重试");
+    throw Object.assign(new Error(typeof value?.error === "string" ? value.error : "读取失败，请重试"), { status: response.status });
   }
   return response;
 }
@@ -353,18 +383,16 @@ async function previewArchive(file: File, ownerId: string): Promise<Preview> {
   ] };
 }
 
-export default function InvestmentDataManager({ ownerId }: { ownerId: string }) {
+export default function InvestmentDataManager({ ownerId, footer }: { ownerId: string; footer?: ReactNode }) {
   const workspaceActive = useWorkspaceActive();
+  const foreground = useWorkspaceForeground();
   const [folder, setFolder] = useState<Folder>("daily");
   const [kind, setKind] = useState<AccountKind>("real");
   const [dailyPaths, setDailyPaths] = useState<Record<AccountKind, DailyPath>>({ real: {}, simulated: {} });
   const { year, month } = dailyPaths[kind];
-  const [rows, setRows] = useState<Row[]>([]);
-  const [next, setNext] = useState<Cursor>(null);
-  const [page, setPage] = useState<Cursor>(null);
-  const [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState("");
+  const [positionMarket, setPositionMarket] = useState<string>();
+  const [pagination, setPagination] = useState(FIRST_PAGE);
+  const resetPage = useCallback(() => setPagination(FIRST_PAGE), []);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [file, setDetail] = useState<FileDetail | null>(null);
   const [detailError, setDetailError] = useState("");
@@ -375,32 +403,45 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
   const [preview, setPreview] = useState<Preview | null>(null);
   const exportRequest = useRef<AbortController | null>(null);
   const previewContent = useRef<HTMLDivElement>(null);
+  const listItems = useRef<HTMLDivElement>(null);
+  const path = directoryPath(folder, kind, { year, month }, pagination.starts[pagination.index] ?? null, positionMarket);
+  const readDirectory = useCallback(async (key: string, signal: AbortSignal): Promise<DirectoryPage> => {
+    const response = await ownRequest(ownerId, key, signal);
+    return response.json();
+  }, [ownerId]);
+  const { page, accessBlocked, error: listError, recheck, preload } = useInvestmentDirectoryPages({ path, foreground, read: readDirectory, resetPage });
+  const next = page?.next;
+  const loading = !page && !listError;
+  const showPagination = pagination.index > 0 || pagination.starts.length > 1 || !!next;
+
+  useLayoutEffect(() => { listItems.current?.scrollTo(0, 0); }, [path]);
+  useEffect(() => {
+    if (!accessBlocked) return;
+    setSelection(null);
+    setDetail(null);
+    setPrevious([]);
+  }, [accessBlocked]);
 
   useEffect(() => () => exportRequest.current?.abort(), []);
   useEffect(() => {
-    if (folder === "archive") return;
-    const controller = new AbortController();
-    const daily = folder === "daily";
-    const params = new URLSearchParams(daily ? { kind } : { section: folder });
-    if (daily) {
-      if (month === undefined) params.set("folders", "true");
-      if (year !== undefined) params.set("year", String(year));
-      if (month !== undefined) params.set("month", String(month));
+    if (!foreground || !page || listError) return;
+    const targets = [next ? directoryPath(folder, kind, { year, month }, next, positionMarket) : null];
+    if (folder === "positions" && positionMarket === undefined) {
+      for (const entry of page.items.slice(0, 3)) if ("market" in entry) targets.push(directoryPath("positions", kind, {}, null, entry.market));
     }
-    if (typeof page === "string") params.set("before", page);
-    if (Array.isArray(page)) {
-      params.set("beforeAt", page[0]); params.set("beforeType", page[1]); params.set("beforeId", page[2]);
-    }
-    setLoading(true); setListError("");
-    void ownRequest(ownerId, `${daily ? "/daily-results" : "/records"}?${params}`, controller.signal)
-      .then((response) => response.json()).then((value) => {
-        if (controller.signal.aborted) return;
-        setRows((current) => page ? [...current, ...value.items] : value.items);
-        setNext(value.next);
-      }).catch((error) => { if (!controller.signal.aborted) setListError(error.message); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [folder, kind, month, ownerId, page, refresh, year]);
+    targets.push(...OTHER_LISTS.map(other => directoryPath(other, kind, {}, null)));
+    let active = true;
+    const timer = setTimeout(() => {
+      void (async () => {
+        for (const target of targets) {
+          if (!active) return;
+          if (!target || target === path) continue;
+          try { await preload(target); } catch { return; }
+        }
+      })();
+    }, 150);
+    return () => { active = false; clearTimeout(timer); };
+  }, [folder, foreground, kind, listError, month, next, page, path, positionMarket, preload, year]);
 
   useEffect(() => {
     if (!selection) return;
@@ -423,9 +464,17 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
     setPrevious([]);
   }
   function resetList(nextFolder: Folder) {
-    setFolder(nextFolder); setRows([]); setPage(null); setNext(null); setListError("");
-    setLoading(nextFolder !== "archive");
+    setFolder(nextFolder);
+    resetPage();
     closeFile();
+  }
+  function openMarket(market?: string) {
+    setPositionMarket(market);
+    resetList("positions");
+  }
+  function nextPage() {
+    if (!next) return;
+    setPagination(({ index, starts }) => ({ index: index + 1, starts: [...starts.slice(0, index + 1), next] }));
   }
   function openPeriod(nextYear?: number, nextMonth?: number) {
     setDailyPaths((paths) => ({ ...paths, [kind]: { year: nextYear, month: nextMonth } }));
@@ -482,6 +531,8 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
     : selection.filename ?? (detail ? `${status(selection.type)}.json` : status(selection.type))));
   const dailyFolder = folder === "daily" && month === undefined;
   const dailyFiles = folder === "daily" && month !== undefined;
+  const marketFolders = folder === "positions" && positionMarket === undefined;
+  const folderTitle = FOLDERS.find(({ key }) => key === folder)?.title;
   const currentVersion = dailySelection?.revision ?? (detail && "type" in detail ? detail.version?.revision : undefined);
   const empty = folder === "daily" ? "暂无已保存的日终快照" : "暂无记录";
 
@@ -491,7 +542,13 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
       {FOLDERS.map(({ key, title, icon: Icon }) => <button key={key} type="button" aria-pressed={folder === key}
         onClick={() => { if (folder !== key) resetList(key); }}><Icon size={17} stroke={1.7} aria-hidden="true" />{title}</button>)}
     </nav>
-    <section className={styles.browser} aria-label={FOLDERS.find(({ key }) => key === folder)?.title}>
+    <section className={styles.browser} aria-label={folderTitle}>
+    <div className={styles.browserHeader}>
+      <h2>{folderTitle}</h2>
+      {folder !== "archive" && <Capsule size="sm" variant="ghost" aria-label="重新读取列表" title="重新读取列表" disabled={loading} onClick={recheck}>
+        <IconRefresh size={16} aria-hidden="true" />
+      </Capsule>}
+    </div>
     {folder === "archive" ? <div className={styles.archive}>
       <div className={styles.archiveAction}>
         <IconArchive size={22} stroke={1.5} aria-hidden="true" />
@@ -531,18 +588,26 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
             }
           }} />
       </div>}
-      <div className={styles.fileList} aria-label={dailyFolder ? "盈亏文件夹" : "资料列表"}>
+      {folder === "positions" && <nav className={styles.marketPath} aria-label="持仓市场目录">
+        {marketFolders ? <span aria-current="page">全部市场</span> : <>
+          <button type="button" onClick={() => openMarket()}>全部市场</button><IconChevronRight size={13} aria-hidden="true" />
+          <span aria-current="page">{marketName(positionMarket ?? "")}</span>
+        </>}
+      </nav>}
+      <div className={styles.fileList} aria-label={dailyFolder ? "盈亏文件夹" : marketFolders ? "市场文件夹" : "资料列表"} aria-busy={loading || undefined}>
         <div className={styles.listHead} aria-hidden="true">
-          <span>{dailyFolder ? "文件夹" : dailyFiles ? "日期" : "文件"}</span>
-          <span>{dailyFolder ? "已记录天数" : dailyFiles ? "日终盈亏" : "记录日期"}</span><span />
+          <span>{dailyFolder || marketFolders ? "文件夹" : dailyFiles ? "日期" : "文件"}</span>
+          <span>{marketFolders ? "文件数" : dailyFolder ? "已记录天数" : dailyFiles ? "日终盈亏" : "记录日期"}</span><span />
         </div>
-        {rows.map((row) => {
-          if ("year" in row) {
-            const label = row.month === undefined ? `${row.year} 年` : `${row.month} 月`;
-            return <button type="button" className={styles.listRow} key={`${row.year}:${row.month ?? 0}`}
-              onClick={() => openPeriod(row.year, row.month)}>
+        <div ref={listItems} className={showPagination ? styles.pagedRows : undefined}>
+        {page?.items.map((row) => {
+          if ("year" in row || "market" in row) {
+            const market = "market" in row;
+            const label = market ? marketName(row.market) : row.month === undefined ? `${row.year} 年` : `${row.month} 月`;
+            return <button type="button" className={styles.listRow} key={market ? row.market : `${row.year}:${row.month ?? 0}`}
+              onClick={() => market ? openMarket(row.market) : openPeriod(row.year, row.month)}>
               <span className={styles.fileName}><IconFolder size={21} stroke={1.65} aria-hidden="true" />{label}</span>
-              <span className={styles.secondary}>{row.count} 天</span><IconChevronRight size={16} aria-hidden="true" />
+              <span className={styles.secondary}>{row.count} {market ? "项" : "天"}</span><IconChevronRight size={16} aria-hidden="true" />
             </button>;
           }
           const daily = "day" in row;
@@ -557,14 +622,22 @@ export default function InvestmentDataManager({ ownerId }: { ownerId: string }) 
             <IconChevronRight size={16} aria-hidden="true" />
           </button>;
         })}
-        {listError ? <div className={styles.notice} role="alert">{listError} <Capsule size="sm" variant="ghost" onClick={() => setRefresh(refresh + 1)}>重试</Capsule></div>
-          : loading ? <p className={styles.notice} role="status">读取中…</p> : !rows.length ? <p className={styles.empty}><IconFolder size={22} stroke={1.5} aria-hidden="true" />{empty}</p> : null}
-        {next && !loading && !listError && <div className={styles.loadMore}><Capsule size="sm" variant="ghost" onClick={() => setPage(next)}>加载更多</Capsule></div>}
+        </div>
+        {listError ? <ReadError message={listError} onRetry={recheck} /> : loading ? (
+          <div className={styles.placeholder} role="status" aria-label="正在读取文件列表"><i /><i /><i /></div>
+        ) : !page?.items.length ? <p className={styles.empty}><IconFolder size={22} stroke={1.5} aria-hidden="true" />{empty}</p> : null}
+        {showPagination && <nav className={styles.pageNav} aria-label="文件列表分页">
+          <Capsule size="sm" variant="ghost" aria-label="上一页" disabled={pagination.index === 0}
+            onClick={() => setPagination(state => ({ ...state, index: state.index - 1 }))}><IconChevronLeft size={17} aria-hidden="true" /></Capsule>
+          <span aria-current="page" aria-live="polite">第 {pagination.index + 1} 页</span>
+          <Capsule size="sm" variant="ghost" aria-label="下一页" disabled={!next} onClick={nextPage}><IconChevronRight size={17} aria-hidden="true" /></Capsule>
+        </nav>}
       </div>
     </>}
     </section>
+    {footer && <div className={styles.footer}>{footer}</div>}
     </div>
-    {workspaceActive && selection && <AppModal title={fileTitle ?? "文件预览"} size="xl"
+    {workspaceActive && !accessBlocked && selection && <AppModal title={fileTitle ?? "文件预览"} size="xl"
       className={`${styles.previewDialog} ${dailySelection ? styles.snapshotDialog : ""}`}
       titleAddon={currentVersion && dailyVersions.length <= 1 ? <span className={styles.version}>第 {currentVersion} 版</span> : undefined}
       headerActions={previous.length > 0 ? <Capsule size="sm" variant="ghost" onClick={returnToSource}>返回上一条</Capsule> : undefined}

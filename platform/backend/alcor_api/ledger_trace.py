@@ -63,6 +63,8 @@ REVERSE = {
     "amendment": (("cash", "trade_amendment_id"),),
 }
 LIMIT = 24
+# The archive groups the requested brokerage securities without changing their market or record IDs.
+POSITION_FOLDER = sql.SQL("CASE WHEN t.market = 'US' AND upper(t.code) IN ('IBKR','SCHW') THEN 'brokers' ELSE t.market END")
 ORIGINALS = {
     "statement": ("source_bytes", "source_sha256", "statement.xml"),
     "orderFile": ("raw", "sha256", None),
@@ -123,7 +125,14 @@ def decoded(row):
     return {**row, "data": json.loads(row["data"], parse_float=Decimal, parse_int=Decimal)}
 
 
-async def list_records(conn, owner, section, before):
+async def list_position_folders(conn, owner):
+    rows = await (await conn.execute(sql.SQL(
+        "SELECT {} AS market, COUNT(*) AS count FROM portfolio_records t WHERE owner_id=%s GROUP BY 1 ORDER BY 1"
+    ).format(POSITION_FOLDER), (owner,))).fetchall()
+    return {"items": rows, "next": None}
+
+
+async def list_records(conn, owner, section, before, market=None):
     kinds = {kind: spec for kind, spec in TYPES.items() if spec.section == section}
     if not kinds:
         raise HTTPException(400, "未知数据分类")
@@ -132,6 +141,9 @@ async def list_records(conn, owner, section, before):
     for kind, spec in kinds.items():
         query = summary_sql(kind, spec)
         params.append(owner)
+        if market is not None:
+            query += sql.SQL(" AND ({})=%s").format(POSITION_FOLDER)
+            params.append(market)
         if before:
             query += sql.SQL(" AND ({}, {}, {}::text)<(%s,%s,%s)").format(
                 sql.Identifier(spec.at), sql.Literal(kind), sql.Identifier(spec.key))
@@ -232,7 +244,8 @@ def mount_ledger_trace(app, db):
     @app.get("/api/v2/investment-files/records", operation_id="native_investment_files_records")
     @app.get("/api/personal-data-transfer/records", operation_id="personal_ledger_records")
     async def read(request: Request, section: str = "", type: str = "", id: str = "",
-                   beforeAt: datetime | None = None, beforeType: str = "", beforeId: str = "", revision: int | None = None):
+                   beforeAt: datetime | None = None, beforeType: str = "", beforeId: str = "", revision: int | None = None,
+                   groupBy: str = "", market: str | None = None):
         try:
             who = await investment_file_actor(request, db)
             assert_expected_account(request, who.id)
@@ -240,12 +253,19 @@ def mount_ledger_trace(app, db):
             if (beforeAt and (beforeAt.tzinfo is None or beforeType not in TYPES or not beforeId)
                     or not beforeAt and (beforeId or beforeType) or len(id) > 200 or len(beforeId) > 200
                     or (not section and not (type and id)) or (section and (type or id))
+                    or (groupBy and (groupBy != "market" or section != "positions" or beforeAt or market is not None))
+                    or (market is not None and (section != "positions" or not market or len(market) > 64))
                     or (revision is not None and (type != "position" or revision < 1))):
                 raise HTTPException(400, "记录或分页参数无效")
             async with db.connection() as conn, conn.transaction():
                 await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                 await lock_read_identity(conn, who)
-                value = await list_records(conn, who.id, section, cursor) if section else await detail(conn, who.id, type, id, revision)
+                if groupBy:
+                    value = await list_position_folders(conn, who.id)
+                elif section:
+                    value = await list_records(conn, who.id, section, cursor, market)
+                else:
+                    value = await detail(conn, who.id, type, id, revision)
             return wire_response(value, PRIVATE)
         except HTTPException as exc:
             return wire_response({"error": exc.detail}, {**PRIVATE, **(exc.headers or {})}, exc.status_code)

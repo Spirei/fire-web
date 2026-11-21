@@ -214,3 +214,43 @@ async def test_native_investment_file_discovery_and_account_isolation(client, ad
     assert (await client.get(base + "/daily-results", params={"folders": True}, headers=headers)).json() == {"items": [], "next": None}
     assert (await client.get(base + "/records", params={"section": "positions"},
                             headers={**headers, "x-alcor-expected-account": "other"})).status_code == 403
+
+
+async def test_position_folders_filter_before_paging(client, admin, db, settings):
+    other = await create_user(settings, "OtherPositionFolders", "Synthetic9Pass", role="user")
+    rows = [(admin, f"us-{n:03}", f"QA{n}", "US") for n in range(114)]
+    rows += [(admin, "broker-ibkr", "IBKR", "US"), (admin, "broker-schw", "SCHW", "US"),
+             (admin, "hk", "00700", "HK"), (admin, "cn", "002602", "CN"), (admin, "asset", "XAUUSD", "ASSET"),
+             (other, "private", "IBKR", "US")]
+    async with db.connection() as conn, conn.cursor() as cursor:
+        await cursor.executemany("""
+            INSERT INTO portfolio_records(owner_id,id,name,code,market,updated_at)
+            VALUES (%s,%s,'Synthetic position',%s,%s,'2026-11-21T10:00:00Z')
+        """, rows)
+
+    path = "/api/personal-data-transfer/records"
+    response = await client.get(path, params={"section": "positions", "groupBy": "market"})
+    assert response.status_code == 200, response.text
+    assert {item["market"]: item["count"] for item in response.json()["items"]} == {
+        "US": 114, "brokers": 2, "CN": 1, "HK": 1, "ASSET": 1,
+    }
+    brokers = (await client.get(path, params={"section": "positions", "market": "brokers"})).json()
+    assert {item["id"] for item in brokers["items"]} == {"broker-ibkr", "broker-schw"}
+    assert all(item["data"]["market"] == "US" for item in brokers["items"])
+    assert brokers["next"] is None
+
+    params = {"section": "positions", "market": "US"}
+    read_ids = []
+    for size in (24, 24, 24, 24, 18):
+        page_response = await client.get(path, params=params)
+        assert page_response.status_code == 200, page_response.text
+        page = page_response.json()
+        assert len(page["items"]) == size
+        read_ids.extend(item["id"] for item in page["items"])
+        if page["next"]:
+            params.update(zip(("beforeAt", "beforeType", "beforeId"), page["next"]))
+    assert page["next"] is None
+    assert read_ids == [f"us-{n:03}" for n in reversed(range(114))]
+    assert (await client.get(path, params={"section": "funds", "market": "US"})).status_code == 400
+    assert (await client.get(path, params={"section": "positions", "groupBy": "market"},
+                             headers={"X-Alcor-Expected-Account": other})).status_code == 403

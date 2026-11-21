@@ -1,11 +1,23 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { IconBriefcase, IconDatabaseExport, IconDatabaseImport, IconShieldCheck } from "@tabler/icons-react";
+import { useRef, useState, type ReactNode } from "react";
 import { Capsule } from "@/components/Capsule";
 import InvestmentDataManager from "@/components/InvestmentDataManager";
 import PlatformBackups from "@/components/PlatformBackups";
 import { appConfirm } from "@/lib/appDialog";
 import { showToast } from "@/lib/toast";
+
+function BackupAction({ icon, title, description, children }: { icon: ReactNode; title: string; description?: string; children: ReactNode }) {
+  return <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
+    <span className="grid h-8 w-8 place-items-center rounded-lg bg-bg-gray text-muted" aria-hidden="true">{icon}</span>
+    <div className="min-w-0">
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
+      {description && <p className="mt-0.5 text-xs leading-relaxed text-muted">{description}</p>}
+    </div>
+    <div className="shrink-0">{children}</div>
+  </div>;
+}
 
 export default function DataManagementView({ ownerId, admin, recordsCount, onExport }: {
   ownerId: string;
@@ -87,34 +99,31 @@ export default function DataManagementView({ ownerId, admin, recordsCount, onExp
   return (
     <section className="data-management-page mx-auto w-full min-w-0 max-w-[1100px]" aria-labelledby="data-management-title">
       <h1 id="data-management-title" className="mb-5 text-2xl font-semibold text-ink">数据管理</h1>
-      <div className="grid gap-6">
-        <InvestmentDataManager key={ownerId} ownerId={ownerId} />
-        <div className="grid gap-4" aria-label="导入与导出">
-          <section>
-            <p className="mb-3 text-sm text-muted">旧版档案包含持仓、订单、自选分组、个人偏好与昵称。管理员档案另含站点设置与名人持仓。</p>
-            <div className="sw-row">
-              <div className="sw-row-label"><b>网站数据</b><span>下载为 JSON 文件</span></div>
-              <Capsule variant="ghost" size="sm" type="button" disabled={backupBusy !== null} onClick={exportSiteBackup}>{backupBusy === "export" ? "导出中…" : "导出"}</Capsule>
-            </div>
-          </section>
-          {admin && <PlatformBackups ownerId={ownerId} />}
-          <section>
-            <p className="mb-3 text-sm text-muted">选择 Alcor 导出的 JSON 文件，确认内容后导入。请先导出现有数据留作备份。</p>
-            <div className="sw-row">
-              <div className="sw-row-label"><b>备份文件</b><span>JSON 格式</span></div>
-              <Capsule variant="ghost" size="sm" type="button" disabled={backupBusy !== null} onClick={() => importBackupRef.current?.click()}>{backupBusy === "import" ? "导入中…" : "导入"}</Capsule>
+      <InvestmentDataManager key={ownerId} ownerId={ownerId} footer={
+        <section aria-labelledby="data-transfer-title">
+          <h2 id="data-transfer-title" className="px-3 pt-3 text-xs font-semibold text-muted sm:px-4">{admin ? "导入、导出与备份" : "导入与导出"}</h2>
+          <div className="divide-y divide-edge">
+            <BackupAction icon={<IconDatabaseExport size={18} />} title="旧版网站档案">
+              <Capsule variant="secondary" size="sm" type="button" disabled={backupBusy !== null} onClick={exportSiteBackup}>{backupBusy === "export" ? "导出中…" : "导出 JSON"}</Capsule>
+            </BackupAction>
+            <BackupAction icon={<IconDatabaseImport size={18} />} title="导入备份文件" description="先导出现有数据留档。选择 Alcor 备份，核对后导入。">
+              <Capsule variant="secondary" size="sm" type="button" disabled={backupBusy !== null} onClick={() => importBackupRef.current?.click()}>{backupBusy === "import" ? "导入中…" : "选择文件"}</Capsule>
               <input ref={importBackupRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => {
                 const file = event.currentTarget.files?.[0];
                 if (file) void importSiteBackup(file);
               }} />
-            </div>
-          </section>
-          <div className="sw-row">
-            <div className="sw-row-label"><b>持仓数据</b><span>导出持仓与自选记录，共 {recordsCount ?? "—"} 条</span></div>
-            <Capsule variant="ghost" size="sm" type="button" disabled={recordsCount === null} onClick={onExport}>导出</Capsule>
+            </BackupAction>
+            <BackupAction icon={<IconBriefcase size={18} />} title="持仓与自选" description={recordsCount === null ? "下载持仓与自选记录。" : `共 ${recordsCount} 条记录。`}>
+              <Capsule variant="secondary" size="sm" type="button" disabled={recordsCount === null} onClick={onExport}>导出</Capsule>
+            </BackupAction>
+            {admin && <PlatformBackups ownerId={ownerId} renderTrigger={open => (
+              <BackupAction icon={<IconShieldCheck size={18} />} title="联合备份" description="完整数据库、登记原件和加密密钥。">
+                <Capsule variant="secondary" size="sm" onClick={open}>管理备份</Capsule>
+              </BackupAction>
+            )} />}
           </div>
-        </div>
-      </div>
+        </section>
+      } />
     </section>
   );
 }

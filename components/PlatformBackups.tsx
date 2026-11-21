@@ -1,6 +1,6 @@
 "use client";
 import { clientRequestId } from "@/lib/randomId";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import AppModal from "./AppModal";
 import BackupHistory, { type BackupHistoryItem } from "./BackupHistory";
 import { requestAdminProof } from "@/lib/adminProof";
@@ -36,7 +36,9 @@ const states: Record<string, string> = {
   cancelled: "已取消",
   cancel_requested: "取消中",
 };
-export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }: { ownerId: string; buttonOnly?: boolean; onClose?: () => void }) {
+export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, renderTrigger }: {
+  ownerId: string; buttonOnly?: boolean; onClose?: () => void; renderTrigger?: (open: () => void) => ReactNode;
+}) {
   const active = useWorkspaceActive(),
     canUseLocation = useWorkspaceLocationGuard();
   const params=useWorkspaceSearchParams();
@@ -272,7 +274,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
   const pending=!!requestId&&(!task||running);
   return (
     <>
-      <div className={buttonOnly ? undefined : "sw-row"}>
+      {renderTrigger ? renderTrigger(() => setOpen(true)) : <div className={buttonOnly ? undefined : "sw-row"}>
         {!buttonOnly && <div className="sw-row-label">
           <b>联合备份</b>
           <span>完整 PG、登记原件与加密密钥 · 独立 Worker</span>
@@ -284,7 +286,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose }
         >
           {buttonOnly ? requestId&&(!task||["queued","running","cancel_requested"].includes(task.status))?"查看备份进度":"创建备份" : "管理备份"}
         </Capsule>
-      </div>
+      </div>}
       {open && active && taskOwner.current===ownerId && (
         <AppModal
           title="联合备份"
