@@ -78,9 +78,19 @@ async def test_record_json_xlsx_exports_and_old_personal_data_roundtrip_are_expl
     # instead of replaying arbitrary broker-history upserts from a site backup.
     rid=str(uuid4())
     subset={'format':'fire-site-backup','version':2,'data':{'records':[source]}}
-    imported=await client.post('/api/v1/data/import',content=json.dumps(subset),headers={'x-alcor-request-id':rid,'content-type':'application/json'})
+    headers={'x-alcor-request-id':rid,'content-type':'application/json'}
+    wrong=await client.post('/api/v1/data/import?preview=1',content=json.dumps(subset),
+                            headers={**headers,'x-alcor-expected-account':'changed-account'})
+    assert wrong.status_code==403 and wrong.headers['x-alcor-retire-context']=='true'
+    imported=await client.post('/api/v1/data/import?preview=1',content=json.dumps(subset),
+                               headers={**headers,'x-alcor-expected-account':admin})
     assert imported.status_code==200,imported.text
     value=imported.json();assert value['requestId']==rid and value['preview'] is True and value['executed'] is False
     assert value['confirmationPath']=='/api/personal-data-transfer/submit'
+    wrong_submit=await client.post(value['confirmationPath'],json={'requestId':rid,'previewId':value['previewId']},
+                                  headers={'x-alcor-expected-account':'changed-account'})
+    assert wrong_submit.status_code==403
+    receipt=await client.get('/api/personal-data-transfer/operations/'+rid)
+    assert receipt.json()['state']=='previewed'
     original=await client.get('/api/personal-data-transfer/originals/'+value['sourceId'])
     assert json.loads(original.content)==subset

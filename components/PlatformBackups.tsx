@@ -3,7 +3,7 @@ import { clientRequestId } from "@/lib/randomId";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import AppModal from "./AppModal";
 import BackupHistory, { type BackupHistoryItem } from "./BackupHistory";
-import { requestAdminProof } from "@/lib/adminProof";
+import { requestAdminProof, type AdminProof } from "@/lib/adminProof";
 import { Capsule } from "@/components/Capsule";
 import { PlatformRequestError, platformRequest as read } from "@/lib/platformRequest";
 import {
@@ -36,13 +36,14 @@ const states: Record<string, string> = {
   cancelled: "已取消",
   cancel_requested: "取消中",
 };
-export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, renderTrigger }: {
-  ownerId: string; buttonOnly?: boolean; onClose?: () => void; renderTrigger?: (open: () => void) => ReactNode;
+export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, inline = false, renderTrigger }: {
+  ownerId: string; buttonOnly?: boolean; onClose?: () => void; inline?: boolean;
+  renderTrigger?: (toggle: () => void, open: boolean) => ReactNode;
 }) {
   const active = useWorkspaceActive(),
     canUseLocation = useWorkspaceLocationGuard();
   const params=useWorkspaceSearchParams();
-  const [open, setOpen] = useState(()=>/^[a-f0-9-]{36}$/i.test(params.get('backupRequest')??'')),
+  const [open, setOpen] = useState(()=>/^[a-f0-9-]{36}$/i.test(params?.get('backupRequest')??'')),
     [data, setData] = useState<Listing | null>(null),
     [error, setError] = useState(""),
     [readError, setReadError] = useState(""),
@@ -53,12 +54,25 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, 
     [requestId, setRequestId] = useState(""),
     [task, setTask] = useState<Task | null>(null);
   const operation = useRef(0);
+  const [inlineTotp, setInlineTotp] = useState<boolean | null>(null);
+  const proofResolver = useRef<((value: AdminProof | null) => void) | null>(null);
+  const finishProof = useCallback((value: AdminProof | null) => {
+    proofResolver.current?.(value);
+    proofResolver.current = null;
+    setInlineTotp(null);
+  }, []);
+  useEffect(() => () => {
+    operation.current++;
+    proofResolver.current?.(null);
+    proofResolver.current = null;
+  }, []);
   const taskOwner=useRef(ownerId);
   const csrf = useRef(""),
     instance = useRef(""),
     generation = useRef(0);
   const reset = useCallback(() => {
     operation.current++;
+    finishProof(null);
     setBusy(false);
     setData(null);
     setTask(null);
@@ -68,7 +82,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, 
     setReadError("");
     setReady(false);
     csrf.current = "";
-  }, []);
+  }, [finishProof]);
   useEffect(()=>{if(taskOwner.current!==ownerId){taskOwner.current=ownerId;reset();setOpen(false);}},[ownerId,reset]);
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -262,6 +276,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, 
   function close() {
     generation.current++;
     operation.current++;
+    finishProof(null);
     setBusy(false);setData(null);setSaved(false);setVerify(false);setError('');setReadError('');setReady(false);csrf.current='';
     setOpen(false);
     onClose?.();
@@ -272,29 +287,7 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, 
   const phaseLabels:Record<string,string>={backup_snapshot:'准备一致快照',backup_sources:'核对备份原件',backup_tables:'逐表校验',backup_database:'归档数据库',backup_encrypt:'加密备份',backup_verify:'校验备份文件',backup_publish:'保存备份'};
   const running=!!task&&['queued','running','cancel_requested'].includes(task.status);
   const pending=!!requestId&&(!task||running);
-  return (
-    <>
-      {renderTrigger ? renderTrigger(() => setOpen(true)) : <div className={buttonOnly ? undefined : "sw-row"}>
-        {!buttonOnly && <div className="sw-row-label">
-          <b>联合备份</b>
-          <span>完整 PG、登记原件与加密密钥 · 独立 Worker</span>
-        </div>}
-        <Capsule variant={buttonOnly ? "primary" : "secondary"} size="sm"
-          type="button"
-          className=""
-          onClick={() => setOpen(true)}
-        >
-          {buttonOnly ? requestId&&(!task||["queued","running","cancel_requested"].includes(task.status))?"查看备份进度":"创建备份" : "管理备份"}
-        </Capsule>
-      </div>}
-      {open && active && taskOwner.current===ownerId && (
-        <AppModal
-          title="联合备份"
-          size="lg"
-          className="backup-management-modal"
-          desc="包含所有用户和执行状态；恢复密钥须独立保存。"
-          onClose={close}
-        >
+  const contents = <>
           {!data && !readError && <p role="status">正在核对当前实例…</p>}
           {data && !data.configured && (
             <p>请先配置私有备份目录和独立恢复密钥目录。</p>
@@ -357,25 +350,59 @@ export default function PlatformBackups({ ownerId, buttonOnly = false, onClose, 
           </div>}
           {data && (data.items.length>0||!pending) && <BackupHistory items={data.items} downloads />}
           {readError && <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p role="alert" className="system-error">{readError}</p><Capsule variant="secondary" size="sm" disabled={busy} onClick={() => void load()}>重新读取</Capsule></div>}
-          {verify && <div className="mt-4"><Capsule variant="secondary" busy={busy} onClick={async () => {
+          {verify && inlineTotp === null && <div className="mt-4"><Capsule variant="secondary" busy={busy} onClick={async () => {
             if (busy) return;
             const ticket = ++operation.current;
             setBusy(true);
             try {
-              const proof = await requestAdminProof();
+              const proof = await requestAdminProof(inline ? (totpEnabled) => {
+                if (ticket !== operation.current) return Promise.resolve(null);
+                return new Promise<AdminProof | null>((resolve) => {
+                  proofResolver.current = resolve;
+                  setInlineTotp(totpEnabled);
+                });
+              } : undefined);
               if (!proof || ticket !== operation.current) return;
               await read("/api/fire/connections/reauthenticate", {method:"POST", headers:{"content-type":"application/json","x-csrf-token":csrf.current}, body:JSON.stringify(proof)});
               if (ticket === operation.current) { setVerify(false); setError(""); await load(); }
             } catch (e) { if (ticket === operation.current) setError((e as Error).message); }
             finally { if (ticket === operation.current) setBusy(false); }
           }}>验证身份</Capsule></div>}
+          {inlineTotp !== null && <form className="mt-4 grid max-w-sm gap-3" onSubmit={(event) => {
+            event.preventDefault();
+            const fields = new FormData(event.currentTarget);
+            finishProof({ password: String(fields.get("password") ?? ""), code: String(fields.get("code") ?? "") });
+          }}>
+            <label className="grid gap-1 text-sm">管理员密码<input name="password" type="password" autoComplete="current-password" required className="min-w-0 rounded-lg border border-edge bg-white px-3 py-2" /></label>
+            {inlineTotp && <label className="grid gap-1 text-sm">二次验证码或备用码<input name="code" autoComplete="one-time-code" required className="min-w-0 rounded-lg border border-edge bg-white px-3 py-2" /></label>}
+            <div className="flex flex-wrap gap-2">
+              <Capsule variant="secondary" size="sm" onClick={() => finishProof(null)}>取消</Capsule>
+              <Capsule size="sm" type="submit">确认验证</Capsule>
+            </div>
+          </form>}
           {error && (
             <p role="alert" className="system-error">
               {error}
             </p>
           )}
-        </AppModal>
-      )}
+  </>;
+  return (
+    <>
+      {renderTrigger ? renderTrigger(() => open ? close() : setOpen(true), open) : <div className={buttonOnly ? undefined : "sw-row"}>
+        {!buttonOnly && <div className="sw-row-label">
+          <b>联合备份</b>
+          <span>完整 PG、登记原件与加密密钥 · 独立 Worker</span>
+        </div>}
+        <Capsule variant={buttonOnly ? "primary" : "secondary"} size="sm" type="button" onClick={() => setOpen(true)}>
+          {buttonOnly ? requestId&&(!task||["queued","running","cancel_requested"].includes(task.status))?"查看备份进度":"创建备份" : "管理备份"}
+        </Capsule>
+      </div>}
+      {open && active && taskOwner.current === ownerId && (inline ? (
+        <section aria-label="联合备份管理" className="min-w-0 border-t border-edge bg-bg-gray px-4 py-3 text-sm">{contents}</section>
+      ) : (
+        <AppModal title="联合备份" size="lg" className="backup-management-modal"
+          desc="包含所有用户和执行状态；恢复密钥须独立保存。" onClose={close}>{contents}</AppModal>
+      ))}
     </>
   );
 }

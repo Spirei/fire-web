@@ -2,7 +2,6 @@
 
 import { IconArchive, IconArrowsExchange, IconBriefcase, IconChartLine, IconChevronLeft, IconChevronRight, IconCopy, IconFileDescription, IconFolder, IconDownload, IconHistory, IconReceipt, IconRefresh } from "@tabler/icons-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import AppModal from "@/components/AppModal";
 import AppSelect from "@/components/AppSelect";
 import { Capsule } from "@/components/Capsule";
 import { copyText } from "@/lib/clipboard";
@@ -20,7 +19,7 @@ const FOLDERS = [
   { key: "funds", title: "资金流水", icon: IconArrowsExchange },
   { key: "corrections", title: "更正记录", icon: IconHistory },
   { key: "originals", title: "来源原件", icon: IconFileDescription },
-  { key: "archive", title: "账本档案", icon: IconArchive },
+  { key: "archive", title: "账本与备份", icon: IconArchive },
 ] as const;
 type Folder = typeof FOLDERS[number]["key"];
 type AccountKind = "real" | "simulated";
@@ -383,10 +382,18 @@ async function previewArchive(file: File, ownerId: string): Promise<Preview> {
   ] };
 }
 
-export default function InvestmentDataManager({ ownerId, footer }: { ownerId: string; footer?: ReactNode }) {
+export function InvestmentArchiveAction({ icon, title, description, children }: { icon: ReactNode; title: string; description?: string; children: ReactNode }) {
+  return <div className={styles.archiveAction}>
+    <span className={styles.archiveIcon} aria-hidden="true">{icon}</span>
+    <div><h3>{title}</h3>{description && <p>{description}</p>}</div>
+    <div>{children}</div>
+  </div>;
+}
+
+export default function InvestmentDataManager({ ownerId, archiveActions, resumeBackup }: { ownerId: string; archiveActions?: ReactNode; resumeBackup?: boolean }) {
   const workspaceActive = useWorkspaceActive();
   const foreground = useWorkspaceForeground();
-  const [folder, setFolder] = useState<Folder>("daily");
+  const [folder, setFolder] = useState<Folder>(resumeBackup ? "archive" : "daily");
   const [kind, setKind] = useState<AccountKind>("real");
   const [dailyPaths, setDailyPaths] = useState<Record<AccountKind, DailyPath>>({ real: {}, simulated: {} });
   const { year, month } = dailyPaths[kind];
@@ -403,6 +410,8 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
   const [preview, setPreview] = useState<Preview | null>(null);
   const exportRequest = useRef<AbortController | null>(null);
   const previewContent = useRef<HTMLDivElement>(null);
+  const previewTitle = useRef<HTMLHeadingElement>(null);
+  const openedBy = useRef<HTMLButtonElement>(null);
   const listItems = useRef<HTMLDivElement>(null);
   const path = directoryPath(folder, kind, { year, month }, pagination.starts[pagination.index] ?? null, positionMarket);
   const readDirectory = useCallback(async (key: string, signal: AbortSignal): Promise<DirectoryPage> => {
@@ -413,8 +422,13 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
   const next = page?.next;
   const loading = !page && !listError;
   const showPagination = pagination.index > 0 || pagination.starts.length > 1 || !!next;
+  const showFile = workspaceActive && !accessBlocked && !!selection;
 
   useLayoutEffect(() => { listItems.current?.scrollTo(0, 0); }, [path]);
+  useLayoutEffect(() => {
+    if (showFile) previewTitle.current?.focus();
+    else if (openedBy.current?.getClientRects().length) openedBy.current.focus({ preventScroll: true });
+  }, [showFile]);
   useEffect(() => {
     if (!accessBlocked) return;
     setSelection(null);
@@ -464,6 +478,7 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
     setPrevious([]);
   }
   function resetList(nextFolder: Folder) {
+    openedBy.current = null;
     setFolder(nextFolder);
     resetPage();
     closeFile();
@@ -482,7 +497,7 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
   }
   function showView(nextView: FileView) {
     setView(nextView);
-    previewContent.current?.closest(".app-modal-body")?.scrollTo(0, 0);
+    previewContent.current?.scrollTo(0, 0);
   }
   function readFile(item: Selection, nextView: FileView) {
     setDetailError("");
@@ -550,14 +565,10 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
       </Capsule>}
     </div>
     {folder === "archive" ? <div className={styles.archive}>
-      <div className={styles.archiveAction}>
-        <IconArchive size={22} stroke={1.5} aria-hidden="true" />
-        <div><strong>完整个人账本</strong><p>持仓、成交、资金流水、更正和日终快照</p></div>
+      <InvestmentArchiveAction icon={<IconArchive size={18} />} title="完整个人账本" description="持仓、成交、资金流水、更正和日终快照。">
         <Capsule size="sm" variant="secondary" busy={exporting} onClick={() => void download()}><IconDownload size={15} />下载 JSON</Capsule>
-      </div>
-      <div className={styles.archiveAction}>
-        <IconHistory size={22} stroke={1.5} aria-hidden="true" />
-        <div><strong>恢复前校验</strong><p>核对账户归属、记录条数和文件校验值</p></div>
+      </InvestmentArchiveAction>
+      <InvestmentArchiveAction icon={<IconHistory size={18} />} title="恢复前校验" description="核对账户归属、记录条数和文件校验值。">
         <label className={styles.filePicker}>选择文件<input type="file" aria-label="选择恢复文件" accept=".json,application/json" onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
@@ -567,11 +578,12 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
           void previewArchive(file, ownerId).then((value) => { setPreview(value); setFileStatus(""); })
             .catch((error) => setFileStatus(error instanceof SyntaxError ? "无法读取账本 JSON" : error.message));
         }} /></label>
-      </div>
+      </InvestmentArchiveAction>
       {fileStatus && <p className={styles.notice} role="status">{fileStatus}</p>}
       {preview && <div className={styles.archivePreview}><strong>{preview.name}</strong><Values data={{ "导出时间": preview.timestamp,
         "文件校验": preview.digestChecked ? "SHA-256 已核对" : "当前连接可核对清单，SHA-256 待验证", ...Object.fromEntries(preview.counts) }} /></div>}
-    </div> : <>
+      {archiveActions}
+    </div> : <div hidden={showFile}>
       {folder === "daily" && <div className={styles.toolbar}>
         <nav aria-label="每日盈亏目录" className={styles.breadcrumb}>
           {year === undefined ? <span aria-current="page">全部年份</span> : <button type="button" onClick={() => openPeriod()}>全部年份</button>}
@@ -613,9 +625,9 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
           const daily = "day" in row;
           const title = daily ? dailyFilename(row.day) : folder === "originals" ? rowTitle(row) : `${rowTitle(row)}.json`;
           const item: Selection = daily ? { day: row.day, revision: row.revision } :
-            { type: row.type, id: row.id, filename: folder === "originals" ? title : undefined };
-          return <button type="button" className={styles.listRow} key={daily ? row.day : `${row.type}:${row.id}`} aria-haspopup="dialog"
-            onClick={() => { setPrevious([]); readFile(item, "file"); }}>
+            { type: row.type, id: row.id, filename: title };
+          return <button type="button" className={styles.listRow} key={daily ? row.day : `${row.type}:${row.id}`} aria-controls="investment-file-preview"
+            onClick={(event) => { openedBy.current = event.currentTarget; setPrevious([]); readFile(item, "file"); }}>
             <span className={styles.fileName}><IconFileDescription size={19} stroke={1.65} aria-hidden="true" />{title}</span>
             {daily ? <span className={styles.amount}>{row.pnl === null ? <small>{status(row.state)}</small> : <><b className={amountTone(row.pnl)}>{row.pnl}</b> <small>{row.currency}</small></>}</span>
               : <span className={styles.secondary}>{datePart(row.at)}</span>}
@@ -633,16 +645,18 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
           <Capsule size="sm" variant="ghost" aria-label="下一页" disabled={!next} onClick={nextPage}><IconChevronRight size={17} aria-hidden="true" /></Capsule>
         </nav>}
       </div>
-    </>}
-    </section>
-    {footer && <div className={styles.footer}>{footer}</div>}
-    </div>
-    {workspaceActive && !accessBlocked && selection && <AppModal title={fileTitle ?? "文件预览"} size="xl"
-      className={`${styles.previewDialog} ${dailySelection ? styles.snapshotDialog : ""}`}
-      titleAddon={currentVersion && dailyVersions.length <= 1 ? <span className={styles.version}>第 {currentVersion} 版</span> : undefined}
-      headerActions={previous.length > 0 ? <Capsule size="sm" variant="ghost" onClick={returnToSource}>返回上一条</Capsule> : undefined}
-      onClose={closeFile}>
-      <div ref={previewContent}>
+    </div>}
+    <section id="investment-file-preview" aria-label="文件预览" hidden={!showFile} className={styles.filePreview}>
+    {showFile && selection && <>
+      <div className={styles.fileHeader}>
+        <Capsule size="sm" variant="ghost" onClick={closeFile}><IconChevronLeft size={16} aria-hidden="true" />返回列表</Capsule>
+        {previous.length > 0 && <Capsule size="sm" variant="ghost" onClick={returnToSource}>返回上一条</Capsule>}
+      </div>
+      <h3 className={styles.fileTitle} ref={previewTitle} tabIndex={-1}>
+        {fileTitle ?? "文件预览"}
+        {currentVersion && dailyVersions.length <= 1 ? <span className={styles.version}>第 {currentVersion} 版</span> : null}
+      </h3>
+      <div ref={previewContent} className={dailySelection ? styles.snapshotContent : undefined}>
         {(dailySelection || detail) && <div className={styles.previewToolbar}>
           <nav className={styles.previewNav} aria-label="文件视图">
             <button type="button" aria-pressed={view === "file"} onClick={() => showView("file")}>{original ? "原始文件" : "文件内容"}</button>
@@ -668,6 +682,9 @@ export default function InvestmentDataManager({ ownerId, footer }: { ownerId: st
               disabled={version.revision === detail.version?.revision} key={version.revision} onClick={() => choose({ type: detail.type, id: detail.id, revision: version.revision })}>第 {version.revision} 版{version.action === "baseline" ? " · 首次留存" : ""}</button>)}</Evidence>}
           </>}
       </div>
-    </AppModal>}
+    </>}
+    </section>
+    </section>
+    </div>
   </div>;
 }

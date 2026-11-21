@@ -1,4 +1,4 @@
-.workspace, .previewDialog {
+.workspace {
   --data-ink: rgb(var(--site-ink, 30 39 51));
   --data-muted: rgb(var(--site-muted, 94 105 120));
   --data-accent: rgb(var(--site-accent, 51 100 170));
@@ -10,7 +10,7 @@
   color: var(--data-ink);
   min-width: 0;
 }
-:global(.dark) .workspace, :global(.dark) .previewDialog {
+:global(.dark) .workspace {
   --data-hover: color-mix(in srgb, var(--data-ink) 8%, var(--data-surface));
   --data-selected: color-mix(in srgb, var(--data-accent) 16%, var(--data-surface));
 }
@@ -54,7 +54,6 @@
 .browser { min-width: 0; padding: 4px 14px 14px; }
 .browserHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 46px; }
 .browserHeader h2 { margin: 0; font-size: 15px; font-weight: 650; }
-.footer { grid-column: 1 / -1; border-top: 1px solid var(--data-edge); min-width: 0; }
 @container (min-width: 630px) {
   .layout { grid-template-columns: 9.5rem minmax(0, 1fr); }
   .categories {
@@ -64,7 +63,6 @@
     border-bottom: 0;
     border-inline-end: 1px solid var(--data-edge);
   }
-  .layout:has(.footer) .categories { border-end-start-radius: 0; }
 }
 .previewNav {
   display: flex;
@@ -164,29 +162,21 @@
 .placeholder i:nth-child(2) { width: min(39%, 164px); }
 .placeholder i:nth-child(3) { width: min(43%, 178px); }
 .archive { border: 1px solid var(--data-edge); border-radius: 14px; overflow: hidden; background: var(--data-surface); }
-.archiveAction { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 15px; }
-.archiveAction + .archiveAction { border-top: 1px solid var(--data-edge); }
-.archiveAction > svg { color: var(--data-muted); }
-.archiveAction strong { font-size: 14px; font-weight: 650; }
-.archiveAction p { color: var(--data-muted); font-size: 12px; margin: 3px 0 0; }
+.archiveAction { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 15px; }
+.archiveAction:not(:first-child) { border-top: 1px solid var(--data-edge); }
+.archiveIcon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: var(--data-muted); background: var(--data-soft); }
+.archiveAction h3 { margin: 0; font-size: 14px; font-weight: 650; }
+.archiveAction p { color: var(--data-muted); font-size: 12px; line-height: 1.5; margin: 3px 0 0; }
 .archiveAction button svg { flex: none; }
 .archivePreview { margin: 0 15px 15px; padding: 13px; border-radius: 9px; background: var(--data-soft); overflow-wrap: anywhere; }
-.filePicker { position: relative; border: 1px solid var(--data-edge); border-radius: 8px; padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+.filePicker { position: relative; display: inline-flex; align-items: center; min-height: 30px; border: 1px solid var(--data-edge); border-radius: 999px; padding: 0 11px; font-size: 12px; white-space: nowrap; }
 .filePicker:hover, .filePicker:focus-within { background: var(--data-hover); }
 .filePicker > input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-.previewDialog { background: var(--data-surface); }
-.previewDialog :global(.app-modal-header) h3 { overflow-wrap: anywhere; }
-.previewDialog :global(.app-modal-body) { min-width: 0; }
-.snapshotDialog { height: min(42rem, calc(100dvh - 2 * var(--modal-gutter, 16px))); }
-.snapshotDialog :global(.app-modal-body) { flex: 1; }
-.snapshotDialog .previewToolbar {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  margin-top: 0;
-  background: var(--data-surface);
-}
-.snapshotDialog .jsonPreview > pre { max-height: none; overflow: visible; }
+.filePreview { min-width: 0; border-top: 1px solid var(--data-edge); }
+.fileHeader { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 5px; }
+.fileTitle { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 5px 0 10px; font-size: 16px; font-weight: 650; overflow-wrap: anywhere; }
+.fileTitle:focus { outline: none; }
+.snapshotContent { min-height: min(24rem, 55dvh); }
 .version { color: var(--data-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .previewToolbar {
   display: flex;
@@ -196,7 +186,7 @@
   column-gap: 12px;
   border-bottom: 1px solid var(--data-edge);
   padding-bottom: 2px;
-  margin: -6px 0 12px;
+  margin: 0 0 12px;
 }
 .previewNav button { min-height: 38px; }
 .result { background: var(--data-soft); border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; }

@@ -13,6 +13,7 @@ from .fx_provider_parser import unique
 from .personal_data_transfer import PersonalDataTransfer
 from .profile_http import bounded_body
 from .record_file_api import actor
+from .security import assert_expected_account
 
 HEADERS = {"Cache-Control": "private, no-store", "Vary": "Cookie, Authorization"}
 FILE_LIMIT = 10 * 1024 * 1024
@@ -42,6 +43,7 @@ def mount_personal_data_transfer(app, db):
                     and len(request.query_params.getlist("preview")) == 1):
                 raise HTTPException(400, "不接受这些查询参数")
             who = await actor(request, db, write=action in {"preview", "submit", "close", "import"})
+            assert_expected_account(request, who.id)
             if action == "export":
                 result = await service.export(who)
                 headers["Content-Disposition"] = 'attachment; filename="personal-data.json"'
