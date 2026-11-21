@@ -56,6 +56,21 @@ def fee_transport(value,detailed):
     return row
 
 
+async def require_order_coverage(conn, owner, account=None):
+    unresolved = await (await conn.execute("""
+        SELECT 1 FROM broker_account_references r
+        CROSS JOIN LATERAL (SELECT CASE
+            WHEN r.reference_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN r.reference_id::uuid END AS id) ref
+        WHERE r.owner_id=%s AND (%s::text IS NULL OR r.account_id=%s) AND r.kind='order'
+          AND NOT EXISTS(SELECT 1 FROM trade_ledger t WHERE t.owner_id=r.owner_id AND t.id=ref.id)
+          AND NOT EXISTS(SELECT 1 FROM internal_orders i WHERE i.owner_id=r.owner_id AND i.id=ref.id)
+        LIMIT 1
+    """, (owner, account, account))).fetchone()
+    if unresolved:
+        raise HTTPException(409, '原委托范围尚未核对，不能返回虚假的空订单')
+
+
 async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,strict=True,exact=False,scope_record_id=None,scope_account_id=None,registered_order_read_model=False,orders_only=False):
     scope_record=None
     if scope_record_id is not None and scope_account_id is not None:
@@ -93,7 +108,7 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
                'projections':[row for row in state['projections'] if row['record_id'] in selected]}
     pending=await(await conn.execute('SELECT * FROM internal_orders WHERE owner_id=%s AND (%s::text IS NULL OR record_id=%s) AND (%s::text IS NULL OR account_id=%s) ORDER BY id LIMIT 10001',(who.id,scope_record_id,scope_record_id,scoped_account,scoped_account))).fetchall()
     if len(pending)>10000 or len(state['records'])>10000 or len(state['fills'])>5000:raise HTTPException(409,'完整交易历史超出本次有界快照，须独立分段核对')
-    if await(await conn.execute("SELECT 1 FROM broker_account_references r WHERE r.owner_id=%s AND (%s::text IS NULL OR r.account_id=%s) AND r.kind='order' AND NOT EXISTS(SELECT 1 FROM trade_ledger t WHERE t.owner_id=r.owner_id AND t.id::text=r.reference_id) AND NOT EXISTS(SELECT 1 FROM internal_orders i WHERE i.owner_id=r.owner_id AND i.id::text=r.reference_id) LIMIT 1",(who.id,scoped_account,scoped_account))).fetchone():raise HTTPException(409,'原委托范围尚未核对，不能返回虚假的空订单')
+    await require_order_coverage(conn, who.id, scoped_account)
     kinds={row['account_kind'] for row in state['cash']}|{row['account_kind'] for row in pending}|{row['account_kind'] for row in state['fills']}
     if len(kinds)>1 or kinds-{'real','simulated'}:raise HTTPException(409,'旧交易协议无法合并真实、模拟或未知账户身份')
     rows=[row for row in state['records'] if row['deleted_at'] is None];by_record={row['id']:row for row in rows};by_broker={row['id']:row for row in brokers}

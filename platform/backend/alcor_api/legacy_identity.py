@@ -317,6 +317,8 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
             from .native_portfolio_analysis import discovery as portfolio_analysis_discovery
             value['investment_files'] = native_files_discovery()
             value['portfolio_analysis_days'] = portfolio_analysis_discovery()
+            from .native_trading_cycle import discovery as trading_cycle_discovery
+            value['portfolio_trading_cycle'] = trading_cycle_discovery()
         return value
 
     @app.get('/api/v{version}/auth/config', tags=['legacy-native-identity'])

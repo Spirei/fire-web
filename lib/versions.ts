@@ -8433,6 +8433,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.88", date: "2026-11-22", summary: "优化数据管理的市场目录、分页和读取",
   software: V0_1_87_ENTRY.software.map(item => ({ ...item, version: "v0.1.88" })),
   changes: [
+    { kind: "feature", title: "App 交易周期", desc: "按纽约 20:00 提供交易周期内的已成交买卖、持仓核对依据和已核验基准收盘价。" },
     { kind: "fix", title: "整理网页数据管理", desc: "持仓按实际市场进入文件夹，盈透证券与嘉信理财归入券商文件夹。长列表统一分页，切回已读类别立即显示，并在后台预读。" },
     { kind: "fix", title: "账本与备份并入文件目录", desc: "从同一分类栏打开网站档案、备份与导入导出。文件原位查看，导入在右侧核对并确认，联合备份也在当前栏展开。" },
   ],

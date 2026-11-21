@@ -163,15 +163,28 @@ async def execute(db,task,*,finalize=True):
     finally:await old.rollback();await old.close()
 
 
-async def registered_orders(conn,owner,*,native_records=None):
+async def registered_orders(conn,owner,*,native_records=None,trading_start=None):
     from .legacy_order_projection import native_fields
 
     rows=await(await conn.execute('SELECT originals,source_sha256,source_instance,source_owner FROM database_migration_history_imports WHERE owner_id=%s ORDER BY created_at,request_id',(owner,))).fetchall()
     output=[]
     for stored in rows:
         packet=stored['originals'];maps=packet['maps']
+        orders = packet['orders']
+        if trading_start is not None:
+            def relevant(row):
+                if row['status'] != 'filled' or row['side'] not in ('buy', 'sell'):
+                    return False
+                try:
+                    stamp = datetime.fromisoformat(packet['normalized_orders'][row['id']]['occurredAt'])
+                except (ValueError, TypeError):
+                    return True
+                return stamp.tzinfo is None or stamp >= trading_start
+            orders = [row for row in orders if relevant(row)]
+            if not orders:
+                continue
         projection=native_fields(stored,native_records) if native_records is not None else None
-        for row in packet['orders']:
+        for row in orders:
             normalized=packet['normalized_orders'][row['id']];rid=maps['records'][row['record_id']]
             numeric=lambda key:Decimal(row[key]) if row.get(key) is not None else None
             output.append({'id':row['id'],'originalOrderNo':row.get('order_no'),'orderNo':row.get('order_no'),'orderNoSource':'source_original',
