@@ -98,6 +98,8 @@ class Observations:
         self.reader = SharedQuotes(authority) if authority else None
 
     async def context(self, conn, who, raw, order_id):
+        from .native_ledger_handoff import require_legacy_order
+        await require_legacy_order(conn, who.id, order_id)
         row = await (
             await conn.execute(
                 "SELECT * FROM internal_orders WHERE owner_id=%s AND id=%s FOR UPDATE", (who.id, order_id)

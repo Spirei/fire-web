@@ -14,7 +14,7 @@ from .legacy_order_projection import READ_MODEL
 from .legacy_trading_snapshot import require_order_coverage, scalar
 from .market_contract import ZONES
 from .native_ledger import ledger_head
-from .native_ledger_projection import collection_revision, position_rows, visible_orders
+from .native_ledger_projection import collection_revision, financial_orders, position_rows
 from .scope_coverage import require_global
 from .security import lock_read_identity
 
@@ -202,8 +202,8 @@ def mount(app, db, authority):
                 records = {row["id"]: row for row in rows}
                 native_ids = {item["tradeId"] for item in native["snapshot"]["orders"]}
                 items = [item for item in items if item["id"] not in native_ids]
-                for item in visible_orders(native):
-                    if item["status"] != "filled" or not start <= event_time(item["tradedAt"]) < end:
+                for item in financial_orders(native):
+                    if not start <= event_time(item["tradedAt"]) < end:
                         continue
                     record = records[item["recordId"]]
                     # Current before/after quantities are good for syncing the

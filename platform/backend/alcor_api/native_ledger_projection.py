@@ -52,7 +52,25 @@ def positions_with_brokers(rows, head, accounts):
 def visible_orders(head):
     if not head:
         return []
-    return [order_projection(order) for order in head['snapshot']['orders'] if order['status'] != 'deleted']
+    state = head['snapshot']
+    history = state.get('orderHistory', {})
+    numbers = state.get('orderNumbers', {})
+    return [order_projection(order, history=history.get(order['tradeId']), order_number=numbers.get(order['tradeId']))
+            for order in state['orders'] if order['status'] != 'deleted']
+
+
+def financial_orders(head):
+    """A presentation merge leaves each actual execution on its own trade date."""
+    orders = {order['tradeId']: order for order in head['snapshot']['orders']}
+    candidates = [order for order in orders.values() if order['status'] == 'filled']
+    results = []
+    while candidates:
+        order = candidates.pop()
+        if order.get('mergedFromOrderIds'):
+            candidates.extend(orders[identifier] for identifier in order['mergedFromOrderIds'])
+        else:
+            results.append(order_projection({**order, 'status': 'filled'}))
+    return results
 
 
 def merge_orders(legacy, head):

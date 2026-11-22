@@ -4,8 +4,10 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from psycopg.errors import CheckViolation
 
 from alcor_api.cli import create_user
+from alcor_api.internal_orders import pending_reservations
 from alcor_api.main import create_app
 from alcor_api.native_trading_cycle import cycle_range
 from test_legacy_trade_corrections import native_headers
@@ -124,6 +126,8 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
         assert len(items) == 1 and items[0]['id'] == fill['tradeId']
         assert datetime.fromisoformat(items[0]['tradedAt']) == datetime.fromisoformat(at)
         assert items[0]['brokerAccountId'] == broker
+        assert items[0]['orderActivity'] == [{'id': fill['tradeId'] + ':1', 'timestamp': at,
+                                             'kind': 'filled', 'quantity': 15.0, 'price': 300.0}]
     other_owner = await create_user(db.settings, 'other-ledger', 'other-ledger-test-password-1')
     unauthorized = await native_headers(db, other_owner, 'portfolio.read')
     await data(client.get(path, headers=unauthorized), 404)
@@ -198,3 +202,143 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
     await data(client.post(TRANSACTIONS, headers=headers,
                            json=trade(9, eventual_sell, '2', '1', None, None, cost='26.5')))
     assert (await data(client.get(LEDGER, headers=headers)))['positions'][0]['quantity'] == '1'
+
+
+@pytest.mark.asyncio
+async def test_old_pending_transfers_once_with_original_revisions_and_a_write_fence(client, admin, db):
+    broker, record = await setup(client)
+    headers = await native_headers(db, admin, SCOPES + ' orders.write orders.cancel')
+    path = ASSETS + '/trading'
+    latest = await data(client.get(path, headers=headers))
+    draft = {'accountId': admin, 'recordId': record['id'], 'recordRevision': record['revision'],
+             'snapshotRevision': latest['snapshotRevision'], 'side': 'buy', 'mode': 'order',
+             'orderType': 'limit', 'qty': 2, 'price': 20, 'fees': 1, 'tif': 'gtc', 'session': 'REGULAR'}
+    preview = await data(client.post(path + '/preview', headers=headers, json=draft))
+    await data(client.post(path + '/submissions', headers=headers, json={
+        **draft, 'requestId': str(uuid4()), 'previewRevision': preview['previewRevision'],
+    }))
+    first = (await data(client.get(LEDGER, headers=headers)))
+    assert first['adoptionBlockers'] == []
+    initial = first['orders'][0]
+    assert initial['status'] == 'pending' and initial['brokerAccountId'] == broker
+    order_id = initial['tradeId']
+    before_move = (await data(client.get(ASSETS + '/orders?scope=all', headers=headers)))['items'][0]
+    assert before_move['cancellable'] and before_move['orderNo'].isdigit()
+    latest = await data(client.get(path, headers=headers))
+    amendment = {**draft, 'snapshotRevision': latest['snapshotRevision'], 'orderRevision': 1, 'qty': 3}
+    edit_path = path + '/orders/' + order_id
+    preview = await data(client.post(edit_path + '/preview', headers=headers, json=amendment))
+    await data(client.put(edit_path, headers=headers, json={
+        **amendment, 'requestId': str(uuid4()), 'previewRevision': preview['previewRevision'],
+    }))
+    await data(client.post(TRANSACTIONS, headers=headers, json={'requestId': str(uuid4()), 'kind': 'adopt',
+        'baseRevision': 0, 'legacyRevision': first['legacyRevision']}), 409)
+    handoff = await data(client.get(LEDGER, headers=headers))
+    await adopt(client, headers, handoff)
+    canonical = await data(client.get(LEDGER, headers=headers))
+    assert canonical['orders'][0]['tradeId'] == order_id
+    assert [event['quantity'] for event in canonical['orderHistory'][order_id]] == ['2', '3']
+    cancellation = {'requestId': str(uuid4()), 'accountId': admin, 'orders': [
+        {'orderId': order_id, 'recordId': record['id'], 'market': 'US', 'code': record['code'],
+         'revision': 2, 'recordRevision': record['revision']},
+    ]}
+    await data(client.post(ASSETS + '/orders/cancellations', headers=headers, json=cancellation), 409)
+    async with db.connection() as conn:
+        reserves = await pending_reservations(conn, admin, 'real', 'USD')
+        assert reserves['cash'] == 0
+        with pytest.raises(CheckViolation) as rejected:
+            async with conn.transaction():
+                await conn.execute("UPDATE internal_orders SET status='cancelled',cancelled_at=now() "
+                                   "WHERE owner_id=%s AND id=%s", (admin, order_id))
+        assert rejected.value.diag.constraint_name == 'native_ledger_transferred_order_read_only'
+    edited_at = datetime.now(UTC).isoformat()
+    amended = {**canonical['orders'][0], 'quantity': '4', 'changedAt': edited_at, 'price': '21', 'orderPrice': '21'}
+    update = {'requestId': str(uuid4()), 'kind': 'trade', 'baseRevision': 1,
+              'orders': [amended], 'positions': [], 'cash': []}
+    first, replay = await asyncio.gather(*(data(client.post(TRANSACTIONS, headers=headers, json=update)) for _ in range(2)))
+    assert first == replay and first['sourceRevision'] == 2
+    snapshot = await data(client.get(LEDGER, headers=headers))
+    assert [(event['revision'], event['quantity']) for event in snapshot['orderHistory'][order_id]] == [(1,'2'),(2,'3'),(3,'4')]
+    assert snapshot['orderHistory'][order_id][-1]['occurredAt'] == edited_at
+    for path in ('/api/v1/account-assets/orders?scope=all', ASSETS + '/orders?scope=all', ASSETS + '/native-orders'):
+        projected = (await data(client.get(path, headers=headers)))['items'][0]
+        assert projected['id'] == order_id and projected['orderNo'] == before_move['orderNo']
+        assert projected['nativeActions'] == {'cancel': True, 'delete': True, 'edit': True}
+        assert projected['cancellable'] is False
+        assert [(row['id'], row['kind'], row['quantity'], row['price']) for row in projected['orderActivity']] == [
+            (order_id + ':3', 'amended', 4, 21),
+            (order_id + ':2', 'amended', 3, 20),
+            (order_id + ':1', 'submitted', 2, 20),
+        ]
+        assert projected['orderActivity'][0]['timestamp'] == edited_at
+    old_mirror = {key: amended[key] for key in amended if key not in ('brokerAccountId', 'changedAt')}
+    await data(client.post(ASSETS + '/native-orders', headers=headers, json=old_mirror), 409)
+
+
+@pytest.mark.asyncio
+async def test_legacy_cancellation_and_adoption_have_a_single_winner(client, admin, db):
+    _, record = await setup(client)
+    headers = await native_headers(db, admin, SCOPES + ' orders.write orders.cancel')
+    path = ASSETS + '/trading'
+    latest = await data(client.get(path, headers=headers))
+    pending = {'accountId': admin, 'recordId': record['id'], 'recordRevision': record['revision'],
+        'snapshotRevision': latest['snapshotRevision'], 'side': 'buy', 'mode': 'order',
+        'orderType': 'limit', 'qty': 2, 'price': 20, 'fees': 1, 'tif': 'gtc', 'session': 'REGULAR'}
+    preview = await data(client.post(path + '/preview', headers=headers, json=pending))
+    await data(client.post(path + '/submissions', headers=headers, json={
+        **pending, 'requestId': str(uuid4()), 'previewRevision': preview['previewRevision'],
+    }))
+    baseline = await data(client.get(LEDGER, headers=headers))
+    order_id = baseline['orders'][0]['tradeId']
+    adopt_request = {'requestId': str(uuid4()), 'kind': 'adopt', 'baseRevision': 0,
+                     'legacyRevision': baseline['legacyRevision']}
+    cancellation = {'requestId': str(uuid4()), 'accountId': admin, 'orders': [
+        {'orderId': order_id, 'recordId': record['id'], 'market': 'US', 'code': record['code'],
+         'revision': 1, 'recordRevision': record['revision']},
+    ]}
+    adoption, cancel = await asyncio.gather(
+        client.post(TRANSACTIONS, headers=headers, json=adopt_request),
+        client.post(ASSETS + '/orders/cancellations', headers=headers, json=cancellation),
+    )
+    assert sorted((adoption.status_code, cancel.status_code)) == [200, 409], (adoption.text, cancel.text)
+    final = await data(client.get(LEDGER, headers=headers))
+    if adoption.status_code == 200:
+        assert final['source'] == 'native' and final['orders'][0]['tradeId'] == order_id
+    else:
+        assert final['source'] == 'legacy' and final['orders'] == []
+        await adopt(client, headers, final)
+
+
+@pytest.mark.asyncio
+async def test_merge_keeps_exact_cash_and_original_trading_days(client, admin, db):
+    broker, record = await setup(client, amount='0', qty='0', cost=None)
+    headers = await native_headers(db, admin, SCOPES)
+    await adopt(client, headers, await data(client.get(LEDGER, headers=headers)))
+    now = datetime.now(UTC)
+    earlier = now - timedelta(days=1)
+    first = order(record['id'], broker, at=earlier.isoformat(), quantity='2', price='25', fees='1', net='51')
+    second = order(record['id'], broker, at=now.isoformat(), quantity='3', price='33.33333333', fees='2', net='101.99999999')
+    await data(client.post(TRANSACTIONS, headers=headers, json=trade(1, first, '0', '2', '0', '-51')))
+    await data(client.post(TRANSACTIONS, headers=headers, json=trade(2, second, '2', '5', '-51', '-152.99999999')))
+    merge = {'requestId': str(uuid4()), 'kind': 'merge', 'baseRevision': 3,
+             'orderIds': [first['tradeId'], second['tradeId']], 'mergedOrderId': str(uuid4()),
+             'filledAt': second['filledAt']}
+    await data(client.post(TRANSACTIONS, headers=headers,
+                          json={**merge, 'filledAt': (earlier - timedelta(hours=1)).isoformat()}), 409)
+    receipt = await data(client.post(TRANSACTIONS, headers=headers, json=merge))
+    assert receipt == await data(client.post(TRANSACTIONS, headers=headers, json=merge))
+    snapshot = await data(client.get(LEDGER, headers=headers))
+    assert snapshot['positions'][0]['quantity'] == '5'
+    assert {cash['balance'] for cash in snapshot['cash']} == {'-152.99999999'}
+    combined = next(item for item in snapshot['orders'] if item['tradeId'] == merge['mergedOrderId'])
+    assert combined['grossAmount'] == '149.99999999'
+    assert combined['settlementAmount'] == '152.99999999'
+    assert combined['filledAt'] == second['filledAt']
+    assert combined['mergedFromOrderIds'] == merge['orderIds']
+    assert all(item['mergedIntoOrderId'] == merge['mergedOrderId'] for item in snapshot['orders'] if item['status'] == 'deleted')
+    items = (await data(client.get(ASSETS + '/orders?scope=all', headers=headers)))['items']
+    assert [item['id'] for item in items] == [merge['mergedOrderId']]
+    for original, stamp in ((first, earlier), (second, now)):
+        result = await data(client.get(ASSETS + '/trading-cycle', headers=headers,
+                                      params={'cycleStart': cycle_range(stamp)[0].isoformat()}))
+        assert [item['id'] for item in result['items']] == [original['tradeId']]

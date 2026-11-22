@@ -121,7 +121,9 @@ async def pending_reservations(conn, owner, account_kind, currency, record_id=No
             "FROM internal_orders o LEFT JOIN portfolio_records r ON r.owner_id=o.owner_id AND r.id=o.record_id "
             "LEFT JOIN broker_accounts b ON b.owner_id=o.owner_id AND b.id=o.account_id "
             "LEFT JOIN internal_order_family_legs fl ON fl.owner_id=o.owner_id AND fl.order_id=o.id "
-            "WHERE o.owner_id=%s AND o.account_kind=%s AND o.currency=%s AND o.status='pending' AND (%s::text IS NULL OR o.account_id=%s) AND (%s::uuid IS NULL OR (o.id<>%s AND NOT EXISTS(SELECT 1 FROM internal_order_family_legs a JOIN internal_order_family_legs z ON z.owner_id=a.owner_id AND z.family_id=a.family_id WHERE a.owner_id=o.owner_id AND a.order_id=%s AND z.order_id=o.id))) ORDER BY o.created_at,o.id",
+            "WHERE o.owner_id=%s AND o.account_kind=%s AND o.currency=%s AND o.status='pending' "
+            "AND NOT EXISTS(SELECT 1 FROM native_ledger_transferred_orders x WHERE x.owner_id=o.owner_id AND x.order_id=o.id) "
+            "AND (%s::text IS NULL OR o.account_id=%s) AND (%s::uuid IS NULL OR (o.id<>%s AND NOT EXISTS(SELECT 1 FROM internal_order_family_legs a JOIN internal_order_family_legs z ON z.owner_id=a.owner_id AND z.family_id=a.family_id WHERE a.owner_id=o.owner_id AND a.order_id=%s AND z.order_id=o.id))) ORDER BY o.created_at,o.id",
             (owner, account_kind, currency,scoped_account,scoped_account,exclude_order_id,exclude_order_id,exclude_order_id),
         )
     ).fetchall()
@@ -241,6 +243,8 @@ class InternalOrders:
 
     async def plan(self, conn, who, data, cash_revision, order_revision):
         if data["action"] == "cancel":
+            from .native_ledger_handoff import require_legacy_order
+            await require_legacy_order(conn, who.id, data['orderId'])
             row = await (
                 await conn.execute(
                     "SELECT * FROM internal_orders WHERE owner_id=%s AND id=%s FOR UPDATE",

@@ -3,7 +3,8 @@
 import json
 import re
 from collections import defaultdict
-from decimal import Decimal, localcontext
+from datetime import UTC, date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -18,7 +19,7 @@ from .cash_overview import CashOverview
 from .fx_provider_parser import unique
 from .legacy_identity import assert_native_origin, native_identity
 from .native_app_auth import CLIENT
-from .native_trade_sync import CURRENCIES, extends_fill_history, same_fill, validate_amount, validate_order
+from .native_trade_sync import CURRENCIES, extends_fill_history, order_time, same_fill, validate_amount, validate_order
 from .profile_http import body_budget, bounded_body
 from .security import lock_mutation_identity, lock_read_identity
 
@@ -108,7 +109,18 @@ def validate_ledger_order(item):
     if item.get('broker') != '' and 'broker' in item:
         text(item['broker'], 160)
     account = broker_id(item.get('brokerAccountId'))
-    identifier, _ = validate_order({key: value for key, value in item.items() if key != 'brokerAccountId'})
+    if 'changedAt' in item:
+        order_time(item['changedAt'])
+    if 'triggerAbove' in item and (type(item['triggerAbove']) is not bool or 'triggerPrice' not in item):
+        raise ValueError
+    if 'expiresAt' in item:
+        expiry = item['expiresAt']
+        if len(expiry) == 10:
+            date.fromisoformat(expiry)
+        else:
+            order_time(expiry)
+    identifier, _ = validate_order({key: value for key, value in item.items()
+                                    if key not in {'brokerAccountId', 'changedAt', 'expiresAt', 'triggerAbove'}})
     return str(identifier), {**item, 'brokerAccountId': account}
 
 
@@ -135,6 +147,16 @@ def validate_transaction(raw):
         if raw.keys() != common | {'legacyRevision'} or raw['baseRevision'] != 0 or not re.fullmatch(r'[0-9a-f]{64}', raw['legacyRevision']):
             raise ValueError
         return rid, {}, {}, {}
+    if raw['kind'] == 'merge':
+        if raw.keys() != common | {'orderIds', 'mergedOrderId', 'filledAt'}:
+            raise ValueError
+        ids = raw['orderIds']
+        if not isinstance(ids, list) or not 2 <= len(ids) <= ITEM_LIMIT or len(set(ids)) != len(ids):
+            raise ValueError
+        if raw['mergedOrderId'] in ids or any(str(UUID(id_)) != id_ for id_ in [*ids, raw['mergedOrderId']]):
+            raise ValueError
+        order_time(raw['filledAt'])
+        return rid, {}, {}, {}
     if raw['kind'] != 'trade' or raw.keys() != common | {'orders', 'positions', 'cash'}:
         raise ValueError
     if not isinstance(raw['orders'], list) or not 1 <= len(raw['orders']) <= ITEM_LIMIT:
@@ -158,8 +180,9 @@ async def require_legacy_write(conn, owner, account_kind):
         conflict('实盘账本已接入 App 原生同步，请通过原生账本提交')
 
 
-async def legacy_baseline(conn, db, who):
+async def legacy_baseline(conn, db, who, *, lock_orders=False):
     from .scope_coverage import require_global
+    from .native_ledger_handoff import pending
     await require_global(conn, who.id)
     records = await (await conn.execute('''
         SELECT r.id,r.market,r.account_market,r.code,r.name,r.qty,r.broker_account_id
@@ -186,8 +209,9 @@ async def legacy_baseline(conn, db, who):
             value = row['balance']
             cash.append({'currency': row['currency'], 'brokerAccountId': broker['accountId'],
                          'balance': decimal_text(Decimal(value)) if value is not None else None})
+    orders, history, transfers, blockers, numbers = await pending(conn, who.id, positions, lock=lock_orders)
     return {'positions': positions, 'cash': sorted(cash, key=lambda row: (row['brokerAccountId'] or '', row['currency'])),
-            'orders': []}
+            'orders': orders, 'orderHistory': history, 'adoptionBlockers': blockers, 'orderNumbers': numbers}, transfers
 
 
 def conflict(message='原生账本版本已变化，请重新读取后确认'):
@@ -204,6 +228,15 @@ def transition(prior, item):
     if position_identity(prior) != position_identity(item) or any(item.get(key) != prior.get(key) for key in stable):
         conflict('原订单身份已变化')
     old = prior['status']
+    if old == status == 'pending':
+        mutable = {'quantity', 'orderPrice', 'price', 'fees', 'triggerPrice', 'triggerAbove',
+                   'tif', 'session', 'expiresAt', 'changedAt'}
+        if (not item.get('changedAt') or {k:v for k,v in item.items() if k not in mutable}
+                != {k:v for k,v in prior.items() if k not in mutable}
+                or Decimal(item['orderPrice']) != Decimal(item['price'])
+                or all(item.get(key) == prior.get(key) for key in mutable - {'changedAt'})):
+            conflict('待成改单须保留原单身份并记录实际变更')
+        return
     incoming = item.get('deletedFrom', status)
     eligible = old == 'pending' and (status in {'filled', 'cancelled', 'expired'} or incoming == 'pending' and status == 'deleted')
     removed = old in {'filled', 'cancelled', 'expired'} and status == 'deleted' and incoming == old
@@ -214,6 +247,8 @@ def transition(prior, item):
                  and (old != 'filled' or same_fill(prior, item)))
     if not (edited or (eligible or removed) and unchanged):
         conflict('原订单状态或编辑历史已变化')
+    if prior.get('mergedFromOrderIds') and status != 'deleted':
+        conflict('合并成交保留精确原单金额，需分开核对原成交')
 
 
 def settlement(item):
@@ -221,7 +256,8 @@ def settlement(item):
     currency = CURRENCIES[account_market]
     quantity, price, fees = (Decimal(item[key]) for key in ('quantity', 'price', 'fees'))
     buy = item['side'] == 'buy'
-    standard = quantity * price + (fees if buy else -fees)
+    gross = Decimal(item['grossAmount']) if item.get('mergedFromOrderIds') else quantity * price
+    standard = gross + (fees if buy else -fees)
     value = item.get('settlementAmount')
     if (item.get('settlementCurrency', currency) != currency
             or account_market != market and (value is None or Decimal(value) <= 0)
@@ -263,15 +299,46 @@ async def check_record_identities(conn, owner, state, orders):
             conflict('持仓编号与现有记录冲突')
 
 
-def apply_trade(state, changed_orders, changed_positions, changed_cash):
+def append_history(history, item, now, request_id, prior=None):
+    identifier = item['tradeId']
+    events = list(history.get(identifier, []))
+    if prior is not None and not events:
+        events = [order_history_item(prior, prior['createdAt'], 1)]
+    edit = item.get('editHistory')
+    edited_at = edit[-1]['editedAt'] if edit and prior and edit != prior.get('editHistory') else None
+    explicit = item.get('changedAt') or item.get('deletedAt') or edited_at or (item['createdAt'] if prior is None else None)
+    occurred = explicit or now.isoformat()
+    stamp = order_time(occurred)
+    last_known = next((event['occurredAt'] for event in reversed(events) if event.get('timeSource') != 'server'), None)
+    if (stamp < order_time(item['createdAt']) or stamp > now + timedelta(minutes=5)
+            or explicit and last_known and stamp < order_time(last_known)):
+        conflict('订单变更时间与原版本不一致')
+    events.append({**order_history_item(item, occurred, (events[-1]['revision'] if events else 0) + 1),
+                   'timeSource': 'app' if explicit else 'server', 'requestId': str(request_id)})
+    history[identifier] = events
+
+
+def order_history_item(item, occurred, revision):
+    return {'revision': revision, 'occurredAt': occurred, 'status': item['status'],
+            **{key: item[key] for key in ('quantity', 'price', 'orderPrice', 'fees')}}
+
+
+def apply_trade(state, changed_orders, changed_positions, changed_cash, now, request_id):
     orders = {item['tradeId']: item for item in state['orders']}
     positions = {item['recordId']: item for item in state['positions']}
     cash = {cash_key(item): item for item in state['cash']}
+    history = dict(state.get('orderHistory', {}))
     quantity_delta, cash_delta = defaultdict(Decimal), defaultdict(Decimal)
     identities = {}
     for identifier, item in changed_orders.items():
         before = orders.get(identifier)
+        if before and item['status'] != 'pending':
+            carried = {key: before[key] for key in ('expiresAt', 'triggerAbove', 'triggerPrice') if key in before}
+            item = {**carried, **item}
+        if before and before.get('mergedFromOrderIds'):
+            item = {**item, **{key: before[key] for key in ('mergedFromOrderIds', 'grossAmount')}}
         transition(before, item)
+        append_history(history, item, now, request_id, before)
         record = item['recordId']
         identity = position_identity(item)
         if record in positions and identity != position_identity(positions[record]):
@@ -328,7 +395,50 @@ def apply_trade(state, changed_orders, changed_positions, changed_cash):
             balance = None if current is None else Decimal(current) + delta
             cash[key] = {'currency': key[1], 'brokerAccountId': key[0], 'balance': decimal_text(balance)}
 
-    return {'positions': list(positions.values()), 'cash': list(cash.values()), 'orders': list(orders.values())}
+    return {**state, 'positions': list(positions.values()), 'cash': list(cash.values()), 'orders': list(orders.values()),
+            'orderHistory': history}
+
+
+def apply_merge(state, raw, now, request_id):
+    orders = {item['tradeId']: item for item in state['orders']}
+    selected = [orders.get(identifier) for identifier in raw['orderIds']]
+    identifier = raw['mergedOrderId']
+    if identifier in orders or any(not order or order['status'] != 'filled' for order in selected):
+        conflict('须选择本人仍生效且已成交的原单')
+    template = selected[0]
+    relation = set(raw['orderIds'])
+    if (any(position_identity(item) != position_identity(template) or item['recordId'] != template['recordId']
+            or item['side'] != template['side'] or item.get('parentOrderId') for item in selected)
+            or any(item.get('parentOrderId') in relation and item['status'] == 'pending' for item in orders.values())):
+        conflict('合并须使用同券商、同持仓、同方向且无在途附加单的成交')
+    if not any(order_time(item['filledAt']) == order_time(raw['filledAt']) for item in selected):
+        conflict('合并成交时间须选自原单')
+    total_quantity = sum(Decimal(item['quantity']) for item in selected)
+    total_fees = sum(Decimal(item['fees']) for item in selected)
+    gross = sum(Decimal(item['grossAmount']) if item.get('mergedFromOrderIds')
+                else Decimal(item['quantity']) * Decimal(item['price']) for item in selected)
+    totals = [settlement(item) for item in selected]
+    net = sum(entry[2] for entry in totals) * (-1 if template['side'] == 'buy' else 1)
+    average = decimal_text((gross / total_quantity).quantize(Decimal('0.00000001'), rounding=ROUND_HALF_UP))
+    combined = {key: template[key] for key in ('recordId','brokerAccountId','market','code','name','side','priceCurrency')}
+    combined.update({'tradeId': identifier, 'status': 'filled', 'execution': 'recorded', 'orderType': 'limit',
+        'quantity': decimal_text(total_quantity), 'price': average, 'orderPrice': average, 'fees': decimal_text(total_fees),
+        'createdAt': now.isoformat(), 'filledAt': raw['filledAt'], 'settlementCurrency': totals[0][0][1],
+        'settlementAmount': decimal_text(net)})
+    if 'accountMarket' in template:
+        combined['accountMarket'] = template['accountMarket']
+    validate_ledger_order(combined)
+    combined.update(grossAmount=decimal_text(gross), mergedFromOrderIds=raw['orderIds'])
+    history = dict(state.get('orderHistory', {}))
+    for item in selected:
+        tombstone = {**item, 'status': 'deleted', 'deletedFrom': 'filled', 'deletedAt': now.isoformat(),
+                     'mergedIntoOrderId': identifier}
+        tombstone.pop('changedAt', None)
+        append_history(history, tombstone, now, request_id, item)
+        orders[item['tradeId']] = tombstone
+    append_history(history, combined, now, request_id)
+    orders[identifier] = combined
+    return {**state, 'orders': list(orders.values()), 'orderHistory': history}
 
 
 async def receipt(conn, owner, request_id):
@@ -352,10 +462,15 @@ async def commit(conn, db, who, raw):
     if revision != raw['baseRevision']:
         conflict()
     kind = raw['kind']
+    now = (await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
+    transfers = {}
     if kind == 'adopt':
-        state = await legacy_baseline(conn, db, who)
+        state, transfers = await legacy_baseline(conn, db, who, lock_orders=True)
         if fingerprint(state) != raw['legacyRevision']:
             conflict('旧账户基线已变化，请重新读取后确认接管')
+        if state['adoptionBlockers']:
+            conflict('存在尚不能完整接管的旧委托，请先核对在途订单')
+        state.pop('adoptionBlockers')
     else:
         if not head:
             conflict('请先读取并接管旧账户基线')
@@ -363,13 +478,20 @@ async def commit(conn, db, who, raw):
         await check_record_identities(conn, who.id, head['snapshot'], orders)
         with localcontext() as context:
             context.prec = 80
-            state = apply_trade(head['snapshot'], orders, positions, cash)
+            if kind == 'merge':
+                state = apply_merge(head['snapshot'], raw, now, request_id)
+            else:
+                state = apply_trade(head['snapshot'], orders, positions, cash, now, request_id)
     next_revision = revision + 1
     value = {'ownerId': who.id, 'requestId': str(request_id), 'kind': kind, 'sourceRevision': next_revision}
     await conn.execute('''
         INSERT INTO native_ledger_heads(owner_id,revision,snapshot) VALUES(%s,%s,%s)
         ON CONFLICT(owner_id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot,updated_at=clock_timestamp()
     ''', (who.id, next_revision, Jsonb(state)))
+    for order_id, legacy_revision in transfers.items():
+        await conn.execute('''
+            INSERT INTO native_ledger_transferred_orders(owner_id,order_id,legacy_revision) VALUES(%s,%s,%s)
+        ''', (who.id, order_id, legacy_revision))
     await conn.execute("INSERT INTO asset_request_domains(owner_id,request_id,domain) VALUES(%s,%s,'native_ledger')", (who.id, request_id))
     await conn.execute('''
         INSERT INTO native_ledger_transactions(owner_id,request_id,revision,fingerprint,event,receipt)
@@ -413,7 +535,7 @@ def mount_native_ledger(app):
                         value = old['receipt']
                     else:
                         head = await ledger_head(conn, who.id)
-                        state = head['snapshot'] if head else await legacy_baseline(conn, db, who)
+                        state = head['snapshot'] if head else (await legacy_baseline(conn, db, who))[0]
                         value = {'ownerId': who.id, 'source': 'native' if head else 'legacy',
                                  'sourceRevision': head['revision'] if head else 0,
                                  'legacyRevision': None if head else fingerprint(state), **state}

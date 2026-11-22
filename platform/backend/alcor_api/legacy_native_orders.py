@@ -96,11 +96,13 @@ class NativeOrders(InternalOrders):
             from .asset_request_domains import require_domain
             await require_domain(conn,who.id,rid,'internal_order')
             rows = []
+            from .native_ledger_handoff import require_legacy_order
             for item in selected:
                 try:
                     order_id = UUID(item['orderId'])
                 except ValueError:
                     raise HTTPException(404,'本人订单不存在') from None
+                await require_legacy_order(conn, who.id, order_id)
                 row = await (await conn.execute('SELECT * FROM internal_orders WHERE owner_id=%s AND id=%s FOR UPDATE',(who.id,order_id))).fetchone()
                 if not row:
                     raise HTTPException(404,'本人订单不存在')

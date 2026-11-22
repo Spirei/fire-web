@@ -212,11 +212,10 @@ async def lock_mirror_order(conn, who, identifier):
     await lock_mutation_identity(conn, who, require_admin=False)
     await lock_order(conn, who.id, identifier)
     native = await (await conn.execute("""
-        SELECT 1 FROM native_ledger_heads
-        WHERE owner_id=%s AND snapshot->'orders' @> %s
-    """, (who.id, Jsonb([{'tradeId': str(identifier)}])))).fetchone()
+        SELECT 1 FROM native_ledger_heads WHERE owner_id=%s
+    """, (who.id,))).fetchone()
     if native:
-        raise HTTPException(409, '该订单已归属 App 原生账本，请通过原生事务修改')
+        raise HTTPException(409, '本账户已接管，请通过 App 原生账本同步订单')
 
 
 async def save_order(conn, who, identifier, occurred, item):
@@ -257,7 +256,29 @@ async def save_order(conn, who, identifier, occurred, item):
                        (who.id, identifier, status, occurred, Jsonb(item)))
 
 
-def order_projection(item):
+def order_activity(item, history):
+    versions = history or [{
+        'revision': 1, 'status': item['status'], 'occurredAt': item['createdAt'],
+        'quantity': item.get('quantity'), 'price': item.get('price'),
+    }]
+    result = []
+    previous = None
+    for version in versions:
+        status = version['status']
+        if status == 'deleted':
+            continue
+        kind = ('amended' if status == previous else 'submitted' if status == 'pending' else status)
+        timestamp = item.get('filledAt') if kind == 'filled' else version['occurredAt']
+        result.append((order_time(timestamp), version['revision'], {
+            'id': f"{item['tradeId']}:{version['revision']}", 'timestamp': timestamp, 'kind': kind,
+            **{key: float(Decimal(version[key])) if version.get(key) is not None else None
+               for key in ('quantity', 'price')},
+        }))
+        previous = status
+    return [event for _, _, event in sorted(result, key=lambda row: row[:2], reverse=True)]
+
+
+def order_projection(item, *, history=None, order_number=None):
     filled = item.get('status', 'filled') == 'filled'
     stamp = item.get('filledAt') or item['createdAt']
     qty, price = Decimal(item['quantity']), Decimal(item['price'])
@@ -267,21 +288,26 @@ def order_projection(item):
             'CN' if item['market'] == 'HK' and item.get('settlementCurrency') == 'CNY' else item['market']),
         'code': item['code'], 'name': item['name'], 'side': item['side'],
         'status': item.get('status', 'filled'), 'qty': float(qty), 'price': float(price),
-        'fees': float(item['fees']), 'amount': float(qty * price), 'currency': item['priceCurrency'],
+        'fees': float(item['fees']), 'amount': float(Decimal(item['grossAmount']) if 'grossAmount' in item else qty * price), 'currency': item['priceCurrency'],
         'settlementCurrency': item.get('settlementCurrency'),
         'settlementAmount': float(item['settlementAmount']) if item.get('settlementAmount') is not None else None,
         'createdAt': item.get('createdAt'), 'tradedAt': stamp, 'startsAt': item.get('startsAt'),
         'orderType': item.get('orderType'), 'orderPrice': float(item.get('orderPrice', item['price'])),
         'executedPrice': float(price) if filled else None, 'filledQty': float(qty) if filled else 0,
         'triggerPrice': float(item['triggerPrice']) if item.get('triggerPrice') is not None else None,
+        **{key: item[key] for key in ('expiresAt', 'triggerAbove') if key in item},
         'parentOrderId': item.get('parentOrderId'), 'tif': item.get('tif'), 'session': item.get('session'),
         'broker': item.get('broker') or '', 'note': '', 'realizedPnl': None,
         'executionModel': 'app_order_mirror', 'apiManaged': True, 'cancellable': False,
         'actualFeeKnown': filled, 'brokerExecution': False, 'editCount': len(item.get('editHistory', [])),
         **({'brokerAccountId': item['brokerAccountId'], 'identityMatches': True,
-            'executionModel': 'app_native_ledger', 'revision': 1 + len(item.get('editHistory', [])),
+            'executionModel': 'app_native_ledger', 'revision': history[-1]['revision'] if history else 1,
+            'orderActivity': order_activity(item, history),
+            **({'orderNo': order_number, 'orderNoSource': 'platform_assigned'} if order_number else {}),
+            **({'mergedFromOrderIds': item['mergedFromOrderIds']} if item.get('mergedFromOrderIds') else {}),
             'nativeActions': {'cancel': item['status'] == 'pending', 'delete': item['status'] in ORDER_STATES,
-                              'edit': filled and item['execution'] == 'recorded' and not item.get('parentOrderId')}}
+                              'edit': item['status'] == 'pending' or filled and item['execution'] == 'recorded'
+                                and not item.get('parentOrderId') and not item.get('mergedFromOrderIds')}}
            if 'brokerAccountId' in item else {}),
     }
 
@@ -290,20 +316,22 @@ async def fetch_orders(conn, owner, *, before=None, limit=100, record_id=None, t
     cursor = await conn.execute('''
         WITH native AS (
             SELECT (item->>'tradeId')::uuid AS order_id,
-                COALESCE(item->>'filledAt',item->>'createdAt')::timestamptz AS occurred_at,item
+                COALESCE(item->>'filledAt',item->>'createdAt')::timestamptz AS occurred_at,item,
+                snapshot->'orderHistory'->(item->>'tradeId') AS history,
+                snapshot->'orderNumbers'->>(item->>'tradeId') AS order_number
             FROM native_ledger_heads CROSS JOIN LATERAL jsonb_array_elements(snapshot->'orders') AS events(item)
             WHERE owner_id=%(owner)s
-        ) SELECT order_id,occurred_at,item FROM (
-            SELECT order_id,occurred_at,item FROM native
+        ) SELECT order_id,occurred_at,item,history,order_number FROM (
+            SELECT order_id,occurred_at,item,history,order_number FROM native
             WHERE item->>'status'<>'deleted'
               AND (%(record)s::text IS NULL OR item->>'recordId'=%(record)s)
             UNION ALL
-            SELECT order_id,occurred_at,item FROM native_synced_orders
+            SELECT order_id,occurred_at,item,NULL::jsonb,NULL::text FROM native_synced_orders
             WHERE owner_id=%(owner)s AND status<>'deleted'
               AND (%(record)s::text IS NULL OR item->>'recordId'=%(record)s)
               AND order_id NOT IN (SELECT order_id FROM native)
             UNION ALL
-            SELECT trade_id,occurred_at,fill FROM native_synced_fills f
+            SELECT trade_id,occurred_at,fill,NULL::jsonb,NULL::text FROM native_synced_fills f
             WHERE owner_id=%(owner)s AND %(record)s::text IS NULL
               AND NOT EXISTS (SELECT 1 FROM native_synced_orders o WHERE o.owner_id=f.owner_id AND o.order_id=f.trade_id)
               AND trade_id NOT IN (SELECT order_id FROM native)
@@ -353,7 +381,8 @@ def mount_native_trade_sync(app):
                     await lock_read_identity(conn, who, require_admin=False)
                     rows = await fetch_orders(conn, who.id, before=before, limit=101, today=params.get('scope') == 'today')
                 tail = rows[99] if len(rows) > 100 else None
-                value = {'ownerId': who.id, 'items': [order_projection(row['item']) for row in rows[:100]],
+                value = {'ownerId': who.id, 'items': [order_projection(row['item'], history=row['history'],
+                                                         order_number=row['order_number']) for row in rows[:100]],
                          'before': f"{tail['occurred_at'].isoformat()}|{tail['order_id']}" if tail else None}
             return JSONResponse({'code': 0, 'message': 'ok', 'data': value}, headers=headers)
         except (ValueError, UnicodeError, RecursionError):
