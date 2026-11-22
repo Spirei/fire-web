@@ -4,10 +4,10 @@ import { IconCamera, IconLoader2 } from "@tabler/icons-react";
 import SafeAssetImage from "@/components/SafeAssetImage";
 
 /** Shared, full-image upload target. It stays a sibling of edit/select actions. */
-export default function AssetImageControl({ src, name, card = false, disabled = false, busy = false, onUpload }: {
-  src?: string; name: string; card?: boolean; disabled?: boolean; busy?: boolean; onUpload?: () => void;
+export default function AssetImageControl({ src, name, card = false, disabled = false, busy = false, loading = "lazy", onUpload }: {
+  src?: string; name: string; card?: boolean; disabled?: boolean; busy?: boolean; loading?: "eager" | "lazy"; onUpload?: () => void;
 }) {
-  const image = <SafeAssetImage src={src} alt={name} loading="lazy"
+  const image = <SafeAssetImage src={src} alt={name} loading={loading}
     style={{ width: "100%", height: "100%" }} className="h-full w-full object-contain"
     fallback={<span className="asset-image-fallback">{name.slice(0, 1)}</span>} />;
   return onUpload ? <button type="button" data-capsule="off" className={`asset-image-control${card ? " is-card" : ""}`}

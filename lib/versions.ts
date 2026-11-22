@@ -8453,6 +8453,8 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.89", date: "2026-11-23", summary: "App 订单、持仓和原币现金一起同步",
   software: V0_1_88_ENTRY.software.map(item => ({ ...item, version: "v0.1.89" })),
   changes: [
+    { kind: "fix", title: "素材库搜索与加载反馈", desc: "输入时立即显示读取状态，搜索、筛选和翻页保留已显示的结果直到新结果就绪。首次显示时优先加载可见图标，并随列表返回已保存的市场顺序。" },
+    { kind: "fix", title: "集中核对 ETF 图标关系", desc: "股票图标页可按待核实状态筛选。查看正股后可以返回原 ETF 的市场、搜索词、筛选和页码。" },
     { kind: "feature", title: "App 原生账本同步", desc: "补录按实际成交时间保存，成交、持仓和原币现金一起入账。买卖、挂单、撤单、编辑和删除使用同一账本，跨设备可按原请求编号核对。" },
   ],
 };

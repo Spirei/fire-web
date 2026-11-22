@@ -14,6 +14,7 @@ import { IconButton } from "@/components/Capsule";
 export default function CollectionToolbar({
   query,
   onQuery,
+  onSearchComposition,
   selecting,
   onToggleSelection,
   selectedCount,
@@ -28,6 +29,7 @@ export default function CollectionToolbar({
 }: {
   query: string;
   onQuery: (value: string) => void;
+  onSearchComposition?: (composing: boolean) => void;
   selecting: boolean;
   onToggleSelection: () => void;
   selectedCount: number;
@@ -49,6 +51,11 @@ export default function CollectionToolbar({
           placeholder="搜索名称或代码"
           value={query}
           onChange={(e) => onQuery(e.target.value)}
+          onCompositionStart={() => onSearchComposition?.(true)}
+          onCompositionEnd={(event) => {
+            if (onSearchComposition) onQuery(event.currentTarget.value);
+            onSearchComposition?.(false);
+          }}
         />
       </label>
       <button

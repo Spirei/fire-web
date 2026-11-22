@@ -237,6 +237,40 @@ async def test_skhynix_related_material_and_single_etf_icon_read(client, admin, 
     assert (await client.get("/api/assets", params={"type": "stock", "keys": "US:SKUU.OQ"})).json() == {"assets": []}
 
 
+async def test_stock_review_filter_counts_before_pagination_and_preserves_search(client, admin, app):
+    await fire_login(client)
+    names = {
+        **{f"stock:US:REVIEW{i:02d}": f"2倍做多示例ETF 第{i}号" for i in range(12)},
+        "stock:US:SKUU.OQ": "2倍做多海力士ETF",
+        "stock:HK:REVIEW": "2倍做多示例ETF",
+        "stock:US:AANT": "ANT preferred example",
+        "stock:US:ANT": "Anthropic",
+    }
+    for aid in names:
+        await seed_asset(app, aid, "stock", aid.split(":")[1])
+    async with app.state.db.connection() as conn:
+        for aid, name in names.items():
+            await conn.execute("UPDATE asset_catalog_entries SET name=%s WHERE id=%s", (name, aid))
+    path = "/api/assets/catalog"
+    common = {"type": "stock", "market": "ALL"}
+    regular = await client.get(path, params=common)
+    assert regular.status_code == 200, regular.text
+    assert regular.json()["reviewCount"] == 12
+    result = await client.get(path, params={**common, "review": "1", "page": "2"})
+    assert result.status_code == 200, result.text
+    data = result.json()
+    assert (data["total"], data["reviewCount"], data["page"]) == (12, 12, 2)
+    assert [row["code"] for row in data["assets"]] == ["REVIEW10", "REVIEW11"]
+    assert all(row["imageReview"]["state"] == "unverified-underlying" for row in data["assets"])
+    narrower = await client.get(path, params={**common, "review": "1", "q": "REVIEW11", "page": "2"})
+    assert (narrower.json()["total"], narrower.json()["page"]) == (1, 1)
+    hk = await client.get(path, params={**common, "review": "1", "market": "HK"})
+    assert hk.json()["total"] == 0
+    assert (await client.get(path, params={**common, "review": "1", "removed": "1"})).status_code == 400
+    exact = await client.get(path, params={**common, "q": "ANT"})
+    assert [row["code"] for row in exact.json()["assets"]][:2] == ["ANT", "AANT"]
+
+
 def test_stock_reference_counts_follow_shared_underlying_without_certifying_bytes():
     from alcor_api.asset_catalog_management import stock_image_reference_counts
     root={'id':'root','type':'stock','market':'US','code':'TSLA','light_version':'synthetic-version'}

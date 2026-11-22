@@ -1,6 +1,18 @@
+import type { MaterialListing } from "./workspaceInitial";
+import { readMaterialResponse } from "./materialRead";
+
 /** Last accepted material catalog page, used to paint before the network read. */
 const MATERIAL_PAGE_CACHE = "fire:material:page:v1";
 const MAX_CACHED_BYTES = 1_000_000;
+const prefetches = new Map<string, { ownerId: string; controller: AbortController; work: Promise<MaterialListing | null> }>();
+
+export function materialListingScope(ownerId: string, type: string, removed: boolean) {
+  return JSON.stringify([ownerId, type, removed]) + "|";
+}
+
+export function materialListingKey(ownerId: string, type: string, market = "ALL", query = "", page = 1, removed = false, review = false) {
+  return materialListingScope(ownerId, type, removed) + JSON.stringify([market, query, page, review]);
+}
 
 export function materialPageKey(ownerId: string, readKey: string) {
   return `${MATERIAL_PAGE_CACHE}:${ownerId || "guest"}:${readKey}`;
@@ -25,6 +37,11 @@ export function saveCachedMaterialListing<T>(ownerId: string, readKey: string, d
 }
 
 export function clearCachedMaterialListings(ownerId: string) {
+  for (const [key, request] of prefetches) {
+    if (request.ownerId !== ownerId) continue;
+    request.controller.abort();
+    prefetches.delete(key);
+  }
   try {
     const prefix = `${MATERIAL_PAGE_CACHE}:${ownerId || "guest"}:`;
     for (let index = localStorage.length - 1; index >= 0; index -= 1) {
@@ -34,17 +51,30 @@ export function clearCachedMaterialListings(ownerId: string) {
   } catch { /* optional view cache */ }
 }
 
-/** Warm the default catalog page when the mouse reaches the sidebar entry. */
-export async function prefetchMaterialCatalog(ownerId: string, type = "market") {
-  const key = `${ownerId || "guest"}|${type}|ALL||1|`;
-  try {
-    const response = await fetch(`/api/assets/catalog?${new URLSearchParams({ type, market: "ALL", q: "", page: "1", removed: "0" })}`, {
-      cache: "no-store",
-      credentials: "same-origin",
+export function pendingMaterialCatalog(key: string) {
+  return prefetches.get(key)?.work;
+}
+
+/** Share an in-flight category read between sidebar preparation and the active view. */
+export function prefetchMaterialCatalog(ownerId: string, type = "market") {
+  const key = materialListingKey(ownerId, type);
+  const pending = pendingMaterialCatalog(key);
+  if (pending) return pending;
+  const cached = readCachedMaterialListing<MaterialListing>(ownerId, key);
+  if (cached && Date.now() - cached.at < 60000) return;
+  const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]);
+  const query = new URLSearchParams({ type, market: "ALL", q: "", page: "1", removed: "0" });
+  const work = readMaterialResponse(`/api/assets/catalog?${query}`, signal)
+    .then(data => {
+      if (!Array.isArray(data.assets) || !Number.isFinite(data.total) || !Number.isFinite(data.page)) return null;
+      saveCachedMaterialListing(ownerId, key, data);
+      return data as MaterialListing;
+    })
+    .catch(() => null)
+    .finally(() => {
+      if (pendingMaterialCatalog(key) === work) prefetches.delete(key);
     });
-    if (!response.ok) return;
-    const data = await response.json();
-    if (!data || !Array.isArray(data.assets) || !Number.isFinite(data.total)) return;
-    saveCachedMaterialListing(ownerId, key, data);
-  } catch { /* the view still loads on click */ }
+  prefetches.set(key, { ownerId, controller, work });
+  return work;
 }

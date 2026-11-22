@@ -296,7 +296,7 @@ async def admin_passkeys(user_id: str, request: Request, who: Member):
 async def asset_catalog(request: Request, who: Member):
     if who.role != "admin":
         raise HTTPException(403, "需要管理员权限")
-    parameters(request, ("type", "market", "q", "page", "removed"))
+    parameters(request, ("type", "market", "q", "page", "removed", "review"))
     kind = request.query_params.get("type", "market")
     market = request.query_params.get("market", "ALL")
     q = request.query_params.get("q", "")
@@ -304,16 +304,21 @@ async def asset_catalog(request: Request, who: Member):
         raise HTTPException(400, "素材筛选无效")
     service = request.app.state.asset_catalog_management
     deleted = request.query_params.get("removed") == "1"
+    review = request.query_params.get("review", "0")
+    if review not in {"0", "1"} or (review == "1" and (kind != "stock" or deleted)):
+        raise HTTPException(400, "素材筛选无效")
     public_listings = []
-    if kind == "stock" and market in {"ALL", "US"} and not deleted and len(q.strip()) <= 50:
+    if kind == "stock" and market in {"ALL", "US"} and not deleted and review == "0" and len(q.strip()) <= 50:
         from .public_stock_reference import find_listings
         public_listings = await find_listings(getattr(request.app.state, "public_reference", None), q)
     async with service.catalog.context(who) as conn:
         preferences = (await (await conn.execute("SELECT broker_order FROM fire_catalog_preferences WHERE singleton")).fetchone())["broker_order"]
         site = await (await conn.execute("SELECT settings FROM site_settings WHERE singleton")).fetchone()
         market_order = (site["settings"].get("assetMarketOrder", []) if site else []) + list(MARKETS)
-        value = await service.listing(kind=kind, q=q, page=page_number(request.query_params.get("page")), clamp=True, deleted=deleted, connection=conn, directory={"market": market, "brokerOrder": preferences, "marketOrder": market_order, "publicListings": public_listings})
+        value = await service.listing(kind=kind, q=q, page=page_number(request.query_params.get("page")), clamp=True, deleted=deleted, connection=conn, directory={"market": market, "brokerOrder": preferences, "marketOrder": market_order, "publicListings": public_listings, "reviewOnly": review == "1"})
     value["revision"] = str(value["revision"])
+    if kind == "stock":
+        value["marketOrder"] = list(dict.fromkeys(market_order))
     from .asset_web_keys import stock_image_review
     value["assets"] = [
         {

@@ -746,10 +746,15 @@ class AssetManagement:
                     or (public_listing_identities and row["type"] == "stock"
                         and stock_identity(row["market"], row["code"]) in public_listing_identities)
                 ]
+            review_count = None
+            if directory is not None and kind == "stock" and not deleted:
+                from .asset_web_keys import stock_needs_underlying_review
+
+                needs_review = [pair for pair in records if stock_needs_underlying_review(pair[0])]
+                review_count = len(needs_review)
+                if directory.get("reviewOnly"):
+                    records = needs_review
             records.sort(key=lambda pair: (pair[0]["type"], pair[0]["market"], pair[0]["code"]))
-            if directory is not None and kind == "stock" and query:
-                needle = query.upper()
-                records.sort(key=lambda pair: needle not in (pair[0]["code"].upper(), pair[0]["name"].upper(), listing_name(pair[0])))
             if sort is not None:
                 records.sort(key=lambda pair: pair[0]["code"])
                 if sort in ("name", "code"):
@@ -768,6 +773,9 @@ class AssetManagement:
                 records.sort(key=lambda pair: positions.get(pair[0]["market"], len(positions)))
             elif directory is not None and kind != "broker":
                 records.sort(key=lambda pair: pair[0]["code"])
+            if directory is not None and kind == "stock" and query:
+                needle = query.upper()
+                records.sort(key=lambda pair: needle not in (pair[0]["code"].upper(), pair[0]["name"].upper(), listing_name(pair[0])))
             total = len(records)
             if clamp:
                 page = min(page, max(1, math.ceil(total / page_size)))
@@ -838,6 +846,7 @@ class AssetManagement:
                 "assets": assets,
                 **({"marketCounts": market_counts, "removedCount": removed_count} if directory is not None else {}),
                 **({"marketCountsBasis": "image-references"} if directory is not None and kind == "stock" else {}),
+                **({"reviewCount": review_count} if review_count is not None else {}),
                 "excludedMarkets": sorted(aid[7:] for aid in removed if aid.startswith("market:")),
                 "total": total,
                 "page": page,

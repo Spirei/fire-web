@@ -1,6 +1,6 @@
 "use client";
 import { clientRequestId } from "@/lib/randomId";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IconTrash,
   IconLayoutGrid,
@@ -27,7 +27,7 @@ import Pagination from "@/components/Pagination";
 import AppSelect from "@/components/AppSelect";
 import { materialMarketSlots } from "@/lib/materialMarkets";
 import { readMaterialResponse } from "@/lib/materialRead";
-import { clearCachedMaterialListings, readCachedMaterialListing, saveCachedMaterialListing } from "@/lib/materialCatalogCache";
+import { clearCachedMaterialListings, materialListingKey, materialListingScope, pendingMaterialCatalog, prefetchMaterialCatalog, readCachedMaterialListing, saveCachedMaterialListing } from "@/lib/materialCatalogCache";
 import { Capsule } from "@/components/Capsule";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { appConfirm } from "@/lib/appDialog";
@@ -60,27 +60,9 @@ const markets = [
   "TW",
   "BR",
 ];
-type Item = {
-  id: string;
-  type: string;
-  market: string;
-  code: string;
-  name: string;
-  url: string;
-  urlDark?: string;
-  imageUrl?: string;
-  listingCandidate?: boolean;
-  imageReview?: { state: "unverified-underlying" } | { state: "missing-artwork"; code: string };
-  brokerMarkets: string[];
-};
-type Listing = {
-  marketCounts: Record<string, number>;
-  removedCount?: number;
-  assets: Item[];
-  total: number;
-  page: number;
-  revision: string;
-};
+type Listing = import("@/lib/workspaceInitial").MaterialListing;
+type Item = Listing["assets"][number];
+type UnderlyingOrigin = { ownerId: string; code: string };
 
 const readCachedListing = (ownerId: string, readKey: string) =>
   readCachedMaterialListing<Listing>(ownerId, readKey);
@@ -105,10 +87,14 @@ export default function AssetCatalogView({
     query = (params.get("q") || "").slice(0, 200),
     page = Math.max(1, Number(params.get("page")) || 1),
     grid = params.get("view") === "grid",
-    removed = type !== "group" && params.get("removed") === "1";
+    removed = type !== "group" && params.get("removed") === "1",
+    review = type === "stock" && !removed && params.get("review") === "1";
   const [listing, setListing] = useState<Listing | null>(initial?.data ?? null),
-    [loading, setLoading] = useState(!initial),
-    [error, setError] = useState(""),
+    [loadingKey, setLoadingKey] = useState<string>(),
+    [error, setError] = useState<{ key: string; message: string } | null>(null),
+    [searchComposing, setSearchComposing] = useState(false),
+    [searchDraft, setSearchDraft] = useState<{ key: string; value: string }>(),
+    [underlyingOrigin, setUnderlyingOrigin] = useState<UnderlyingOrigin | null>(null),
     [tick, setTick] = useState(0),
     [selecting, setSelecting] = useState(false),
     [selection, setSelection] = useState<string[]>([]),
@@ -116,7 +102,7 @@ export default function AssetCatalogView({
     [editing, setEditing] = useState<Item | null>(null),
     [name, setName] = useState(""),
     [classification, setClassification] = useState<string[]>([]),
-    [order, setOrder] = useState(markets),
+    [manualOrder, setOrder] = useState<string[]>(),
     [importRows, setImportRows] = useState<
       | {
           file: File;
@@ -126,7 +112,10 @@ export default function AssetCatalogView({
     >(null);
   const marketCountCache = useRef(new Map<string, Record<string, number>>());
   const pageCache = useRef(new Map<string, { data: Listing; at: number }>(initial ? [[initial.key, {data:initial.data,at:Date.now()}]] : []));
-  const prefetching = useRef(new Set<string>());
+  const cacheEpoch = useRef(0);
+  const submittedSearch = useRef<{ from: string; to: string } | undefined>(undefined);
+  const results = useRef<HTMLDivElement>(null);
+  const lastResultsHeight = useRef({ ownerId, height: 0 });
   const seenTick = useRef(0);
   const directoryFile = useRef<HTMLInputElement>(null);
   const editorFile = useRef<HTMLInputElement>(null);
@@ -142,16 +131,28 @@ export default function AssetCatalogView({
     positions = useRef(new Map<string, DOMRect>());
   const bar = useRef<HTMLElement>(null),
     drag = useRef<string | null>(null),
-    readKey = `${ownerId}|${type}|${market}|${query}|${page}|${removed}`,
+    readKey = materialListingKey(ownerId, type, market, query, page, removed, review),
     [loadedKey, setLoadedKey] = useState(initial?.key ?? "");
   const current = useRef(readKey);
   current.current = readKey;
   const displayed =
     loadedKey === readKey ? listing : pageCache.current.get(readKey)?.data;
-  const rows = displayed?.assets || [];
+  const visibleListing = displayed ?? (loadedKey.startsWith(materialListingScope(ownerId, type, removed)) ? listing : null);
+  const submitted = submittedSearch.current;
+  const draftMatches = searchDraft && (searchDraft.key === readKey ||
+    (submitted?.from === searchDraft.key && submitted.to === readKey));
+  const searchValue = draftMatches ? searchDraft.value : query;
+  const searchPending = searchValue !== query;
+  const replacing = !displayed || searchPending;
+  const loading = loadingKey === readKey;
+  const pending = replacing || loading;
+  const activeError = !searchPending && error?.key === readKey ? error.message : "";
+  const rows = visibleListing?.assets || [];
   const selectableRows = rows.filter(item => !item.listingCandidate);
   const editingUnderlying = editing?.type === "stock" ? relatedStock(editing.market, editing.code) : null;
-  const total = displayed?.total || 0;
+  const total = visibleListing?.total || 0;
+  const reviewCount = visibleListing?.reviewCount ?? 0;
+  const order = manualOrder ?? visibleListing?.marketOrder ?? markets;
   const marketSlots =
     type === "stock" || type === "broker"
       ? materialMarketSlots(
@@ -162,8 +163,7 @@ export default function AssetCatalogView({
           market,
         )
       : { visible: order, more: [] };
-  // Restore the last accepted page before the first paint. The network read
-  // below still revalidates it, so this only removes the skeleton flash.
+  // Restore cached pages before paint, then revalidate when their read has expired.
   useLayoutEffect(() => {
     if (loadedKey === readKey) return;
     const cached = readCachedListing(ownerId, readKey);
@@ -171,41 +171,43 @@ export default function AssetCatalogView({
     pageCache.current.set(readKey, cached);
     setListing(cached.data);
     setLoadedKey(readKey);
-    setLoading(false);
+    setLoadingKey(undefined);
   }, [ownerId, readKey, loadedKey]);
   // Warm the first page of another category on hover/focus so switching tabs
   // does not start with a full skeleton.
   const prefetchCategory = (next: string) => {
     if (next === type || next === "group" || !foregroundRef.current) return;
-    const key = `${ownerId}|${next}|ALL||1|`;
-    if (pageCache.current.has(key) || prefetching.current.has(key)) return;
-    prefetching.current.add(key);
-    const search = new URLSearchParams({ type: next, market: "ALL", q: "", page: "1", removed: "0" });
-    void readMaterialResponse(`/api/assets/catalog?${search}`, AbortSignal.timeout(15000))
-      .then((data) => {
-        if (!Array.isArray(data.assets) || !Number.isFinite(data.total) || !Number.isFinite(data.page)) return;
-        const listing = data as Listing;
-        pageCache.current.set(key, { data: listing, at: Date.now() });
-        saveCachedListing(ownerId, key, listing);
-        if (current.current === key) {
-          setListing(listing);
-          setLoadedKey(key);
-          setLoading(false);
-          setError("");
-        }
-      })
-      .catch(() => { /* the tab still loads on click */ })
-      .finally(() => prefetching.current.delete(key));
+    if (pageCache.current.has(materialListingKey(ownerId, next))) return;
+    void prefetchMaterialCatalog(ownerId, next);
   };
-  const update = (patch: Record<string, string | null>) => {
+  const update = useCallback((patch: Record<string, string | null>, fromETF?: string) => {
     if (!guard()) return;
     const next = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(patch)) {
       if (value === null) next.delete(key);
       else next.set(key, value);
     }
-    window.history.replaceState(null, "", `?${next}`);
-  };
+    if (fromETF) {
+      window.history.pushState({ materialUnderlyingOrigin: { ownerId, code: fromETF } }, "", `?${next}`);
+      return;
+    }
+    const origin = window.history.state?.materialUnderlyingOrigin as UnderlyingOrigin | undefined;
+    const keepOrigin = !("tab" in patch) && !("removed" in patch) && origin?.ownerId === ownerId;
+    window.history.replaceState(keepOrigin ? { materialUnderlyingOrigin: origin } : null, "", `?${next}`);
+  }, [guard, ownerId, params]);
+  useEffect(() => {
+    if (!foreground) return;
+    const origin = window.history.state?.materialUnderlyingOrigin as UnderlyingOrigin | undefined;
+    setUnderlyingOrigin(type === "stock" && !removed && origin?.ownerId === ownerId ? origin : null);
+  }, [params, type, removed, ownerId, foreground]);
+  useEffect(() => {
+    if (!searchPending || searchComposing || !foreground) return;
+    const timer = window.setTimeout(() => {
+      submittedSearch.current = { from: readKey, to: materialListingKey(ownerId, type, market, searchValue, 1, removed, review) };
+      update({ q: searchValue || null, page: null });
+    }, 170);
+    return () => window.clearTimeout(timer);
+  }, [searchPending, searchComposing, searchValue, foreground, readKey, ownerId, type, market, removed, review, update]);
   useLayoutEffect(() => {
     const nav = bar.current,
       selected = nav?.querySelector<HTMLElement>('[aria-selected="true"]');
@@ -221,16 +223,32 @@ export default function AssetCatalogView({
     setSelecting(false);
     setEditing(null);
     setImportRows(null);
+    setSearchComposing(false);
+    const navigation = submittedSearch.current;
+    submittedSearch.current = undefined;
+    setSearchDraft(draft => {
+      if (!draft || draft.key === readKey) return draft;
+      return navigation?.from === draft.key && navigation.to === readKey ? { ...draft, key: readKey } : undefined;
+    });
   }, [readKey]);
   // A saved icon or metadata edit must not leave an obsolete listing to be
   // restored after the next refresh.
-  useEffect(() => {
-    const clear = () => clearCachedMaterialListings(ownerId);
-    window.addEventListener("fire:assets-updated", clear);
-    return () => window.removeEventListener("fire:assets-updated", clear);
+  const invalidate = useCallback(() => {
+    cacheEpoch.current++;
+    pageCache.current.clear();
+    clearCachedMaterialListings(ownerId);
   }, [ownerId]);
   useEffect(() => {
+    const refreshListing = () => {
+      invalidate();
+      setTick(value => value + 1);
+    };
+    window.addEventListener("fire:assets-updated", refreshListing);
+    return () => window.removeEventListener("fire:assets-updated", refreshListing);
+  }, [invalidate]);
+  useEffect(() => {
     if (!foreground) return;
+    if (searchPending) return;
     const cached = pageCache.current.get(readKey);
     const forced = tick !== seenTick.current;
     seenTick.current = tick;
@@ -239,25 +257,30 @@ export default function AssetCatalogView({
       setLoadedKey(readKey);
     }
     if (cached && Date.now() - cached.at < 60000 && !forced) {
-      setLoading(false);
-      setError("");
+      setLoadingKey(undefined);
+      setError(null);
       return;
     }
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
+    setLoadingKey(readKey);
+    setError(null);
     const p = new URLSearchParams({
       type,
       market,
       q: query.slice(0, 200),
       page: String(page),
       removed: removed ? "1" : "0",
+      ...(review ? { review: "1" } : {}),
     });
-    readMaterialResponse(
+    const read = () => readMaterialResponse(
       type === "group" ? "/api/v1/watch-groups" : `/api/assets/catalog?${p}`,
       controller.signal,
-    )
+    );
+    const epoch = cacheEpoch.current;
+    const warmRead = forced ? undefined : pendingMaterialCatalog(readKey);
+    (warmRead ? warmRead.then(data => controller.signal.aborted ? null : data ?? read()) : read())
       .then((d) => {
+        if (!d) throw Error("素材响应不完整，请重试");
         if (type === "group") {
           const groups = (d.data?.groups || []).filter(
             (g: { kind: string; name: string }) =>
@@ -293,6 +316,7 @@ export default function AssetCatalogView({
       .then((d) => {
         if (
           controller.signal.aborted ||
+          epoch !== cacheEpoch.current ||
           current.current !== readKey ||
           !foregroundRef.current ||
           document.hidden
@@ -315,28 +339,15 @@ export default function AssetCatalogView({
         saveCachedListing(ownerId, readKey, d);
       })
       .catch((e) => {
-        if (!controller.signal.aborted && current.current === readKey && foregroundRef.current) setError(e.message);
+        if (!controller.signal.aborted && current.current === readKey && foregroundRef.current) setError({ key: readKey, message: e.message });
       })
       .finally(() => {
-        if (!controller.signal.aborted && current.current === readKey) setLoading(false);
+        if (!controller.signal.aborted && current.current === readKey) setLoadingKey(undefined);
       });
     return () => controller.abort();
-  }, [readKey, tick, foreground]);
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/settings", { signal: controller.signal })
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d.settings?.assetMarketOrder))
-          setOrder([
-            ...new Set<string>([...d.settings.assetMarketOrder, ...markets]),
-          ]);
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
+  }, [readKey, tick, foreground, searchPending]);
   useLayoutEffect(() => {
-    if (loading) return;
+    if (pending) return;
     for (const node of table.current?.querySelectorAll<HTMLElement>(
       "[data-material-id]",
     ) || []) {
@@ -356,7 +367,7 @@ export default function AssetCatalogView({
       }
     }
     positions.current.clear();
-  }, [listing, loading]);
+  }, [listing, pending]);
   const capturePositions = () => {
     positions.current = new Map(
       Array.from(
@@ -365,8 +376,12 @@ export default function AssetCatalogView({
       ).map((node) => [node.dataset.materialId!, node.getBoundingClientRect()]),
     );
   };
+  useLayoutEffect(() => {
+    if (displayed && !pending && results.current) lastResultsHeight.current = { ownerId, height: results.current.offsetHeight };
+  }, [displayed, pending, grid, ownerId]);
   const refresh = () => {
-    pageCache.current.clear();
+    invalidate();
+    setLoadingKey(readKey);
     setTick((n) => n + 1);
   };
   async function mutate(
@@ -374,7 +389,7 @@ export default function AssetCatalogView({
     ids: string[],
     extra: Record<string, unknown> = {},
   ) {
-    if (!listing || busy) return false;
+    if (!displayed || replacing || busy) return false;
     setBusy(true);
     try {
       const r = await fetch("/api/assets/catalog", {
@@ -384,7 +399,7 @@ export default function AssetCatalogView({
           action,
           requestId: clientRequestId(),
           ids,
-          revision: listing.revision,
+          revision: displayed.revision,
           ...extra,
         }),
       });
@@ -579,6 +594,7 @@ export default function AssetCatalogView({
                   page: null,
                   q: null,
                   removed: null,
+                  review: null,
                 })
               }
             >
@@ -645,8 +661,9 @@ export default function AssetCatalogView({
           </div>
         )}
         <CollectionToolbar
-          query={query}
-          onQuery={(q) => update({ q: q || null, page: null })}
+          query={searchValue}
+          onQuery={(value) => setSearchDraft({ key: readKey, value: value.slice(0, 200) })}
+          onSearchComposition={setSearchComposing}
           selecting={selecting}
           onToggleSelection={() => {
             setSelecting((v) => !v);
@@ -658,23 +675,33 @@ export default function AssetCatalogView({
           grid={grid}
           onGrid={(next) => update({ view: next ? "grid" : null })}
           onRefresh={refresh}
-          refreshing={loading}
-          busy={busy}
+          refreshing={pending && !activeError}
+          busy={busy || replacing}
           onImport={() => directoryFile.current?.click()}
         />
         <div className="material-count">
-          {displayed ? <>{total} 项素材</> : <CollectionSkeleton count />}
-          {removed ? " · 已移除" : ""}
+          <span>{visibleListing ? `${total} 项素材${removed ? " · 已移除" : ""}` : <CollectionSkeleton count />}</span>
+          {underlyingOrigin && (
+            <Capsule variant="secondary" onClick={() => {
+              if (guard() && window.history.state?.materialUnderlyingOrigin?.ownerId === ownerId) window.history.back();
+            }}>返回 {underlyingOrigin.code}</Capsule>
+          )}
+          {type === "stock" && !removed && (review || reviewCount > 0) && (
+            <Capsule variant={review ? "primary" : "secondary"} aria-pressed={review}
+              onClick={() => update({ review: review ? null : "1", page: null })}>
+              待核实 {reviewCount}
+            </Capsule>
+          )}
           {type !== "group" &&
-            (removed || Number(displayed?.removedCount) > 0) && (
+            (removed || Number(visibleListing?.removedCount) > 0) && (
               <Capsule
                 variant="secondary"
                 className="material-trash-toggle"
                 onClick={() =>
-                  update({ removed: removed ? null : "1", page: null })
+                  update({ removed: removed ? null : "1", review: null, page: null })
                 }
               >
-                {removed ? "返回素材" : `已移除 ${displayed?.removedCount}`}
+                {removed ? "返回素材" : `已移除 ${visibleListing?.removedCount}`}
               </Capsule>
             )}
           {selecting && (
@@ -694,18 +721,19 @@ export default function AssetCatalogView({
             </label>
           )}
         </div>
-        {error ? (
-          <div role="alert">
-            {error}
-            <button type="button" onClick={refresh}>
-              重试
-            </button>
+        <div ref={results} className="material-results" aria-busy={pending && !activeError}
+          style={!visibleListing && !activeError && lastResultsHeight.current.ownerId === ownerId ? { minHeight: lastResultsHeight.current.height } : undefined}>
+        {pending && !activeError && visibleListing && <div className="material-results-loading" aria-hidden="true" />}
+        {activeError && (
+          <div className="material-results-error" role="alert">
+            {activeError}
+            <Capsule variant="secondary" onClick={refresh}>重试</Capsule>
           </div>
-        ) : !displayed ? (
-          <CollectionSkeleton grid={grid} />
-        ) : (
+        )}
+        {!visibleListing ? (!activeError && <CollectionSkeleton grid={grid} />) : (
           <div
             ref={table}
+            inert={replacing || undefined}
             className={`material-table ${grid ? "is-grid" : ""}`}
             data-kind={type}
           >
@@ -781,12 +809,12 @@ export default function AssetCatalogView({
                   ) : type === "broker" ? (
                     <IconGripVertical size={16} />
                   ) : (
-                    ((displayed?.page || page) - 1) * 10 + index + 1
+                    ((visibleListing?.page || page) - 1) * 10 + index + 1
                   )}
                 </span>
                 <div className="material-identity">
                   <AssetImageControl src={item.imageUrl || item.url} name={item.name} card={type === "card"}
-                    disabled={busy || removed} onUpload={selecting || removed || (type === "stock" && relatedStock(item.market, item.code))
+                    loading={index < (grid ? 6 : 4) ? "eager" : "lazy"} disabled={busy || removed} onUpload={selecting || removed || (type === "stock" && relatedStock(item.market, item.code))
                       ? undefined : () => chooseImage(item)} />
                   <IdentityText type={selecting ? undefined : "button"} className="material-identity-text" data-capsule="off"
                     disabled={selecting ? undefined : busy || item.listingCandidate} onClick={selecting || item.listingCandidate ? undefined : () => beginEdit(item)}>
@@ -854,15 +882,18 @@ export default function AssetCatalogView({
               </article>
             ))}
             {!rows.length && <p className="material-empty">
-              {type === "broker" ? <>没有匹配的券商图标 · <a href="/settings?sub=stocks" className="font-semibold text-ink hover:underline">新增券商</a></> : "没有匹配的素材"}
+              {review ? "当前范围没有待核实的标的" : type === "broker" ? <>没有匹配的券商图标 · <a href="/settings?sub=stocks" className="font-semibold text-ink hover:underline">新增券商</a></> : "没有匹配的素材"}
             </p>}
           </div>
         )}
-        <Pagination
-          page={displayed?.page || page}
-          total={Math.max(1, Math.ceil(total / 10))}
-          onChange={(n) => update({ page: String(n) })}
-        />
+        </div>
+        <div inert={replacing || undefined}>
+          <Pagination
+            page={visibleListing?.page || page}
+            total={Math.max(1, Math.ceil(total / 10))}
+            onChange={(n) => update({ page: String(n) })}
+          />
+        </div>
       </section>
       <input ref={imageFile} type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
         onChange={async event => {
@@ -951,7 +982,7 @@ export default function AssetCatalogView({
                 onClick={() => {
                   if (editingUnderlying) {
                     setEditing(null);
-                    update({ market: "US", q: editingUnderlying.code, page: null });
+                    update({ market: "US", q: editingUnderlying.code, page: null, review: null }, editing.code);
                   } else editorFile.current?.click();
                 }}
               >

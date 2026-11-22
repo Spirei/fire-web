@@ -10,8 +10,11 @@ const identity={user:{id:'owner-one',role:'admin'},csrf:'synthetic',instance_id:
 (async()=>{
  const calls=[],read=async path=>{calls.push(path);return {assets:[],items:[],total:0,page:1,revision:'1',marketCounts:{}};};
  const materials=await bootstrap('library',new URLSearchParams('tab=stock&market=HK&q=a%26b&page=2'),identity,read);
- assert.equal(materials.material.key,'owner-one|stock|HK|a&b|2|false');
+ assert.equal(materials.material.key,'["owner-one","stock",false]|["HK","a&b",2,false]');
  assert.equal(calls.length,1);const query=new URLSearchParams(calls[0].split('?')[1]);assert.equal(query.get('q'),'a&b');assert.equal(query.get('page'),'2');
+ calls.length=0;const review=await bootstrap('library',new URLSearchParams('tab=stock&review=1&page=2'),identity,read);
+ assert.equal(review.material.key,'["owner-one","stock",false]|["ALL","",2,true]');
+ assert.equal(new URLSearchParams(calls[0].split('?')[1]).get('review'),'1');
  calls.length=0;await bootstrap('library',new URLSearchParams(),{...identity,user:{id:'reader',role:'user'}},read);assert.equal(calls.length,0,'Non-admin never gets material administration bootstrap');
  calls.length=0;await bootstrap('settings',new URLSearchParams('sub=palette'),identity,read);assert.equal(calls.length,0,'Appearance must not wait for records, funds or unrelated pages');
  const pending=[],gate=path=>new Promise(resolve=>pending.push({path,resolve}));

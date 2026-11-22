@@ -36,14 +36,20 @@ def related_root(market, code):
     return root
 
 
+def stock_needs_underlying_review(item):
+    if item["type"] != "stock" or item["market"] != "US":
+        return False
+    name = item["name"]
+    return "ETF" in name.upper() and bool(LEVERAGED_NAME.search(name)) and not related_root(item["market"], item["code"])
+
+
 def stock_image_review(item):
     if item["type"] != "stock" or item["market"] != "US":
         return None
     root = related_root(item["market"], item["code"])
     if root:
         return None if item.get("imageUrl") or item.get("url") else {"state": "missing-artwork", "code": root}
-    name = item["name"]
-    if "ETF" in name.upper() and LEVERAGED_NAME.search(name):
+    if stock_needs_underlying_review(item):
         return {"state": "unverified-underlying"}
     return None
 

@@ -3,6 +3,8 @@ import { FX_CURRENCIES, fxCurrencyMeta, visibleFxOrder } from './fxConvert';
 import { defaultFlagUrl } from './flagAssets';
 import { selectMigrationPreparation } from './databaseMigration';
 /** Request-local reads only. No cross-account cache and no speculative financial requests. */
+import { materialListingKey } from "./materialCatalogCache";
+
 export async function workspaceBootstrap(tab:string,query:URLSearchParams,identity:WebSession,read:<T>(path:string)=>Promise<T>,preferences:Record<string,unknown>={}):Promise<WorkspaceInitial>{
  const initial:WorkspaceInitial={};
  if(tab==='global'&&query.get('section')==='convert'){
@@ -27,13 +29,14 @@ export async function workspaceBootstrap(tab:string,query:URLSearchParams,identi
  }else if(tab==='library'&&identity.user.role==='admin'){
   const type=['market','stock','crypto','metal','flag','broker','group','card'].includes(query.get('tab')||'')?query.get('tab')!:'market';
   const market=query.get('market')||'ALL',q=(query.get('q')||'').slice(0,200),page=Math.max(1,Number(query.get('page'))||1),removed=type!=='group'&&query.get('removed')==='1';
+  const review=type==="stock"&&!removed&&query.get("review")==="1";
   let data:MaterialListing;
   if(type==='group'){
    const result=await read<{data:{groups:{id:string;name:string;icon:string;kind:string}[]}}>('/api/v1/watch-groups');
    const groups=result.data.groups.filter(g=>g.kind==='custom'&&(!q||g.name.toLocaleLowerCase().includes(q.toLocaleLowerCase()))),safe=Math.min(page,Math.max(1,Math.ceil(groups.length/10)));
    data={assets:groups.slice((safe-1)*10,safe*10).map(g=>({id:g.id,type:'group',market:'GROUP',code:g.id,name:g.name,url:g.icon,brokerMarkets:[]})),total:groups.length,page:safe,revision:'owner-groups',marketCounts:{}};
-  }else data=await read('/api/assets/catalog?'+new URLSearchParams({type,market,q,page:String(page),removed:removed?'1':'0'}));
-  initial.material={key:`${identity.user.id}|${type}|${market}|${q}|${page}|${removed}`,data};
+  }else data=await read('/api/assets/catalog?'+new URLSearchParams({type,market,q,page:String(page),removed:removed?'1':'0',...(review?{review:'1'}:{})}));
+  initial.material={key:materialListingKey(identity.user.id,type,market,q,page,removed,review),data};
  }else if(tab==='cards')initial.cards=await read('/api/cards');
  else if(tab==='watchlist'){const value=await read<{data:{groups:NonNullable<WorkspaceInitial['watchGroups']>}}>('/api/v1/watch-groups');initial.watchGroups=value.data.groups;}
  else if(tab==='activities')initial.logs=await read('/api/activities');
