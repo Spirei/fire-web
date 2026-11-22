@@ -51,6 +51,7 @@ function orderTypeLabel(order: TradeOrder): string {
 }
 function validityLabel(order: TradeOrder): string {
   if (order.side === "dividend") return "—";
+  if (order.executionModel === "app_order_mirror") return order.tif || "—";
   return VALIDITY_LABEL[order.tif] ?? "当日有效";
 }
 
@@ -1772,7 +1773,10 @@ export default function TradeOrdersPanel({
             </span>
           )],
           ["触发状态", <span key="q" className="text-ink">{detail.triggerStatus || "—"}</span>],
-          ["委托时间", <span key="n" className="tabular-nums text-ink">{formatOrderTime(detail.tradedAt, detail.market)}</span>],
+          [detail.status === "filled" ? "成交时间" : "委托时间", <span key="n" className="tabular-nums text-ink">{formatOrderTime(detail.tradedAt, detail.market)}</span>],
+          ...(detail.executionModel === "app_order_mirror" && detail.createdAt && detail.status === "filled"
+            ? [["录入时间", <span key="entered" className="text-ink">{formatOrderTime(detail.createdAt, detail.market)}</span>] as [string, React.ReactNode]]
+            : []),
           ["已实现盈亏", (
             <span key="j" className={`font-semibold tabular-nums ${detail.realizedPnl == null ? "text-faint" : detail.realizedPnl >= 0 ? "text-up" : "text-down"}`}>
               {detail.realizedPnl == null ? "—" : `${detail.realizedPnl >= 0 ? "+" : "-"}${fmtMoney(Math.abs(detail.realizedPnl), currency)}`}

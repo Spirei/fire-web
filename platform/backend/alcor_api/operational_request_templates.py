@@ -256,6 +256,7 @@ TEMPLATES = frozenset(
         "/api/v2/account-assets/trading/submissions",
         "/api/v2/account-sync",
         "/api/v2/account-assets/native-fills",
+        "/api/v2/account-assets/native-orders",
         "/api/v2/app-state",
         "/api/v2/app-state/operations/[requestId]",
         "/api/v2/assets",

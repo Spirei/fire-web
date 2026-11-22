@@ -32,6 +32,21 @@
 
 App 专用接口，固定前缀 `/api/v2`。与 Web / v1 共用账号、授权、持仓及账本，版本切换不搬迁数据。私有接口只接受 App access token；公开行情和图标支持本地模式匿名读取。
 
+## App 本机订单同步
+
+App 从 `GET /api/v2/auth/config` 的 `native_trade_sync.orders` 核对版本 1、固定路径和 `owner-order-state-v1`。接口使用同源 App Bearer。
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/account-assets/native-orders` | `portfolio.read` |
+| POST | `/api/v2/account-assets/native-orders` | `portfolio.write` |
+
+POST 上报本机账本已经保存的订单状态。必填字段为 `tradeId`、`recordId`、`status`、`market`、`code`、`name`、`side`、`orderType`、`quantity`、`price`、`orderPrice`、`fees`、`priceCurrency`、`createdAt` 和 `execution`。数量、价格、费用和结算金额按十进制文本发送。状态为 `pending`、`filled`、`cancelled`、`expired` 或 `deleted`。成交携带 `filledAt`，保留实际成交时间。预约委托可携带 `startsAt`。删除携带 `deletedAt`、`deletedFrom` 和原订单字段。账户归属取自请求授权。
+
+回执的 `data` 包含 `ownerId`、`tradeId` 和 `status`。重复提交同一状态返回相同回执。订单可以由挂单进入一个终态，删除可以从原状态到达，过时状态返回 409。同步只保存 App 订单及其状态，Fire 交易、持仓和资金账本由各自交易接口更新。
+
+GET 返回 `ownerId`、最多 100 条当前订单 `items` 和下一页游标 `before`。按 `scope=all` 或 `scope=today` 读取，续页原样传递编码后的 `before`。按订单的实际成交时间或创建时间及编号倒序分页，当日范围使用各市场交易所当地日期。旧 `native-fills` 已有成交在新接口中继续可见。同编号只返回一条，已删除的订单退出列表。
+
 ## 1. 版本发现与迁移
 
 <details>

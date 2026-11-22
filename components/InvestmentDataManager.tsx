@@ -75,7 +75,7 @@ type FileView = "file" | "json" | "sources";
 type FileDetail = { selection: Selection; kind: AccountKind; data: DailyDetail | LedgerDetail; source: string };
 
 const LABELS: Record<string, string> = {
-  position: "持仓", trade: "成交", appFill: "App 成交", declaration: "历史订单",
+  position: "持仓", trade: "成交", appFill: "App 成交", appOrder: "App 订单", declaration: "历史订单",
   cash: "资金分录", amendment: "成交更正", feeCorrection: "费用更正", fundReversal: "资金冲回", cashCorrection: "余额更正",
   transfer: "转仓", statement: "券商账单", orderFile: "订单原件", financialImport: "账本导入原件", historyImport: "迁移原件",
   buy: "买入", sell: "卖出", dividend: "股息", opening: "期初",

@@ -498,7 +498,18 @@ def mount_legacy_flat_orders(app):
             who = await order_identity(request, db, write=action != "list")
             if action == "list":
                 async with db.connection() as conn, conn.transaction():
-                    value = scalar(select_orders(await snapshot(conn, who), request.query_params))
+                    orders = await snapshot(conn, who)
+                    if request.query_params.get("includeAppOrders") == "1":
+                        from .native_trade_sync import fetch_orders, order_projection, order_time
+
+                        mirrored = await fetch_orders(conn, who.id, limit=5000, record_id=request.query_params.get("recordId") or None)
+                        existing = {order["id"] for order in orders["orders"]}
+                        orders["orders"] = sorted(
+                            orders["orders"] + [order_projection(row["item"]) for row in mirrored if str(row["order_id"]) not in existing],
+                            key=lambda item: (order_time(item["tradedAt"]), item["id"]),
+                            reverse=True,
+                        )
+                    value = scalar(select_orders(orders, request.query_params))
             else:
                 if request.query_params:
                     raise HTTPException(400, "不支持查询参数")

@@ -329,7 +329,8 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     if (savedPnlMarket !== pnlMarket) setPnlMarket(pnlMarket);
   }, [positions.length, savedAssetMarket, savedHoldingsMarket, savedPnlMarket, assetMarket, holdingsMarket, pnlMarket, setAssetMarket, setHoldingsMarket, setPnlMarket]);
   const [pnlExpanded, setPnlExpanded] = useState(false);
-  const [orders, setOrders] = useState<TradeOrder[]>([]);
+  const [displayOrders, setOrders] = useState<TradeOrder[]>([]);
+  const orders = useMemo(() => displayOrders.filter(order => order.executionModel !== "app_order_mirror"), [displayOrders]);
   const [ordersLoading,setOrdersLoading]=useState(true);
   const [ordersError,setOrdersError]=useState("");
   useLayoutEffect(()=>{setOrders([]);setOrdersLoading(true);setOrdersError("");},[ownerId,signature,readRevision]);
@@ -339,7 +340,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     if (!foreground || !ownerId) return;
     const controller=new AbortController(),epoch=privateReadEpoch();
     setOrdersLoading(true);
-    void readAnalysisOrders(ownerId,controller.signal).then(data=>{
+    void readAnalysisOrders(ownerId,controller.signal,true).then(data=>{
       if(controller.signal.aborted || epoch!==privateReadEpoch())return;
       setOrders(data);setOrdersError("");
     }).catch(error=>{
@@ -401,7 +402,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     try {
       if (kind === "orders") {
         // 与组合聚合接口保持同一口径（limit=5000），否则刷新后订单列表会从 5000 缩到 500
-        const data=await readAnalysisOrders(ownerId);
+        const data=await readAnalysisOrders(ownerId, undefined, true);
         if(epoch===privateReadEpoch()){setOrders(data);setOrdersError("");}
       } else {
         await onRefreshMarketData?.();
@@ -1237,9 +1238,9 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
         </div>
 
         <div {...moduleDragProps("right", "orders")} className={moduleWrapperClass("right", "orders")} style={{ order: moduleOrderIndex("right", "orders") }}>
-          {ordersError && !orders.length ? <div role="alert" className="rounded-2xl border border-edge bg-white p-4 text-sm text-muted"><span>{ordersError}</span><button type="button" className="ml-3 font-semibold text-ink" disabled={ordersLoading} onClick={()=>void handleRefresh("orders")}>{ordersLoading?"读取中…":"重新读取"}</button></div> : <TradeOrdersPanel
+          {ordersError && !displayOrders.length ? <div role="alert" className="rounded-2xl border border-edge bg-white p-4 text-sm text-muted"><span>{ordersError}</span><button type="button" className="ml-3 font-semibold text-ink" disabled={ordersLoading} onClick={()=>void handleRefresh("orders")}>{ordersLoading?"读取中…":"重新读取"}</button></div> : <TradeOrdersPanel
             ownerId={ownerId}
-            orders={orders}
+            orders={displayOrders}
             loading={ordersLoading}
             stockIcons={stockIcons}
             storageKey="fire:asset-order-tab"

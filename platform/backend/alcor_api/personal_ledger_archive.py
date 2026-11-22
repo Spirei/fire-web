@@ -31,7 +31,7 @@ SECTIONS = {
     ),
     "trades": (
         "trade_operations", "trade_ledger", "trade_registration_contexts",
-        "trade_presentation_ids", "native_synced_fills", "personal_order_declarations",
+        "trade_presentation_ids", "native_synced_fills", "native_synced_orders", "personal_order_declarations",
         "internal_order_collections", "internal_orders", "internal_order_contexts",
         "internal_order_actions", "internal_order_families", "internal_order_family_legs",
         "legacy_flat_order_operations", "legacy_order_import_sources", "legacy_order_import_links",

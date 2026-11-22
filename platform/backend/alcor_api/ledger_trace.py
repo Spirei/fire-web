@@ -30,6 +30,7 @@ TYPES = {
     "position": RecordType("positions", "portfolio_records", "id", "updated_at", "name code market qty cost source revision broker_account_id deleted_at"),
     "trade": RecordType("trades", "trade_ledger", "id", "occurred_at", "side quantity price amount fees currency source record_id account_id"),
     "appFill": RecordType("trades", "native_synced_fills", "trade_id", "occurred_at", "fill synced_at"),
+    "appOrder": RecordType("trades", "native_synced_orders", "order_id", "occurred_at", "status item synced_at"),
     "declaration": RecordType("trades", "personal_order_declarations", "id", "created_at", "record_id raw"),
     "cash": RecordType("funds", "cash_ledger_entries", "id", "occurred_at", "kind amount currency account_id request_id source_trade_id"),
     "amendment": RecordType("corrections", "trade_amendments", "id", "created_at", "action trade_id record_id previous_amendment_id request_id"),
@@ -114,11 +115,16 @@ async def original_file(conn, owner, kind, identifier):
 def summary_sql(kind, spec):
     pairs = [sql.SQL("{}, to_jsonb(t)->{}").format(sql.Literal(field), sql.Literal(field))
              for field in spec.fields.split()]
-    return sql.SQL("SELECT {} AS type, {}::text AS id, {} AS at, jsonb_build_object({})::text AS data "
+    query = sql.SQL("SELECT {} AS type, {}::text AS id, {} AS at, jsonb_build_object({})::text AS data "
                    "FROM {} t WHERE owner_id=%s").format(
         sql.Literal(kind), sql.Identifier(spec.key), sql.Identifier(spec.at), sql.SQL(", ").join(pairs),
         sql.Identifier(spec.table),
     )
+    if kind == "appFill":
+        query += sql.SQL(" AND NOT EXISTS (SELECT 1 FROM native_synced_orders o WHERE o.owner_id=t.owner_id AND o.order_id=t.trade_id)")
+    if kind == "appOrder":
+        query += sql.SQL(" AND t.status<>'deleted'")
+    return query
 
 
 def decoded(row):
@@ -163,6 +169,11 @@ async def detail(conn, owner, kind, identifier, revision=None):
     query = sql.SQL("SELECT (to_jsonb(t) - ARRAY['raw','source_bytes','evidence_raw','authorization_binding','originals','rows']::text[])::text AS data "
                     "FROM {} t WHERE owner_id=%s AND {}::text=%s").format(
         sql.Identifier(spec.table), sql.Identifier(spec.key))
+    if kind == "appOrder":
+        query += sql.SQL(" AND t.status<>'deleted'")
+    if kind == "appFill":
+        query += sql.SQL(" AND NOT EXISTS (SELECT 1 FROM native_synced_orders o WHERE o.owner_id=t.owner_id "
+                         "AND o.order_id=t.trade_id AND o.status='deleted')")
     row = await (await conn.execute(query, (owner, identifier))).fetchone()
     if not row:
         raise HTTPException(404, "找不到本人的这条记录")
