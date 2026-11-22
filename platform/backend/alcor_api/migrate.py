@@ -4,7 +4,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
 from .config import Settings
-from .db import PRODUCT, TargetMismatch, verify_identity
+from .db import PRODUCT, SCHEMA_MIGRATION_LOCK, TargetMismatch, verify_identity
 
 
 async def migrate(settings: Settings, database_name: str, initialize_empty: bool = False):
@@ -19,7 +19,7 @@ async def migrate(settings: Settings, database_name: str, initialize_empty: bool
         options="-c search_path=public -c statement_timeout=900000 -c lock_timeout=5000",
     ) as conn:
         async with conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock(67132001)")
+            await conn.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_MIGRATION_LOCK,))
             current = await (await conn.execute("SELECT current_database() AS name")).fetchone()
             if current["name"] != database_name:
                 raise TargetMismatch("Database name confirmation does not match")

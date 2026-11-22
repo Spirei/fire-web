@@ -8433,6 +8433,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.88", date: "2026-11-22", summary: "优化数据管理的市场目录、分页和读取",
   software: V0_1_87_ENTRY.software.map(item => ({ ...item, version: "v0.1.88" })),
   changes: [
+    { kind: "fix", title: "手动迁移后可继续更新镜像", desc: "按 PostgreSQL 已应用的迁移和发布提交校验目标镜像。完成匹配的迁移后，刷新部署状态即可推送新镜像。" },
     { kind: "feature", title: "App 成交编辑同步", desc: "允许按原订单编号同步手工成交的股数和股价修正，保留原始成交和更改记录，拒绝过期修改。" },
     { kind: "feature", title: "App 订单状态同步", desc: "Fire 接收 App 买卖成交、挂单、撤单、过期和删除。订单详情可核对实际成交时间和录入时间。" },
     { kind: "feature", title: "App 交易周期", desc: "按纽约 20:00 提供交易周期内的已成交买卖、持仓核对依据和已核验基准收盘价。" },

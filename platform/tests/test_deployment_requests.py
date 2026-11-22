@@ -1,5 +1,8 @@
 import asyncio
+import base64
+import hashlib
 import io
+import shutil
 import threading
 import urllib.error
 
@@ -9,7 +12,11 @@ from uuid import uuid4
 from alcor_api import __version__, deployments
 from alcor_api import deployment_watchtower as bridge
 from alcor_api.config import ROOT
+from alcor_api.db import Database, TargetMismatch
+from alcor_api.deployment_schema import git_blob_id, migration_files, schema_hash
+from alcor_api.migrate import migrate
 from pydantic import SecretStr
+from test_legacy_deployment import legacy  # noqa: F401
 
 P = "/api/deployment"
 
@@ -112,6 +119,83 @@ async def test_no_runner_schema_mismatch_stale_release_and_csrf(client, admin, a
     data["release"] = release.model_dump()
     assert not (await client.get(P)).json()["schema_compatible"]
     assert (await client.post(P + "/requests", json=data)).status_code == 409
+
+async def test_manual_migration_enables_deployment_without_relaxing_other_routes(
+    client, legacy, app, monkeypatch, tmp_path,  # noqa: F811
+):
+    release, _, _ = configure(app, monkeypatch)
+    db = app.state.db
+    target = tmp_path / "target-migrations"
+    shutil.copytree(db.settings.migration_dir, target)
+    name = "9999_deployment_rehearsal.sql"
+    content = b"CREATE TABLE deployment_rehearsal (id int PRIMARY KEY);\n"
+    (target / name).write_bytes(content)
+    release.schema_hash = schema_hash(target)
+    blob_id = git_blob_id(content)
+    contents = [
+        {"name": file, "path": f"platform/migrations/{file}", "type": "file", "sha": git_blob_id(raw)}
+        for file, raw in migration_files(target).items()
+    ]
+    provider = deployments.github_json
+    wrong_blob = True
+
+    def github(settings, path, body=None):
+        if path == f"/contents/platform/migrations?ref={release.revision}":
+            return contents
+        if path == f"/git/blobs/{blob_id}":
+            raw = b"changed" if wrong_blob else content
+            return {"sha": blob_id, "size": len(raw), "encoding": "base64", "content": base64.b64encode(raw).decode()}
+        return provider(settings, path, body)
+
+    sent = []
+    monkeypatch.setattr(deployments, "github_json", github)
+    monkeypatch.setattr(bridge, "notify", lambda _: sent.append(True) or {"status": "running", "message": "accepted"})
+    prefix = "/api/deploy-status"
+    payload = {"request_id": str(uuid4()), "release": release.model_dump()}
+    before = await legacy.get(prefix)
+    assert before.status_code == 200, before.text
+    assert before.json()["schemaError"] == deployments.MIGRATION_REQUIRED and not before.json()["canUpdate"]
+    assert (await legacy.post(prefix + "/container-update", json=payload)).status_code == 409
+
+    async with db.connection() as conn:
+        database = conn.info.dbname
+    await migrate(db.settings.model_copy(update={"migration_dir": target}), database)
+    # A pool recycling after manual maintenance must not strand the deployment page.
+    old_pool = db.pool
+    db.pool = Database(db.settings).pool
+    await db.pool.open()
+    await old_pool.close()
+    with pytest.raises(TargetMismatch):
+        async with db.connection():
+            pass
+    assert (await legacy.get(prefix + "/config")).status_code == 200
+    assert not (await legacy.get(prefix)).json()["canUpdate"]
+    assert (await legacy.post(prefix + "/container-update", json=payload)).status_code == 503
+    assert not sent
+
+    wrong_blob = False
+    current = await client.get(P)
+    assert current.status_code == 200 and current.json()["schema_compatible"]
+    assert (await legacy.get(prefix)).json()["canUpdate"]
+    accepted = await legacy.post(prefix + "/container-update", json=payload)
+    assert accepted.status_code == 202, accepted.text
+    assert accepted.json()["status"] == "running" and sent == [True]
+    assert (await legacy.get(prefix + "/requests/" + payload["request_id"])).json()["status"] == "running"
+    assert (await legacy.post(prefix + "/container-update", json=payload)).status_code == 202
+    assert sent == [True]
+    with pytest.raises(TargetMismatch):
+        async with db.connection():
+            pass
+    monkeypatch.setattr(app.state.settings, "migration_dir", target)
+    monkeypatch.setattr(app.state.settings, "source_revision", release.revision)
+    monkeypatch.setattr(db, "expected_migrations", {
+        file: hashlib.sha256(raw).hexdigest() for file, raw in migration_files(target).items()
+    })
+    async with db.connection() as conn:
+        await conn.execute("INSERT INTO worker_heartbeats(worker_id,version) VALUES(%s,%s)", (uuid4(), __version__))
+    result = await legacy.get(prefix + "/requests/" + payload["request_id"])
+    assert result.status_code == 200 and result.json()["status"] == "succeeded"
+    assert sent == [True]
 
 
 async def test_build_unknown_is_durable_and_never_redispatched(client, admin, app, monkeypatch):

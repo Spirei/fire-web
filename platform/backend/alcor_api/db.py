@@ -1,5 +1,6 @@
 import hashlib
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
@@ -8,6 +9,22 @@ from .config import Settings
 from .request_timing import TimedConnection, elapsed, measure, start
 
 PRODUCT = "alcor-platform"
+SCHEMA_MIGRATION_LOCK = 67132001
+_deployment_schema = ContextVar("allowed_deployment_schema", default=False)
+
+
+async def deployment_schema_scope():
+    """Let explicitly scoped deployment routes read an already-migrated database."""
+    token = _deployment_schema.set(True)
+    try:
+        yield
+    finally:
+        _deployment_schema.reset(token)
+
+
+async def applied_migrations(conn):
+    rows = await (await conn.execute("SELECT name,sha256 FROM public.schema_migrations")).fetchall()
+    return {row["name"]: row["sha256"] for row in rows}
 
 
 class TargetMismatch(RuntimeError):
@@ -87,19 +104,19 @@ class Database:
                     # identity and applied-schema checks run once per physical
                     # connection instead of on every checkout. A new connection
                     # (including one created after a pool replacement) re-verifies.
-                    names = getattr(conn, "_alcor_schema_names", None)
+                    deployment = _deployment_schema.get()
+                    names = None if deployment else getattr(conn, "_alcor_schema_names", None)
                     if names is None:
                         await verify_identity(conn, self.settings)
-                        versions = await (
-                            await conn.execute("SELECT name,sha256 FROM schema_migrations")
-                        ).fetchall()
-                        names = frozenset(row["name"] for row in versions)
-                        if (
-                            not self.expected_migrations
-                            or {r["name"]: r["sha256"] for r in versions} != self.expected_migrations
+                        installed = await applied_migrations(conn)
+                        exact = installed == self.expected_migrations
+                        if not self.expected_migrations or not (
+                            exact or deployment and self.expected_migrations.items() <= installed.items()
                         ):
                             raise TargetMismatch("Database schema does not match this application release")
-                        setattr(conn, "_alcor_schema_names", names)
+                        names = frozenset(installed)
+                        if exact:
+                            setattr(conn, "_alcor_schema_names", names)
                     if "0131_private_runtime_settings.sql" in names:
                         from .private_runtime_settings import load_runtime_on_connection
 

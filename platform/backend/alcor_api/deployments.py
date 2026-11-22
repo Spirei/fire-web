@@ -1,7 +1,6 @@
 """Independent release discovery and durable, fixed-target host update requests."""
 
 import asyncio
-import hashlib
 import json
 import urllib.error
 import urllib.request
@@ -16,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__
 from . import deployment_watchtower as bridge
+from .db import SCHEMA_MIGRATION_LOCK, applied_migrations, deployment_schema_scope
+from .deployment_schema import matches_release_schema, schema_hash
 from .models import InputModel
 from .security import Identity, administrator, lock_mutation_identity
 
@@ -46,11 +47,17 @@ class UpdateInput(InputModel):
     release: Release
 
 
-def schema_hash(directory):
-    h = hashlib.sha256()
-    for path in sorted(directory.glob("*.sql")):
-        h.update(path.name.encode() + b"\0" + path.read_bytes() + b"\0")
-    return h.hexdigest()
+MIGRATION_REQUIRED = "此版本需要单独执行数据库迁移"
+
+
+async def require_release_schema(settings, release, applied):
+    try:
+        async with asyncio.timeout(10):
+            compatible = await matches_release_schema(settings, release, applied, github_read)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise HTTPException(503, "暂时无法核对目标镜像的数据库迁移，请刷新重试") from None
+    if not compatible:
+        raise HTTPException(409, MIGRATION_REQUIRED)
 
 
 def configured(settings):
@@ -122,7 +129,7 @@ async def discover(settings):
         raise HTTPException(503, "未取得有效发布记录，请检查仓库权限、发布结果与网络") from None
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(deployment_schema_scope)])
 async def status(request: Request, who: Admin):
     from .deployment_config import effective
 
@@ -175,8 +182,15 @@ async def status(request: Request, who: Admin):
             (who.id,),
         )).fetchone()
         ready = await bridge.runtime_ready(conn, version=__version__)
+        applied = await applied_migrations(conn) if release else None
     runner = await asyncio.to_thread(bridge.probe, settings)
-    compatible = bool(release and release.schema_hash == schema_hash(settings.migration_dir))
+    schema_error = None
+    if release:
+        try:
+            await require_release_schema(settings, release, applied)
+        except HTTPException as exc:
+            schema_error = exc.detail
+    compatible = bool(release and schema_error is None)
     matches = already_running(settings, release)
     return {
         "configured": configured(settings),
@@ -197,6 +211,7 @@ async def status(request: Request, who: Admin):
         "build_requests": builds,
         "can_build": bool(configured(settings) and settings.deployment_github_token),
         "schema_compatible": compatible,
+        "schema_error": schema_error,
         "runner": runner,
         "receipts": rows,
         "can_update": bool(
@@ -210,7 +225,7 @@ async def status(request: Request, who: Admin):
     }
 
 
-@router.post("/requests", status_code=202)
+@router.post("/requests", status_code=202, dependencies=[Depends(deployment_schema_scope)])
 async def submit(data: UpdateInput, request: Request, who: Admin):
     from .deployment_config import effective, guard_generation
 
@@ -231,8 +246,9 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
     release, _published = await discover(settings)
     if release != data.release:
         raise HTTPException(409, "发布版本已变化，请重新检查")
-    if release.schema_hash != schema_hash(settings.migration_dir):
-        raise HTTPException(409, "此版本需要单独执行数据库迁移")
+    async with db.connection() as conn:
+        applied = await applied_migrations(conn)
+    await require_release_schema(settings, release, applied)
     if already_running(settings, release):
         raise HTTPException(409, "此镜像已在运行")
     if not bridge.configured(settings):
@@ -254,6 +270,9 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
             if any(old[k] != getattr(release, k) for k in ("image", "version", "revision", "schema_hash")):
                 raise HTTPException(409, "此请求编号已用于不同版本")
             return public_receipt(old)
+        await conn.execute("SELECT pg_advisory_xact_lock_shared(%s)", (SCHEMA_MIGRATION_LOCK,))
+        if await applied_migrations(conn) != applied:
+            raise HTTPException(409, "数据库迁移记录已变化，请刷新后重新核对")
         active = await (
             await conn.execute("SELECT * FROM deployment_requests WHERE status IN ('queued','running','unknown') FOR UPDATE")
         ).fetchall()
@@ -299,7 +318,7 @@ def public_receipt(row):
     }
 
 
-@router.get("/requests/{request_id}")
+@router.get("/requests/{request_id}", dependencies=[Depends(deployment_schema_scope)])
 async def receipt(request_id: UUID, request: Request, who: Admin):
     from .deployment_config import effective
 
@@ -320,7 +339,7 @@ class CloseInput(InputModel):
     release: Release
 
 
-@router.post("/requests/{request_id}/close")
+@router.post("/requests/{request_id}/close", dependencies=[Depends(deployment_schema_scope)])
 async def close_request(request_id: UUID, data: CloseInput, request: Request, who: Admin):
     """Explicitly close observation; never cancels or repeats a Watchtower action."""
     async with request.app.state.db.connection() as conn, conn.transaction():

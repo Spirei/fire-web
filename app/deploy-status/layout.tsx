@@ -1,16 +1,16 @@
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { getUserByToken, isAdmin, LEGACY_SESSION_COOKIE, SESSION_COOKIE } from "@/lib/auth";
+import { platformJsonRetry, PlatformError } from "@/lib/platformTransport";
 
 export const dynamic = "force-dynamic";
 
 export default async function DeployStatusLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value ?? cookieStore.get(LEGACY_SESSION_COOKIE)?.value ?? null;
-  let user: Awaited<ReturnType<typeof getUserByToken>> = null;
   try {
-    user = await getUserByToken(token);
-  } catch {
+    const cookie = (await headers()).get("cookie") || "";
+    // This deployment-scoped admin read still works after manual migration.
+    await platformJsonRetry("/api/deploy-status/config", { cookie });
+  } catch (error) {
+    if (error instanceof PlatformError && [401, 403].includes(error.status)) notFound();
     // A busy or briefly unreachable backend must not replace the page with
     // the global error screen; keep the route and offer a reload.
     return (
@@ -23,6 +23,5 @@ export default async function DeployStatusLayout({ children }: { children: React
       </main>
     );
   }
-  if (!isAdmin(user)) notFound();
   return children;
 }

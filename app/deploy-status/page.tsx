@@ -234,6 +234,8 @@ export default function DeployStatusPage() {
     update: new DeploymentCommand("/api/deploy-status/container-update", "POST", "/api/deploy-status/requests"),
   }), []);
   const [release, setRelease] = useState<Record<string,string> | null>(null);
+  const [serverCanUpdate, setServerCanUpdate] = useState(false);
+  const [schemaError, setSchemaError] = useState("");
   const [configOpen, setConfigOpen] = useState(false);
   const [token, setToken] = useState("");
   const [configError, setConfigError] = useState("");
@@ -246,6 +248,7 @@ export default function DeployStatusPage() {
       const response = await fetch("/api/deploy-status", { cache: "no-store", signal: controller.signal });
       const data = await readApiJson<{
         runsError?: string | null; buildError?: string | null; heatmapError?: string | null; sourceError?: string | null; releaseError?: string | null; configured?: boolean; check?: Pick<Run, "sha" | "status" | "conclusion" | "url"> | null;
+        schemaError?: string | null; canUpdate?: boolean;
         repository?: string; error?: string; release?: Record<string,string> | null; runs?: Run[]; imageProgress?: ImageProgress | null;
         source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
         packageName?: string; workflowRunCount?: number; checkedAt?: string; heatmap?: Record<string, number>;
@@ -257,6 +260,8 @@ export default function DeployStatusPage() {
       if (data.repository) { setRepository(data.repository); loadedRepository.current = data.repository; }
       if (!response.ok) throw new Error(data.error || "读取失败");
       setRelease(data.release || null);
+      setServerCanUpdate(data.canUpdate === true);
+      setSchemaError(data.schemaError || "");
       if (Array.isArray(data.runs)) setRuns(data.runs);
       else if (changedRepository || data.configured === false) setRuns([]);
       setRunsError(data.runsError || (data.configured === false ? "尚未配置发布仓库" : ""));
@@ -284,7 +289,7 @@ export default function DeployStatusPage() {
       if (typeof data.workflowRunCount === "number") setWorkflowRunCount(data.workflowRunCount);
       else if (changedRepository || data.configured === false) setWorkflowRunCount(0);
       setCheckedAt(data.checkedAt || "");
-      setError([data.sourceError, data.releaseError, data.heatmapError].filter(Boolean).join("；"));
+      setError([data.sourceError, data.releaseError, data.schemaError, data.heatmapError].filter(Boolean).join("；"));
     } catch (err) { if (!controller.signal.aborted) { setNotice(""); setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); } }
     finally { if (loadController.current === controller) { setRefreshing(false); setHasLoaded(true); } }
   }, [commands]);
@@ -425,7 +430,13 @@ export default function DeployStatusPage() {
     : runtimeVersion?.sha && runtimeVersion.sha !== "unknown"
       ? { label: runtimeVersion.matchesImage ? `运行旧镜像 ${runtimeVersion.shortSha}` : `待更新 ${runtimeVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
       : { label: "线上版本未知", dot: "bg-slate-400", text: "text-slate-500" };
-  const canUpdateContainer = updaterAvailable && Boolean(imageVersion?.matchesMain) && !runtimeVersion?.matchesImage && !imageBuilding;
+  const canUpdateContainer = serverCanUpdate && updaterAvailable && Boolean(imageVersion?.matchesMain) && !runtimeVersion?.matchesImage && !imageBuilding;
+  const updateTitle = commands.update.pending ? "仅核对原更新请求与运行版本"
+    : !updaterAvailable ? updaterReason
+    : imageBuilding ? "请等待镜像构建完成"
+    : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像"
+    : runtimeVersion?.matchesImage ? "Watchtower 在线，容器已运行最新镜像"
+    : schemaError || (serverCanUpdate ? "拉取最新 GHCR 镜像并重启 Alcor" : "更新暂不可执行，请核对发布状态");
   const showImageProgress = Boolean(imageProgress && ["schedule", "workflow_dispatch"].includes(imageProgress.event || ""));
   const updaterDot = updaterReason === "正在检查更新服务" ? "bg-slate-400" : updaterAvailable ? "bg-emerald-500" : "bg-red-500";
   const runActionLabel = (run: Run) => {
@@ -468,7 +479,7 @@ export default function DeployStatusPage() {
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
             <button onClick={() => void triggerPublish()} disabled={publishDisabled} title={publishTitle} className="deploy-publish inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-blue-600 bg-blue-600 px-3.5 py-2.5 font-semibold text-white shadow-sm shadow-blue-600/15 transition hover:border-blue-500 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950 dark:shadow-none dark:hover:border-blue-300 dark:hover:bg-blue-300"><span className={`h-2.5 w-2.5 rounded-full ${imageState.dot}`} /><IconPackageExport aria-hidden="true" className={publishBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{publishDisabled ? publishLabel : imageState.label}</button>
             <IconChevronRight aria-hidden="true" className="hidden text-slate-400 sm:block dark:text-slate-600" size={15} stroke={1.8} />
-            <button onClick={() => void updateContainer()} disabled={(!canUpdateContainer && !commands.update.pending) || containerUpdateState === "triggering"} title={commands.update.pending ? "仅核对原更新请求与运行版本" : !updaterAvailable ? updaterReason : imageBuilding ? "请等待镜像构建完成" : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像" : runtimeVersion?.matchesImage ? "Watchtower 在线，容器已运行最新镜像" : "Watchtower 在线，可拉取最新 GHCR 镜像并重启 Alcor"} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${updaterDot}`} /><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : updaterReason === "正在检查更新服务" ? "服务检测中" : !updaterAvailable ? "服务离线" : runtimeVersion?.matchesImage ? "容器已是最新" : "有新镜像"}</button>
+            <button onClick={() => void updateContainer()} disabled={(!canUpdateContainer && !commands.update.pending) || containerUpdateState === "triggering"} title={updateTitle} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${updaterDot}`} /><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : updaterReason === "正在检查更新服务" ? "服务检测中" : !updaterAvailable ? "服务离线" : runtimeVersion?.matchesImage ? "容器已是最新" : schemaError ? "迁移待核对" : "推送新镜像"}</button>
           </div>
         </section>
         {buildError && <p role="alert" className="deploy-observation-error mb-4 text-sm">{buildError}{imageProgress ? " · 显示上次记录" : ""}</p>}

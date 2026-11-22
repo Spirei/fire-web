@@ -9,7 +9,7 @@ import re
 from functools import wraps
 from uuid import UUID
 
-from fastapi import HTTPException, Request, Response
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import ValidationError
@@ -18,6 +18,7 @@ from . import deployment_config as configuration
 from . import deployment_observations as observations
 from . import deployments
 from .admin_verification import VerificationInput, verify_admin_access
+from .db import deployment_schema_scope
 from .legacy_identity import body, web_identity
 from .security import lock_mutation_identity
 
@@ -87,7 +88,7 @@ def require_uuid(data):
 
 
 def mount_legacy_deployment(app, settings, db):
-    @app.get(PREFIX)
+    @app.get(PREFIX, dependencies=[Depends(deployment_schema_scope)])
     @protocol
     async def status(request: Request):
         who = await admin(request, db)
@@ -225,11 +226,13 @@ def mount_legacy_deployment(app, settings, db):
             "configured": state["configured"],
             "sourceError": state["source_error"],
             "releaseError": state["release_error"],
+            "schemaError": state["schema_error"],
+            "canUpdate": state["can_update"],
             "check": state.get("check"),
             "buildError": state.get("build_error") or state.get("jobs_error"),
         }
 
-    @app.get(PREFIX + "/config")
+    @app.get(PREFIX + "/config", dependencies=[Depends(deployment_schema_scope)])
     @protocol
     async def config(request: Request):
         return await configuration.read_config(request, await admin(request, db))
@@ -261,7 +264,7 @@ def mount_legacy_deployment(app, settings, db):
             "receiptUrl": PREFIX + "/config/receipts/" + data["request_id"],
         }
 
-    @app.get(PREFIX + "/container-update")
+    @app.get(PREFIX + "/container-update", dependencies=[Depends(deployment_schema_scope)])
     @protocol
     async def updater(request: Request):
         await admin(request, db)
@@ -298,7 +301,7 @@ def mount_legacy_deployment(app, settings, db):
             status_code=202,
         )
 
-    @app.post(PREFIX + "/container-update")
+    @app.post(PREFIX + "/container-update", dependencies=[Depends(deployment_schema_scope)])
     @protocol
     async def update(request: Request):
         who = await admin(request, db)
@@ -322,7 +325,7 @@ def mount_legacy_deployment(app, settings, db):
     async def build_receipt(request_id: UUID, request: Request):
         return await deployments.build_receipt(request_id, request, await admin(request, db))
 
-    @app.get(PREFIX + "/requests/{request_id}")
+    @app.get(PREFIX + "/requests/{request_id}", dependencies=[Depends(deployment_schema_scope)])
     @protocol
     async def update_receipt(request_id: UUID, request: Request):
         return await deployments.receipt(request_id, request, await admin(request, db))
