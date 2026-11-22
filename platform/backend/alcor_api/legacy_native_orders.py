@@ -15,6 +15,8 @@ from .legacy_identity import assert_native_origin, native_identity
 from .legacy_optional_credentials import credentials_present
 from .legacy_order_projection import READ_MODEL
 from .legacy_trading_snapshot import TIME_ZONES, fee_transport, scalar, snapshot_in_transaction
+from .native_ledger import ledger_head
+from .native_ledger_projection import merge_orders
 from .profile_http import bounded_body
 from .security import lock_mutation_identity, lock_read_identity
 
@@ -24,13 +26,24 @@ class NativeOrders(InternalOrders):
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
             await lock_read_identity(conn,who,require_admin=False)
-            _, snapshot = await snapshot_in_transaction(
-                conn, who, strict=False, scope_record_id=record_id,
-                registered_order_read_model=True, orders_only=True,
-            )
+            head = await ledger_head(conn, who.id)
+            native_record_only = bool(record_id and head
+                and any(item['recordId'] == record_id for item in head['snapshot']['orders'])
+                and not await (await conn.execute(
+                    'SELECT 1 FROM portfolio_records WHERE owner_id=%s AND id=%s AND deleted_at IS NULL',
+                    (who.id, record_id),
+                )).fetchone())
+            if native_record_only:
+                legacy = []
+            else:
+                _, snapshot = await snapshot_in_transaction(
+                    conn, who, strict=False, scope_record_id=record_id,
+                    registered_order_read_model=True, orders_only=True,
+                )
+                legacy = snapshot['orders']
             now = datetime.now(UTC)
-            items, unknown_dates = [], []
-            for item in snapshot['orders']:
+            items, unknown_dates, timestamps = [], [], {}
+            for item in merge_orders(legacy, head):
                 if record_id and item['recordId'] != record_id:
                     continue
                 try:
@@ -39,6 +52,7 @@ class NativeOrders(InternalOrders):
                     stamp = stamp if isinstance(stamp,datetime) else datetime.fromisoformat(stamp)
                     if stamp.tzinfo is None:
                         raise ValueError()
+                    timestamps[item['id']] = stamp
                     today = stamp.astimezone(zone).date() == now.astimezone(zone).date()
                 except (ValueError,TypeError,KeyError):
                     unknown_dates.append(item['id'])
@@ -46,6 +60,9 @@ class NativeOrders(InternalOrders):
                 if status != 'all' and item['status'] != status or scope == 'today' and not today:
                     continue
                 items.append(item)
+            if head:
+                minimum = datetime.min.replace(tzinfo=UTC)
+                items.sort(key=lambda row: (timestamps.get(row['id'], minimum), row['id']), reverse=True)
             unverified_history=(len({row['id'] for row in items})!=len(items) or any(
                 row.get('executionModel')=='source_registered_history' and row.get('originalReadModel')!=READ_MODEL
                 for row in items))

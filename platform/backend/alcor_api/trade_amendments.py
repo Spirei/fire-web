@@ -124,6 +124,8 @@ class TradeAmendments(FeeRepairs):
         if record['revision']!=data['recordRevision'] or account['revision']!=data['brokerRevision'] or state['snapshotRevision']!=data['snapshotRevision']:raise HTTPException(409,'完整成交、账户或资金版本已变化')
         flat_net=bool(self.allow_flat_net_settlement and record['market']=='HK' and record['account_market']=='CN')
         if account['holding_source']!='manual' or account['account_kind'] not in ('real','simulated') or record['market'] not in ('US','HK','CN') or record['account_market'] not in ('',record['market']) and not flat_net:raise HTTPException(409,'当前仅支持已明确手工账户同币种现货成交')
+        from .native_ledger import require_legacy_write
+        await require_legacy_write(conn, who.id, account['account_kind'])
         rows=sorted((row for row in state['fills'] if row['record_id']==record['id']),key=lambda row:row['before_record_revision'])
         if not rows or len(rows)>5000:raise HTTPException(409,'须完整有界成交历史及独立期初证据')
         from .position_transfer_checkpoint import (

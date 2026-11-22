@@ -13,6 +13,8 @@ from .legacy_identity import assert_native_origin, envelope, native_identity
 from .legacy_order_projection import READ_MODEL
 from .legacy_trading_snapshot import require_order_coverage, scalar
 from .market_contract import ZONES
+from .native_ledger import ledger_head
+from .native_ledger_projection import collection_revision, position_rows, visible_orders
 from .scope_coverage import require_global
 from .security import lock_read_identity
 
@@ -194,6 +196,23 @@ def mount(app, db, authority):
             """, (who.id,))).fetchone()
             records = {row["id"]: row for row in rows}
             items = await period_fills(conn, who.id, records, start)
+            native = await ledger_head(conn, who.id)
+            if native:
+                rows = position_rows(rows, native)
+                records = {row["id"]: row for row in rows}
+                native_ids = {item["tradeId"] for item in native["snapshot"]["orders"]}
+                items = [item for item in items if item["id"] not in native_ids]
+                for item in visible_orders(native):
+                    if item["status"] != "filled" or not start <= event_time(item["tradedAt"]) < end:
+                        continue
+                    record = records[item["recordId"]]
+                    # Current before/after quantities are good for syncing the
+                    # active book. They do not prove the historical day opening.
+                    items.append({**item, "recordRevision": record["revision"],
+                                  "positionQtyBefore": None, "positionQtyAfter": None})
+                if len(records) > MAX_ROWS or len(items) > MAX_ROWS:
+                    raise HTTPException(409, "本交易周期持仓或成交超出完整读取上限")
+                items.sort(key=lambda row: row["id"])
             transfers = await (await conn.execute("""
                 SELECT source_record_id,target_record_id FROM broker_position_transfers
                 WHERE owner_id=%s AND occurred_at>=%s LIMIT %s
@@ -202,6 +221,7 @@ def mount(app, db, authority):
                 raise HTTPException(409, "本交易周期转仓超出完整读取上限")
             uncertain = {row[key] for row in transfers for key in ("source_record_id", "target_record_id")}
             uncertain &= records.keys()
+            uncertain.update(rid for rid, row in records.items() if row.get("_native_ledger_position"))
             prices = []
             if closes:
                 # Optional price evidence has its own short budget so a
@@ -213,7 +233,7 @@ def mount(app, db, authority):
                     pass
         return envelope(scalar({
             "accountId": who.id, "basis": BASIS, "asOf": now, "cycleStart": start, "cycleEnd": end,
-            "collectionRevision": head["revision"] if head else 0,
+            "collectionRevision": collection_revision(head["revision"] if head else 0, native),
             "records": {rid: row["revision"] for rid, row in records.items()},
             "items": items, "uncertainRecords": sorted(uncertain), "openingCloses": prices,
         }), request, response)

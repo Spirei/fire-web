@@ -148,6 +148,8 @@ class CashLedger:
             return total, attributed, balance
 
     async def plan(self, conn, who, data, *, financial_source=False):
+        from .native_ledger import require_legacy_write
+        await require_legacy_write(conn, who.id, data["accountKind"])
         account_id = data["accountId"]
         currency = data["currency"]
         amount = Decimal(data["amount"])

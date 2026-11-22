@@ -41,6 +41,8 @@ App 从 `GET /api/v2/auth/config` 的 `native_trade_sync.orders` 核对版本 1�
 | GET | `/api/v2/account-assets/native-orders` | `portfolio.read` |
 | POST | `/api/v2/account-assets/native-orders` | `portfolio.write` |
 
+已接管的账户通过 [App 原生账本](native-ledger-v2.md) 原子同步订单、持仓和现金。旧订单读取入口包含当前生效订单。
+
 POST 上报本机账本已经保存的订单状态。必填字段为 `tradeId`、`recordId`、`status`、`market`、`code`、`name`、`side`、`orderType`、`quantity`、`price`、`orderPrice`、`fees`、`priceCurrency`、`createdAt` 和 `execution`。数量、价格、费用和结算金额按十进制文本发送。状态为 `pending`、`filled`、`cancelled`、`expired` 或 `deleted`。成交携带 `filledAt`，保留实际成交时间。预约委托可携带 `startsAt`。删除携带 `deletedAt`、`deletedFrom` 和原订单字段。账户归属取自请求授权。
 
 回执的 `data` 包含 `ownerId`、`tradeId` 和 `status`。重复提交同一状态返回相同回执。订单可以由挂单进入一个终态，删除可以从原状态到达，过时状态返回 409。同步只保存 App 订单及其状态，Fire 交易、持仓和资金账本由各自交易接口更新。

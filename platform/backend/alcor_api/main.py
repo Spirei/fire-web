@@ -863,6 +863,9 @@ def create_app(settings: Settings | None = None):
     mount_legacy_trade_commands(app)
     from .native_trade_sync import mount_native_trade_sync
     mount_native_trade_sync(app)
+    from .native_ledger import mount_native_ledger
+    app.state.native_ledger_enabled = settings.native_ledger_enabled
+    mount_native_ledger(app)
     from .legacy_native_orders import mount_legacy_native_orders
     mount_legacy_native_orders(app)
     from .legacy_flat_orders import mount_legacy_flat_orders

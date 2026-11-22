@@ -275,6 +275,8 @@ class InternalOrders:
         account = await broker_account(conn, who.id, record["broker_account_id"])
         if account["account_kind"] not in ("real", "simulated") or account["holding_source"] != "manual":
             raise HTTPException(409, "账户身份或官方来源不允许内部委托")
+        from .native_ledger import require_legacy_write
+        await require_legacy_write(conn, who.id, account["account_kind"])
         market = ALIASES.get(record["market"].upper(), record["market"].upper())
         currency = MARKET_CURRENCY.get(market)
         if currency is None or (market == "HK" and record["account_market"] == "CN"):

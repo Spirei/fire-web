@@ -379,6 +379,9 @@ def mount_legacy_cash_reads(app):
                     instance=str(instance["instance_id"]),
                     observed_at=datetime.now(UTC),
                 )
+                from .native_ledger import ledger_head
+                from .native_ledger_projection import broker_cash_snapshot
+                value = broker_cash_snapshot(value, await ledger_head(conn, who.id))
             return JSONResponse({"code": 0, "message": "ok", "data": value}, headers=headers)
         except HTTPException as exc:
             if exc.status_code in (401, 403):

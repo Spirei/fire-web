@@ -32,7 +32,11 @@ async def owner_cash_page(service,commands,who,query):
         raise HTTPException(400,'资金分页或币种无效')
     async with service.context(who) as conn:
         from .cash_overview import CashOverview
+        from .native_ledger import ledger_head
+        from .native_ledger_projection import cash_overview
         overview=await CashOverview(service.db).on_connection(conn,who)
+        native = await ledger_head(conn, who.id)
+        overview = cash_overview(overview, native)
         now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
         result=await commands.owner_snapshot(conn,who,overview,now)
         if expected is not None and expected!=result['snapshotRevision'] or int(offset)>0 and expected is None:

@@ -18,6 +18,8 @@ async def bounded_body(request, limit):
 
 
 def body_budget(path):
+    if path == "/api/v2/account-assets/native-ledger/transactions":
+        return 512 * 1024
     if path == "/api/auth/personal-home":
         return 8 * 1024 * 1024 + 65536
     if path.startswith("/api/agent-runtime/"):

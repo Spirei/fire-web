@@ -296,7 +296,7 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
             config = await (await conn.execute('SELECT * FROM identity_passkey_config WHERE singleton=true')).fetchone()
             mail_availability = await email_verification_availability(conn, settings)
             value = discovery(version, config)
-            value.update(business_discovery(version))
+            value.update(business_discovery(version, native_ledger_enabled=settings.native_ledger_enabled))
             value['security']['email_verification_delivery'] = mail_availability
             value['native_login']['email_registration'] = await native_email_registration_discovery(conn, settings, mail_availability)
             # Price-alert and calendar discovery share this snapshot instead of

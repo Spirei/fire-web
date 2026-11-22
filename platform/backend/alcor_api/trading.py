@@ -278,6 +278,8 @@ class Trading:
         account = await broker_account(conn, who.id, record["broker_account_id"])
         if account["holding_source"] != "manual" or account["account_kind"] not in {"real", "simulated"}:
             raise HTTPException(409, "账户来源或真实模拟身份尚未确认")
+        from .native_ledger import require_legacy_write
+        await require_legacy_write(conn, who.id, account["account_kind"])
         if record["history_state"] == "unknown" or record["qty"] is None:
             raise HTTPException(409, "持仓历史或数量未知，请先核对期初")
         from .position_transfer_checkpoint import verify_current

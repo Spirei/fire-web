@@ -205,9 +205,22 @@ async def lock_order(conn, owner, identifier):
                        (f'native-order:{owner}:{identifier}',))
 
 
-async def save_order(conn, who, identifier, occurred, item):
+async def lock_mirror_order(conn, who, identifier):
+    from .broker_accounts import serialize_brokers
+
+    await serialize_brokers(conn, who.id)
     await lock_mutation_identity(conn, who, require_admin=False)
     await lock_order(conn, who.id, identifier)
+    native = await (await conn.execute("""
+        SELECT 1 FROM native_ledger_heads
+        WHERE owner_id=%s AND snapshot->'orders' @> %s
+    """, (who.id, Jsonb([{'tradeId': str(identifier)}])))).fetchone()
+    if native:
+        raise HTTPException(409, '该订单已归属 App 原生账本，请通过原生事务修改')
+
+
+async def save_order(conn, who, identifier, occurred, item):
+    await lock_mirror_order(conn, who, identifier)
     status = item['status']
     existing = await (await conn.execute('SELECT item FROM native_synced_orders WHERE owner_id=%s AND order_id=%s',
                                          (who.id, identifier))).fetchone()
@@ -265,25 +278,40 @@ def order_projection(item):
         'broker': item.get('broker') or '', 'note': '', 'realizedPnl': None,
         'executionModel': 'app_order_mirror', 'apiManaged': True, 'cancellable': False,
         'actualFeeKnown': filled, 'brokerExecution': False, 'editCount': len(item.get('editHistory', [])),
+        **({'brokerAccountId': item['brokerAccountId'], 'identityMatches': True,
+            'executionModel': 'app_native_ledger', 'revision': 1 + len(item.get('editHistory', [])),
+            'nativeActions': {'cancel': item['status'] == 'pending', 'delete': item['status'] in ORDER_STATES,
+                              'edit': filled and item['execution'] == 'recorded' and not item.get('parentOrderId')}}
+           if 'brokerAccountId' in item else {}),
     }
 
 
 async def fetch_orders(conn, owner, *, before=None, limit=100, record_id=None, today=False):
     cursor = await conn.execute('''
-        SELECT order_id,occurred_at,item FROM (
+        WITH native AS (
+            SELECT (item->>'tradeId')::uuid AS order_id,
+                COALESCE(item->>'filledAt',item->>'createdAt')::timestamptz AS occurred_at,item
+            FROM native_ledger_heads CROSS JOIN LATERAL jsonb_array_elements(snapshot->'orders') AS events(item)
+            WHERE owner_id=%(owner)s
+        ) SELECT order_id,occurred_at,item FROM (
+            SELECT order_id,occurred_at,item FROM native
+            WHERE item->>'status'<>'deleted'
+              AND (%(record)s::text IS NULL OR item->>'recordId'=%(record)s)
+            UNION ALL
             SELECT order_id,occurred_at,item FROM native_synced_orders
             WHERE owner_id=%(owner)s AND status<>'deleted'
               AND (%(record)s::text IS NULL OR item->>'recordId'=%(record)s)
-              AND (%(stamp)s::timestamptz IS NULL OR (occurred_at,order_id)<(%(stamp)s,%(id)s::uuid))
+              AND order_id NOT IN (SELECT order_id FROM native)
             UNION ALL
             SELECT trade_id,occurred_at,fill FROM native_synced_fills f
             WHERE owner_id=%(owner)s AND %(record)s::text IS NULL
-              AND (%(stamp)s::timestamptz IS NULL OR (occurred_at,trade_id)<(%(stamp)s,%(id)s::uuid))
               AND NOT EXISTS (SELECT 1 FROM native_synced_orders o WHERE o.owner_id=f.owner_id AND o.order_id=f.trade_id)
+              AND trade_id NOT IN (SELECT order_id FROM native)
         ) AS source
         CROSS JOIN LATERAL (SELECT CASE item->>'market' WHEN 'US' THEN 'America/New_York'
             WHEN 'HK' THEN 'Asia/Hong_Kong' ELSE 'Asia/Shanghai' END AS exchange) AS tz
-        WHERE NOT %(today)s OR timezone(tz.exchange,occurred_at)::date=timezone(tz.exchange,now())::date
+        WHERE (%(stamp)s::timestamptz IS NULL OR (occurred_at,order_id)<(%(stamp)s,%(id)s::uuid))
+          AND (NOT %(today)s OR timezone(tz.exchange,occurred_at)::date=timezone(tz.exchange,now())::date)
         ORDER BY occurred_at DESC,order_id DESC LIMIT %(limit)s
     ''', {'owner': owner, 'record': record_id, 'stamp': before[0] if before else None,
           'id': before[1] if before else None, 'limit': limit, 'today': today})
@@ -353,8 +381,7 @@ def mount_native_trade_sync(app):
                     raise HTTPException(400, '本机成交数据无效') from exc
                 trade_id, occurred = validate_fill(fill)
                 async with db.connection() as conn, conn.transaction():
-                    await lock_mutation_identity(conn, who, require_admin=False)
-                    await lock_order(conn, who.id, trade_id)
+                    await lock_mirror_order(conn, who, trade_id)
                     deleted = await (await conn.execute('''SELECT 1 FROM native_synced_orders
                         WHERE owner_id=%s AND order_id=%s AND status='deleted' ''', (who.id, trade_id))).fetchone()
                     if deleted:

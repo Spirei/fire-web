@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     public_origin: str = "http://127.0.0.1:8088"
     trusted_proxy_ips: list[str] = Field(default_factory=list, max_length=16)
     connections_from_environment: bool = False
+    native_ledger_enabled: bool = False
     web_dist: Path = ROOT / "apps/web/dist"
     migration_dir: Path = ROOT / "migrations"
     inventory_file: Path = ROOT / "contracts/migration-register.json"

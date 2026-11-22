@@ -15,6 +15,9 @@ from .fx_reference import FxWorker
 from .legacy_broker_read import iso
 from .legacy_registered_positions import registered_closures
 from .market_quote_selection import configured_quotes
+from .native_ledger import ledger_head
+from .native_ledger_projection import cash_overview, collection_revision, positions_with_brokers
+from .portfolio_records import record_dto
 from .position_transfer_checkpoint import economic_initial
 from .trade_accounting import replay_economic_trades
 from .trade_amendment_history import attach_amendments, effective_rows
@@ -105,15 +108,19 @@ async def snapshot(service,who,options):
     from .request_timing import elapsed, measure, start
     with measure('assets_records'):
         async with service.context(who,shared_read=True) as conn:
-            original=await (await conn.execute('''SELECT r.id,r.market,r.code,r.revision,r.qty,r.trade_tip_id,r.position_transfer_id,a.holding_source AS _holding_source
+            original=await (await conn.execute('''SELECT r.id,r.market,r.code,r.revision,r.qty,r.trade_tip_id,r.position_transfer_id,r.group_name,a.holding_source AS _holding_source
                 FROM portfolio_records r LEFT JOIN broker_accounts a ON a.owner_id=r.owner_id AND a.id=r.broker_account_id AND a.deleted_at IS NULL
                 WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY r.id LIMIT 10001''',(who.id,))).fetchall()
+            initial_native = await ledger_head(conn, who.id)
             if len(original)>10000:raise HTTPException(409,'持仓超过完整读取上限')
+    quoting_rows = positions_with_brokers(original, initial_native, {})
+    if len(quoting_rows) > 10000:
+        raise HTTPException(409,'持仓超过完整读取上限')
     async def read_quotes():
         with measure('assets_quotes'):
             return await configured_quotes(
                 service.market_authority, who,
-                [{'id':row['id'],'market':row['market'],'code':row['code']} for row in original if needs_position_quote(row)],
+                [{'id':row['id'],'market':row['market'],'code':row['code']} for row in quoting_rows if needs_position_quote(row)],
                 regular=selected['usPrice']=='regular', include_market_cap=False,
             )
 
@@ -129,6 +136,9 @@ async def snapshot(service,who,options):
         rows=await (await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
         if [(row['id'],row['market'],row['code'],row['revision']) for row in rows]!=[(row['id'],row['market'],row['code'],row['revision']) for row in original]:
             raise HTTPException(409,'持仓在读取报价期间已变化，请重新读取')
+        native = await ledger_head(conn, who.id)
+        if (native and native['revision']) != (initial_native and initial_native['revision']):
+            raise HTTPException(409,'原生账本在读取报价期间已变化，请重新读取')
         policies = {}
         for state in quoted['quoteStates'].values():
             revision = state.get('sourceRevision')
@@ -147,16 +157,25 @@ async def snapshot(service,who,options):
         with measure('assets_cash'):
             overview=await CashOverview(service.db).on_connection(conn,who)
             archive=await registered_book_source(conn,who.id)
-            registered=await read_registered_cash(conn,who,service.db.settings,overview,source=archive)
+            registered=await read_registered_cash(conn,who,service.db.settings,overview,source=archive) if not native else None
+            overview = cash_overview(overview, native)
         registered_cash=registered.dto if registered is not None else None
         head=await (await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
-        accounts=await (await conn.execute('SELECT id,account_kind,holding_source FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL',(who.id,))).fetchall()
+        accounts=await (await conn.execute('SELECT id,name,account_kind,holding_source FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL',(who.id,))).fetchall()
         accounts={row['id']:row for row in accounts}
         if any(row['_holding_source']!=(accounts.get(current['broker_account_id']) or {}).get('holding_source')
                for row,current in zip(original,rows,strict=True)):
             raise HTTPException(409,'持仓来源在读取报价期间已变化，请重新读取')
         now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
         migrated_closed=registered_closures(archive,who.id,rows,actual,accounts,now)
+        rows = positions_with_brokers(rows, native, accounts)
+        for row in rows:
+            if row.get('_native_ledger_position'):
+                rid = row['id']
+                actual[rid] = record_dto(row)
+                average.pop(rid, None)
+                cleared.pop(rid, None)
+                migrated_closed.pop(rid, None)
         from .legacy_identity import public_profile
         with measure('assets_profile'):
             owner=await public_profile(conn,who.id,scope='portfolio.read')
@@ -184,7 +203,7 @@ async def snapshot(service,who,options):
                     if price is not None:
                         source='record';price_at=(record.get('officialObservation') or {}).get('reportDate') or record['updatedAt']
                 currency=CURRENCIES.get(row['market']);account=accounts.get(row['broker_account_id'])
-                kind=account['account_kind'] if account else 'unknown'
+                kind=account['account_kind'] if account else row.get('account_kind', 'unknown')
                 position_status='closed' if rid in migrated_closed else position_state(row,record)
                 is_active=position_status in ('open','quantity_unknown')
                 if is_active:kinds.add(kind)
@@ -245,7 +264,7 @@ async def snapshot(service,who,options):
         elapsed('assets_main', main_started)
         result={'schemaVersion':1,'accountId':who.id,
             'profile':{'accountId':who.id,'username':owner['username'],'nickname':owner.get('nickname'),'uid':owner.get('uid'),'avatar':owner.get('avatar')},
-            'collectionRevision':head['revision'] if head else 0,'currency':selected['currency'],'options':selected,
+            'collectionRevision':collection_revision(head['revision'] if head else 0, native),'currency':selected['currency'],'options':selected,
             'positions':values,'markets':markets,'summary':{'totalMarket':display(total_market,2),'totalCost':display(total_cost,2),
                 'holdingPnl':display(total_market-total_cost,2) if total_market is not None and total_cost is not None else None,
                 'totalCash':display(cash_total,2),'totalAsset':display(asset_total,2),'holdingsComplete':total_market is not None,'costComplete':total_cost is not None,
@@ -254,7 +273,9 @@ async def snapshot(service,who,options):
             'cash':{'nativeBalancesByCurrency':{key:display(value) for key,value in cash_values.items()} if source_complete else None,
                     'sourceComplete':source_complete,'complete':cash_complete,'source':'recorded_cash_ledger',
                     'sourceRevision':registered_cash['snapshotRevision'] if registered_cash is not None and not separated else overview['snapshotRevision'],
-                    'sourceAuthority':registered_cash['sourceAuthority'] if registered_cash is not None and not separated else 'platform_owner_kind_posted_cash_ledger','valuationIndependent':True,'marketAllocationAvailable':False,
+                    'sourceAuthority':('app_native_ledger' if native else registered_cash['sourceAuthority']
+                        if registered_cash is not None and not separated else 'platform_owner_kind_posted_cash_ledger'),
+                    'valuationIndependent':True,'marketAllocationAvailable':False,
                     'actualBrokerBalanceClaimed':False},
             'todayOrders':{'items':[],'count':0,'available':False,'emptyReason':'snapshot_orders_not_included',
                     'dateBasis':'exchange_local_calendar_date','timeZones':ZONES,'unknownDateOrderIds':[],'settlesPendingOrders':False},

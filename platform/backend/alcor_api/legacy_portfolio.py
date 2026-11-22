@@ -15,6 +15,8 @@ from .legacy_identity import (
     web_identity,
 )
 from .portfolio_records import PortfolioRecords, record_dto
+from .native_ledger import ledger_head
+from .native_ledger_projection import collection_revision, positions_with_brokers
 
 
 def legacy_record(record):
@@ -64,6 +66,27 @@ def collection_value(raw):
 def mount_legacy_portfolio(app, settings, db):
     service = PortfolioRecords(db)
 
+    async def projects(conn, owner, rows, head):
+        if not head:
+            return rows
+        brokers = await (await conn.execute(
+            'SELECT id,name FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL', (owner,),
+        )).fetchall()
+        return positions_with_brokers(rows, head, {row['id']: row for row in brokers})
+
+    def check_revision(expected, revision):
+        if expected is not None and revision != expected:
+            raise LegacyError(409, 40902, "记录已变化，请重新读取第一页")
+
+    async def list_records(conn, owner, head):
+        rows = await (await conn.execute("SELECT r.*,COALESCE(o.display_timestamp,r.updated_at) AS legacy_updated_at FROM portfolio_records r LEFT JOIN portfolio_legacy_ordering o ON o.owner_id=r.owner_id AND o.record_id=r.id WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY COALESCE(o.display_timestamp,r.updated_at) DESC,r.id", (owner,))).fetchall()
+        original = [dict(row, updated_at=row["legacy_updated_at"]) for row in rows]
+        if head:
+            original = await projects(conn, owner, original, head)
+            original.sort(key=lambda row: row["id"])
+            original.sort(key=lambda row: row["updated_at"], reverse=True)
+        return original
+
     async def snapshot(who, expected=None):
         owner=who.id
         async with db.connection() as conn, conn.transaction():
@@ -72,10 +95,11 @@ def mount_legacy_portfolio(app, settings, db):
             revision = await ReadOnlyRecords(db,who).lock(conn,owner)
             from .scope_coverage import require_global
             await require_global(conn,owner)
-            if expected is not None and revision != expected:
-                raise LegacyError(409, 40902, "记录已变化，请重新读取第一页")
-            rows = await (await conn.execute("SELECT r.*,COALESCE(o.display_timestamp,r.updated_at) AS legacy_updated_at FROM portfolio_records r LEFT JOIN portfolio_legacy_ordering o ON o.owner_id=r.owner_id AND o.record_id=r.id WHERE r.owner_id=%s AND r.deleted_at IS NULL ORDER BY COALESCE(o.display_timestamp,r.updated_at) DESC,r.id", (owner,))).fetchall()
-            return [legacy_record(record_dto(dict(row, updated_at=row["legacy_updated_at"]))) for row in rows], revision
+            head = await ledger_head(conn, owner)
+            revision = collection_revision(revision, head)
+            check_revision(expected, revision)
+            rows = await list_records(conn, owner, head)
+            return [legacy_record(record_dto(row)) for row in rows], revision
 
     async def paged_snapshot(who, expected, *, market, group, page, size):
         """One bounded page plus its filtered total inside the same snapshot."""
@@ -86,8 +110,15 @@ def mount_legacy_portfolio(app, settings, db):
             revision = await ReadOnlyRecords(db, who).lock(conn, owner)
             from .scope_coverage import require_global
             await require_global(conn, owner)
-            if expected is not None and revision != expected:
-                raise LegacyError(409, 40902, "记录已变化，请重新读取第一页")
+            head = await ledger_head(conn, owner)
+            revision = collection_revision(revision, head)
+            check_revision(expected, revision)
+            if head:
+                rows = await list_records(conn, owner, head)
+                matches = [row for row in rows if (not market or row["market"] == market)
+                           and (not group or row["group_name"] == group)]
+                selected = matches[(page - 1) * size:page * size]
+                return [legacy_record(record_dto(row)) for row in selected], revision, len(matches)
             where, params = "r.owner_id=%s AND r.deleted_at IS NULL", [owner]
             if market:
                 where += " AND r.market=%s"
@@ -173,12 +204,16 @@ def mount_legacy_portfolio(app, settings, db):
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             from .legacy_record_writes import ReadOnlyRecords
             revision = await ReadOnlyRecords(db,who).lock(conn,who.id)
+            head = await ledger_head(conn, who.id)
+            revision = collection_revision(revision, head)
             row = await service.get(conn, who.id, record_id)
+            ordering = await (await conn.execute("SELECT display_timestamp FROM portfolio_legacy_ordering WHERE owner_id=%s AND record_id=%s", (who.id, record_id))).fetchone()
+            if ordering and row:
+                row = dict(row, updated_at=ordering["display_timestamp"])
+            rows = await projects(conn, who.id, [row] if row else [], head)
+            row = next((entry for entry in rows if entry["id"] == record_id), None)
             if not row:
                 raise LegacyError(404, 40401, "记录不存在")
-            ordering = await (await conn.execute("SELECT display_timestamp FROM portfolio_legacy_ordering WHERE owner_id=%s AND record_id=%s", (who.id, record_id))).fetchone()
-            if ordering:
-                row = dict(row, updated_at=ordering["display_timestamp"])
             result = envelope(legacy_record(record_dto(row)), request, response)
             result["meta"] = {"collectionRevision": revision}
             return result

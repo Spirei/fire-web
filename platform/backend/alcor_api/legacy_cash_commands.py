@@ -64,9 +64,13 @@ def global_dto(owner,overview,now):
 
 
 async def overview_on_connection(conn,who,service,*,include_accounts=False,version=2):
+    from .native_ledger import ledger_head
+    from .native_ledger_projection import broker_cash_snapshot, cash_overview
+
     value=await CashOverview(service.db).on_connection(conn,who)
     now=(await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
-    result=global_dto(who.id,value,now)
+    native = await ledger_head(conn, who.id)
+    result=global_dto(who.id,cash_overview(value, native),now)
     if include_accounts:
         if len(value['accounts'])>100:raise HTTPException(409,'账户数量超过总览上限，请先核对账户目录')
         instance=str((await (await conn.execute('SELECT instance_id FROM alcor_instance WHERE singleton')).fetchone())['instance_id'])
@@ -76,6 +80,7 @@ async def overview_on_connection(conn,who,service,*,include_accounts=False,versi
             dto=await account_view(conn,who.id,account['id'],[],version=version)
             facts=await activity_facts(conn,who.id,account,entry['snapshot'])
             cash=snapshot_dto(who.id,account,entry['snapshot'],facts,instance=instance,observed_at=now)
+            cash=broker_cash_snapshot(cash, native)
             cash['globalCashRevision']=result['globalCashRevision']
             accounts.append({'account':dto,'cash':cash})
         head=(await (await conn.execute('SELECT revision FROM broker_account_collections WHERE owner_id=%s',(who.id,))).fetchone())

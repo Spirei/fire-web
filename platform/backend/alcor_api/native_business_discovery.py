@@ -4,13 +4,15 @@ Protocol availability does not grant scopes or promise an observed quote/history
 """
 
 
-def discovery(version):
+def discovery(version, *, native_ledger_enabled=False):
     base = f'/api/v{version}'
     assets = base + '/account-assets'
     trading = assets + '/trading'
     from .native_trade_sync import discovery as sync_discovery
+    from .native_ledger import discovery as ledger_discovery
     return {
         **({'native_trade_sync': sync_discovery()} if version == 2 else {}),
+        **({'native_ledger': ledger_discovery()} if version == 2 and native_ledger_enabled else {}),
         'account_trading': {
             'version': 1, 'supported': True, 'snapshot_path': trading,
             'preview_path': trading + '/preview', 'submit_path': trading + '/submissions',

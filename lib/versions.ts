@@ -8428,7 +8428,7 @@ const V0_1_87_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_88_ENTRY: VersionEntry = {
   ...V0_1_87_ENTRY,
   version: "v0.1.88", date: "2026-11-22", summary: "优化数据管理的市场目录、分页和读取",
   software: V0_1_87_ENTRY.software.map(item => ({ ...item, version: "v0.1.88" })),
@@ -8448,10 +8448,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_88_ENTRY,
+  version: "v0.1.89", date: "2026-11-23", summary: "App 订单、持仓和原币现金一起同步",
+  software: V0_1_88_ENTRY.software.map(item => ({ ...item, version: "v0.1.89" })),
+  changes: [
+    { kind: "feature", title: "App 原生账本同步", desc: "补录按实际成交时间保存，成交、持仓和原币现金一起入账。买卖、挂单、撤单、编辑和删除使用同一账本，跨设备可按原请求编号核对。" },
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_88_ENTRY,
   V0_1_87_ENTRY,
   V0_1_86_ENTRY,
   V0_1_85_ENTRY,
