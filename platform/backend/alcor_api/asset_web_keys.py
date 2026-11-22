@@ -4,10 +4,30 @@ import json
 import re
 from importlib.resources import files
 
-from .asset_lookup_contract import trim
+from .asset_lookup_contract import normalize, trim
 
-RELATED = json.loads(files("alcor_api").joinpath("data/asset_related_icons.json").read_text())
+_DIRECTORY = json.loads(files("alcor_api").joinpath("data/discovery-related-etfs.json").read_text())
+RELATED_PRODUCTS = _DIRECTORY["products"]
+RELATED = dict(_DIRECTORY["legacyUnderlyings"])
+for underlying, products in RELATED_PRODUCTS.items():
+    for product in products:
+        RELATED.setdefault(product["code"], underlying)
+
 SUFFIXES = ("", ".AM", ".N", ".OQ", ".PS", ".K")
+
+
+def related_root(market, code):
+    if market.strip().upper() != "US":
+        return None
+    code = normalize("US", code)
+    root = RELATED.get(code)
+    visited = {code}
+    while root in RELATED:
+        if root in visited:
+            return None
+        visited.add(root)
+        root = RELATED[root]
+    return root
 
 
 def select_web_keys(kind, keys=None, market=None, code=None):
@@ -38,7 +58,8 @@ def stock_codes(market, code):
 
 def related_icons(mapping):
     result = dict(mapping)
-    for etf, main in RELATED.items():
+    for etf in RELATED:
+        main = related_root("US", etf)
         url = result.get("US:" + main)
         for suffix in SUFFIXES:
             key = "US:" + etf + suffix

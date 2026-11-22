@@ -270,9 +270,8 @@ async def test_legacy_web_flag_and_stock_keys_use_verified_single_authority(clie
     assert mapping["HK:9992"] == mapping["HK:09992"]
     assert mapping["US:NVDL"] == mapping["US:NVDA"]
     assert (await client.get(mapping["US:NVDL"])).status_code == 200
-    assert (await client.get("/api/assets", params={"type": "stock", "keys": "US:NVDL"})).json() == {
-        "assets": []
-    }
+    etf_only = await client.get("/api/assets", params={"type": "stock", "keys": "US:NVDL"})
+    assert next(row["url"] for row in etf_only.json()["assets"] if row["code"] == "NVDL") == mapping["US:NVDA"]
     assert (
         await client.get(
             "/api/assets", params={"type": "stock", "keys": ",".join(["bad"] * 200 + ["HK:9992"])}

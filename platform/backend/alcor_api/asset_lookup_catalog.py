@@ -524,17 +524,10 @@ class AssetCatalog:
         """Preserve the established shared-underlying image rule without changing ETF identity."""
         if asset.get('type') != 'stock' or asset.get('market') != 'US' or asset.get('iconTarget'):
             return asset
-        from .asset_web_keys import RELATED
-        from .asset_lookup_contract import normalize
-        code = normalize('US', asset['code'])
-        root = RELATED.get(code)
+        from .asset_web_keys import related_root
+        root = related_root(asset['market'], asset['code'])
         if not root:
             return asset
-        seen = {code}
-        while root in RELATED:
-            if root in seen:
-                return asset
-            seen.add(root); root = RELATED[root]
         cache_key = ('underlying-art', root)
         if cache_key not in cache:
             rows = await (await conn.execute("SELECT * FROM asset_catalog_entries e WHERE type='stock' AND upper(market)='US' AND upper(code)=%s ORDER BY created_at,id LIMIT 1",(root,))).fetchall()

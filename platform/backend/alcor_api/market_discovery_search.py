@@ -5,13 +5,14 @@ import re
 from pathlib import Path
 
 from .asset_lookup_catalog import AssetCatalog
+from .asset_web_keys import RELATED_PRODUCTS as RELATED
 from .card_preferences import JS_WHITESPACE
+from .confirmed_stock_listings import CONFIRMED_LISTINGS, stock_identity
 from .legacy_pinyin_match import matches
 from .market_discovery_protocol import stock_symbol
 
 ROOT=Path(__file__).parent/'data'
 CRYPTO=json.loads((ROOT/'discovery-mainstream-crypto.json').read_text())
-RELATED=json.loads((ROOT/'discovery-related-etfs.json').read_text())
 
 
 def normalized(value):return re.sub(r'[\s_-]+',' ',value.strip(JS_WHITESPACE).lower())
@@ -33,17 +34,28 @@ def special(text):
 
 
 async def local(conn,text,db):
-    # Public metadata shares its existing catalog lock/authority. No copied stock
-    # directory and no scan of image files or users' private portfolio names.
+    # A verified public listing can be searched before its artwork or quotes are imported.
     async with AssetCatalog(db).context(connection=conn):
         rows=await (await conn.execute("SELECT e.* FROM asset_catalog_entries e WHERE type='stock' AND NOT EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL) ORDER BY created_at,id LIMIT 20001")).fetchall()
     if len(rows)>20000:return [],{'state':'catalog_budget_exceeded','complete':False}
     pattern=re.compile('.*'+''.join('.*' if char=='%' else '.' if char=='_' else re.escape(char) for char in text.lower())+'.*',re.DOTALL)
-    found=[row for row in rows if pattern.fullmatch(row['code'].lower()) or pattern.fullmatch(row['name'].lower()) or matches(row['name'],text)]
+    needle = text.strip(JS_WHITESPACE).casefold()
+    stored_identities = {stock_identity(row["market"], row["code"]) for row in rows}
+    candidates = [*rows, *(item for key, item in CONFIRMED_LISTINGS.items() if key not in stored_identities)]
+    found = []
+    for row in candidates:
+        listed = CONFIRMED_LISTINGS.get(stock_identity(row["market"], row["code"]))
+        names = (row["name"], listed["name"]) if listed else (row["name"],)
+        exact = row["code"].casefold() == needle or any(name.casefold() == needle for name in names)
+        if exact or pattern.fullmatch(row["code"].lower()) or any(
+            pattern.fullmatch(name.lower()) or matches(name, text) for name in names
+        ):
+            found.append((not exact, row))
+    found.sort(key=lambda match: match[0])
     # Unavailable market capitalization cannot be substituted with a zero sort
     # key. Stable catalog order is explicit until licensed cap facts are present.
     values=[{'symbol':stock_symbol(row['market'],row['code'].upper()),'code':row['code'].upper(),
-        'name':row['name'],'market':row['market'],'price':None,'changePct':None} for row in found[:8]]
+        'name':row['name'],'market':row['market'],'price':None,'changePct':None} for _,row in found[:8]]
     all_rows={(row['market'],row['code'].upper()):row for row in rows}
     primary=next((row for row in values if row['market']=='US' and row['code'] in RELATED),None)
     if primary:

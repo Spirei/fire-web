@@ -320,6 +320,9 @@ async def catalog_material(service, conn, aid):
     if row is None and service.legacy_card_directory is not None:
         from .card_public_assets import CardPublicAssets
         row = await CardPublicAssets(service.catalog.db, service.legacy_card_directory).source(aid)
+    if row is None:
+        from .confirmed_stock_listings import LISTING_MATERIALS
+        row = LISTING_MATERIALS.get(aid)
     if row is None and aid.startswith("market:"):
         from .legacy_asset_directory import MARKET_NAMES
         key = aid.removeprefix("market:")

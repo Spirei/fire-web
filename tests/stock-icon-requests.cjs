@@ -1,9 +1,17 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
-const modules=new Map();function load(file){file=path.resolve(file);if(modules.has(file))return modules.get(file);const m={exports:{}};modules.set(file,m.exports);new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(id=>id.startsWith('@/')?load(path.join(process.cwd(),id.slice(2)+'.ts')):id.startsWith('.')?load(path.resolve(path.dirname(file),id+'.ts')):require(id),m,m.exports);return m.exports;}
+const modules=new Map();function load(file){file=path.resolve(file);if(modules.has(file))return modules.get(file);const m={exports:{}};modules.set(file,m.exports);new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(id=>id.endsWith('.json')?require(path.resolve(path.dirname(file),id)):id.startsWith('@/')?load(path.join(process.cwd(),id.slice(2)+'.ts')):id.startsWith('.')?load(path.resolve(path.dirname(file),id+'.ts')):require(id),m,m.exports);return m.exports;}
 const {stockIconBatches,readStockIcons,stockIconPreloads}=load('lib/stockIconRequests.ts');
 (async()=>{
  const groups=stockIconBatches([{market:' us ',code:'ROBN.AM'},{market:'US',code:'HOOD'},{market:'HK',code:'700'},{market:'ASSET',code:'BTC'}]);
  assert(groups.flat().includes('US:HOOD'));assert(groups.flat().includes('US:ROBN.AM'));assert.equal(groups.flat().filter(k=>k==='US:HOOD').length,1);assert(!groups.flat().includes('ASSET:BTC'));
+ const {relatedStock,relatedEtfBadge}=load('lib/relatedEtfs.ts');
+ const {applyRelatedEtfMainStockIcons}=load('lib/stockIconKey.ts');
+ assert.deepEqual(stockIconBatches([{market:'US',code:'SKUU.OQ'},{market:'US',code:'SKDD.N'}]).flat(),['US:SKHY','US:SKUU.OQ','US:SKDD.N']);
+ assert.equal(relatedStock('US','skuu.oq').code,'SKHY');
+ assert.equal(relatedEtfBadge('US','SKDD.N').tone,'short');
+ const skhynix='/uploads/asset/stock/US/SKHY.png';
+ assert.equal(applyRelatedEtfMainStockIcons({'US:SKHY':skhynix,'US:SKUU.OQ':'issuer'})['US:SKUU.OQ'],skhynix);
+ assert.equal(applyRelatedEtfMainStockIcons({'US:SKUU.OQ':'issuer'})['US:SKUU.OQ'],undefined);
  const many=Array.from({length:253},(_,n)=>({market:'US',code:'DEMO'+n}));assert.deepEqual(stockIconBatches(many).map(b=>b.length),[100,100,53]);
  let active=0,max=0,calls=[];
  const icons=await readStockIcons(many,async url=>{calls.push(url);max=Math.max(max,++active);await new Promise(r=>setImmediate(r));active--;const keys=new URL(url,'http://test.invalid').searchParams.get('keys').split(',');if(keys[0]==='US:DEMO100')throw Error('synthetic unavailable batch');return{assets:keys.map(key=>({type:'stock',market:'US',code:key.split(':')[1],imageUrl:'/api/asset-image/'+key.split(':')[1]}))};});

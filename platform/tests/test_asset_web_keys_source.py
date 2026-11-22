@@ -40,7 +40,10 @@ def test_web_keys_truncate_before_filter_and_keep_original_stock_pairs():
     assert [
         select_web_keys(q["type"], q.get("keys"), q.get("market"), q.get("code")) for q in vectors
     ] == golden["parsed"]
-    assert RELATED == golden["related"]
+    assert {code: RELATED[code] for code in golden["related"]} == golden["related"]
+    assert {code: root for code, root in RELATED.items() if code not in golden["related"]} == dict.fromkeys(
+        ("SKUU", "SKDD", "SKHL", "SKHU", "SKHX", "SKHZ", "SKHQ", "SK"), "SKHY"
+    )
     assert [
         stock_codes(market, code)
         for market, code in [("HK", "9992"), ("HK", "00000"), ("US", "demo.oq"), ("JP", " abc.t ")]
@@ -150,7 +153,7 @@ async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_
     assert len(calls) == 2
     calls.clear()
     result = await service.web_icons("stock", select_web_keys("stock", "US:NVDL"))
-    assert result == {"assets": []}
+    assert next(row["url"] for row in result["assets"] if row["code"] == "NVDL") == mapping["US:NVDA"]
     assert len(calls) == 2
     calls.clear()
     result = await service.web_icons("flag", select_web_keys("flag", "us,US,cn"))

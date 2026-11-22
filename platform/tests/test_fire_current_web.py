@@ -164,6 +164,79 @@ async def test_catalog_stock_counts_are_registered_images_independent_of_search(
     assert (await client.get('/api/assets/catalog?type=group')).status_code==400
 
 
+async def test_confirmed_listing_search_and_material_lifecycle(client, admin, app):
+    await fire_login(client)
+    for code in ("ANTZZ", "PLANT", "GANT", "MANT", "WANT", "CANT", "SANT", "PANT"):
+        await seed_asset(app, f"stock:US:{code}", "stock", "US")
+
+    for query in ("anthropic", "ANT"):
+        response = await client.get("/api/search", params={"q": query})
+        assert response.status_code == 200, response.text
+        assert response.json()["results"][0] == {
+            "market": "US", "code": "ANT", "symbol": "usANT", "name": "Anthropic",
+            "price": None, "changePct": None,
+        }
+
+    path = "/api/assets/catalog"
+    params = {"type": "stock", "market": "US", "q": "anthropic"}
+    first = (await client.get(path, params={**params, "q": "ANT"})).json()
+    assert first["assets"][0]["code"] == "ANT"
+    initial = (await client.get(path, params=params)).json()
+    assert initial["total"] == 1
+    asset = initial["assets"][0]
+    assert asset["id"] == "stock:US:ANT" and not asset["imageUrl"]
+    assert (await client.get(path, params={**params, "market": "HK"})).json()["total"] == 0
+
+    async def mutate(action, revision, **fields):
+        response = await client.post(path, json={
+            "action": action, "revision": revision, "ids": [asset["id"]], "requestId": str(uuid4()), **fields,
+        })
+        assert response.status_code == 200, response.text
+        return response.json()["revision"]
+
+    revision = await mutate("remove", initial["revision"])
+    assert (await client.get(path, params=params)).json()["total"] == 0
+    removed = (await client.get(path, params={**params, "removed": "1"})).json()
+    assert removed["removedCount"] == 1 and removed["assets"][0]["id"] == asset["id"]
+    revision = await mutate("restore", revision)
+    await mutate("rename", revision, name="Anthropic PBC")
+    restored = (await client.get(path, params=params)).json()
+    assert restored["total"] == 1 and restored["assets"][0]["name"] == "Anthropic PBC"
+
+
+async def test_skhynix_related_material_and_single_etf_icon_read(client, admin, app, tmp_path):
+    from test_legacy_asset_directory import SVG, write
+
+    await fire_login(client)
+    asset_root = tmp_path / "public-artwork"
+    app.state.legacy_asset_directory.root = asset_root
+    for code in ("SKHY", "SKUU"):
+        write(asset_root, f"asset/stock/US/{code}.svg", SVG)
+    write(asset_root, "asset/stock/HK/SKDD.svg", SVG)
+    await seed_asset(app, "stock:US:SKDD.OQ", "stock", "US")
+
+    async def material(code, market="US"):
+        response = await client.get("/api/assets/catalog", params={"type": "stock", "market": market, "q": code})
+        assert response.status_code == 200, response.text
+        return response.json()["assets"][0]
+
+    url = (await material("SKHY"))["imageUrl"]
+    assert url.startswith("/uploads/asset/stock/US/SKHY.svg?")
+    assert (await material("SKUU"))["imageUrl"] == (await material("SKDD"))["imageUrl"] == url
+    assert (await material("SKDD", "HK"))["imageUrl"].startswith("/uploads/asset/stock/HK/SKDD.svg?")
+    assert (await client.get(url)).status_code == 200
+    response = await client.get("/api/assets", params={"type": "stock", "keys": "US:SKUU.OQ"})
+    assert response.status_code == 200, response.text
+    icons = {row["code"]: row["url"] for row in response.json()["assets"]}
+    assert icons["SKUU.OQ"] == icons["SKDD"] == icons["SKHY"] == url
+
+    (await client.post("/api/assets/catalog", json={
+        "action": "remove", "revision": "0", "ids": [(await material("SKHY"))["id"]], "requestId": str(uuid4()),
+    })).raise_for_status()
+    assert not (await material("SKUU"))["imageUrl"]
+    assert (await client.get("/api/assets", params={"type": "stock", "keys": "US:SKUU.OQ"})).json() == {"assets": []}
+
+
 def test_stock_reference_counts_follow_shared_underlying_without_certifying_bytes():
     from alcor_api.asset_catalog_management import stock_image_reference_counts
     root={'id':'root','type':'stock','market':'US','code':'TSLA','light_version':'synthetic-version'}
@@ -198,7 +271,7 @@ async def test_stock_directory_page_does_not_read_all_image_originals(client, ad
     monkeypatch.setattr(directory,'project',project_legacy);monkeypatch.setattr(catalog,'project',project_registered)
     started=time.monotonic();response=await client.get('/api/assets/catalog?type=stock');elapsed=time.monotonic()-started
     assert response.status_code==200,response.text
-    value=response.json();assert value['total']==2048 and len(value['assets'])==10
+    value=response.json();assert value['total']==2049 and len(value['assets'])==10
     assert value['marketCounts']=={'CN':1024,'US':1024} and value['marketCountsBasis']=='image-references'
     assert len(legacy_reads)==10 and not registered_reads,'pagination must bound original reads, regardless of directory size'
     bad=next(item for item in value['assets'] if item['code']=='000000');assert not bad['imageUrl']

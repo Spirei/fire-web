@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
 from .asset_lookup_contract import trim
+from .confirmed_stock_listings import CONFIRMED_LISTINGS, LISTING_MATERIALS, stock_identity
 
 TYPES = ("stock", "market", "flag", "crypto", "metal", "broker", "group")
 V1_TYPES = ("stock", "market", "flag", "crypto", "metal")
@@ -60,8 +61,7 @@ def stock_image_reference_counts(records):
     This is directory metadata, not an integrity receipt. Selected items and
     every image response still pass through the unchanged original checks.
     """
-    from .asset_lookup_contract import normalize
-    from .asset_web_keys import RELATED
+    from .asset_web_keys import related_root
 
     def referenced(row):
         return bool(row.get('light_version') or row.get('dark_version') or row.get('fileVariants'))
@@ -71,12 +71,8 @@ def stock_image_reference_counts(records):
         roots.setdefault((row['market'], row['code'].upper()), referenced(row))
     counts = {}
     for row, _ in records:
-        code = normalize(row['market'], row['code'])
-        seen = set()
-        while row['market'] == 'US' and code in RELATED and code not in seen:
-            seen.add(code)
-            code = RELATED[code]
-        known = roots.get(('US', code), False) if seen and code not in seen else referenced(row)
+        root = related_root(row['market'], row['code'])
+        known = roots.get(('US', root), False) if root else referenced(row)
         if known:
             counts[row['market']] = counts.get(row['market'], 0) + 1
     return counts
@@ -182,6 +178,8 @@ class AssetManagement:
                 ).fetchone()
                 if not old and self.legacy_directory is not None:
                     legacy = next((row for row in await self.legacy_directory.entries() if row["id"] == aid and row["type"] in TYPES), None)
+                if not old and legacy is None:
+                    legacy = LISTING_MATERIALS.get(aid)
                 if not old and legacy is None:
                     from .legacy_asset_directory import MARKET_NAMES
                     key = aid.removeprefix("market:")
@@ -365,6 +363,8 @@ class AssetManagement:
                 from .card_public_assets import CardPublicAssets
                 source = await CardPublicAssets(self.catalog.db, self.legacy_card_directory).source(aid)
             legacy = next((r for r in await self.legacy_directory.entries() if r['id'] == aid), None) if self.legacy_directory is not None and row is None and source is None else None
+            if row is None and source is None and legacy is None:
+                legacy = LISTING_MATERIALS.get(aid)
             tombstone = await (await conn.execute("SELECT * FROM asset_catalog_tombstones WHERE asset_id=%s AND restored_at IS NULL", (aid,))).fetchone()
             material = row or source or legacy
             if material and material["type"] not in (*TYPES, "card"):
@@ -396,8 +396,8 @@ class AssetManagement:
             return result
 
     async def web_icons(self, kind, selected):
-        from .asset_lookup_contract import image_key, normalize
-        from .asset_web_keys import RELATED, icon_rows, related_icons, stock_codes
+        from .asset_lookup_contract import image_key
+        from .asset_web_keys import icon_rows, related_icons, related_root, stock_codes
 
         # Icon maps carry artwork only. Read every requested identity, version
         # and related underlying in bounded statements instead of projecting
@@ -415,24 +415,9 @@ class AssetManagement:
                 if code:
                     requested.append(("", code))
 
-        def related_root(code):
-            root = RELATED.get(normalize("US", code))
-            visited = {normalize("US", code)}
-            while root and root in RELATED:
-                if root in visited:
-                    return None
-                visited.add(root)
-                root = RELATED[root]
-            return root
-
         pairs = list(dict.fromkeys(requested))
-        if kind == "stock":
-            known_pairs = set(pairs)
-            for market, code in requested:
-                root = related_root(code) if market == "US" else None
-                if root and ("US", root) not in known_pairs:
-                    known_pairs.add(("US", root))
-                    pairs.append(("US", root))
+        roots = dict.fromkeys(root for market, code in pairs if kind == "stock" and (root := related_root(market, code)))
+        pairs = list(dict.fromkeys([*pairs, *(("US", root) for root in roots)]))
 
         async with self.catalog.context() as conn:
             removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
@@ -515,25 +500,24 @@ class AssetManagement:
                     return "" if candidates[0]["id"] in removed else await light_url(candidates[0])
                 return await legacy_url("US", root, "stock")
 
-            async def row_url(row):
-                if kind == "stock" and row["market"].upper() == "US":
-                    root = related_root(row["code"])
-                    if root:
-                        return await inherited_url(root)
-                return await light_url(row)
-
             mapping = {}
+            for root in roots:
+                if url := await inherited_url(root):
+                    mapping["US:" + root] = url
             for item in selected:
                 if kind == "stock":
                     market = item["market"].strip().upper()
                     if not market:
                         continue
                     requested_code = item["code"].strip().upper()
+                    # Populate product aliases from their underlying, even on an ETF-only read.
+                    if related_root(market, requested_code) or (market == "US" and requested_code in roots):
+                        continue
                     for code in stock_codes(market, item["code"]):
                         entries = index.get((market, code)) or []
                         row = next((candidate for candidate in entries if candidate["id"] not in removed), None)
                         if row is not None:
-                            url = await row_url(row)
+                            url = await light_url(row)
                             # A registered entry can outlive its verified image
                             # bytes; the licensed legacy original still stands in.
                             if not url:
@@ -560,7 +544,7 @@ class AssetManagement:
                     entries = index.get(("", code)) or []
                     row = next((candidate for candidate in entries if candidate["id"] not in removed), None)
                     if row is not None:
-                        url = await row_url(row) or await legacy_url("", code)
+                        url = await light_url(row) or await legacy_url("", code)
                     elif not entries:
                         url = await legacy_url("", code)
                     else:
@@ -658,12 +642,17 @@ class AssetManagement:
                 for card in await self.legacy_card_directory.entries():
                     if (card["id"] in removed) == deleted and card["id"] not in known_card_ids and unquote(card["originalImageUrl"]) not in known_paths and (market is None or card["market"] == market):
                         records.append((card, "legacy-card"))
-            if self.legacy_directory is not None:
+            listing_rows = []
+            if self.legacy_directory is not None or (directory is not None and kind == "stock"):
                 # Any registered row, including a tombstone, suppresses the filename fallback.
                 known_rows = await (await conn.execute("SELECT type,market,code,name FROM asset_catalog_entries")).fetchall()
+            else:
+                known_rows = []
+            legacy_entries = await self.legacy_directory.entries() if self.legacy_directory is not None else []
+            if self.legacy_directory is not None:
                 known = {public_identity(r) for r in known_rows}
                 known_brokers = {key for row in known_rows if row["type"] == "broker" and (key := broker_name_key(row["name"]))}
-                for entry in await self.legacy_directory.entries():
+                for entry in legacy_entries:
                     if entry["type"] not in (*TYPES, "card"):
                         continue
                     if entry["type"] == "card" and (entry["id"] in known_card_ids or unquote(entry["legacyPath"]) in known_paths):
@@ -676,6 +665,17 @@ class AssetManagement:
                     if (entry["id"] in removed) == deleted and key not in known and (kind is None or entry["type"] == kind) and (market is None or entry["market"] == market):
                         records.append((entry, "legacy-file"))
                         known.add(key)
+            if directory is not None and kind == "stock":
+                existing = {
+                    stock_identity(row["market"], row["code"])
+                    for row in (*known_rows, *legacy_entries)
+                    if row["type"] == "stock"
+                }
+                listing_rows = [
+                    row for row in LISTING_MATERIALS.values()
+                    if stock_identity(row["market"], row["code"]) not in existing
+                ]
+                records.extend((row, "placeholder") for row in listing_rows if (row["id"] in removed) == deleted)
             if deleted and kind in (None, 'market'):
                 from .legacy_asset_directory import MARKET_NAMES
                 represented = {r['market'] for r,_ in records if r['type']=='market'}
@@ -688,7 +688,8 @@ class AssetManagement:
                 removed_count = (await (await conn.execute("SELECT count(*) AS n FROM asset_catalog_tombstones t JOIN asset_catalog_entries e ON e.id=t.asset_id WHERE t.restored_at IS NULL AND e.type=%s", (kind,))).fetchone())["n"]
                 registered_ids = {r["id"] for r in await (await conn.execute("SELECT id FROM asset_catalog_entries WHERE type=%s", (kind,))).fetchall()}
                 if self.legacy_directory is not None:
-                    removed_count += sum(1 for r in await self.legacy_directory.entries() if r["type"] == kind and r["id"] in removed and r["id"] not in registered_ids)
+                    removed_count += sum(1 for r in legacy_entries if r["type"] == kind and r["id"] in removed and r["id"] not in registered_ids)
+                removed_count += sum(row["id"] in removed for row in listing_rows)
                 if kind == "card":
                     removed_count += (await (await conn.execute("SELECT count(*) AS n FROM card_catalog_public_index WHERE deleted_at IS NOT NULL")).fetchone())["n"]
                 if kind == "stock" and not deleted:
@@ -704,6 +705,12 @@ class AssetManagement:
                 if selected_market != "ALL":
                     records = [(r, source) for r, source in records if selected_market in r.get("material_state", {}).get("brokerMarkets", r.get("brokerMarkets", []))] if kind == "broker" else [(r, source) for r, source in records if r["market"] == selected_market]
             query = trim(q)
+            def listing_name(row):
+                if directory is None or row["type"] != "stock":
+                    return ""
+                listing = CONFIRMED_LISTINGS.get(stock_identity(row["market"], row["code"]))
+                return listing["name"].upper() if listing else ""
+
             if sort is not None:
                 from .asset_web_paging import sqlite_like_contains
 
@@ -720,8 +727,12 @@ class AssetManagement:
                     if not query
                     or query.upper() in row["code"].upper()
                     or query.upper() in row["name"].upper()
+                    or query.upper() in listing_name(row)
                 ]
             records.sort(key=lambda pair: (pair[0]["type"], pair[0]["market"], pair[0]["code"]))
+            if directory is not None and kind == "stock" and query:
+                needle = query.upper()
+                records.sort(key=lambda pair: needle not in (pair[0]["code"].upper(), pair[0]["name"].upper(), listing_name(pair[0])))
             if sort is not None:
                 records.sort(key=lambda pair: pair[0]["code"])
                 if sort in ("name", "code"):
