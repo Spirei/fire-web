@@ -8,6 +8,7 @@ from alcor_api.releases import release_records
 
 def test_backend_version_uses_project_metadata_and_matches_web(tmp_path):
     assert __version__ == software_version() == json.loads((ROOT.parent / "package.json").read_text())["version"]
+    assert __version__ in {record["version"] for record in release_records()}
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.2.999"\n')
     assert software_version(tmp_path) == "0.2.999"
 
