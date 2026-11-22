@@ -22,7 +22,7 @@ from .security import lock_mutation_identity, lock_read_identity
 
 
 class NativeOrders(InternalOrders):
-    async def listing(self, who, *, scope='today', status='all', record_id=None):
+    async def listing(self, who, *, scope='today', status='all', record_id=None, financial=False):
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
             await lock_read_identity(conn,who,require_admin=False)
@@ -43,7 +43,7 @@ class NativeOrders(InternalOrders):
                 legacy = snapshot['orders']
             now = datetime.now(UTC)
             items, unknown_dates, timestamps = [], [], {}
-            for item in merge_orders(legacy, head):
+            for item in merge_orders(legacy, head, financial=financial):
                 if record_id and item['recordId'] != record_id:
                     continue
                 try:
@@ -59,6 +59,8 @@ class NativeOrders(InternalOrders):
                     today = False
                 if status != 'all' and item['status'] != status or scope == 'today' and not today:
                     continue
+                if financial and 'nativeActions' in item:
+                    item = {**item, 'nativeActions': dict.fromkeys(item['nativeActions'], False)}
                 items.append(item)
             if head:
                 minimum = datetime.min.replace(tzinfo=UTC)
@@ -70,7 +72,8 @@ class NativeOrders(InternalOrders):
                 'source':'platform_native_and_registered_history' if unverified_history else 'local_trade_ledger','executionModel':'registered_history_and_atomic_internal_orders' if unverified_history else 'atomic_internal_orders','items':items,'count':len(items),
                 'settlesPendingOrders':False,'dateBasis':'exchange_local_calendar_date','timeZones':TIME_ZONES,
                 'unknownDateOrderIds':unknown_dates,'supportedStatuses':['pending','filled','cancelled','expired'],
-                'rejectedOrdersAvailable':False,'partialFillsAvailable':False})
+                'rejectedOrdersAvailable':False,'partialFillsAvailable':False,
+                **({'basis':'financial'} if financial else {})})
 
     async def cancel_many(self, who, raw):
         if (not isinstance(raw,dict) or set(raw)!={'requestId','accountId','orders'} or raw['accountId']!=who.id
@@ -145,12 +148,16 @@ def mount_legacy_native_orders(app):
                 headers['X-Alcor-Trade-Fees']='details-v1'
             if action=='list':
                 params=request.query_params
-                if set(params)-{'scope','status','recordId'} or any(len(params.getlist(key))!=1 for key in params):
+                allowed = {'scope', 'status', 'recordId', 'basis'} if version == 2 else {'scope', 'status', 'recordId'}
+                if set(params)-allowed or any(len(params.getlist(key))!=1 for key in params):
                     raise HTTPException(400,'查询参数无效')
                 scope,status,record_id=params.get('scope','today'),params.get('status','all'),params.get('recordId')
                 if scope not in ('today','all') or status not in ('all','pending','filled','cancelled','rejected','expired') or record_id is not None and not 1<=len(record_id)<=200:
                     raise HTTPException(400,'订单筛选无效')
-                value=await service.listing(who,scope=scope,status=status,record_id=record_id)
+                basis = params.get('basis')
+                if basis is not None and (basis != 'financial' or status not in ('all', 'filled')):
+                    raise HTTPException(400, '成交口径与订单筛选不一致')
+                value=await service.listing(who,scope=scope,status=status,record_id=record_id,financial=basis=='financial')
             else:
                 if request.query_params:
                     raise HTTPException(400,'不支持查询参数')

@@ -62,7 +62,9 @@ def visible_orders(head):
 def financial_orders(head):
     """A presentation merge leaves each actual execution on its own trade date."""
     orders = {order['tradeId']: order for order in head['snapshot']['orders']}
-    numbers = head['snapshot'].get('orderNumbers', {})
+    state = head['snapshot']
+    numbers = state.get('orderNumbers', {})
+    history = state.get('orderHistory', {})
     candidates = [order for order in orders.values() if order['status'] == 'filled']
     results = []
     while candidates:
@@ -70,15 +72,22 @@ def financial_orders(head):
         if order.get('mergedFromOrderIds'):
             candidates.extend(orders[identifier] for identifier in order['mergedFromOrderIds'])
         else:
-            results.append(order_projection({**order, 'status': 'filled'}, order_number=numbers.get(order['tradeId'])))
+            identifier = order['tradeId']
+            row = order_projection({**order, 'status': 'filled'}, order_number=numbers.get(identifier))
+            if versions := history.get(identifier):
+                row['revision'] = versions[-1]['revision']
+            results.append(row)
     return results
 
 
-def merge_orders(legacy, head):
+def merge_orders(legacy, head, *, financial=False):
+    if financial:
+        legacy = [order for order in legacy if order['status'] == 'filled']
     if not head:
         return legacy
     native_ids = {order['tradeId'] for order in head['snapshot']['orders']}
-    return [order for order in legacy if order['id'] not in native_ids] + visible_orders(head)
+    native = financial_orders(head) if financial else visible_orders(head)
+    return [order for order in legacy if order['id'] not in native_ids] + native
 
 
 def cash_overview(overview, head):

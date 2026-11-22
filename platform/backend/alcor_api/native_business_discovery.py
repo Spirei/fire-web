@@ -71,6 +71,7 @@ def discovery(version, *, native_ledger_enabled=False):
             'order_filters': ['all', 'pending', 'filled', 'cancelled', 'rejected', 'expired'],
             'features': {
                 'all_orders': True, 'batch_cancel_pending': True,
+                **({'financial_order_basis': True} if version == 2 else {}),
                 'cash_by_currency': True, 'cash_price_independent': True,
                 'cash_valuation': 'recorded_cash_ledger_price_independent', 'cash_by_market': False,
                 'today_orders': False, 'order_reads_settle': False,

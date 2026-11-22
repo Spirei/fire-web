@@ -64,6 +64,8 @@ App 可按受影响币种提交本人全局 `cash`，省略 `brokerAccountId`。
 
 委托、撤单及未成交删除提交订单状态，并传空的 `positions`、`cash`。委托成交、手工成交编辑和已成交删除都提交受影响的股数及原币现金。删除项目作为墓碑保留在同步返回中，App 从可见订单剔除。多个同事务相关订单可一起提交，批内 UUID 各自唯一。
 
+主单成交时，App 可在同一 `trade` 事务的 `orders` 数组一并创建附加委托。子单提交 `parentOrderId`、`startsAt`、`session`、`expiresAt`、`triggerPrice` 和 `triggerAbove`。子单成交时可在同一数组提交另一子单的 `cancelled` 状态，持仓和现金只提交实际成交的变动。报价、策略分支及联动时机由 App 判定，Fire 保存订单状态并核对整批账务和回执。
+
 既有订单读接口以 `executionModel=app_native_ledger` 标识原生账本订单，`nativeActions` 宣告当前能否撤单、删除和编辑。订单变化提交到原生事务入口。旧同步入口仍可读取这些订单，同编号的修改由原生账本处理。
 
 新原生委托、直接成交和合并后的汇总单由服务端分配十位订单编号。订单列表在 `orderNo` 返回编号，账本快照以 `orderNumbers[tradeId]` 返回同一编号。移交的委托保留原订单编号，改单、成交、撤单和删除沿用该编号。交易请求仍使用原 `tradeId` 和独立的 `requestId`，回执结构沿用原合同。
@@ -80,5 +82,6 @@ App 可按受影响币种提交本人全局 `cash`，省略 `brokerAccountId`。
 
 使用同一个事务入口，发送 `{requestId,kind:"merge",baseRevision,orderIds,mergedOrderId,filledAt}`。原单须已成交、生效且同券商、同一持仓、同方向。选择任一原单的实际成交时间用于合并显示。原单以 `mergedIntoOrderId` 指向汇总单，汇总单以 `mergedFromOrderIds` 保留原单关系。精确成交总额 `grossAmount`、原币结算额和费用保留原账本金额，持仓和资金不重复入账。收益日历仍按各原单的实际成交日读取。
 
+收益日历、趋势与成交标记读取 `GET /api/v2/account-assets/orders?scope=all&status=all&basis=financial`。App 可在 v2 认证发现的 `account_assets.features.financial_order_basis` 为布尔值 `true` 时使用。响应沿用订单列表信封，`data.basis` 为 `"financial"`，`items` 和 `count` 仅包含生效的已成交记录。原生汇总单展开为每笔原成交，保留原 `id`、`orderNo`、日期、股数、成交价、费用和结算。多次合并仍回到每笔实际成交。显式删除且未归入生效汇总的成交不会计入。`scope=today` 按原成交的市场本地日期筛选，也可按 `recordId` 查询。该视图用于分析，原生行的操作按钮全部关闭。省略 `basis` 时继续返回原订单展示列表及合并汇总单。
 
 单次请求支持最多 100 个订单、100 条持仓变动和 100 条现金变动，并限制请求体为 512 KiB。此版本记录已有成交和委托生命周期，独立的现金入金、出金和对账命令需要单独协议。

@@ -196,6 +196,8 @@ positions.weightPct 分母为**全账户所有 active 持仓的完整显示币�
 
 count 为当天所有以上状态的 items 总数，dividend 也计入真实记账条目。如 App 只展示 status=filled，自行过滤并标为“成交条数”；空态仅证明没有记录的当日订单。策略字段保留真实台账值，App 不需要策略入口。
 
+收益日历、趋势和成交标记可用 v2 发现声明的 `basis=financial` 查询。订单展示列表继续显示原生合并单，分析查询按实际成交日回读各笔原单。[原生账本查询合同](native-ledger-v2.md#合并已成交订单)
+
 其他数值：qty/price/cost/dilutedCost/averageOpenCost 和金额为number|null，revision/recordRevision/collectionRevision/positionCount/count 为整数；asOf/updatedAt/cycleStartedAt/clearedAt/priceAt 为string|null（asOf必有ISO UTC，priceAt保持行情源原文，可能是交易所本地时间）；timeZone为IANAstring|null、date为YYYY-MM-DD|null，完整性为boolean。
 
 ## 报价独立现金修正（2026-10-09，冻结；待发布）

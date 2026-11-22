@@ -328,7 +328,7 @@ async def test_merge_keeps_exact_cash_and_original_trading_days(client, admin, d
     headers = await native_headers(db, admin, SCOPES)
     await adopt(client, headers, await data(client.get(LEDGER, headers=headers)))
     now = datetime.now(UTC)
-    earlier = now - timedelta(days=1)
+    earlier = now - timedelta(days=2)
     first = order(record['id'], broker, at=earlier.isoformat(), quantity='2', price='25', fees='1', net='51')
     second = order(record['id'], broker, at=now.isoformat(), quantity='3', price='33.33333333', fees='2', net='101.99999999')
     await data(client.post(TRANSACTIONS, headers=headers, json=trade(1, first, '0', '2', '0', '-51')))
@@ -358,7 +358,91 @@ async def test_merge_keeps_exact_cash_and_original_trading_days(client, admin, d
     items = (await data(client.get(ASSETS + '/orders?scope=all', headers=headers)))['items']
     assert [item['id'] for item in items] == [merge['mergedOrderId']]
     assert items[0]['orderNo'] == merged_number
+    config = await data(client.get('/api/v2/auth/config'))
+    assert config['account_assets']['features']['financial_order_basis'] is True
+    v1 = await data(client.get('/api/v1/auth/config'))
+    assert 'financial_order_basis' not in v1['account_assets']['features']
+    path = ASSETS + '/orders?scope=all&status=all&basis=financial'
+    executions = await data(client.get(path, headers=headers))
+    assert executions['basis'] == 'financial' and executions['count'] == 2
+    assert (executions['accountId'], executions['status'], executions['source'], executions['executionModel']) == (
+        admin, 'all', 'local_trade_ledger', 'atomic_internal_orders',
+    )
+    assert [(item['id'], item['orderNo'], item['qty'], item['fees'], item['settlementAmount'])
+            for item in executions['items']] == [
+        (second['tradeId'], original_numbers[second['tradeId']], 3, 2, 101.99999999),
+        (first['tradeId'], original_numbers[first['tradeId']], 2, 1, 51),
+    ]
+    for execution, original in zip(executions['items'], (second, first)):
+        assert datetime.fromisoformat(execution['tradedAt']) == datetime.fromisoformat(original['filledAt'])
+        assert execution['status'] == 'filled' and not any(execution['nativeActions'].values())
+        assert execution['revision'] == snapshot['orderHistory'][execution['id']][-1]['revision']
+    by_record = await data(client.get(path + '&recordId=' + record['id'], headers=headers))
+    assert by_record['items'] == executions['items']
+    today = await data(client.get(ASSETS + '/orders?scope=today&basis=financial', headers=headers))
+    assert [item['id'] for item in today['items']] == [second['tradeId']]
+    await data(client.get(path + '&basis=financial', headers=headers), 400)
+    await data(client.get(ASSETS + '/orders?status=pending&basis=financial', headers=headers), 400)
+    await data(client.get('/api/v1/account-assets/orders?basis=financial', headers=headers), 400)
     for original, stamp in ((first, earlier), (second, now)):
         result = await data(client.get(ASSETS + '/trading-cycle', headers=headers,
                                       params={'cycleStart': cycle_range(stamp)[0].isoformat()}))
         assert [item['id'] for item in result['items']] == [original['tradeId']]
+
+
+@pytest.mark.asyncio
+async def test_app_attachment_batch_records_children_and_cancels_sibling_atomically(client, admin, db):
+    broker, record = await setup(client, amount='0', qty='0', cost=None)
+    headers = await native_headers(db, admin, SCOPES)
+    await adopt(client, headers, await data(client.get(LEDGER, headers=headers)))
+    now = datetime.now(UTC)
+    start, activation, execution = (now + timedelta(seconds=offset) for offset in range(3))
+    parent_fill = order(record['id'], broker, at=activation.isoformat(), created=start.isoformat(),
+                        quantity='2', price='24', fees='1', net='49')
+    parent_fill.update(execution='conditional', orderPrice='25', changedAt=activation.isoformat())
+    parent = {key: value for key, value in parent_fill.items()
+              if key not in ('filledAt', 'settlementCurrency', 'settlementAmount', 'changedAt')}
+    parent.update(status='pending', price='25')
+    await data(client.post(TRANSACTIONS, headers=headers, json={
+        'requestId': str(uuid4()), 'kind': 'trade', 'baseRevision': 1,
+        'orders': [parent], 'positions': [], 'cash': [],
+    }))
+
+    def child(price, above):
+        item = order(record['id'], broker, at=execution.isoformat(), created=activation.isoformat(),
+                     side='sell', quantity='2', price=price, fees='1')
+        return {key: value for key, value in item.items()
+                if key not in ('filledAt', 'settlementCurrency', 'settlementAmount')} | {
+                    'status': 'pending', 'execution': 'conditional', 'parentOrderId': parent['tradeId'],
+                    'startsAt': activation.isoformat(), 'expiresAt': (now + timedelta(days=1)).date().isoformat(),
+                    'session': 'regular', 'triggerPrice': price, 'triggerAbove': above,
+                }
+
+    take, stop = child('32', True), child('18', False)
+    buy = trade(2, parent_fill, '0', '2', '0', '-49', cost='24.5')
+    buy['orders'].extend((take, stop))
+    await data(client.post(TRANSACTIONS, headers=headers, json=buy))
+    opened = await data(client.get(LEDGER, headers=headers))
+    assert {item['tradeId']: item['status'] for item in opened['orders']} == {
+        parent['tradeId']: 'filled', take['tradeId']: 'pending', stop['tradeId']: 'pending',
+    }
+    for item in opened['orders'][1:]:
+        assert item['parentOrderId'] == parent['tradeId'] and item['startsAt'] == activation.isoformat()
+        assert item['triggerAbove'] == (item['tradeId'] == take['tradeId'])
+
+    take_fill = dict(take, status='filled', filledAt=execution.isoformat(), changedAt=execution.isoformat(),
+                     settlementCurrency='USD', settlementAmount='63')
+    sell = trade(3, take_fill, '2', '0', '-49', '14')
+    sell['orders'].append(dict(stop, status='cancelled', changedAt=execution.isoformat()))
+    wrong_cash = {**sell, 'cash': [dict(sell['cash'][0], balanceAfter='15')]}
+    await data(client.post(TRANSACTIONS, headers=headers, json=wrong_cash), 400)
+    assert await data(client.get(LEDGER, headers=headers)) == opened
+    receipt = await data(client.post(TRANSACTIONS, headers=headers, json=sell))
+    assert receipt == await data(client.post(TRANSACTIONS, headers=headers, json=sell))
+    closed = await data(client.get(LEDGER, headers=headers))
+    assert closed['orderNumbers'] == opened['orderNumbers']
+    assert {item['tradeId']: item['status'] for item in closed['orders']} == {
+        parent['tradeId']: 'filled', take['tradeId']: 'filled', stop['tradeId']: 'cancelled',
+    }
+    assert closed['positions'][0]['quantity'] == '0'
+    assert {item['balance'] for item in closed['cash']} == {'14'}
