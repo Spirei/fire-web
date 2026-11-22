@@ -24,7 +24,8 @@ export default function PnlTrendChart({
   weighting,
   benchLabel,
   observed,
-  currency
+  currency,
+  maskValues = false,
 }: {
   points: PnlTrendPoint[];
   tab: PnlChartTab;
@@ -32,6 +33,7 @@ export default function PnlTrendChart({
   benchLabel: string;
   observed?: ObservedTrend;
   currency?: string;
+  maskValues?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null);
@@ -68,12 +70,33 @@ export default function PnlTrendChart({
       const benchmark = observed?.benchmark ?? points.map((p) => (p.benchmark / startBench - 1) * 100);
       const hasBench = observed ? benchmark.some(value => value !== null) : points.some((p) => p.benchmark > 0);
       const hasPortfolio = assetData.some(value => value !== null);
+      const singleBenchmark = Boolean(observed && benchmark.filter(value => value !== null).length === 1);
+      const multipleYears = dates[0].slice(0, 4) !== dates.at(-1)?.slice(0, 4);
       const money = new Intl.NumberFormat("zh-CN", currency
         ? { style: "currency", currency, maximumFractionDigits: 2 }
         : { maximumFractionDigits: 2 });
       const ink = dark ? "#d8dee9" : "#26303b";
       const muted = dark ? "#727d8d" : "#87909d";
       const grid = dark ? "rgba(255,255,255,.07)" : "rgba(34,46,60,.08)";
+      let minimum = Infinity;
+      let maximum = -Infinity;
+      if (observed) {
+        const visibleSeries = tab === "return" ? [assetData, benchmark, observed.missingStart] : [assetData];
+        for (const values of visibleSeries) for (const value of values) {
+          if (value == null) continue;
+          minimum = Math.min(minimum, value);
+          maximum = Math.max(maximum, value);
+        }
+      }
+      const tickEstimate = (maximum - minimum) / 8;
+      const precision = tickEstimate > 0 ? Math.max(0, Math.min(8, Math.ceil(-Math.log10(tickEstimate)))) : 0;
+      const compact = !observed || tickEstimate >= 1000;
+      const axisMoney = new Intl.NumberFormat("zh-CN", compact
+        ? { notation: "compact", maximumFractionDigits: observed ? 2 : 1 }
+        : { maximumFractionDigits: precision });
+      const constant = Number.isFinite(minimum) && minimum === maximum;
+      const margin = Math.max(Math.abs(minimum) * 0.05, 1);
+      if (maskValues) chart.dispatchAction({ type: "hideTip" });
       chart.setOption({
         animation: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         animationDuration: 520,
@@ -81,8 +104,10 @@ export default function PnlTrendChart({
         animationDurationUpdate: 240,
         grid: { left: 10, right: 12, top: 24, bottom: 24, containLabel: true },
         tooltip: {
+          show: !maskValues,
           trigger: "axis",
           confine: true,
+          ...(observed && { axisPointer: { show: !maskValues, type: "line" as const, lineStyle: { color: muted, type: "dashed" as const } } }),
           backgroundColor: dark ? "#202630" : "#fff",
           borderColor: dark ? "#3a4350" : "#dce1e8",
           textStyle: { color: ink },
@@ -90,22 +115,29 @@ export default function PnlTrendChart({
         },
         xAxis: {
           type: "category",
-          boundaryGap: false,
+          boundaryGap: Boolean(observed && dates.length === 1),
           data: dates,
           axisTick: { show: false },
           axisLine: { lineStyle: { color: grid } },
-          axisLabel: { color: muted, hideOverlap: true, formatter: (value: string) => value.slice(5).replace("-", "/") }
+          axisLabel: {
+            color: muted,
+            hideOverlap: true,
+            formatter: (value: string) => value.slice(observed && multipleYears ? 2 : 5).replaceAll("-", "/")
+          }
         },
         yAxis: {
           type: "value",
           position: "right",
           scale: true,
+          min: constant ? Math.floor(minimum - margin) : undefined,
+          max: constant ? Math.ceil(maximum + margin) : undefined,
           splitNumber: 4,
           axisLine: { show: false },
           axisTick: { show: false },
           axisLabel: {
+            show: !maskValues,
             color: muted,
-            formatter: (value: number) => (tab === "return" ? `${value.toFixed(1)}%` : value.toLocaleString("zh-CN", { notation: "compact", maximumFractionDigits: 1 }))
+            formatter: (value: number) => (tab === "return" ? `${value.toFixed(Math.max(1, precision))}%` : axisMoney.format(value))
           },
           splitLine: { lineStyle: { color: grid, type: "dashed" } }
         },
@@ -143,10 +175,11 @@ export default function PnlTrendChart({
                         id: "benchmark",
                         name: benchLabel,
                         type: "line",
-                        showSymbol: false,
+                        showSymbol: singleBenchmark,
                         connectNulls: Boolean(observed),
                         data: benchmark,
                         lineStyle: { color: "#4a90d9", width: 1.6 },
+                        ...(observed && { itemStyle: { color: "#4a90d9" } }),
                         emphasis: { focus: "series" }
                       }
                     ]
@@ -166,6 +199,7 @@ export default function PnlTrendChart({
                   }),
                   data: assetData,
                   lineStyle: { color: "#3297f6", width: 2 },
+                  ...(observed && { itemStyle: { color: "#3297f6" } }),
                   areaStyle: {
                     color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                       { offset: 0, color: "rgba(50,151,246,.42)" },
@@ -174,7 +208,7 @@ export default function PnlTrendChart({
                   }
                 }
               ]
-      }, { replaceMerge: ["series"] });
+      }, { replaceMerge: ["series", "yAxis"] });
     };
     draw();
     let dark = document.documentElement.classList.contains("dark");
@@ -186,6 +220,6 @@ export default function PnlTrendChart({
     });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => themeObserver.disconnect();
-  }, [points, tab, weighting, benchLabel, observed, currency]);
+  }, [points, tab, weighting, benchLabel, observed, currency, maskValues]);
   return <div ref={ref} className="h-[330px] w-full min-w-0 max-w-full overflow-hidden" />;
 }

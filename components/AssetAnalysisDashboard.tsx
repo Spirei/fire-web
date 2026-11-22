@@ -12,7 +12,7 @@ import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
 import { readAnalysisOrders } from "@/lib/analysisOrders";
 import { useWorkspaceLocationGuard } from "@/lib/workspacePanel";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CurrencyFlag from "@/components/CurrencyFlag";
 import { fmtMoney, fmtMoneyCalendarCell, fmtMoneyCalendarCompact, fmtMoneyCompact, fmtNumMarket, fmtPct, fmtQty } from "@/lib/format";
 import { marketMeta, type Quote, type StockRecord, type TradeOrder } from "@/lib/types";
@@ -50,6 +50,7 @@ import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { registeredPnlCalendar, buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
 import { fetchBenchmarkKline, fetchPortfolioBundle, type SeriesClose } from "@/lib/portfolioSeries";
 import { buildVerifiedAssetTrend, verifiedAssetDays } from "@/lib/assetAnalysisTrend";
+import { validObservedDate } from "@/lib/observedDate";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
 type ChartTab = "return" | "asset";
@@ -197,6 +198,10 @@ function parseIsoDate(value: string) {
 function monthStart(value: Date) { return new Date(value.getFullYear(), value.getMonth(), 1); }
 function shiftMonth(value: Date, delta: number) { return new Date(value.getFullYear(), value.getMonth() + delta, 1); }
 function formatRangeDate(value: string) { return value.replaceAll("-", "/"); }
+function formatDateRange({ start, end }: DateRange) {
+  return start === end && start ? formatRangeDate(start)
+    : `${start ? formatRangeDate(start) : "开始日期"} – ${end ? formatRangeDate(end) : "结束日期"}`;
+}
 function defaultDateRange(): DateRange {
   const end = new Date();
   const start = new Date(end.getFullYear(), end.getMonth() - 1, 20);
@@ -231,25 +236,31 @@ function CalendarMonth({ month, range, onPick }: { month: Date; range: DateRange
       const edge = key === range.start || key === range.end;
       const between = Boolean(range.start && range.end && key > range.start && key < range.end);
       const isToday = key === today;
-      return <button key={key} type="button" onClick={() => onPick(key)} className={`relative flex aspect-square min-h-8 items-center justify-center rounded-lg text-xs transition-colors ${edge ? "bg-[#3297f6] font-bold text-white" : between ? "bg-[#3297f6]/15 text-ink" : inMonth ? "text-ink hover:bg-bg-gray" : "text-faint hover:bg-bg-gray"}`}>
+      return <button key={key} type="button" onClick={() => onPick(key)} aria-label={key} aria-pressed={edge} disabled={key > today} className={`relative flex aspect-square min-h-8 items-center justify-center rounded-lg text-xs transition-colors disabled:opacity-40 ${edge ? "bg-[#3297f6] font-bold text-white" : between ? "bg-[#3297f6]/15 text-ink" : inMonth ? "text-ink hover:bg-bg-gray" : "text-faint hover:bg-bg-gray"}`}>
         {date.getDate()}{isToday && !edge && <i className="absolute bottom-1 h-1 w-1 rounded-full bg-[#3297f6]" />}
       </button>;
     })}</div>
   </div>;
 }
 
-function DateRangePicker({ range, onApply, onClose }: { range: DateRange; onApply: (range: DateRange) => void; onClose: () => void }) {
+function DateRangePicker({ id, range, onApply, onClose }: { id: string; range: DateRange; onApply: (range: DateRange) => void; onClose: () => void }) {
   const [draft, setDraft] = useState(range);
   const [month, setMonth] = useState(() => monthStart(parseIsoDate(range.start || isoDate(new Date()))));
+  const picker = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => picker.current?.focus({ preventScroll: true }), []);
   const pick = (date: string) => setDraft((current) => !current.start || current.end ? { start: date, end: "" } : date < current.start ? { start: date, end: current.start } : { start: current.start, end: date });
-  return <div className="absolute left-0 top-full z-40 mt-2 w-[min(720px,calc(100vw-3rem))] rounded-2xl border border-edge-strong bg-white p-4 shadow-2xl dark:bg-[#1b2029]" onClick={(event) => event.stopPropagation()}>
+  return <div id={id} ref={picker} role="group" aria-label="选择日期区间" tabIndex={-1}
+    className="absolute inset-x-0 top-full z-40 mt-2 max-h-[72dvh] overflow-y-auto overscroll-contain rounded-2xl border border-edge-strong bg-white p-4 shadow-2xl xl:right-auto xl:w-[min(640px,calc(100vw-3rem))] dark:bg-[#1b2029]"
+    onKeyDown={(event) => {
+      if (event.key === "Escape") { event.stopPropagation(); onClose(); }
+    }}>
     <div className="mb-4 flex items-center justify-between">
       <IconButton size="sm" framed type="button" onClick={() => setMonth((value) => shiftMonth(value, -1))} className="" label="上个月"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m12 15-5-5 5-5" /></svg></IconButton>
-      <strong className="text-sm">选择盈利区间</strong>
-      <IconButton size="sm" framed type="button" onClick={() => setMonth((value) => shiftMonth(value, 1))} className="" label="下个月"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m8 5 5 5-5 5" /></svg></IconButton>
+      <strong className="text-sm">选择日期区间</strong>
+      <IconButton size="sm" framed type="button" disabled={month >= monthStart(new Date())} onClick={() => setMonth((value) => shiftMonth(value, 1))} className="" label="下个月"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m8 5 5 5-5 5" /></svg></IconButton>
     </div>
-    <div className="grid gap-5 md:grid-cols-2"><CalendarMonth month={month} range={draft} onPick={pick} /><CalendarMonth month={shiftMonth(month, 1)} range={draft} onPick={pick} /></div>
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-edge pt-4"><span className="text-xs text-muted">{draft.start ? formatRangeDate(draft.start) : "开始日期"} — {draft.end ? formatRangeDate(draft.end) : "结束日期"}</span><div className="flex gap-2"><button type="button" onClick={onClose} className="rounded-lg border border-edge px-3 py-1.5 text-xs text-muted hover:bg-bg-gray">取消</button><button type="button" disabled={!draft.start || !draft.end} onClick={() => onApply(draft)} className="rounded-lg border border-edge-strong bg-white px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-40 dark:bg-[#252c39]">应用区间</button></div></div>
+    <div className="grid gap-5 xl:grid-cols-2"><CalendarMonth month={month} range={draft} onPick={pick} /><div className="hidden xl:block"><CalendarMonth month={shiftMonth(month, 1)} range={draft} onPick={pick} /></div></div>
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-edge pt-4"><span className="text-xs text-muted">{formatDateRange(draft)}</span><div className="flex gap-2"><button type="button" onClick={onClose} className="rounded-lg border border-edge px-3 py-1.5 text-xs text-muted hover:bg-bg-gray">取消</button><button type="button" disabled={!draft.start || !draft.end} onClick={() => onApply(draft)} className="rounded-lg border border-edge-strong bg-white px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-40 dark:bg-[#252c39]">应用区间</button></div></div>
   </div>;
 }
 
@@ -283,8 +294,35 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   const lastRetryTick = useRef(0);
   const [recordCloses, setRecordCloses] = useState<Record<string, SeriesClose[]>>({});
   const [closesLoading, setClosesLoading] = useState(true);
-  const [customRange, setCustomRange] = useState<DateRange>(() => defaultDateRange());
+  const [savedCustomRange, setCustomRange] = usePersistedState<DateRange>("fire:asset-trend-date-range", defaultDateRange);
+  const customRange = useMemo(() => (
+    validObservedDate(savedCustomRange?.start) && validObservedDate(savedCustomRange?.end)
+    && savedCustomRange.start <= savedCustomRange.end && savedCustomRange.end <= isoDate(new Date())
+      ? savedCustomRange : defaultDateRange()
+  ), [savedCustomRange]);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const datePickerId = useId();
+  const datePickerTrigger = useRef<HTMLButtonElement>(null);
+  const periodList = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const list = periodList.current;
+    const selected = list?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]');
+    if (!list || !selected) return;
+    const reveal = () => {
+      const visible = list.getBoundingClientRect();
+      const button = selected.getBoundingClientRect();
+      if (button.left < visible.left) list.scrollLeft += button.left - visible.left;
+      else if (button.right > visible.right) list.scrollLeft += button.right - visible.right;
+    };
+    reveal();
+    const resize = new ResizeObserver(reveal);
+    resize.observe(list);
+    return () => resize.disconnect();
+  }, [period]);
+  const closeDatePicker = () => {
+    setDatePickerOpen(false);
+    datePickerTrigger.current?.focus({ preventScroll: true });
+  };
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState<"asset" | "trend" | null>(null);
   const [benchKey, setBenchKey] = usePersistedState<BenchKey>("fire:asset-benchmark", "spy");
   const [benchOpen, setBenchOpen] = useState(false);
@@ -742,6 +780,9 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     [observed, benchmark, activeRange, displayCurrency, weighting],
   );
   const chart = chartTab === "return" ? relative : absolute;
+  const latestAssetIndex = absolute.portfolio.findLastIndex(value => value !== null);
+  const latestAssetDate = absolute.dates[latestAssetIndex];
+  const latestAsset = absolute.portfolio[latestAssetIndex];
   const hasPersonalTrend = chart.portfolio.some(value => value !== null);
   const hasTrend = hasPersonalTrend || chart.benchmark.some(value => value !== null);
   const trendLoading = !hasTrend && (!observed || (chartTab === "return" && !benchmark));
@@ -941,10 +982,54 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
 
         <div id="asset-trend" {...moduleDragProps("left", "trend")} className={moduleWrapperClass("left", "trend")} style={{ order: moduleOrderIndex("left", "trend") }}>
           <section data-workspace-reveal className="card relative overflow-visible">
-            <div className="flex items-end gap-6 border-b border-edge px-4 pt-3">{([['return', '收益率趋势图'], ['asset', '总资产趋势图']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setChartTab(key)} className={`relative shrink-0 whitespace-nowrap px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>{label}{chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}</button>)}</div>
-            <div className="relative flex items-center gap-2 px-4 py-3"><div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{PERIODS.map(([key, label]) => <Capsule variant="secondary" aria-pressed={period === key} key={key} type="button" onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>{label}</Capsule>)}</div><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`} title="选择日期区间" aria-label="选择日期区间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" /></svg></button>{datePickerOpen && <DateRangePicker range={customRange} onClose={() => setDatePickerOpen(false)} onApply={(range) => { setCustomRange(range); setPeriod("custom"); setDatePickerOpen(false); setPnlExpanded(false); }} />}</div>
-            {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">{formatRangeDate(customRange.start)} – {formatRangeDate(customRange.end)}</div>}
+            <div role="group" aria-label="趋势类型" className="flex items-end gap-4 border-b border-edge px-4 pt-3 sm:gap-6">
+              {([["return", "收益率趋势图"], ["asset", "总资产趋势图"]] as const).map(([key, label]) => (
+                <button key={key} type="button" aria-pressed={chartTab === key} onClick={() => setChartTab(key)}
+                  className={`relative shrink-0 whitespace-nowrap px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>
+                  {label}
+                  {chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}
+                </button>
+              ))}
+            </div>
+            <div className="relative flex items-center gap-2 px-4 py-3">
+              <div ref={periodList} role="group" aria-label="趋势周期" className="asset-trend-periods flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1">
+                {PERIODS.map(([key, label]) => (
+                  <Capsule key={key} variant="secondary" aria-pressed={period === key} type="button"
+                    onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }}
+                    className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>
+                    {label}
+                  </Capsule>
+                ))}
+              </div>
+              <button ref={datePickerTrigger} type="button" aria-expanded={datePickerOpen} aria-controls={datePickerOpen ? datePickerId : undefined}
+                onClick={() => setDatePickerOpen(open => !open)}
+                className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`}
+                title="选择日期区间" aria-label="选择日期区间">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
+                  <path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" />
+                </svg>
+              </button>
+              {datePickerOpen && <DateRangePicker id={datePickerId} range={customRange} onClose={closeDatePicker}
+                onApply={(range) => { setCustomRange(range); setPeriod("custom"); closeDatePicker(); setPnlExpanded(false); }} />}
+            </div>
+            {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">
+              {customRange.start === customRange.end
+                ? <time dateTime={customRange.start}>{formatDateRange(customRange)}</time>
+                : formatDateRange(customRange)}
+            </div>}
             {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix="已核验区间盈亏" /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${!Number.isFinite(cumulative) ? "text-muted" : cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[var(--capsule-fill)] font-bold text-white" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${!Number.isFinite(returnRate) ? "text-muted" : returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
+            {chartTab === "asset" && (
+              <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 px-4">
+                <div className="min-w-0">
+                  <CurrencyPicker context="trend" prefix="最近日终估值" />
+                  {latestAsset != null && <strong className="mt-1 block text-xl tabular-nums">
+                    <AccountOverviewValue value={latestAsset} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} />
+                  </strong>}
+                </div>
+                {latestAssetDate && !(period === "custom" && customRange.start === customRange.end) &&
+                  <time dateTime={latestAssetDate} className="pb-1 text-xs tabular-nums text-muted">{formatRangeDate(latestAssetDate)}</time>}
+              </div>
+            )}
             {chartTab === "return" && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-bg-gray px-3 py-2 text-xs">
               <div className="relative">
                 <button type="button" onClick={() => setBenchOpen((open) => !open)} aria-expanded={benchOpen} className="inline-flex items-center gap-1.5 text-ink transition-colors hover:text-ink">
@@ -970,7 +1055,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
                 )}
               </div>
             </div>}
-            {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : hasTrend ? <><PnlTrendChart points={EMPTY_CHART_POINTS} tab={chartTab} weighting={weighting} benchLabel={benchLabel} observed={chart} currency={displayCurrency} />{!hasPersonalTrend && observed && <p className="px-4 pb-3 text-center text-xs text-muted">{observed.failed ? "个人历史估值暂时无法读取" : "暂无可比较的个人历史估值"}</p>}</> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>{observed?.failed ? "日终趋势暂时无法读取" : chartTab === "asset" ? "暂无已核验的总资产估值" : "暂无可比较的历史收益率"}</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
+            {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : hasTrend ? <><PnlTrendChart points={EMPTY_CHART_POINTS} tab={chartTab} weighting={weighting} benchLabel={benchLabel} observed={chart} currency={displayCurrency} maskValues={!assetsVisible} />{!hasPersonalTrend && observed && <p className="px-4 pb-3 text-center text-xs text-muted">{observed.failed ? "个人历史估值暂时无法读取" : "暂无可比较的个人历史估值"}</p>}</> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>{observed?.failed ? "日终趋势暂时无法读取" : chartTab === "asset" ? "暂无已核验的总资产估值" : "暂无可比较的历史收益率"}</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
           </section>
           {renderModuleHandle("left", "trend")}
         </div>

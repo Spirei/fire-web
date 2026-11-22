@@ -5599,6 +5599,11 @@ button.PhotoView-Slider__toolbarIcon {
 .asset-analysis-shortcuts svg { width:18px; height:18px; flex:none; }
 .asset-analysis-shortcuts a:hover { background:rgb(var(--site-ink) / .06); color:rgb(var(--site-ink)); }
 .asset-analysis-page :is(#asset-trend,#asset-holdings,#asset-calendar) { scroll-margin-top:88px; }
+.asset-trend-periods {
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--site-ink) / .22) transparent;
+}
 .asset-account-highlight { margin-top:4px; }
 .asset-account-total { display:flex; align-items:center; gap:4px; min-width:0; padding-bottom:20px; }
 .asset-account-amount { flex:1; min-width:0; white-space:nowrap; font-size:clamp(24px,2.4vw,34px); font-weight:700; line-height:1.25; letter-spacing:-.035em; }
