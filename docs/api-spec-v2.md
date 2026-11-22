@@ -47,6 +47,8 @@ POST 上报本机账本已经保存的订单状态。必填字段为 `tradeId`�
 
 GET 返回 `ownerId`、最多 100 条当前订单 `items` 和下一页游标 `before`。按 `scope=all` 或 `scope=today` 读取，续页原样传递编码后的 `before`。按订单的实际成交时间或创建时间及编号倒序分页，当日范围使用各市场交易所当地日期。旧 `native-fills` 已有成交在新接口中继续可见。同编号只返回一条，已删除的订单退出列表。
 
+当发现响应含 `manual_fill_edits: 1`，App 可为手工已成交订单同步 `editHistory`，按时间排列每次编辑前的 `quantity`、`price`、`editedAt` 及已有的 `settlementCurrency` 和 `settlementAmount`。订单编号、实际成交时间、录入时间和实际费用保留。Fire 核对原始成交及已收到的编辑链，追加已核对的版本。重复提交返回同一回执，编辑分支冲突返回 409。回执及订单列表以 `editCount` 表示确认的编辑次数。
+
 ## 1. 版本发现与迁移
 
 <details>

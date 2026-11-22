@@ -26,14 +26,16 @@ CURRENCIES = {'US': 'USD', 'HK': 'HKD', 'CN': 'CNY'}
 ORDER_STATES = {'pending', 'filled', 'cancelled', 'expired'}
 ORDER_FIELDS = FIELDS - {'filledAt'} | {'status', 'createdAt', 'recordId', 'orderPrice', 'orderType'}
 ORDER_OPTIONAL = OPTIONAL | {'filledAt', 'accountMarket', 'tif', 'session', 'startsAt',
-                             'triggerPrice', 'parentOrderId', 'deletedAt', 'deletedFrom'}
+                             'triggerPrice', 'parentOrderId', 'deletedAt', 'deletedFrom', 'editHistory'}
+MAX_ORDER_BYTES = 32 * 1024
+MAX_EDIT_HISTORY = 128
 
 
 def discovery():
     return {'version': 1, 'path': PATH, 'write_scope': 'portfolio.write',
             'idempotency': 'immutable-owner-trade-id',
             'orders': {'version': 1, 'path': ORDERS_PATH, 'read_scope': 'portfolio.read',
-                       'write_scope': 'portfolio.write', 'idempotency': 'owner-order-state-v1'}}
+                       'write_scope': 'portfolio.write', 'idempotency': 'owner-order-state-v1', 'manual_fill_edits': 1}}
 
 
 def validate_amount(value, scale, *, positive=False):
@@ -138,6 +140,30 @@ def validate_order(item):
             if item.keys() & {'filledAt', 'settlementCurrency', 'settlementAmount'}:
                 raise ValueError
             occurred = created
+        if 'editHistory' in item:
+            history = item['editHistory']
+            if (original_status != 'filled' or item['execution'] != 'recorded' or 'parentOrderId' in item
+                    or not isinstance(history, list) or not 1 <= len(history) <= MAX_EDIT_HISTORY
+                    or Decimal(item['orderPrice']) != Decimal(item['price'])):
+                raise ValueError
+            edited_after = max(created, occurred)
+            for edit in history:
+                if (not isinstance(edit, dict) or not {'quantity', 'price', 'editedAt'} <= edit.keys()
+                        or edit.keys() - {'quantity', 'price', 'editedAt', 'settlementAmount', 'settlementCurrency'}):
+                    raise ValueError
+                stamp = order_time(edit['editedAt'])
+                if not edited_after <= stamp <= future:
+                    raise ValueError
+                edited_after = stamp
+                if any(validate_amount(edit[k], 8, positive=True) > Decimal('1000000000000000') for k in ('quantity', 'price')):
+                    raise ValueError
+                if 'settlementAmount' in edit:
+                    validate_amount(edit['settlementAmount'], 16)
+                if (('settlementCurrency' in edit) != ('settlementAmount' in edit)
+                        or ('settlementCurrency' in edit and edit['settlementCurrency'] != item.get('settlementCurrency'))):
+                    raise ValueError
+            if status == 'deleted' and order_time(item['deletedAt']) < edited_after:
+                raise ValueError
         return trade_id, occurred
     except (ValueError, TypeError, AttributeError, OverflowError) as exc:
         raise HTTPException(400, '本机订单记录无效') from exc
@@ -150,6 +176,28 @@ def same_fill(old, new):
             and all(Decimal(old[key]) == Decimal(new[key]) if old.get(key) is not None and new.get(key) is not None
                     else old.get(key) is None and new.get(key) is None
                     for key in ('quantity', 'price', 'fees', 'settlementAmount')))
+
+
+def fill_fields(item):
+    return {key: value for key, value in item.items() if key in FIELDS | OPTIONAL}
+
+
+def fill_before_edit(item, edit):
+    fill = fill_fields(item)
+    fill.update(quantity=edit['quantity'], price=edit['price'])
+    fill.pop('settlementAmount', None)
+    fill.pop('settlementCurrency', None)
+    if 'settlementAmount' in edit:
+        fill['settlementAmount'] = edit['settlementAmount']
+        fill['settlementCurrency'] = edit['settlementCurrency']
+    return fill
+
+
+def extends_fill_history(previous, item):
+    history = item.get('editHistory', [])
+    known = previous.get('editHistory', [])
+    return (len(history) > len(known) and history[:len(known)] == known
+            and same_fill(previous, fill_before_edit(item, history[len(known)])))
 
 
 async def lock_order(conn, owner, identifier):
@@ -167,23 +215,27 @@ async def save_order(conn, who, identifier, occurred, item):
         previous = existing['item']
         if previous == item:
             return
-        immutable = ('tradeId', 'recordId', 'market', 'code', 'side', 'quantity', 'createdAt', 'orderPrice',
+        immutable = ('tradeId', 'recordId', 'market', 'code', 'side', 'createdAt',
                      'execution', 'orderType', 'parentOrderId', 'startsAt')
         previous_status = previous['status']
         next_status = item['deletedFrom'] if status == 'deleted' else status
         legal = (previous_status == 'pending' and status != 'pending') or (
             previous_status in ORDER_STATES - {'pending'} and status == 'deleted' and next_status == previous_status)
-        if (not legal or any(item.get(key) != previous.get(key) for key in immutable)
-                or previous_status == 'filled' and not same_fill(previous, item)):
+        edited = previous_status == 'filled' and next_status == 'filled' and extends_fill_history(previous, item)
+        same_terms = all(item[key] == previous[key] for key in ('quantity', 'orderPrice'))
+        matches = (same_terms and previous.get('editHistory') == item.get('editHistory')
+                   and (previous_status != 'filled' or same_fill(previous, item)))
+        if any(item.get(key) != previous.get(key) for key in immutable) or not (edited or legal and matches):
             raise HTTPException(409, '原订单状态已变化')
     legacy = await (await conn.execute('SELECT fill FROM native_synced_fills WHERE owner_id=%s AND trade_id=%s',
                                        (who.id, identifier))).fetchone()
-    if legacy and (item.get('deletedFrom', status) != 'filled' or not same_fill(legacy['fill'], item)):
+    history = item.get('editHistory', [])
+    original = fill_before_edit(item, history[0]) if history else item
+    if legacy and (item.get('deletedFrom', status) != 'filled' or not same_fill(legacy['fill'], original)):
         raise HTTPException(409, '原成交编号已对应不同的记录')
     if status == 'filled' and not legacy:
-        fill = {key: value for key, value in item.items() if key in FIELDS | OPTIONAL}
         await conn.execute('INSERT INTO native_synced_fills(owner_id,trade_id,occurred_at,fill) VALUES (%s,%s,%s,%s)',
-                           (who.id, identifier, occurred, Jsonb(fill)))
+                           (who.id, identifier, occurred, Jsonb(fill_fields(original))))
     await conn.execute('''INSERT INTO native_synced_orders(owner_id,order_id,status,occurred_at,item)
                           VALUES (%s,%s,%s,%s,%s)
                           ON CONFLICT (owner_id,order_id) DO UPDATE
@@ -212,7 +264,7 @@ def order_projection(item):
         'parentOrderId': item.get('parentOrderId'), 'tif': item.get('tif'), 'session': item.get('session'),
         'broker': item.get('broker') or '', 'note': '', 'realizedPnl': None,
         'executionModel': 'app_order_mirror', 'apiManaged': True, 'cancellable': False,
-        'actualFeeKnown': filled, 'brokerExecution': False,
+        'actualFeeKnown': filled, 'brokerExecution': False, 'editCount': len(item.get('editHistory', [])),
     }
 
 
@@ -255,11 +307,12 @@ def mount_native_trade_sync(app):
                     raise HTTPException(400, '不支持查询参数')
                 if not await app.state.rate_limit(db, 'native-orders:' + who.id, 120, window_seconds=60):
                     raise HTTPException(429, '同步频率过高，请稍后再试')
-                item = json.loads(await bounded_body(request, 8192), object_pairs_hook=unique)
+                item = json.loads(await bounded_body(request, MAX_ORDER_BYTES), object_pairs_hook=unique)
                 identifier, occurred = validate_order(item)
                 async with db.connection() as conn, conn.transaction():
                     await save_order(conn, who, identifier, occurred, item)
-                value = {'ownerId': who.id, 'tradeId': str(identifier), 'status': item['status']}
+                value = {'ownerId': who.id, 'tradeId': str(identifier), 'status': item['status'],
+                         'editCount': len(item.get('editHistory', []))}
             else:
                 if (set(params) - {'before', 'scope'} or any(len(params.getlist(key)) != 1 for key in params)
                         or params.get('scope', 'all') not in ('all', 'today')):
@@ -324,13 +377,14 @@ def mount_native_trade_sync(app):
                     raise HTTPException(400, '成交分页游标无效') from exc
                 async with db.connection() as conn, conn.transaction():
                     await lock_read_identity(conn, who, require_admin=False)
-                    cursor = await conn.execute('''SELECT fill FROM native_synced_fills f WHERE owner_id=%s
-                        AND (%s::uuid IS NULL OR trade_id<%s::uuid)
-                        AND NOT EXISTS (SELECT 1 FROM native_synced_orders o
-                            WHERE o.owner_id=f.owner_id AND o.order_id=f.trade_id AND o.status='deleted')
-                        ORDER BY trade_id DESC LIMIT 101''', (who.id, before, before))
+                    cursor = await conn.execute('''SELECT f.fill, o.item FROM native_synced_fills f
+                        LEFT JOIN native_synced_orders o ON o.owner_id=f.owner_id AND o.order_id=f.trade_id
+                        WHERE f.owner_id=%s AND (%s::uuid IS NULL OR f.trade_id<%s::uuid)
+                          AND o.status IS DISTINCT FROM 'deleted'
+                        ORDER BY f.trade_id DESC LIMIT 101''', (who.id, before, before))
                     rows = await cursor.fetchall()
-                items = [row['fill'] for row in rows[:100]]
+                items = [fill_fields(row['item']) if row['item'] and row['item'].get('editHistory') else row['fill']
+                         for row in rows[:100]]
                 value = {'ownerId': who.id, 'items': items, 'before': items[-1]['tradeId'] if len(rows) > 100 else None}
             return JSONResponse({'code': 0, 'message': 'ok', 'data': value}, headers=headers)
         except HTTPException as exc:

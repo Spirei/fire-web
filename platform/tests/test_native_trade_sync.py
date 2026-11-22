@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -35,6 +35,47 @@ async def test_native_fill_mirror_is_idempotent_and_leaves_cloud_accounting_unto
     async with db.connection() as conn:
         for table in ('trade_ledger', 'cash_ledger_entries', 'portfolio_records'):
             assert (await (await conn.execute('SELECT count(*) AS n FROM ' + table)).fetchone())['n'] == 0
+
+
+@pytest.mark.asyncio
+async def test_manual_fill_edits_preserve_original_and_reject_divergent_revisions(client, admin, db):
+    headers = await native_headers(db, admin, 'portfolio.read portfolio.write')
+    now = datetime.now(UTC)
+    original = dict(tradeId=str(uuid4()), recordId='stable-record', market='US', code='GOOGL', name='Alphabet',
+                    side='buy', quantity='5', price='90', orderPrice='90', fees='1', priceCurrency='USD',
+                    settlementCurrency='USD', settlementAmount='451', status='filled', execution='recorded', orderType='limit',
+                    createdAt=now.isoformat(), filledAt=(now - timedelta(days=3)).isoformat())
+    first = dict(quantity='5', price='90', settlementAmount='451', settlementCurrency='USD', editedAt=now.isoformat())
+    edited = {**original, 'quantity': '6', 'price': '92', 'orderPrice': '92', 'settlementAmount': '553', 'editHistory': [first]}
+
+    async def submit(item, expected=200):
+        response = await client.post(ORDERS, json=item, headers=headers)
+        assert response.status_code == expected, response.text
+        return response.json()['data']
+
+    # The native app can be offline through multiple edits. The accumulated history
+    # anchors the first upload to the original terms and later uploads to its latest receipt.
+    assert (await submit(edited))['editCount'] == 1
+    assert await submit(edited) == await submit(edited)
+    await submit(original, 409)
+    await submit({**edited, 'price': '93', 'orderPrice': '93'}, 409)
+    second = dict(quantity='6', price='92', settlementAmount='553', settlementCurrency='USD', editedAt=now.isoformat())
+    revised = {**edited, 'price': '95', 'orderPrice': '95', 'settlementAmount': '571', 'editHistory': [first, second]}
+    await submit({**revised, 'editHistory': [{**first, 'quantity': '4'}, second]}, 409)
+    await submit({**revised, 'filledAt': now.isoformat()}, 409)
+    assert (await submit(revised))['editCount'] == 2
+    orders = (await client.get(ORDERS, headers=headers)).json()['data']['items']
+    assert [(item['id'], item['editCount'], item['qty'], item['price'], item['tradedAt']) for item in orders] == [
+        (original['tradeId'], 2, 6, 95, original['filledAt']),
+    ]
+    active_fill = (await client.get(PATH, headers=headers)).json()['data']['items'][0]
+    assert active_fill['price'] == '95'
+    async with db.connection() as conn:
+        record = await (await conn.execute('SELECT fill FROM native_synced_fills WHERE owner_id=%s', (admin,))).fetchone()
+        assert record['fill']['quantity'] == '5' and record['fill']['price'] == '90'
+    await submit({**revised, 'status': 'deleted', 'deletedFrom': 'filled', 'deletedAt': now.isoformat()})
+    await submit(revised, 409)
+    assert (await client.get(ORDERS, headers=headers)).json()['data']['items'] == []
 
 
 @pytest.mark.asyncio

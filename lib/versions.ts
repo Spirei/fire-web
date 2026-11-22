@@ -8433,6 +8433,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.88", date: "2026-11-22", summary: "优化数据管理的市场目录、分页和读取",
   software: V0_1_87_ENTRY.software.map(item => ({ ...item, version: "v0.1.88" })),
   changes: [
+    { kind: "feature", title: "App 成交编辑同步", desc: "允许按原订单编号同步手工成交的股数和股价修正，保留原始成交和更改记录，拒绝过期修改。" },
     { kind: "feature", title: "App 订单状态同步", desc: "Fire 接收 App 买卖成交、挂单、撤单、过期和删除。订单详情可核对实际成交时间和录入时间。" },
     { kind: "feature", title: "App 交易周期", desc: "按纽约 20:00 提供交易周期内的已成交买卖、持仓核对依据和已核验基准收盘价。" },
     { kind: "fix", title: "整理网页数据管理", desc: "持仓按实际市场进入文件夹，盈透证券与嘉信理财归入券商文件夹。长列表统一分页，切回已读类别立即显示，并在后台预读。" },
