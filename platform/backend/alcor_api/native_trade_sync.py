@@ -280,10 +280,12 @@ def order_activity(item, history):
 
 def order_projection(item, *, history=None, order_number=None):
     filled = item.get('status', 'filled') == 'filled'
+    native = 'brokerAccountId' in item
     stamp = item.get('filledAt') or item['createdAt']
     qty, price = Decimal(item['quantity']), Decimal(item['price'])
     return {
-        'id': item['tradeId'], 'orderNo': item['tradeId'], 'recordId': item.get('recordId', ''),
+        'id': item['tradeId'], 'orderNo': order_number if native else item['tradeId'],
+        'recordId': item.get('recordId', ''),
         'market': item['market'], 'accountMarket': item.get('accountMarket',
             'CN' if item['market'] == 'HK' and item.get('settlementCurrency') == 'CNY' else item['market']),
         'code': item['code'], 'name': item['name'], 'side': item['side'],
@@ -303,12 +305,12 @@ def order_projection(item, *, history=None, order_number=None):
         **({'brokerAccountId': item['brokerAccountId'], 'identityMatches': True,
             'executionModel': 'app_native_ledger', 'revision': history[-1]['revision'] if history else 1,
             'orderActivity': order_activity(item, history),
-            **({'orderNo': order_number, 'orderNoSource': 'platform_assigned'} if order_number else {}),
+            **({'orderNoSource': 'platform_assigned'} if order_number else {}),
             **({'mergedFromOrderIds': item['mergedFromOrderIds']} if item.get('mergedFromOrderIds') else {}),
             'nativeActions': {'cancel': item['status'] == 'pending', 'delete': item['status'] in ORDER_STATES,
                               'edit': item['status'] == 'pending' or filled and item['execution'] == 'recorded'
                                 and not item.get('parentOrderId') and not item.get('mergedFromOrderIds')}}
-           if 'brokerAccountId' in item else {}),
+           if native else {}),
     }
 
 

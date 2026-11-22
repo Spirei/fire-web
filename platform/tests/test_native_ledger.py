@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -107,6 +108,8 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
     snapshot = await data(client.get(LEDGER, headers=other_phone))
     assert snapshot['positions'][0]['quantity'] == '33' and snapshot['positions'][0]['unitCost'] is None
     assert snapshot['orders'] == [fill]
+    number = snapshot['orderNumbers'][fill['tradeId']]
+    assert re.fullmatch(r'[0-9]{10}', number)
     assert {item['brokerAccountId']: item['balance'] for item in snapshot['cash']} == {None: '-4501.05', broker: '-4501.05'}
     positions = await data(client.get(ASSETS + '/positions', headers=other_phone))
     assert positions['items'][0]['qty'] == 33 and positions['items'][0]['cost'] is None
@@ -124,10 +127,14 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
     for suffix in ('/orders?scope=all', '/native-orders'):
         items = (await data(client.get(ASSETS + suffix, headers=other_phone)))['items']
         assert len(items) == 1 and items[0]['id'] == fill['tradeId']
+        assert items[0]['orderNo'] == number and items[0]['orderNoSource'] == 'platform_assigned'
         assert datetime.fromisoformat(items[0]['tradedAt']) == datetime.fromisoformat(at)
         assert items[0]['brokerAccountId'] == broker
         assert items[0]['orderActivity'] == [{'id': fill['tradeId'] + ':1', 'timestamp': at,
                                              'kind': 'filled', 'quantity': 15.0, 'price': 300.0}]
+    flat = await data(client.get('/api/v2/orders?includeAppOrders=1', headers=other_phone))
+    assert [(item['id'], item['orderNo']) for item in flat['orders']] == [(fill['tradeId'], number)]
+    assert flat['coverage']['available'] == 1
     other_owner = await create_user(db.settings, 'other-ledger', 'other-ledger-test-password-1')
     unauthorized = await native_headers(db, other_owner, 'portfolio.read')
     await data(client.get(path, headers=unauthorized), 404)
@@ -176,10 +183,14 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
 
     await data(client.post(TRANSACTIONS, headers=headers, json=trade(2, amended, '2', '2', None, None, cost='26.5')))
     await orders_only(3, pending)
+    opened = await data(client.get(LEDGER, headers=headers))
+    pending_number = opened['orderNumbers'][pending['tradeId']]
+    assert re.fullmatch(r'[0-9]{10}', pending_number)
     await orders_only(4, dict(pending, status='cancelled'))
     visible = (await data(client.get(ASSETS + '/orders?scope=all', headers=headers)))['items']
     cancelled = next(item for item in visible if item['id'] == pending['tradeId'])
     assert cancelled['nativeActions'] == {'cancel': False, 'delete': True, 'edit': False}
+    assert cancelled['orderNo'] == pending_number
     stamp = (now + timedelta(seconds=2)).isoformat()
     await orders_only(5, dict(pending, status='deleted', deletedFrom='cancelled', deletedAt=stamp))
     legacy = {k: v for k, v in pending.items() if k != 'brokerAccountId'}
@@ -193,6 +204,8 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
     snapshot = await data(client.get(LEDGER, headers=headers))
     assert snapshot['sourceRevision'] == 8 and snapshot['positions'][0]['quantity'] == '2'
     assert [item['status'] for item in snapshot['orders']] == ['filled', 'deleted', 'deleted']
+    assert snapshot['orderNumbers'][pending['tradeId']] == pending_number
+    assert snapshot['orderNumbers'][fill['tradeId']] == opened['orderNumbers'][fill['tradeId']]
     for suffix in ('/orders?scope=all', '/native-orders'):
         items = (await data(client.get(ASSETS + suffix, headers=headers)))['items']
         assert [(item['id'], item['price'], item['editCount']) for item in items] == [(fill['tradeId'], 26, 1)]
@@ -320,6 +333,7 @@ async def test_merge_keeps_exact_cash_and_original_trading_days(client, admin, d
     second = order(record['id'], broker, at=now.isoformat(), quantity='3', price='33.33333333', fees='2', net='101.99999999')
     await data(client.post(TRANSACTIONS, headers=headers, json=trade(1, first, '0', '2', '0', '-51')))
     await data(client.post(TRANSACTIONS, headers=headers, json=trade(2, second, '2', '5', '-51', '-152.99999999')))
+    original_numbers = (await data(client.get(LEDGER, headers=headers)))['orderNumbers']
     merge = {'requestId': str(uuid4()), 'kind': 'merge', 'baseRevision': 3,
              'orderIds': [first['tradeId'], second['tradeId']], 'mergedOrderId': str(uuid4()),
              'filledAt': second['filledAt']}
@@ -328,6 +342,11 @@ async def test_merge_keeps_exact_cash_and_original_trading_days(client, admin, d
     receipt = await data(client.post(TRANSACTIONS, headers=headers, json=merge))
     assert receipt == await data(client.post(TRANSACTIONS, headers=headers, json=merge))
     snapshot = await data(client.get(LEDGER, headers=headers))
+    numbers = snapshot['orderNumbers']
+    merged_number = numbers[merge['mergedOrderId']]
+    assert re.fullmatch(r'[0-9]{10}', merged_number)
+    assert {identifier: numbers[identifier] for identifier in merge['orderIds']} == original_numbers
+    assert len(set(numbers.values())) == 3
     assert snapshot['positions'][0]['quantity'] == '5'
     assert {cash['balance'] for cash in snapshot['cash']} == {'-152.99999999'}
     combined = next(item for item in snapshot['orders'] if item['tradeId'] == merge['mergedOrderId'])
@@ -338,6 +357,7 @@ async def test_merge_keeps_exact_cash_and_original_trading_days(client, admin, d
     assert all(item['mergedIntoOrderId'] == merge['mergedOrderId'] for item in snapshot['orders'] if item['status'] == 'deleted')
     items = (await data(client.get(ASSETS + '/orders?scope=all', headers=headers)))['items']
     assert [item['id'] for item in items] == [merge['mergedOrderId']]
+    assert items[0]['orderNo'] == merged_number
     for original, stamp in ((first, earlier), (second, now)):
         result = await data(client.get(ASSETS + '/trading-cycle', headers=headers,
                                       params={'cycleStart': cycle_range(stamp)[0].isoformat()}))

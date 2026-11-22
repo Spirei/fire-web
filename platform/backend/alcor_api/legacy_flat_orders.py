@@ -505,7 +505,10 @@ def mount_legacy_flat_orders(app):
                         mirrored = await fetch_orders(conn, who.id, limit=5000, record_id=request.query_params.get("recordId") or None)
                         existing = {order["id"] for order in orders["orders"]}
                         orders["orders"] = sorted(
-                            orders["orders"] + [order_projection(row["item"]) for row in mirrored if str(row["order_id"]) not in existing],
+                            orders["orders"] + [
+                                order_projection(row["item"], history=row["history"], order_number=row["order_number"])
+                                for row in mirrored if str(row["order_id"]) not in existing
+                            ],
                             key=lambda item: (order_time(item["tradedAt"]), item["id"]),
                             reverse=True,
                         )

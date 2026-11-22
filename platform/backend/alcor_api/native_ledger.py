@@ -448,6 +448,17 @@ async def receipt(conn, owner, request_id):
     )).fetchone()
 
 
+async def assign_order_numbers(conn, state, order_ids):
+    numbers = state.get('orderNumbers', {})
+    missing = [identifier for identifier in order_ids if identifier not in numbers]
+    if missing:
+        rows = await (await conn.execute("""
+            SELECT order_id, nextval('trade_presentation_number')::text AS number
+            FROM unnest(%s::text[]) AS pending(order_id)
+        """, (missing,))).fetchall()
+        state['orderNumbers'] = {**numbers, **{row['order_id']: row['number'] for row in rows}}
+
+
 async def commit(conn, db, who, raw):
     request_id, orders, positions, cash = validate_transaction(raw)
     expected = fingerprint(raw)
@@ -480,8 +491,10 @@ async def commit(conn, db, who, raw):
             context.prec = 80
             if kind == 'merge':
                 state = apply_merge(head['snapshot'], raw, now, request_id)
+                await assign_order_numbers(conn, state, (raw['mergedOrderId'],))
             else:
                 state = apply_trade(head['snapshot'], orders, positions, cash, now, request_id)
+                await assign_order_numbers(conn, state, orders)
     next_revision = revision + 1
     value = {'ownerId': who.id, 'requestId': str(request_id), 'kind': kind, 'sourceRevision': next_revision}
     await conn.execute('''

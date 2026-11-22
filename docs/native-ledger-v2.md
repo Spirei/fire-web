@@ -66,6 +66,8 @@ App 可按受影响币种提交本人全局 `cash`，省略 `brokerAccountId`。
 
 既有订单读接口以 `executionModel=app_native_ledger` 标识原生账本订单，`nativeActions` 宣告当前能否撤单、删除和编辑。订单变化提交到原生事务入口。旧同步入口仍可读取这些订单，同编号的修改由原生账本处理。
 
+新原生委托、直接成交和合并后的汇总单由服务端分配十位订单编号。订单列表在 `orderNo` 返回编号，账本快照以 `orderNumbers[tradeId]` 返回同一编号。移交的委托保留原订单编号，改单、成交、撤单和删除沿用该编号。交易请求仍使用原 `tradeId` 和独立的 `requestId`，回执结构沿用原合同。
+
 ### 待成改单与版本历史
 
 待成改单沿用 `kind=trade`，同编号、同证券、同券商、同创建时间，保留 `status=pending`，同时传更新后的委托条件及带时区的 `changedAt`。已成交股数和原币现金不受影响，`positions` 和 `cash` 传空数组。`expiresAt` 支持带时区绝对时间或交易所日历日期。`triggerAbove` 与 `triggerPrice` 一起表达触发方向和精确价格。若有实际变更时间，成交、撤单和删除也可提供 `changedAt`。

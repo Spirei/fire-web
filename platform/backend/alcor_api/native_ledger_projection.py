@@ -62,6 +62,7 @@ def visible_orders(head):
 def financial_orders(head):
     """A presentation merge leaves each actual execution on its own trade date."""
     orders = {order['tradeId']: order for order in head['snapshot']['orders']}
+    numbers = head['snapshot'].get('orderNumbers', {})
     candidates = [order for order in orders.values() if order['status'] == 'filled']
     results = []
     while candidates:
@@ -69,7 +70,7 @@ def financial_orders(head):
         if order.get('mergedFromOrderIds'):
             candidates.extend(orders[identifier] for identifier in order['mergedFromOrderIds'])
         else:
-            results.append(order_projection({**order, 'status': 'filled'}))
+            results.append(order_projection({**order, 'status': 'filled'}, order_number=numbers.get(order['tradeId'])))
     return results
 
 
