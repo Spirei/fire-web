@@ -26,7 +26,6 @@ import { emptyFundBalances, type FundCurrency } from "@/lib/fundCurrencies";
 import TradeOrdersPanel from "@/components/TradeOrdersPanel";
 import RefreshButton from "@/components/RefreshButton";
 import AssetHoldingList from "@/components/AssetHoldingList";
-import MobileExplanation from "@/components/MobileExplanation";
 import { preloadView } from "@/lib/viewPreload";
 import DailyPnlShareModal, { preloadDailyPnlTemplates, waitForDailyPnlTemplates, type DailyPnlShareItem } from "@/components/DailyPnlShareModal";
 import dynamic from "next/dynamic";
@@ -49,7 +48,8 @@ import QuoteSourceBadge, { QuoteRowHint } from "@/components/QuoteSourceBadge";
 import PnlCalendar from "@/components/PnlCalendar";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { registeredPnlCalendar, buildDailyAssetSeries, buildDayDetailRows, buildMonthCells, buildYearSummary, savePnlCalendarPref, type CalendarDayRow } from "@/lib/pnlCalendar";
-import { fetchBenchmarkKline, fetchPortfolioBundle, normalizeCloses } from "@/lib/portfolioSeries";
+import { fetchBenchmarkKline, fetchPortfolioBundle, type SeriesClose } from "@/lib/portfolioSeries";
+import { buildVerifiedAssetTrend, verifiedAssetDays } from "@/lib/assetAnalysisTrend";
 
 type Period = "month" | "1m" | "6m" | "ytd" | "1y" | "all" | "custom";
 type ChartTab = "return" | "asset";
@@ -57,15 +57,6 @@ const WEIGHT_OPTIONS = [
   ["simple", "收益率·简单加权"],
   ["time", "收益率·时间加权"]
 ] as const;
-interface TrendPoint {
-  date: string;
-  asset: number;
-  benchmark: number;
-  timeIndex: number;
-  simpleIndex: number;
-  pnl: number;
-}
-interface CloseItem { d: string; c: number }
 interface HoldingSort { key: HoldingColumnKey; dir: "asc" | "desc" }
 interface DateRange { start: string; end: string }
 /** 资金余额按资金系统的币种清单（比展示币种多：含卡面库里会出现的台币 / 英镑等） */
@@ -105,7 +96,7 @@ const ASSET_SPLIT_STORAGE_KEY = "fire:asset-analysis:split-v1";
 const ASSET_SPLIT_MIN = 24;
 const ASSET_SPLIT_MAX = 52;
 const ASSET_SPLIT_DEFAULT = 29;
-const ASSET_TREND_CACHE_KEY = "fire:asset-analysis:trend-cache-v4";
+const EMPTY_CHART_POINTS: [] = [];
 const HOLDINGS_PAGE_SIZE = 10;
 
 /** 资产分析页模块 id 与默认顺序（左右两栏各一组）；自定义顺序存 site_settings.assetAnalysisOrder */
@@ -212,27 +203,6 @@ function defaultDateRange(): DateRange {
   return { start: isoDate(start), end: isoDate(end) };
 }
 
-function marketDate(value: string, market: string) {
-  const timeZone = market.toUpperCase() === "US" ? "America/New_York" : "Asia/Shanghai";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-function cleanCloses(items: CloseItem[]) {
-  return items
-    .map((item) => ({ d: String(item.d || ""), c: Number(item.c) }))
-    .filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.d) && Number.isFinite(item.c) && item.c > 0)
-    .sort((a, b) => a.d.localeCompare(b.d));
-}
-
 function periodStart(period: Period) {
   const now = new Date();
   if (period === "all") return "0000-00-00";
@@ -306,14 +276,13 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   const leftPanePct=clampSplitPct(draftPanePct ?? savedPanePct);
   const leftPanePctRef = useRef(ASSET_SPLIT_DEFAULT);
   const splitRef = useRef<HTMLDivElement>(null);
-  const [trend, setTrend] = useState<TrendPoint[]>([]);
-  const [trendLoading, setTrendLoading] = useState(true);
+  const trendScope = JSON.stringify([ownerId, signature, readRevision]);
+  const [trendRead, setTrendRead] = useState<{ scope: string; days: ReturnType<typeof verifiedAssetDays>; failed: boolean }>();
+  const [benchmarkRead, setBenchmarkRead] = useState<{ scope: string; items: SeriesClose[] }>();
   const [retryTick, setRetryTick] = useState(0);
-  const lastRetryTick=useRef(0);
-  // 基准与趋势的「上一次成功数据」兜底：源站/限流抖动时保留整图，不闪成空白
-  const benchmarkRef = useRef<{ key: BenchKey; items: CloseItem[] }>({ key: "spy", items: [] });
-  const trendRef = useRef<TrendPoint[]>([]);
-  const [recordCloses, setRecordCloses] = useState<Record<string, CloseItem[]>>({});
+  const lastRetryTick = useRef(0);
+  const [recordCloses, setRecordCloses] = useState<Record<string, SeriesClose[]>>({});
+  const [closesLoading, setClosesLoading] = useState(true);
   const [customRange, setCustomRange] = useState<DateRange>(() => defaultDateRange());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [currencyMenuOpen, setCurrencyMenuOpen] = useState<"asset" | "trend" | null>(null);
@@ -430,10 +399,10 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   // 首帧不写 inline 变量，让 <head> 同步脚本 / CSS 默认值先生效，避免刷新闪扩。
 
   useLayoutEffect(() => {
-    trendRef.current = []; setTrend([]); setRecordCloses({});
-    benchmarkRef.current = {key:benchKey,items:[]};
-    try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* disposable derived data */ }
-  }, [ownerId,signature,readRevision,benchKey]);
+    setRecordCloses({});
+    setClosesLoading(true);
+    try { localStorage.removeItem("fire:asset-analysis:trend-cache-v4"); } catch { /* Remove obsolete derived history. */ }
+  }, [trendScope]);
 
   const applySplitPct = (value: number) => {
     const next = Number(clampSplitPct(value).toFixed(2));
@@ -676,14 +645,6 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
   }, 0), [orders, positions, livePrice, rates, displayCurrency]);
   const totalAsset = accountSummaryTotals.totalAsset ?? Number.NaN;
 
-  const ledgerCumulativePnl = useMemo(() => positions.reduce((total, record) => {
-    const row = portfolioLedger.get(record.id);
-    return total + toDisplay(record, row?.totalPnl ?? ((livePrice(record) - (Number(record.cost) || 0)) * (Number(record.qty) || 0)));
-  }, 0), [positions, portfolioLedger, rates, displayCurrency, livePrice]);
-  const orderCoveredIds = useMemo(() => new Set(orders.filter((order) => order.status === "filled").map((order) => order.recordId)), [orders]);
-  const coveredHoldingCount = positions.filter((record) => orderCoveredIds.has(record.id)).length;
-  const historyIncomplete = coveredHoldingCount < positions.length;
-
   const dailyShareItems = useMemo<DailyPnlShareItem[]>(() => positions.map((record) => {
     const qty = Number(record.qty) || 0;
     return {
@@ -704,235 +665,86 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     preloadDailyPnlTemplates(false);
   }, []);
 
+  // The holdings calendar and rank still read their own market evidence.
   useEffect(() => {
-    if (!foreground) return;
-    let cancelled = false;
-    const controller = new AbortController(), epoch = privateReadEpoch();
-    const force=lastRetryTick.current!==retryTick; lastRetryTick.current=retryTick;
-    const eligible = positions.filter(record => ["US", "HK", "CN", "JP", "KR"].includes(record.market.toUpperCase()));
-    if (!trendRef.current.length) setTrendLoading(true);
-    (async () => {
-      // Defer derived history work until the visible first frame.
-      await new Promise<void>((resolve) => {
-        const idleWindow = window as Window & {
-          requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-        };
-        if (typeof idleWindow.requestIdleCallback === "function") idleWindow.requestIdleCallback(() => resolve(), { timeout: 600 });
-        else window.setTimeout(resolve, 150);
-      });
-      if (cancelled || controller.signal.aborted) return;
-      const bench = BENCHMARKS.find((b) => b.key === benchKey) || BENCHMARKS[0];
-      // 「持仓日K + 订单」走一次聚合请求（服务端并发取数），基准单独一个小请求：
-      // 不再由浏览器按持仓逐只打 /api/kline/full（17 只 ≈ 17 次请求 / 700KB）
-      const [bundle, benchItems] = await Promise.all([
-        fetchPortfolioBundle({ days: 330,ownerId,signature,signal:controller.signal,force }),
-        fetchBenchmarkKline(bench.market, bench.code, 330, bench.index,{ownerId,signal:controller.signal,force})
-      ]);
-      if (cancelled || controller.signal.aborted || epoch !== privateReadEpoch()) return;
-      const positionRows = eligible.map((record) => ({
-        record,
-        items: normalizeCloses(bundle?.closes?.[record.id])
+    if (!foreground || !ownerId) return;
+    const controller = new AbortController();
+    const epoch = privateReadEpoch();
+    const deferred = window.setTimeout(() => {
+      void fetchPortfolioBundle({ days: 330, ownerId, signature, signal: controller.signal })
+        .then(bundle => {
+          if (!controller.signal.aborted && epoch === privateReadEpoch()) {
+            setRecordCloses(bundle?.closes ?? {});
+            setClosesLoading(false);
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted && epoch === privateReadEpoch()) setClosesLoading(false);
+        });
+    }, 150);
+    return () => { window.clearTimeout(deferred); controller.abort(); };
+  }, [ownerId, signature, readRevision, foreground]);
+
+  useEffect(() => {
+    if (!foreground || !ownerId) return;
+    const controller = new AbortController();
+    const epoch = privateReadEpoch();
+    void platformRequest<unknown>("/api/fire/asset-analysis/trend", {
+      headers: accountReadHeaders(ownerId), signal: controller.signal, cache: "no-store",
+    }).then(data => {
+      if (!controller.signal.aborted && epoch === privateReadEpoch()) {
+        setTrendRead({ scope: trendScope, days: verifiedAssetDays(data, ownerId), failed: false });
+      }
+    }).catch(error => {
+      if (controller.signal.aborted || epoch !== privateReadEpoch()) return;
+      setTrendRead(previous => ({
+        scope: trendScope,
+        days: error instanceof PlatformRequestError && error.transient && previous?.scope === trendScope ? previous.days : [],
+        failed: true,
       }));
-      const benchmarkItems = benchItems;
-      const fetchedOrdersAll: TradeOrder[] = bundle?.orders ?? [];
-      if (fetchedOrdersAll.some(order => order.executionModel === "source_registered_history" && order.historicalCoverageKnown !== true)) {
-        trendRef.current=[];setTrend([]);setRecordCloses(Object.fromEntries(positionRows.map(row => [row.record.id, row.items])));setTrendLoading(false);
-        try { localStorage.removeItem(ASSET_TREND_CACHE_KEY); } catch { /* storage unavailable */ }
-        return;
-      }
-      const benchmarkFallback =
-        benchmarkItems.length === 0 && benchmarkRef.current.key === benchKey
-          ? benchmarkRef.current.items
-          : [];
-      const effectiveBenchmark = benchmarkItems.length > 0 ? benchmarkItems : benchmarkFallback;
-      if (benchmarkItems.length > 0) benchmarkRef.current = { key: benchKey, items: benchmarkItems };
-      const nextRecordCloses = Object.fromEntries(positionRows.map((row) => [row.record.id, row.items]));
-      setRecordCloses(nextRecordCloses);
-      const fetchedOrders = fetchedOrdersAll.filter((order) => order.status === "filled");
-
-      // 使用所有行情日期，但每个标的在自己的首个有效行情之前以首个收盘价回填。
-      // 旧逻辑从 0 开始，标的稍晚上市或接口少一天时，会把后续出现的整笔市值误算成投资收益。
-      const dates = [...new Set([
-        ...positionRows.flatMap((row) => row.items.map((item) => item.d)),
-        ...effectiveBenchmark.map((item) => item.d)
-      ])].sort();
-      const maps = positionRows.map((row) => {
-        const fallback = row.items[0]?.c || livePrice(row.record) || 0;
-        return { record: row.record, first: fallback, map: new Map(row.items.map((item) => [item.d, item.c])) };
-      }).filter((row) => row.first > 0);
-      const benchMap = new Map(effectiveBenchmark.map((item) => [item.d, item.c]));
-      const last = new Map(maps.map((row) => [row.record.id, row.first]));
-      // 基准在首个行情日前必须回填首个有效点位，不能使用 1。否则 5000 点会显示为约 500000%。
-      let lastBench = effectiveBenchmark[0]?.c || 0;
-
-      const recordsById = new Map(eligible.map((record) => [record.id, record]));
-      const ordersByRecord = new Map<string, TradeOrder[]>();
-      fetchedOrders.forEach((order) => {
-        const list = ordersByRecord.get(order.recordId) || [];
-        list.push(order);
-        ordersByRecord.set(order.recordId, list);
-      });
-      ordersByRecord.forEach((list) => list.sort((a, b) => a.tradedAt.localeCompare(b.tradedAt)));
-
-      // 成交发生在周末/节假日时，现金流必须落到下一条有效行情日期。
-      // 数量轨迹本来会在下一交易日生效；若现金流仍留在非交易日，时间加权会把整笔买入误当收益。
-      const flowByDate = new Map<string, number>();
-      const nextAvailableDate = (date: string) => {
-        let low = 0;
-        let high = dates.length - 1;
-        let answer = "";
-        while (low <= high) {
-          const middle = (low + high) >> 1;
-          if (dates[middle] >= date) { answer = dates[middle]; high = middle - 1; }
-          else low = middle + 1;
-        }
-        return answer;
-      };
-      fetchedOrders.forEach((order) => {
-        const record = recordsById.get(order.recordId);
-        const tradedDate = marketDate(order.tradedAt, order.market);
-        const effectiveDate = tradedDate ? nextAvailableDate(tradedDate) : "";
-        if (!record || !effectiveDate) return;
-        const gross = Number(order.amount) || Number(order.price) * Number(order.qty);
-        const nativeFlow = order.side === "buy"
-          ? gross + Number(order.fees || 0)
-          : -(gross - Number(order.fees || 0));
-        flowByDate.set(effectiveDate, (flowByDate.get(effectiveDate) || 0) + toDisplay(record, nativeFlow));
-      });
-
-      type PositionTrendState = {
-        qty: number;
-        cursor: number;
-        orders: TradeOrder[];
-        startDate: string;
-        active: boolean;
-        initialQty: number;
-        principal: number;
-        netCash: number;
-        grossInvested: number;
-        pnlOffset: number | null;
-      };
-      const quantityState = new Map<string, PositionTrendState>();
-      maps.forEach(({ record }) => {
-        const recordOrders = ordersByRecord.get(record.id) || [];
-        const firstOrder = recordOrders[0];
-        const initialQty = firstOrder ? Number(firstOrder.positionQtyBefore) || 0 : Number(record.qty) || 0;
-        const initialCost = firstOrder
-          ? Number(firstOrder.positionCostBefore ?? record.cost) || 0
-          : Number(record.cost) || 0;
-        const startDate = marketDate(firstOrder?.tradedAt || record.updatedAt, record.market);
-        const principal = initialQty * initialCost;
-        quantityState.set(record.id, {
-          qty: initialQty,
-          cursor: 0,
-          orders: recordOrders,
-          startDate,
-          active: false,
-          initialQty,
-          principal,
-          netCash: 0,
-          grossInvested: Math.abs(principal),
-          pnlOffset: null
-        });
-      });
-
-      let timeIndex = 100;
-      let previousActualAsset = 0;
-      const points = dates.map((date) => {
-        let actualAsset = 0;
-        let portfolioPnl = 0;
-        let investedCapital = 0;
-        let openingFlow = 0;
-        maps.forEach(({ record, map }) => {
-          const next = map.get(date);
-          if (next && Number.isFinite(next)) last.set(record.id, next);
-          const close = last.get(record.id) || 0;
-          const state = quantityState.get(record.id);
-          if (!state) return;
-          if (!state.startDate || date < state.startDate) return;
-          if (!state.active) {
-            state.active = true;
-            // 首次可确认的旧仓按当日市值作为外部转入，避免“突然出现的资产”被当成投资收益。
-            if (state.initialQty > 0) openingFlow += toDisplay(record, close * state.initialQty);
-          }
-          while (state.cursor < state.orders.length && marketDate(state.orders[state.cursor].tradedAt, state.orders[state.cursor].market) <= date) {
-            const order = state.orders[state.cursor];
-            const gross = Number(order.amount) || Number(order.price) * Number(order.qty);
-            const fees = Number(order.fees || 0);
-            if (order.side === "buy") {
-              state.netCash += gross + fees;
-              state.grossInvested += gross + fees;
-            } else {
-              state.netCash -= gross - fees;
-            }
-            state.qty = Number(order.positionQtyAfter) || 0;
-            state.cursor += 1;
-          }
-          const marketValue = toDisplay(record, close * state.qty);
-          actualAsset += marketValue;
-          const rawPnl = marketValue - toDisplay(record, state.principal + state.netCash);
-          // 每只仓位从首个可确认的历史点归零，避免资料不完整的旧仓浮盈被一次性计入当前周期。
-          if (state.pnlOffset === null) state.pnlOffset = rawPnl;
-          portfolioPnl += rawPnl - state.pnlOffset;
-          investedCapital += toDisplay(record, state.grossInvested);
-        });
-        const bench = benchMap.get(date);
-        if (bench && Number.isFinite(bench)) lastBench = bench;
-        if (previousActualAsset > 0) {
-          const cashFlow = (flowByDate.get(date) || 0) + openingFlow;
-          const dailyReturn = (actualAsset - cashFlow) / previousActualAsset - 1;
-          if (Number.isFinite(dailyReturn) && dailyReturn > -1) timeIndex *= 1 + dailyReturn;
-        }
-        if (actualAsset > 0) previousActualAsset = actualAsset;
-        const simpleIndex = investedCapital > 0 ? 100 * (1 + portfolioPnl / investedCapital) : 100;
-        return { date, asset: actualAsset, benchmark: lastBench, timeIndex, simpleIndex, pnl: portfolioPnl };
-      }).filter((point) => point.asset > 0 && Number.isFinite(point.timeIndex) && Number.isFinite(point.simpleIndex));
-      // 本次成功则更新；本次因源站/限流抖动取不到数据时保留上一次成功趋势，避免整图闪空
-      if (points.length > 0) {
-        trendRef.current = points;
-        setTrend(points);
-
-      } else if (trendRef.current.length > 0) {
-        setTrend(trendRef.current);
-      } else {
-        setTrend([]);
-      }
-      setTrendLoading(false);
-    })().catch(error => {
-      if (cancelled || controller.signal.aborted) return;
-      if (error instanceof PlatformRequestError && [401,403].includes(error.status ?? 0)) {
-        trendRef.current=[]; setTrend([]); setRecordCloses({}); benchmarkRef.current={key:benchKey,items:[]};
-      }
-      setTrendLoading(false);
     });
-    return () => { cancelled = true; controller.abort(); };
-  }, [positions, rates, displayCurrency, benchKey, retryTick,ownerId,signature,readRevision,foreground]);
+    return () => controller.abort();
+  }, [foreground, ownerId, trendScope, retryTick]);
+
+  const selectedBenchmark = BENCHMARKS.find(item => item.key === benchKey) ?? BENCHMARKS[0];
+  const benchmarkDays = period === "all" ? 1200 : period === "custom"
+    ? Math.min(1200, Math.max(330, Math.ceil((Date.now() - Date.parse(customRange.start)) / 86400000)))
+    : 330;
+  const benchmarkScope = JSON.stringify([ownerId, readRevision, selectedBenchmark.key, benchmarkDays]);
+  const benchLabel = selectedBenchmark.label;
+  useEffect(() => {
+    if (!foreground || !ownerId) return;
+    const controller = new AbortController();
+    const epoch = privateReadEpoch();
+    const force = retryTick !== lastRetryTick.current;
+    lastRetryTick.current = retryTick;
+    void fetchBenchmarkKline(selectedBenchmark.market, selectedBenchmark.code, benchmarkDays, selectedBenchmark.index, {
+      ownerId, signal: controller.signal, force,
+    }).then(items => {
+      if (!controller.signal.aborted && epoch === privateReadEpoch()) setBenchmarkRead({ scope: benchmarkScope, items });
+    }).catch(error => {
+      if (controller.signal.aborted) return;
+      if (error instanceof PlatformRequestError && [401, 403].includes(error.status ?? 0)) {
+        setTrendRead({ scope: trendScope, days: [], failed: true });
+      }
+      setBenchmarkRead({ scope: benchmarkScope, items: [] });
+    });
+    return () => controller.abort();
+  }, [foreground, ownerId, selectedBenchmark, benchmarkDays, benchmarkScope, trendScope, retryTick]);
 
   const activeRange = useMemo(() => period === "custom"
     ? customRange
     : { start: periodStart(period), end: isoDate(new Date()) }, [period, customRange]);
-  const filteredTrend = useMemo(() => trend.filter((point) => point.date >= activeRange.start && point.date <= activeRange.end), [trend, activeRange]);
-  const latest = filteredTrend.at(-1);
-  const first = filteredTrend[0];
-  const selectedValues = filteredTrend.map((point) => weighting === "time" ? point.timeIndex : point.simpleIndex);
-  const firstValue = selectedValues[0] || 0;
-  const latestValue = selectedValues.at(-1) || 0;
-  const returnRate = filteredTrend.length > 1 && firstValue > 0 ? latestValue / firstValue - 1 : Number.NaN;
-  const benchLabel = BENCHMARKS.find((b) => b.key === benchKey)?.label ?? "标普 500";
-  const hasBench = !!(latest && first && first.benchmark > 0);
-  const benchRate = hasBench ? latest.benchmark / first.benchmark - 1 : 0;
-  const benchDiff = hasBench ? returnRate - benchRate : null;
-  const pointBeforeRange = trend.findLast((point) => point.date < activeRange.start);
-  const cumulative = latest
-    ? latest.pnl - (pointBeforeRange?.pnl ?? 0)
-    : period === "all" ? ledgerCumulativePnl : Number.NaN;
-  const pnlLabel = period === "month" ? "本月盈亏"
-    : period === "1m" ? "近 1 月盈亏"
-      : period === "6m" ? "近 6 月盈亏"
-        : period === "ytd" ? "本年盈亏"
-          : period === "1y" ? "近 1 年盈亏"
-            : period === "custom" ? "区间盈亏"
-              : "累计盈亏";
+  const observed = trendRead?.scope === trendScope ? trendRead : undefined;
+  const benchmark = benchmarkRead?.scope === benchmarkScope ? benchmarkRead.items : undefined;
+  const { relative, absolute, returnRate, cumulative, comparisonDay, benchmarkDifference: benchDiff } = useMemo(
+    () => buildVerifiedAssetTrend(observed?.days ?? [], benchmark ?? [], activeRange.start, activeRange.end, displayCurrency, weighting),
+    [observed, benchmark, activeRange, displayCurrency, weighting],
+  );
+  const chart = chartTab === "return" ? relative : absolute;
+  const hasPersonalTrend = chart.portfolio.some(value => value !== null);
+  const hasTrend = hasPersonalTrend || chart.benchmark.some(value => value !== null);
+  const trendLoading = !hasTrend && (!observed || (chartTab === "return" && !benchmark));
   const marketPositions = holdingsMarket === "ALL" ? positions : positions.filter((item) => holdingAccountMarket(item) === holdingsMarket);
   const holdingAssetTotal = marketPositions.reduce((sum, record) => sum + toDisplay(record, livePrice(record) * (Number(record.qty) || 0)), 0);
   const searchedPositions = marketPositions.filter((record) => {
@@ -1132,12 +944,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
             <div className="flex items-end gap-6 border-b border-edge px-4 pt-3">{([['return', '收益率趋势图'], ['asset', '总资产趋势图']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setChartTab(key)} className={`relative shrink-0 whitespace-nowrap px-0.5 pb-3 transition-colors ${chartTab === key ? "text-[15px] font-bold text-ink" : "text-sm font-medium text-muted hover:text-ink"}`}>{label}{chartTab === key && <i className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}</button>)}</div>
             <div className="relative flex items-center gap-2 px-4 py-3"><div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{PERIODS.map(([key, label]) => <Capsule variant="secondary" aria-pressed={period === key} key={key} type="button" onClick={() => { setPeriod(key); setDatePickerOpen(false); setPnlExpanded(false); }} className={`flex-none rounded-full border px-3 py-1.5 text-xs font-semibold ${period === key ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray"}`}>{label}</Capsule>)}</div><button type="button" onClick={() => setDatePickerOpen((open) => !open)} className={`inline-flex h-8 w-10 flex-none items-center justify-center rounded-full border transition-colors ${period === "custom" || datePickerOpen ? "border-[#3297f6] bg-[#3297f6]/10 text-[#3297f6]" : "border-edge text-muted hover:bg-bg-gray hover:text-ink"}`} title="选择日期区间" aria-label="选择日期区间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path d="M4 5h16M7 3v4m10-4v4M5 9h14v11H5z" /><path d="m9 14 2 2 4-5" /></svg></button>{datePickerOpen && <DateRangePicker range={customRange} onClose={() => setDatePickerOpen(false)} onApply={(range) => { setCustomRange(range); setPeriod("custom"); setDatePickerOpen(false); setPnlExpanded(false); }} />}</div>
             {period === "custom" && <div className="px-4 pb-2 text-xs font-semibold text-muted">{formatRangeDate(customRange.start)} – {formatRangeDate(customRange.end)}</div>}
-            {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix={pnlLabel} /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${!Number.isFinite(cumulative) ? "text-muted" : cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[var(--capsule-fill)] font-bold text-white" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${!Number.isFinite(returnRate) ? "text-muted" : returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
-            {chartTab === "return" && historyIncomplete && (
-              <MobileExplanation className="mx-4 mt-2 text-xs leading-relaxed text-muted" summary={<>订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓</>} mobileContent={<p>未覆盖的持仓从首个可靠日期计算，不回填年初。</p>}><p>
-                历史订单覆盖 {coveredHoldingCount}/{positions.length} 只持仓；未覆盖仓位从首个可确认日期起计，不再回填到年初。
-              </p></MobileExplanation>
-            )}
+            {chartTab === "return" && <div className="flex items-start justify-between gap-3 px-4"><div className="min-w-0 flex-1"><CurrencyPicker context="trend" prefix="已核验区间盈亏" /><strong className={`mt-1 block max-w-[15rem] text-xl tabular-nums ${!Number.isFinite(cumulative) ? "text-muted" : cumulative >= 0 ? "text-up" : "text-down"}`}><AccountOverviewValue value={cumulative} hidden={!assetsVisible} forceCompact={currencyDisplayUnit === "compact"} /></strong></div><div className="relative flex-none text-right"><button type="button" onClick={() => setWeightMenuOpen((open) => !open)} aria-expanded={weightMenuOpen} className="inline-flex items-center gap-1 rounded-lg px-1 py-1 text-xs font-semibold text-muted transition-colors hover:bg-bg-gray hover:text-ink">收益率·{weighting === "simple" ? "简单加权" : "时间加权"}<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 transition-transform ${weightMenuOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg></button>{weightMenuOpen && <><div className="fixed inset-0 z-30" onClick={() => setWeightMenuOpen(false)} /><div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-edge-strong bg-white p-1 shadow-xl dark:bg-[#1b2029]">{WEIGHT_OPTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => { setWeighting(key); setWeightMenuOpen(false); }} className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${weighting === key ? "bg-[var(--capsule-fill)] font-bold text-white" : "text-ink hover:bg-bg-gray"}`}><span>{label}</span>{weighting === key && <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="m2.4 6.4 2.5 2.5 4.7-5.8" /></svg>}</button>)}</div></>}<strong className={`mt-1 block text-base tabular-nums ${!Number.isFinite(returnRate) ? "text-muted" : returnRate >= 0 ? "text-up" : "text-down"}`}>{assetsVisible ? fmtPct(returnRate) : "******"}</strong></div></div>}
             {chartTab === "return" && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-bg-gray px-3 py-2 text-xs">
               <div className="relative">
                 <button type="button" onClick={() => setBenchOpen((open) => !open)} aria-expanded={benchOpen} className="inline-flex items-center gap-1.5 text-ink transition-colors hover:text-ink">
@@ -1146,7 +953,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
                   <i className="h-2 w-2 rounded-full bg-[#4a90d9]" />
                   <span className="font-semibold">{benchLabel}</span>
                   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className={`h-3 w-3 text-muted transition-transform ${benchOpen ? "rotate-180" : ""}`}><path d="m5 7 5 5 5-5" /></svg>
-                  {assetsVisible ? (benchDiff !== null ? <b className={`tabular-nums ${benchDiff >= 0 ? "text-up" : "text-down"}`}>{fmtPct(benchDiff)}</b> : <span className="text-faint">—</span>) : <b className="text-faint">******</b>}
+                  {assetsVisible ? (benchDiff !== null ? <b title={comparisonDay ? `对比日期 ${comparisonDay}` : undefined} className={`tabular-nums ${benchDiff >= 0 ? "text-up" : "text-down"}`}>{fmtPct(benchDiff)}</b> : <span className="text-faint">—</span>) : <b className="text-faint">******</b>}
                 </button>
                 {benchOpen && (
                   <>
@@ -1163,7 +970,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
                 )}
               </div>
             </div>}
-            {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : filteredTrend.length > 1 ? <PnlTrendChart points={filteredTrend} tab={chartTab} weighting={weighting} benchLabel={benchLabel} /> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>暂无已采集的历史行情</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
+            {trendLoading ? <div className="mx-4 mb-4 h-[330px] animate-pulse rounded-xl bg-bg-gray" aria-hidden /> : hasTrend ? <><PnlTrendChart points={EMPTY_CHART_POINTS} tab={chartTab} weighting={weighting} benchLabel={benchLabel} observed={chart} currency={displayCurrency} />{!hasPersonalTrend && observed && <p className="px-4 pb-3 text-center text-xs text-muted">{observed.failed ? "个人历史估值暂时无法读取" : "暂无可比较的个人历史估值"}</p>}</> : <div className="flex h-[330px] flex-col items-center justify-center gap-3 px-8 text-center text-sm text-muted"><span>{observed?.failed ? "日终趋势暂时无法读取" : chartTab === "asset" ? "暂无已核验的总资产估值" : "暂无可比较的历史收益率"}</span><button type="button" onClick={() => setRetryTick((tick) => tick + 1)} className="rounded-full border border-edge px-3.5 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-brand-hover dark:border-white/20">重新获取</button></div>}
           </section>
           {renderModuleHandle("left", "trend")}
         </div>
@@ -1254,7 +1061,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
             className="card p-5"
             days={calendarDays}
             yearSummary={calendarYear}
-            loading={trendLoading}
+            loading={closesLoading}
             month={calMonth}
             onMonthChange={(next) => {
               setCalMonth(next);

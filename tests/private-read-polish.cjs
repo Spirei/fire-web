@@ -18,6 +18,37 @@ const fixture=(n=10)=>({closes:{row:[{d:'2026-10-01',c:n},{d:'2026-10-02',c:n+1}
  now+=300001;assert.equal(peekPortfolioBundle(330,{...scope,signature:'s4'}),null,'expired snapshots are not restored');
  assert.deepEqual(Array.from(normalizeCloses([{d:'2026-01-01',c:10},{d:'2026-01-01',c:11},{d:'2026-01-02',c:null},{d:'2026-01-03',c:0},{d:'2026-01-04',c:12}]).map(p=>p.d)),['2026-01-04']);
  assert.deepEqual(Array.from(normalizeCloses([{d:'2026-02-30',c:12},{d:'0000-01-01',c:12},{d:'2026-02-28',c:true},{d:'2024-02-29',c:12}]).map(p=>p.d)),['2024-02-29'],'only real calendar dates and observed numbers enter history');
+ const {verifiedAssetDays,buildVerifiedAssetTrend}=load('assetAnalysisTrend');
+ const settled={accountId:'42',basis:'settled_real_ledger_v1',items:[
+   {day:'2026-10-06',equity:'0',prior:null,pnl:null,retired:false,rates:{HKD:8}},
+   {day:'2026-10-05',equity:'450',prior:'260',pnl:'190',retired:true,rates:{HKD:8}},
+   {day:'2026-10-04',equity:'260',prior:'220',pnl:'22',retired:false,rates:{}},
+   {day:'2026-10-03',equity:'220',prior:'100',pnl:'20',retired:false,rates:{HKD:7.8}},
+   {day:'2026-10-02',equity:'100',prior:null,pnl:null,retired:false,rates:{HKD:7.5}},
+ ]};
+ assert.throws(()=>verifiedAssetDays(settled,'other'),/响应无效/);
+ const verified=verifiedAssetDays(settled,'42');
+ const index=[{d:'2026-10-01',c:100},{d:'2026-10-04',c:120}];
+ const daily=buildVerifiedAssetTrend(verified,index,'2026-10-01','2026-10-06','HKD','time');
+ assert.deepEqual(Array.from(daily.absolute.portfolio),[750,1716,null,null,0],'frozen FX, retired days, and known zero are distinct');
+ assert.deepEqual(Array.from(daily.relative.missingStart),[0,0,null,null]);
+ assert.deepEqual(Array.from(daily.relative.portfolio.slice(0,2)),[null,0]);
+ assert(Math.abs(daily.returnRate-.32)<1e-10,'verified profit excludes deposits from time-weighted return');
+ assert(Math.abs(daily.benchmarkDifference-.12)<1e-10,'comparison uses the same latest usable date');
+ const holiday=buildVerifiedAssetTrend(verified,[{d:'2026-10-02',c:100},{d:'2026-10-03',c:110}],'2026-10-01','2026-10-06','USD','time');
+ assert.equal(holiday.relative.benchmark[0],null,'the period start must not invent an early benchmark quote');
+ assert.equal(holiday.comparisonDay,'2026-10-03','the comparison falls back to the most recent shared session');
+ assert(Math.abs(holiday.benchmarkDifference-.10)<1e-10);
+ assert(Number.isNaN(daily.cumulative),'one missing frozen rate leaves monetary profit unknown');
+ const simple=buildVerifiedAssetTrend(verified,index,'2026-10-01','2026-10-06','USD','simple');
+ assert(Math.abs(simple.returnRate-(42/218))<1e-10);
+ assert.equal(simple.cumulative,42);
+ const benchmarkOnly=buildVerifiedAssetTrend([],index,'2026-10-01','2026-10-06','USD','time');
+ assert.deepEqual(Array.from(benchmarkOnly.relative.dates),['2026-10-01','2026-10-04']);
+ assert.equal(benchmarkOnly.relative.benchmark[0],0);
+ assert(benchmarkOnly.relative.portfolio.every(value=>value===null));
+ const gap=buildVerifiedAssetTrend(verified.filter(row=>row.day!=='2026-10-05'),[],'2026-10-01','2026-10-06','USD','time');
+ assert.equal(gap.absolute.portfolio[3],null,'missing day breaks total-asset curve');
  let finalSignal,finishLast,departCalls=0;network=async(url,init)=>{departCalls++;finalSignal=init.signal;return new Promise(resolve=>finishLast=resolve)};
  const lastController=new AbortController(),lastObserver=fetchPortfolioBundle({...scope,signature:'depart',signal:lastController.signal});await tick();lastController.abort();await assert.rejects(lastObserver,/Abort/);assert(finalSignal.aborted,'last observer releases the underlying request');
  const reentered=fetchPortfolioBundle({...scope,signature:'depart'});await tick();assert.equal(departCalls,2,'a reentered view does not join a cancelled read');finishLast(Response.json(fixture(60)));assert.equal((await reentered).closes.row[0].c,60);

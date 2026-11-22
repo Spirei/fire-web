@@ -127,6 +127,16 @@ async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap
     latest = days["2026-10-20"]
     assert Decimal(latest["pnl"]) == 6 and Decimal(latest["equity"]) == Decimal("1218.25")
     assert Decimal(latest["calendar"]["profit"]["USD"]) == 6 and "rows" not in latest["calendar"]
+    web_path = "/api/fire/asset-analysis/trend"
+    web = await client.get(web_path)
+    assert web.status_code == 200, web.text
+    assert "no-store" in web.headers["cache-control"]
+    web_data = web.json()
+    assert web_data["accountId"] == owner
+    web_days = {row["day"]: row for row in web_data["items"]}
+    assert web_days["2026-10-20"] == {**latest, "calendar": None}
+    assert (await client.get(web_path, headers={"X-Alcor-Expected-Account": "another-user"})).status_code == 403
+    assert (await client.get(web_path, params={"ownerId": "another-user"})).status_code == 400
     detail = await client.get(path, headers=headers, params={"day": "2026-10-20"})
     assert detail.status_code == 200, detail.text
     assert len(detail.json()["data"]["items"]) == 1
@@ -141,6 +151,8 @@ async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap
     await submit(client, command(account, action="external_deposit", amount="1", occurredAt="2026-10-20T14:00:00Z"))
     stale = (await client.get(path, headers=headers, params={"day": "2026-10-20"})).json()["data"]["items"][0]
     assert stale["retired"] and stale["equity"] is None and stale["calendar"] is None
+    web_stale = (await client.get(web_path)).json()["items"][0]
+    assert web_stale["retired"] and web_stale["equity"] is None
 
 
 async def test_same_day_fx_stays_frozen_when_cash_is_revised(market):  # noqa: F811

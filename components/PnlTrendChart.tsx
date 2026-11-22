@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import echarts from "@/lib/echarts";
+import type { ObservedTrend } from "@/lib/assetAnalysisTrend";
 
 export interface PnlTrendPoint {
   date: string;
@@ -21,12 +22,16 @@ export default function PnlTrendChart({
   points,
   tab,
   weighting,
-  benchLabel
+  benchLabel,
+  observed,
+  currency
 }: {
   points: PnlTrendPoint[];
   tab: PnlChartTab;
   weighting: "simple" | "time";
   benchLabel: string;
+  observed?: ObservedTrend;
+  currency?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null);
@@ -50,18 +55,22 @@ export default function PnlTrendChart({
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    if (points.length === 0) { chart.clear(); return; }
+    if ((observed?.dates.length ?? points.length) === 0) { chart.clear(); return; }
     const draw = () => {
       const dark = document.documentElement.classList.contains("dark");
-      const dates = points.map((p) => p.date);
+      const dates = observed?.dates ?? points.map((p) => p.date);
       const portfolioValues = weighting === "time"
         ? points.map((point) => point.timeIndex)
         : points.map((point) => point.simpleIndex ?? point.asset);
       const startAsset = portfolioValues[0] || 1;
       const startBench = points[0]?.benchmark || 1;
-      const assetData = tab === "return" ? portfolioValues.map((value) => (value / startAsset - 1) * 100) : points.map((p) => p.asset);
-      const hasBench = points.some((p) => p.benchmark > 0);
-      const benchmark = hasBench ? points.map((p) => (p.benchmark / startBench - 1) * 100) : [];
+      const assetData = observed?.portfolio ?? (tab === "return" ? portfolioValues.map((value) => (value / startAsset - 1) * 100) : points.map((p) => p.asset));
+      const benchmark = observed?.benchmark ?? points.map((p) => (p.benchmark / startBench - 1) * 100);
+      const hasBench = observed ? benchmark.some(value => value !== null) : points.some((p) => p.benchmark > 0);
+      const hasPortfolio = assetData.some(value => value !== null);
+      const money = new Intl.NumberFormat("zh-CN", currency
+        ? { style: "currency", currency, maximumFractionDigits: 2 }
+        : { maximumFractionDigits: 2 });
       const ink = dark ? "#d8dee9" : "#26303b";
       const muted = dark ? "#727d8d" : "#87909d";
       const grid = dark ? "rgba(255,255,255,.07)" : "rgba(34,46,60,.08)";
@@ -77,7 +86,7 @@ export default function PnlTrendChart({
           backgroundColor: dark ? "#202630" : "#fff",
           borderColor: dark ? "#3a4350" : "#dce1e8",
           textStyle: { color: ink },
-          valueFormatter: (value: number) => (tab === "return" ? `${Number(value).toFixed(2)}%` : Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 2 }))
+          valueFormatter: (value: number) => value == null ? "—" : tab === "return" ? `${Number(value).toFixed(2)}%` : money.format(value)
         },
         xAxis: {
           type: "category",
@@ -103,10 +112,10 @@ export default function PnlTrendChart({
         series:
           tab === "return"
             ? [
-                {
+                ...(hasPortfolio ? [{
                   id: "portfolio",
-                  name: "我的持仓",
-                  type: "line",
+                  name: observed ? "我的收益率" : "我的持仓",
+                  type: "line" as const,
                   showSymbol: false,
                   smooth: false,
                   data: assetData,
@@ -117,7 +126,17 @@ export default function PnlTrendChart({
                       { offset: 1, color: "rgba(239,91,25,.015)" }
                     ])
                   }
-                },
+                }] : []),
+                ...(observed?.missingStart.some(value => value !== null) ? [{
+                  id: "missing-start",
+                  name: "缺少已核验历史",
+                  type: "line" as const,
+                  showSymbol: false,
+                  silent: true,
+                  tooltip: { show: false },
+                  data: observed.missingStart,
+                  lineStyle: { color: muted, width: 1.3, type: "dashed" as const }
+                }] : []),
                 ...(hasBench
                   ? [
                       {
@@ -125,6 +144,7 @@ export default function PnlTrendChart({
                         name: benchLabel,
                         type: "line",
                         showSymbol: false,
+                        connectNulls: Boolean(observed),
                         data: benchmark,
                         lineStyle: { color: "#4a90d9", width: 1.6 },
                         emphasis: { focus: "series" }
@@ -137,7 +157,13 @@ export default function PnlTrendChart({
                   id: "asset",
                   name: "总资产",
                   type: "line",
-                  showSymbol: false,
+                  showSymbol: Boolean(observed),
+                  ...(observed && {
+                    symbolSize: (_: unknown, item: { dataIndex: number }) => {
+                      const { dataIndex } = item;
+                      return assetData[dataIndex - 1] == null && assetData[dataIndex + 1] == null ? 5 : 0;
+                    }
+                  }),
                   data: assetData,
                   lineStyle: { color: "#3297f6", width: 2 },
                   areaStyle: {
@@ -160,6 +186,6 @@ export default function PnlTrendChart({
     });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => themeObserver.disconnect();
-  }, [points, tab, weighting, benchLabel]);
+  }, [points, tab, weighting, benchLabel, observed, currency]);
   return <div ref={ref} className="h-[330px] w-full min-w-0 max-w-full overflow-hidden" />;
 }

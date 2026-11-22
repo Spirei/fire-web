@@ -10,9 +10,10 @@ from fastapi import HTTPException, Request, Response
 from .legacy_identity import assert_native_origin, envelope, native_identity
 from .market_contract import CURRENCIES, ZONES
 from .portfolio_series import packed
-from .security import lock_read_identity
+from .security import identity, lock_read_identity
 
 PATH = "/api/v2/account-assets/analysis-days"
+WEB_PATH = "/api/fire/asset-analysis/trend"
 DAY = timedelta(days=1)
 MAX_DAYS = 3660
 
@@ -106,15 +107,9 @@ async def calendar_result(conn, owner, kind, day, opening, positions, postings):
 
 
 def mount(app, db, authority):
-    @app.get(PATH, operation_id="native_portfolio_analysis_days")
-    async def read(request: Request, response: Response, before: date | None = None, day: date | None = None):
-        assert_native_origin(request, db.settings)
-        who, _ = await native_identity(request, db, "portfolio.read")
-        if (set(request.query_params) - {"before", "day"}
-                or any(len(request.query_params.getlist(name)) != 1 for name in request.query_params)
-                or day is not None and (before is not None or day == date.max)):
-            raise HTTPException(400, "日终分析查询参数无效")
-        if not await app.state.read_rate_limit(db, "native-analysis-days:" + who.id, 30, window_seconds=60):
+    async def analysis_days(who, *, before=None, day=None, web=False):
+        budget = "web-analysis-days:" if web else "native-analysis-days:"
+        if not await app.state.read_rate_limit(db, budget + who.id, 30, window_seconds=60):
             raise HTTPException(429, "请求过于频繁")
         async with db.connection() as conn, conn.transaction():
             await lock_read_identity(conn, who)
@@ -127,7 +122,7 @@ def mount(app, db, authority):
                 )
                 SELECT l.valuation_day AS day,l.revision,l.result->>'equity' AS equity,
                     l.result->>'priorEquity' AS prior,l.result->>'priorRevision' AS "priorRevision",
-                    l.result->>'pnl' AS pnl,CASE WHEN %s THEN l.result->'calendar'
+                    l.result->>'pnl' AS pnl,CASE WHEN %s THEN NULL WHEN %s THEN l.result->'calendar'
                         ELSE (l.result->'calendar')-'rows' END AS calendar,
                     (SELECT jsonb_object_agg(code,fx->>'rate') FROM jsonb_each(l.result->'fx') e(code,fx)) AS rates,
                     ARRAY(SELECT DISTINCT (v->'close'->>'sourceRevision')::uuid
@@ -139,7 +134,7 @@ def mount(app, db, authority):
                     (SELECT revision FROM market_calendar_active WHERE singleton) AS "activeCalendar"
                 FROM latest l ORDER BY l.valuation_day DESC
             """, (who.id, day + DAY if day is not None else before or date.max, 2 if day else MAX_DAYS + 1,
-                  day is not None, who.id))).fetchall()
+                  web, day is not None, who.id))).fetchall()
             if day is not None and (not rows or rows[0]["day"] != day):
                 rows = []
             allowed = set()
@@ -171,5 +166,24 @@ def mount(app, db, authority):
                               "rates": row["rates"] if current else None, "calendar": calendar,
                               "retired": not current})
             next_day = rows[MAX_DAYS - 1]["day"] if len(rows) > MAX_DAYS else None
-        return envelope(packed({"accountId": who.id, "basis": "settled_real_ledger_v1", "items": items,
-                                "next": next_day}), request, response)
+        return packed({"accountId": who.id, "basis": "settled_real_ledger_v1", "items": items, "next": next_day})
+
+    @app.get(PATH, operation_id="native_portfolio_analysis_days")
+    async def read(request: Request, response: Response, before: date | None = None, day: date | None = None):
+        assert_native_origin(request, db.settings)
+        who, _ = await native_identity(request, db, "portfolio.read")
+        if (set(request.query_params) - {"before", "day"}
+                or any(len(request.query_params.getlist(name)) != 1 for name in request.query_params)
+                or day is not None and (before is not None or day == date.max)):
+            raise HTTPException(400, "日终分析查询参数无效")
+        return envelope(await analysis_days(who, before=before, day=day), request, response)
+
+    @app.get(WEB_PATH, operation_id="web_asset_analysis_trend")
+    async def web_trend(request: Request, response: Response):
+        assert_native_origin(request, db.settings)
+        who = await identity(request)
+        if request.query_params:
+            raise HTTPException(400, "日终趋势查询参数无效")
+        response.headers["Cache-Control"] = "no-store, private"
+        response.headers["Vary"] = "Cookie"
+        return await analysis_days(who, web=True)
