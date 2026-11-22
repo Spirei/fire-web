@@ -303,13 +303,27 @@ async def asset_catalog(request: Request, who: Member):
     if kind not in KINDS or len(q) > 200 or len(market) > 24 or request.query_params.get("removed", "0") not in {"0", "1"}:
         raise HTTPException(400, "素材筛选无效")
     service = request.app.state.asset_catalog_management
+    deleted = request.query_params.get("removed") == "1"
+    public_listings = []
+    if kind == "stock" and market in {"ALL", "US"} and not deleted and len(q.strip()) <= 50:
+        from .public_stock_reference import find_listings
+        public_listings = await find_listings(getattr(request.app.state, "public_reference", None), q)
     async with service.catalog.context(who) as conn:
         preferences = (await (await conn.execute("SELECT broker_order FROM fire_catalog_preferences WHERE singleton")).fetchone())["broker_order"]
         site = await (await conn.execute("SELECT settings FROM site_settings WHERE singleton")).fetchone()
         market_order = (site["settings"].get("assetMarketOrder", []) if site else []) + list(MARKETS)
-        value = await service.listing(kind=kind, q=q, page=page_number(request.query_params.get("page")), clamp=True, deleted=request.query_params.get("removed") == "1", connection=conn, directory={"market": market, "brokerOrder": preferences, "marketOrder": market_order})
+        value = await service.listing(kind=kind, q=q, page=page_number(request.query_params.get("page")), clamp=True, deleted=deleted, connection=conn, directory={"market": market, "brokerOrder": preferences, "marketOrder": market_order, "publicListings": public_listings})
     value["revision"] = str(value["revision"])
-    value["assets"] = [{**{k: item.get(k, "") for k in ("id", "type", "market", "code", "name", "url", "urlDark", "imageUrl", "imageUrlDark")}, "brokerMarkets": item.get("brokerMarkets", [])} for item in value["assets"]]
+    from .asset_web_keys import stock_image_review
+    value["assets"] = [
+        {
+            **{k: item.get(k, "") for k in ("id", "type", "market", "code", "name", "url", "urlDark", "imageUrl", "imageUrlDark")},
+            "brokerMarkets": item.get("brokerMarkets", []),
+            **({"listingCandidate": True} if item.get("listingCandidate") else {}),
+            **({"imageReview": review} if not deleted and (review := stock_image_review(item)) else {}),
+        }
+        for item in value["assets"]
+    ]
     return JSONResponse(value, headers=PRIVATE)
 
 

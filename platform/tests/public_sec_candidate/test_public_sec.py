@@ -1,12 +1,94 @@
 """Actual SEC projections use independent public licences, never personal captures."""
+import asyncio
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
 import pytest
 from alcor_api.public_reference import PublicReferencePolicy
+
+
+async def test_security_directory_refresh_and_search_are_independent_of_artwork(client, app, admin, monkeypatch):
+    from alcor_api.public_stock_reference import DirectoryTarget, KIND, refresh_directory
+    from test_fire_current_web import seed_asset
+    from test_fire_web import fire_login
+
+    service = app.state.public_reference
+    adapter = service.adapters[KIND]
+    target = DirectoryTarget("exchange-directory", ("8.8.8.8",), "Synthetic contact@example.invalid", True)
+    adapter.target_provider = lambda: ({**asdict(target), "kind": KIND},)
+    now = datetime.now(UTC)
+    policy = PublicReferencePolicy(
+        "security-directory", KIND, adapter.source_version, target.id, target.fingerprint,
+        "synthetic-license", "a"*64, str(app.state.db.settings.instance_id),
+        (now-timedelta(days=8)).isoformat(), (now+timedelta(days=1)).isoformat(), ("collect", "display"), ("US",),
+    )
+    service.policy_provider = lambda: (policy,)
+    raw = json.dumps({"fields": ["cik", "name", "ticker", "exchange"], "data": [
+        [1111, "Synthetic New Listing Corp.", "NEWQ", "Nasdaq"], [2222, "OTC Test", "OTCX", "OTC"],
+        *[[10000 + index, f"Directory test {index}", f"D{index}", "NYSE"] for index in range(5000)],
+    ]}).encode()
+    calls = []
+
+    class SEC:
+        async def read(self, selected):
+            assert selected.request()[0].endswith("/files/company_tickers_exchange.json")
+            calls.append(selected.id)
+            return raw
+
+    adapter.transport = SEC()
+    installed = await client.post("/api/system/public-reference/install", json={
+        "requestId": str(uuid4()), "policyId": policy.id, "password": "Synthetic9Pass",
+    })
+    assert installed.status_code == 200, installed.text
+    await seed_asset(app, "stock:US:NEWQQ", "stock", "US")
+    assert all(row["code"] != "NEWQ" for row in (await client.get("/api/search?q=NEWQ")).json()["results"])
+    assert calls == []
+
+    # Leave a captured original after an interrupted projection, then resume
+    # under the same daily admission without making a second source request.
+    original_prior = service.prior
+    async def fail_after_archive(conn, who, rid, hashed):
+        result = await original_prior(conn, who, rid, hashed)
+        if (await (await conn.execute("SELECT 1 FROM public_reference_pages WHERE request_id=%s", (rid,))).fetchone()):
+            raise RuntimeError("synthetic stop after archive")
+        return result
+    monkeypatch.setattr(service, "prior", fail_after_archive)
+    with pytest.raises(RuntimeError, match="synthetic stop after archive"):
+        await refresh_directory(service)
+    assert calls == [target.id]
+    monkeypatch.setattr(service, "prior", original_prior)
+    outcomes = await asyncio.gather(refresh_directory(service), refresh_directory(service))
+    assert any(result and result["state"] == "observed" for result in outcomes)
+    assert calls == [target.id]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver", headers={"origin": "http://testserver"},
+    ) as web:
+        await fire_login(web)
+        verified_snapshot = None
+        for query in ("NEWQ", "synthetic new listing"):
+            listing = await web.get("/api/search", params={"q": query})
+            assert listing.status_code == 200, listing.text
+            result = listing.json()["results"][0]
+            assert result["code"] == "NEWQ" and result["price"] is None
+            materials = await web.get("/api/assets/catalog", params={"type": "stock", "market": "US", "q": query})
+            assert materials.status_code == 200, materials.text
+            candidate = next(row for row in materials.json()["assets"] if row["code"] == "NEWQ")
+            assert candidate["listingCandidate"] and not candidate["imageUrl"]
+            if verified_snapshot is None:
+                verified_snapshot = adapter.verified_capture
+            assert verified_snapshot and adapter.verified_capture is verified_snapshot
+        assert (await web.get("/api/assets/catalog?type=stock&q=OTCX")).json()["total"] == 0
+
+        revoked = await client.post("/api/system/public-reference/revoke", json={
+            "requestId": str(uuid4()), "licenseId": installed.json()["licenseId"], "password": "Synthetic9Pass",
+        })
+        assert revoked.status_code == 200, revoked.text
+        assert (await web.get("/api/assets/catalog?type=stock&q=synthetic%20new%20listing")).json()["total"] == 0
+    assert await refresh_directory(service) is None and calls == [target.id]
 
 
 @pytest.mark.parametrize('kind',['company-profile','financials'])

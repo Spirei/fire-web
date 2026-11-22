@@ -44,6 +44,13 @@ class PublicReference:
     def __init__(self,db,policies=(),*,policy_provider=None,adapters=None):
         self.db,self.policies,self.policy_provider,self.adapters=db,tuple(policies),policy_provider,dict(adapters or {})
 
+    def has_kind(self, kind):
+        installed = self.policy_provider() if self.policy_provider else self.policies
+        return any(
+            (row.kind if isinstance(row, PublicReferencePolicy) else row.get("kind") if isinstance(row, dict) else None) == kind
+            for row in installed
+        )
+
     def policy(self,identifier):
         installed=self.policy_provider() if self.policy_provider else self.policies
         try:
@@ -69,11 +76,12 @@ class PublicReference:
             return policy
         except (ValueError,TypeError,KeyError,AttributeError):raise HTTPException(503,'独立公开资料许可未安装或无效') from None
 
-    async def lock(self,conn,identifier):
-        await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))',('public-reference-license:'+str(identifier),))
+    async def lock(self,conn,identifier,*,shared=False):
+        lock = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        await conn.execute(f'SELECT {lock}(hashtextextended(%s,0))',('public-reference-license:'+str(identifier),))
 
     async def current(self,conn,identifier,purpose,query=None):
-        identifier=UUID(str(identifier));await self.lock(conn,identifier)
+        identifier=UUID(str(identifier));await self.lock(conn,identifier,shared=purpose=="display")
         row=await (await conn.execute('SELECT * FROM public_reference_licenses WHERE id=%s',(identifier,))).fetchone()
         if not row:raise HTTPException(404,'公开资料许可不存在')
         policy=self.policy(row['policy_id']);adapter=self.adapters[policy.kind]
@@ -149,13 +157,18 @@ class PublicReference:
             await NotificationSecurity(self.db).passkeys.step_up(conn,who,password,code)
             await self.current(conn,identifier,'collect',query)
             await conn.execute('INSERT INTO public_reference_admissions(request_id,request_hash,license_id,query,scope,origin_instance,created_by) VALUES(%s,%s,%s,%s,%s,%s,%s)',(rid,hashed,identifier,Jsonb(query),Jsonb(scope),str(self.db.settings.instance_id),who.id))
+        async def authorize(conn):
+            await self.admin(conn,who)
+        return await self.complete_capture(rid,identifier,query,scope,adapter,policy,hashed,who,authorize)
+
+    async def complete_capture(self,rid,identifier,query,scope,adapter,policy,hashed,who,authorize,*,retained=()):
         pages=[];payload=None;state='unknown'
         try:
             # A durable admission never causes an automatic second provider call.
             async def before_request():
                 async with self.db.connection() as conn,conn.transaction():
-                    await self.admin(conn,who);await self.current(conn,identifier,'collect',query)
-            pages=await adapter.acquire(adapter.target(policy),query,before_request=before_request)
+                    await authorize(conn);await self.current(conn,identifier,'collect',query)
+            pages=[page for _,page in retained] if retained else await adapter.acquire(adapter.target(policy),query,before_request=before_request)
             if not isinstance(pages,list) or len(pages)>4:raise ValueError()
             payload=adapter.project(pages,query);state='observed'
         except HTTPException:
@@ -165,7 +178,7 @@ class PublicReference:
             if isinstance(body,bytes):pages.append({'kind':'failure','raw':body,'status':getattr(exc,'status',None),'complete':getattr(exc,'complete',False)})
             state='unknown'
         # Archive received evidence independently of subsequent actor revocation.
-        originals=[]
+        originals=[str(identifier) for identifier,_ in retained]
         async with self.db.connection() as conn,conn.transaction():
             await self.request_lock(conn,rid)
             admitted=await (await conn.execute('SELECT * FROM public_reference_admissions WHERE request_id=%s',(rid,))).fetchone()
@@ -173,7 +186,7 @@ class PublicReference:
             if not admitted or str(admitted['origin_instance'])!=str(self.db.settings.instance_id) or not database or str(database['instance_id'])!=str(self.db.settings.instance_id):
                 raise HTTPException(503,'公开资料采集实例已变化，需核对原请求')
             if len(pages)>4 or sum(len(page.get('raw',b'')) for page in pages)>32*1024*1024:raise HTTPException(503,'公开资料原件超出保存预算')
-            for index,page in enumerate(pages):
+            for index,page in enumerate(pages if not retained else ()):
                 body=page['raw'];page_id=uuid4()
                 if not isinstance(body,bytes) or len(body)>16*1024*1024 or not isinstance(page['kind'],str) or not 1<=len(page['kind'])<=80 or type(page['complete']) is not bool:raise HTTPException(503,'公开资料原件元数据无法核对')
                 await conn.execute('INSERT INTO public_reference_pages(id,request_id,page_number,kind,raw_bytes,raw_sha256,http_status,complete) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)',(page_id,rid,index,page['kind'],body,sha256(body).hexdigest(),page.get('status'),page['complete']))
@@ -181,9 +194,12 @@ class PublicReference:
         async with self.db.connection() as conn,conn.transaction():
             current=True
             try:
-                await self.admin(conn,who);await self.current(conn,identifier,'collect',query)
+                await authorize(conn);await self.current(conn,identifier,'collect',query)
             except HTTPException:current=False
             await self.request_lock(conn,rid)
+            prior = await self.prior(conn,who,rid,hashed)
+            if prior and 'kind' in prior:
+                return prior
             final_state=state if current else 'retained_unavailable'
             if current and state=='observed':
                 if not pages or any(not page['complete'] or page.get('status')!=200 for page in pages):
@@ -214,6 +230,7 @@ class PublicReference:
     async def read(self,kind,raw):
         if kind not in self.adapters:raise HTTPException(503,'公开资料用途尚未安装')
         adapter=self.adapters[kind];query=adapter.normalize(raw,collect=False);scope=adapter.scope(query)
+        read_pool = self.db.pool if getattr(adapter, "latest_capture_only", False) else None
         async with self.db.connection() as conn,conn.transaction():
             licenses=await (await conn.execute('SELECT id,policy_id FROM public_reference_licenses ORDER BY id LIMIT 101')).fetchall()
             if len(licenses)>100:raise HTTPException(503,'公开资料许可超过读取预算')
@@ -228,7 +245,23 @@ class PublicReference:
             if not choices:raise HTTPException(503,'公开资料独立展示许可尚未配置或已失效')
             if len(choices)!=1:raise HTTPException(409,'该公开资料范围有多个独立来源，请核对实例许可')
             identifier,policy=choices[0]
-            captures=await (await conn.execute('SELECT * FROM public_reference_captures WHERE license_id=%s AND scope=%s::jsonb ORDER BY observed_at,request_id LIMIT 2003',(identifier,Jsonb(scope)))).fetchall()
+            cache_key = None
+            if getattr(adapter, "latest_capture_only", False):
+                latest = await (await conn.execute(
+                    """SELECT request_id, observed_at FROM public_reference_captures
+                    WHERE license_id=%s AND scope=%s::jsonb ORDER BY observed_at DESC,request_id DESC LIMIT 1""",
+                    (identifier, Jsonb(scope)),
+                )).fetchone()
+                if not latest:
+                    raise HTTPException(503, '公开资料尚无已采集观察')
+                cache_key = (read_pool, policy.fingerprint, latest["request_id"], latest["observed_at"])
+                if adapter.verified_capture and adapter.verified_capture[0] == cache_key:
+                    return adapter.combine(adapter.verified_capture[1], query)
+                captures = await (await conn.execute(
+                    "SELECT * FROM public_reference_captures WHERE request_id=%s", (latest["request_id"],),
+                )).fetchall()
+            else:
+                captures=await (await conn.execute('SELECT * FROM public_reference_captures WHERE license_id=%s AND scope=%s::jsonb ORDER BY observed_at, request_id LIMIT 2003',(identifier,Jsonb(scope)))).fetchall()
             if len(captures)>2002:raise HTTPException(503,'公开资料观察超过分页预算')
             observations=[];total=0
             for capture in captures:
@@ -248,4 +281,6 @@ class PublicReference:
                 except (ValueError,TypeError,KeyError,UnicodeError,OverflowError,RecursionError):raise HTTPException(503,'公开资料观察与保留原件无法核对') from None
                 observations.append({'query':capture['query'],'payload':projected,'observedAt':capture['observed_at'].isoformat(),'licenseRevision':policy.license_revision})
             if not observations:raise HTTPException(503,'公开资料尚无已采集观察')
+            if cache_key is not None:
+                adapter.verified_capture = (cache_key, observations)
             return adapter.combine(observations,query)

@@ -33,6 +33,7 @@ import MarketCodeBadge from "@/components/MarketCodeBadge";
 import { appConfirm } from "@/lib/appDialog";
 import { showToast } from "@/lib/toast";
 import { marketMeta } from "@/lib/types";
+import { relatedStock } from "@/lib/relatedEtfs";
 const categories = [
   ["market", "市场图标"],
   ["stock", "股票图标"],
@@ -68,6 +69,8 @@ type Item = {
   url: string;
   urlDark?: string;
   imageUrl?: string;
+  listingCandidate?: boolean;
+  imageReview?: { state: "unverified-underlying" } | { state: "missing-artwork"; code: string };
   brokerMarkets: string[];
 };
 type Listing = {
@@ -146,6 +149,8 @@ export default function AssetCatalogView({
   const displayed =
     loadedKey === readKey ? listing : pageCache.current.get(readKey)?.data;
   const rows = displayed?.assets || [];
+  const selectableRows = rows.filter(item => !item.listingCandidate);
+  const editingUnderlying = editing?.type === "stock" ? relatedStock(editing.market, editing.code) : null;
   const total = displayed?.total || 0;
   const marketSlots =
     type === "stock" || type === "broker"
@@ -304,7 +309,7 @@ export default function AssetCatalogView({
           pageCache.current.delete(pageCache.current.keys().next().value!);
         setListing(d);
         setSelection((ids) =>
-          ids.filter((id) => d.assets.some((asset: Item) => asset.id === id)),
+          ids.filter((id) => d.assets.some((asset: Item) => asset.id === id && !asset.listingCandidate)),
         );
         setLoadedKey(readKey);
         saveCachedListing(ownerId, readKey, d);
@@ -678,10 +683,11 @@ export default function AssetCatalogView({
                 type="checkbox"
                 aria-label="选择本页全部素材"
                 checked={
-                  rows.length > 0 && rows.every((r) => selection.includes(r.id))
+                  selectableRows.length > 0 && selectableRows.every((r) => selection.includes(r.id))
                 }
+                disabled={!selectableRows.length}
                 onChange={(e) =>
-                  setSelection(e.target.checked ? rows.map((r) => r.id) : [])
+                  setSelection(e.target.checked ? selectableRows.map((r) => r.id) : [])
                 }
               />
               本页全选 · 已选 {selection.length} 项
@@ -716,16 +722,16 @@ export default function AssetCatalogView({
                 key={item.id}
                 data-material-id={item.id}
                 className={`material-row ${selecting ? "is-selecting" : ""} ${selection.includes(item.id) ? "is-selected" : ""}`}
-                role={selecting ? "checkbox" : undefined}
+                role={selecting && !item.listingCandidate ? "checkbox" : undefined}
                 aria-checked={
-                  selecting ? selection.includes(item.id) : undefined
+                  selecting && !item.listingCandidate ? selection.includes(item.id) : undefined
                 }
-                aria-label={selecting ? `选择 ${item.name}` : undefined}
-                tabIndex={selecting ? 0 : undefined}
-                onClick={selecting ? () => toggleSelection(item.id) : undefined}
+                aria-label={selecting && !item.listingCandidate ? `选择 ${item.name}` : undefined}
+                tabIndex={selecting && !item.listingCandidate ? 0 : undefined}
+                onClick={selecting && !item.listingCandidate ? () => toggleSelection(item.id) : undefined}
                 onKeyDown={(e) => {
                   if (
-                    selecting &&
+                    selecting && !item.listingCandidate &&
                     e.target === e.currentTarget &&
                     (e.key === "Enter" || e.key === " ")
                   ) {
@@ -780,13 +786,17 @@ export default function AssetCatalogView({
                 </span>
                 <div className="material-identity">
                   <AssetImageControl src={item.imageUrl || item.url} name={item.name} card={type === "card"}
-                    disabled={busy || removed} onUpload={selecting || removed ? undefined : () => chooseImage(item)} />
+                    disabled={busy || removed} onUpload={selecting || removed || (type === "stock" && relatedStock(item.market, item.code))
+                      ? undefined : () => chooseImage(item)} />
                   <IdentityText type={selecting ? undefined : "button"} className="material-identity-text" data-capsule="off"
-                    disabled={selecting ? undefined : busy} onClick={selecting ? undefined : () => beginEdit(item)}>
+                    disabled={selecting ? undefined : busy || item.listingCandidate} onClick={selecting || item.listingCandidate ? undefined : () => beginEdit(item)}>
                     <strong title={item.name || item.code}>{item.name || item.code}</strong>
                     {type !== "group" && (type !== "card" || item.code.toLocaleLowerCase() !== item.name.toLocaleLowerCase()) && <small>
                       {type === "stock" && <MarketCodeBadge market={item.market} code={item.code} alwaysVisible className="material-stock-badge" />}
                       <span className="material-code" title={item.code}>{item.code}</span>
+                      {item.listingCandidate && <span>SEC 证券目录 · 待上传图标</span>}
+                      {item.imageReview?.state === "unverified-underlying" && <span>待核实跟踪标的</span>}
+                      {item.imageReview?.state === "missing-artwork" && <span>正股 {item.imageReview.code} 缺少图标</span>}
                     </small>}
                   </IdentityText>
                 </div>
@@ -813,7 +823,7 @@ export default function AssetCatalogView({
                   )}
                 </div>
                 <div className="material-row-actions">
-                  {!selecting && (
+                  {!selecting && !item.listingCandidate && (
                     <>
                       {!removed && (
                         <button
@@ -933,14 +943,19 @@ export default function AssetCatalogView({
                 <small>
                   {[editing.market, editing.code].filter(Boolean).join(" · ")}
                 </small>
+                {editingUnderlying && <small>沿用 {editingUnderlying.name}（{editingUnderlying.code}）的图标</small>}
               </div>
               <Capsule
                 variant="secondary"
                 disabled={busy}
-                onClick={() => editorFile.current?.click()}
+                onClick={() => {
+                  if (editingUnderlying) {
+                    setEditing(null);
+                    update({ market: "US", q: editingUnderlying.code, page: null });
+                  } else editorFile.current?.click();
+                }}
               >
-                <IconUpload size={16} />
-                {busy ? "处理中" : "替换图片"}
+                {editingUnderlying ? "查看正股图标" : <><IconUpload size={16} />{busy ? "处理中" : "替换图片"}</>}
               </Capsule>
             </ModalMedia>
             <input

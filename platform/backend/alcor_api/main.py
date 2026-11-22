@@ -520,10 +520,12 @@ def create_app(settings: Settings | None = None):
     from .public_reference import PublicReference
     from .public_reference_api import mount_public_reference
     from .public_sec_reference import PublicSecAdapter
+    from .public_stock_reference import PublicStockReference
     from .public_earnings_reference import PublicEarnings
     public_references = PublicReference(db, policy_provider=lambda: settings.public_reference_policies, adapters={
         "company-profile": PublicSecAdapter(db, "company-profile", target_provider=lambda: settings.public_sec_targets),
         "financials": PublicSecAdapter(db, "financials", target_provider=lambda: settings.public_sec_targets),
+        "security-directory": PublicStockReference(lambda: settings.public_sec_targets),
         "earnings.calendar": PublicEarnings(lambda: settings.public_earnings_targets),
     })
     mount_public_reference(app, db, public_references)

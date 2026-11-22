@@ -8,6 +8,15 @@ from pathlib import Path
 from alcor_api.asset_web_keys import RELATED, icon_rows, related_icons, select_web_keys, stock_codes
 
 
+def test_stock_image_review_distinguishes_unverified_products_and_missing_underlying_images():
+    from alcor_api.asset_web_keys import stock_image_review
+    etf = {"type": "stock", "market": "US", "code": "NEWETF", "name": "2倍做多某公司ETF"}
+    assert stock_image_review(etf) == {"state": "unverified-underlying"}
+    assert stock_image_review({**etf, "code": "SKUU.OQ"}) == {"state": "missing-artwork", "code": "SKHY"}
+    assert stock_image_review({**etf, "code": "SKUU.OQ", "imageUrl": "/local/skhy.svg"}) is None
+    assert stock_image_review({**etf, "name": "普通宽基 ETF"}) is None
+
+
 def test_web_keys_truncate_before_filter_and_keep_original_stock_pairs():
     root = Path(__file__).parent / "fixtures/asset-management-source"
     for name, digest in json.loads((root / "source.json").read_text()).items():

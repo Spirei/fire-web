@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
 from .asset_lookup_contract import trim
-from .confirmed_stock_listings import CONFIRMED_LISTINGS, LISTING_MATERIALS, stock_identity
+from .confirmed_stock_listings import CONFIRMED_LISTINGS, LISTING_MATERIALS, listing_material, stock_identity
 
 TYPES = ("stock", "market", "flag", "crypto", "metal", "broker", "group")
 V1_TYPES = ("stock", "market", "flag", "crypto", "metal")
@@ -676,6 +676,17 @@ class AssetManagement:
                     if stock_identity(row["market"], row["code"]) not in existing
                 ]
                 records.extend((row, "placeholder") for row in listing_rows if (row["id"] in removed) == deleted)
+                if not deleted:
+                    public_materials = (
+                        listing_material(item)
+                        for item in directory.get("publicListings", ())
+                        if stock_identity(item["market"], item["code"]) not in existing
+                        and stock_identity(item["market"], item["code"]) not in CONFIRMED_LISTINGS
+                    )
+                    records.extend(
+                        ({**row, "listingCandidate": True}, "placeholder")
+                        for row in public_materials if row["id"] not in removed
+                    )
             if deleted and kind in (None, 'market'):
                 from .legacy_asset_directory import MARKET_NAMES
                 represented = {r['market'] for r,_ in records if r['type']=='market'}
@@ -705,6 +716,10 @@ class AssetManagement:
                 if selected_market != "ALL":
                     records = [(r, source) for r, source in records if selected_market in r.get("material_state", {}).get("brokerMarkets", r.get("brokerMarkets", []))] if kind == "broker" else [(r, source) for r, source in records if r["market"] == selected_market]
             query = trim(q)
+            public_listing_identities = {
+                stock_identity(item["market"], item["code"]) for item in (directory or {}).get("publicListings", ())
+            }
+
             def listing_name(row):
                 if directory is None or row["type"] != "stock":
                     return ""
@@ -728,6 +743,8 @@ class AssetManagement:
                     or query.upper() in row["code"].upper()
                     or query.upper() in row["name"].upper()
                     or query.upper() in listing_name(row)
+                    or (public_listing_identities and row["type"] == "stock"
+                        and stock_identity(row["market"], row["code"]) in public_listing_identities)
                 ]
             records.sort(key=lambda pair: (pair[0]["type"], pair[0]["market"], pair[0]["code"]))
             if directory is not None and kind == "stock" and query:

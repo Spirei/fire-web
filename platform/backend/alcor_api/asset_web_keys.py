@@ -14,6 +14,12 @@ for underlying, products in RELATED_PRODUCTS.items():
         RELATED.setdefault(product["code"], underlying)
 
 SUFFIXES = ("", ".AM", ".N", ".OQ", ".PS", ".K")
+LEVERAGED_NAME = re.compile(
+    r"(?:[1-5](?:\.\d+)?\s*倍|[一二两三四五]倍)\s*(?:做多|做空|反向)"
+    r"|(?:[1-5](?:\.\d+)?\s*[x×]|[1-5]00%)\s*(?:long|short|inverse|bull|bear)\b"
+    r"|\b(?:bull|bear|long|short|inverse)\s*(?:[1-5](?:\.\d+)?\s*[x×]|[1-5]00%)\b",
+    re.IGNORECASE,
+)
 
 
 def related_root(market, code):
@@ -28,6 +34,18 @@ def related_root(market, code):
         visited.add(root)
         root = RELATED[root]
     return root
+
+
+def stock_image_review(item):
+    if item["type"] != "stock" or item["market"] != "US":
+        return None
+    root = related_root(item["market"], item["code"])
+    if root:
+        return None if item.get("imageUrl") or item.get("url") else {"state": "missing-artwork", "code": root}
+    name = item["name"]
+    if "ETF" in name.upper() and LEVERAGED_NAME.search(name):
+        return {"state": "unverified-underlying"}
+    return None
 
 
 def select_web_keys(kind, keys=None, market=None, code=None):

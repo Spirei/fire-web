@@ -14,3 +14,11 @@ The FIRE runtime illustration is an explicit exception: `public/fire-assets/clow
 Container data and upload mounts must be writable by UID/GID 1000; do not use world-writable permissions. Configure `FIRE_SETUP_TOKEN` privately for production initialization, and remove it after creating the administrator.
 
 The source-owned feed and passkey illustrations are enumerated in `contracts/system-media.json` and copied into a generated directory at build time. Service identifiers `public/fire-assets/brands/{postgresql.svg,redis.png}` reuse the original Alcor interface assets; those marks remain the property of their respective owners and are not covered by the code license. Neither path depends on the user uploads mount.
+
+## Stock and ETF reference data
+
+Web and App security search can read the [SEC exchange directory](https://www.sec.gov/file/company-tickers-exchange). Configure a `public_sec_targets` entry with `kind: security-directory`, its ID, approved `directory_addresses`, and a declared SEC `user_agent`. Bind it to an independent `public_reference_policies` entry with the adapter version `sec-company-tickers-exchange-v1`, the target fingerprint, the US market, and the `collect` and `display` purposes. Install the policy through the existing public-reference administrator endpoint.
+
+Set `refresh_daily: true` on the target before installing the policy to collect once per UTC day. Administrators can also collect with `{"market":"US"}`. The worker retains the original and the capture receipt. A source outage leaves the last verified capture available for up to seven days. The directory supplies issuer names, tickers and exchange only. Searchable entries without artwork appear in the material search with an upload control. A confirmed listing can also be added to the bundled directory with its exchange announcement.
+
+When a stock icon row shows 待核实跟踪标的, check the issuer prospectus or exchange product notice before adding the relationship to `platform/backend/alcor_api/data/discovery-related-etfs.json`. When the row reports a missing underlying icon, upload the artwork on the underlying equity's material entry. Keep the ETF ticker and underlying ticker distinct.

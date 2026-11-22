@@ -14,6 +14,7 @@ from .market_discovery_protocol import digest as fingerprint
 from .market_discovery_search import crypto, local, special
 from .market_discovery_service import Discovery
 from .profile_http import bounded_body
+from .public_stock_reference import add_listings
 from .security import digest
 
 
@@ -71,6 +72,7 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
             if not values and normalized['q']:
                 async with service.context(who) as conn:
                     values,coverage=await local(conn,normalized['q'],authority.db)
+                values=await add_listings(getattr(app.state,'public_reference',None),values,normalized['q'])
             if values or not normalized['q']:
                 current=fingerprint({'query':normalized,'items':values,'coverage':coverage})
                 if extras.get('revision') and extras['revision']!=current:raise HTTPException(409,'公共目录已变化，请重新读取')
@@ -155,6 +157,7 @@ def mount_market_discovery(app,settings,authority,targets=None,transport=None):
                 if static:return response({'results':static,'coverage':{'scope':'explicit_public_aliases','complete':False}},request)
                 async with authority.db.connection() as conn,conn.transaction():
                     local_rows,coverage=await local(conn,value['q'],authority.db)
+                local_rows=await add_listings(getattr(app.state,'public_reference',None),local_rows,value['q'])
                 if local_rows:
                     data={'results':local_rows,'coverage':coverage}
                     return response({'code':0,'message':'ok','data':data} if version else data,request)

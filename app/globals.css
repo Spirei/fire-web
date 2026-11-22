@@ -7433,6 +7433,7 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 .material-table.is-grid[data-kind=card] .material-row-actions{margin:0;align-self:flex-end;gap:2px}
 .app-modal-media[data-plain=true]{padding:0;border:0;background:none;gap:12px}
 .app-modal-media[data-plain=true] .app-modal-preview{width:52px;height:52px;border-radius:12px}
+.material-editor .app-modal-media[data-plain=true]:not([data-card]) .app-modal-preview{padding:0;border-radius:50%;background:rgb(var(--site-bg))}
 .app-modal-media[data-card=true] .app-modal-preview{width:88px;height:auto;aspect-ratio:1.586;border-radius:7px}
 .app-modal-choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
 .app-modal-choice-grid label{display:flex;align-items:center;gap:9px;min-height:38px;padding:8px 10px;border:1px solid rgb(var(--site-edge));border-radius:11px;color:rgb(var(--site-muted));font-size:13px;cursor:pointer;transition:background 150ms ease,color 150ms ease}
