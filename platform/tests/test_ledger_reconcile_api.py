@@ -181,3 +181,143 @@ async def test_ledger_reconcile_baseline_and_manual_adjustments(client, app, adm
     after = (await client.get(RECONCILE, headers=web_headers)).json()
     assert after["revision"] == 5 and after["baselineDiff"]["hasGaps"] is False
     assert [row["kind"] for row in after["recentAdjustments"]] == ["reconcile_adjustment", "repair_baseline"]
+    assert [row["kind"] for row in after["events"]] == ["reconcile_adjustment", "repair_baseline"]
+
+
+@pytest.mark.asyncio
+async def test_opening_checkpoint_removes_disk_archive_dependency_and_streams_events(
+    client, app, admin, db, tmp_path,
+):
+    import shutil
+    from test_native_ledger import TRANSACTIONS, adopt, trade
+
+    app.state.native_ledger_enabled = True
+    stored = sealed_book()
+    stored["originals"]["funds"][0]["amount"] = "12083.51"  # +27 = 12110.51 USD
+    reseal(stored)
+    binding, _ = archive(tmp_path, stored)
+    app.state.db.settings.backup_dir = tmp_path
+    db.settings.backup_dir = tmp_path
+    await store_packet(db, admin, stored, binding)
+
+    longbridge, googl = await _create_manual_broker_and_record(
+        client, name="Longbridge", code="GOOGL", qty="18", cost="367.486", price="320",
+    )
+    web_headers = {"X-Alcor-Expected-Account": admin}
+
+    before = (await client.get(RECONCILE, headers=web_headers)).json()
+    assert before["checkpoint"]["sealed"] is False
+    assert before["checkpoint"]["diskArchiveDependency"] is True
+    assert before["checkpoint"]["canSeal"] is True
+
+    # Seal opening checkpoint into single PG DB (with UUID idempotency).
+    cp_req = {"requestId": str(uuid4()), "note": "固化迁移期初"}
+    sealed = await client.post(RECONCILE + "/checkpoint", headers=web_headers, json=cp_req)
+    assert sealed.status_code == 200, sealed.text
+    cp_body = sealed.json()
+    assert cp_body["checkpointVersion"] == 1
+    assert cp_body["sourceAuthority"] == "sealed_legacy_registered_book_checkpoint"
+    assert cp_body["cashCurrencies"] == 14
+    assert cp_body["positionCount"] == 1
+    replay = await client.post(RECONCILE + "/checkpoint", headers=web_headers, json=cp_req)
+    assert replay.status_code == 200 and replay.json() == cp_body
+
+    # Physically delete disk migration archive — reads must remain 100% intact from single PG!
+    shutil.rmtree(tmp_path / "database-migrations")
+
+    phone = await native_headers(db, admin, SCOPES)
+    assets = await data(client.get(ASSETS, headers=phone))
+    assert assets["summary"]["cashComplete"] is True
+    assert assets["summary"]["totalCash"] == 12110.51
+    assert assets["cash"]["sourceAuthority"] == "sealed_legacy_registered_book_checkpoint"
+
+    baseline = await data(client.get(LEDGER, headers=phone))
+    usd_base = next(row for row in baseline["cash"] if row["brokerAccountId"] is None and row["currency"] == "USD")
+    assert usd_base["balance"] == "12110.51"
+
+    # Adopt + trade after disk archive removal -> structured events recorded monotonically.
+    await adopt(client, phone, baseline)
+    buy = order(
+        googl["id"], longbridge, at="2026-10-28T22:30:00+08:00",
+        quantity="15", price="300", fees="1.05", net="4501.05",
+    )
+    buy.update(code="GOOGL", name="Synthetic GOOGL")
+    tx = trade(1, buy, "18", "33", "12110.51", "7609.46", cost="336.84236364")
+    tx["cash"][0].pop("brokerAccountId")
+    await data(client.post(TRANSACTIONS, headers=phone, json=tx))
+
+    after = (await client.get(RECONCILE, headers=web_headers)).json()
+    assert after["checkpoint"]["sealed"] is True
+    assert after["checkpoint"]["diskArchiveDependency"] is False
+    assert [row["kind"] for row in after["events"]] == ["trade", "adopt", "opening_checkpoint"]
+    assert [row["seq"] for row in after["events"]] == [3, 2, 1]
+
+
+@pytest.mark.asyncio
+async def test_migration_0176_backfills_existing_native_ledger_transactions(pg, tmp_path):
+    import psycopg
+    from psycopg import sql
+    from psycopg.rows import dict_row
+    from alcor_api.cli import create_user
+    from alcor_api.config import ROOT, Settings
+    from alcor_api.migrate import migrate
+
+    previous = tmp_path / "pre-0176"
+    previous.mkdir()
+    for migration in (ROOT / "migrations").glob("[0-9]*.sql"):
+        if migration.name < "0176_":
+            (previous / migration.name).symlink_to(migration)
+
+    name = "alcor_test_0176_" + uuid4().hex
+    with psycopg.connect(pg.get_uri(), autocommit=True) as server:
+        server.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        try:
+            uri = pg.get_uri(database=name)
+            settings = Settings(database_url=uri, instance_id=uuid4(), environment="test", migration_dir=previous)
+            await migrate(settings, name, initialize_empty=True)
+            owner = await create_user(settings, "EventBackfill", "Backfill9Pass", email="backfill@example.invalid")
+            r1, r2 = uuid4(), uuid4()
+            with psycopg.connect(uri, row_factory=dict_row) as conn:
+                conn.execute(
+                    "INSERT INTO native_ledger_heads(owner_id,revision,snapshot) VALUES(%s,2,%s)",
+                    (owner, Jsonb({"positions": [], "cash": [], "orders": []})),
+                )
+                conn.execute(
+                    "INSERT INTO native_ledger_transactions(owner_id,request_id,revision,fingerprint,event,receipt) "
+                    "VALUES(%s,%s,1,%s,%s,%s)",
+                    (owner, r1, "1" * 64, Jsonb({"kind": "adopt"}), Jsonb({"sourceRevision": 1})),
+                )
+                conn.execute(
+                    "INSERT INTO native_ledger_transactions(owner_id,request_id,revision,fingerprint,event,receipt) "
+                    "VALUES(%s,%s,2,%s,%s,%s)",
+                    (
+                        owner, r2, "2" * 64,
+                        Jsonb({
+                            "kind": "repair_baseline", "note": "历史核准",
+                            "positionUpdates": [{"code": "GOOGL", "unitCostAfter": "336.84236364"}],
+                            "cashUpdates": [{"currency": "USD", "balanceAfter": "4605.92"}],
+                        }),
+                        Jsonb({"sourceRevision": 2}),
+                    ),
+                )
+
+            settings.migration_dir = ROOT / "migrations"
+            await migrate(settings, name)
+            with psycopg.connect(uri, row_factory=dict_row) as conn:
+                events = conn.execute(
+                    "SELECT seq, ledger_revision, request_id, kind, positions, cash, note "
+                    "FROM owner_ledger_events WHERE owner_id=%s ORDER BY seq",
+                    (owner,),
+                ).fetchall()
+                assert [(e["seq"], e["ledger_revision"], e["kind"], e["note"]) for e in events] == [
+                    (1, 1, "adopt", ""),
+                    (2, 2, "repair_baseline", "历史核准"),
+                ]
+                assert events[1]["positions"] == [{"code": "GOOGL", "unitCostAfter": "336.84236364"}]
+                assert events[1]["cash"] == [{"currency": "USD", "balanceAfter": "4605.92"}]
+        finally:
+            server.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=%s AND pid<>pg_backend_pid()",
+                (name,),
+            )
+            server.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(name)))

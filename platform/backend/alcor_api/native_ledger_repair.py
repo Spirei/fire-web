@@ -164,6 +164,17 @@ async def commit_ledger_snapshot(
         INSERT INTO native_ledger_transactions(owner_id,request_id,revision,fingerprint,event,receipt)
         VALUES(%s,%s,%s,%s,%s,%s)
     ''', (owner_id, request_id, next_revision, expected_fingerprint or fingerprint(event), Jsonb(event), Jsonb(receipt)))
+    from .ledger_events import append_ledger_event
+
+    await append_ledger_event(
+        conn, owner_id,
+        request_id=request_id,
+        kind=event.get('kind', 'repair_baseline'),
+        ledger_revision=next_revision,
+        positions=event.get('positionUpdates', []),
+        cash=event.get('cashUpdates', []),
+        note=event.get('note', ''),
+    )
 
 
 async def repair_native_ledger_baseline(db, owner_id: str, *, apply: bool = False):

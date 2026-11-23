@@ -17,7 +17,7 @@ async def test_upgrade_assigns_missing_order_numbers_without_changing_receipts(p
     previous = tmp_path / 'previous-migrations'
     previous.mkdir()
     for migration in (ROOT / 'migrations').glob('[0-9]*.sql'):
-        if not migration.name.startswith('0175_'):
+        if migration.name < '0175_':
             (previous / migration.name).symlink_to(migration)
 
     name = 'alcor_test_order_numbers_' + uuid4().hex

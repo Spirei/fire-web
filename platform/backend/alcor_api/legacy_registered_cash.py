@@ -228,6 +228,11 @@ async def read_registered_cash(conn, who, settings, overview, *, source=_LOAD_SO
 
 
 async def _read_registered_cash(conn, who, settings, overview, *, source):
+    from .ledger_events import checkpoint_to_registered_cash, latest_checkpoint
+
+    checkpoint = await latest_checkpoint(conn, who.id)
+    if checkpoint is not None:
+        return checkpoint_to_registered_cash(checkpoint, overview)
     original = await registered_book_source(conn, who.id) if source is _LOAD_SOURCE else source
     if original is None:
         return None

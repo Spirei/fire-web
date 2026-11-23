@@ -14,6 +14,13 @@ from .broker_accounts import serialize_brokers
 from .broker_metadata import fingerprint
 from .card_preferences_protocol import wire_response
 from .fx_provider_parser import unique
+from .ledger_events import (
+    checkpoint_by_request,
+    create_opening_checkpoint,
+    latest_checkpoint,
+    recent_ledger_events,
+)
+from .legacy_registered_cash import registered_book_source
 from .native_ledger import (
     ITEM_LIMIT,
     MAX_REVISION,
@@ -142,6 +149,30 @@ async def _recent_adjustments(conn, owner_id: str):
     ]
 
 
+def _checkpoint_dto(checkpoint, archive, *, has_sealable_data: bool):
+    if checkpoint is not None:
+        return {
+            "sealed": True,
+            "checkpointVersion": checkpoint["checkpoint_version"],
+            "sourceAuthority": checkpoint["source_authority"],
+            "sourceSha256": checkpoint["source_sha256"],
+            "createdAt": checkpoint["created_at"].isoformat(),
+            "note": checkpoint["note"],
+            "diskArchiveDependency": False,
+            "canSeal": has_sealable_data,
+        }
+    return {
+        "sealed": False,
+        "checkpointVersion": 0,
+        "sourceAuthority": None,
+        "sourceSha256": archive["source_sha256"] if archive is not None else None,
+        "createdAt": None,
+        "note": "",
+        "diskArchiveDependency": archive is not None,
+        "canSeal": has_sealable_data,
+    }
+
+
 def mount_ledger_reconcile(app, db):
     @app.get(ROOT)
     async def read_state(request: Request):
@@ -153,6 +184,9 @@ def mount_ledger_reconcile(app, db):
             await serialize_brokers(conn, who.id, shared_read=True)
             await lock_read_identity(conn, who)
             head = await ledger_head(conn, who.id)
+            checkpoint = await latest_checkpoint(conn, who.id)
+            archive = await registered_book_source(conn, who.id) if checkpoint is None else None
+            events = await recent_ledger_events(conn, who.id, limit=30)
             if not head:
                 baseline, _ = await legacy_baseline(conn, db, who, lock_orders=False)
                 positions = [
@@ -175,11 +209,16 @@ def mount_ledger_reconcile(app, db):
                     for item in baseline["cash"]
                     if item.get("brokerAccountId") is None
                 ]
+                sealable = any(row["balance"] is not None for row in cash) or any(
+                    row["unitCost"] is not None for row in positions
+                )
                 return wire_response({
                     "ownerId": who.id, "adopted": False, "revision": 0, "updatedAt": None,
                     "positions": positions, "cash": cash,
+                    "checkpoint": _checkpoint_dto(checkpoint, archive, has_sealable_data=sealable),
                     "baselineDiff": {"hasGaps": False, "positionUpdates": [], "cashUpdates": [], "warnings": []},
                     "recentAdjustments": [],
+                    "events": events,
                 }, PRIVATE)
 
             plan = await plan_baseline_repair(conn, db, who, head, strict=False)
@@ -224,11 +263,15 @@ def mount_ledger_reconcile(app, db):
                     "suggestedBalance": suggested_cash.get(currency),
                 })
 
+            sealable = any(v is not None for v in base_cash.values()) or any(
+                v is not None for v in live_cash.values()
+            ) or any(row["unitCost"] is not None for row in positions)
             adjustments = await _recent_adjustments(conn, who.id)
             return wire_response({
                 "ownerId": who.id, "adopted": True, "revision": head["revision"],
                 "updatedAt": head["updated_at"].isoformat(),
                 "positions": positions, "cash": cash,
+                "checkpoint": _checkpoint_dto(checkpoint, archive, has_sealable_data=sealable),
                 "baselineDiff": {
                     "hasGaps": bool(plan["position_updates"] or plan["cash_updates"]),
                     "positionUpdates": plan["position_updates"],
@@ -236,7 +279,82 @@ def mount_ledger_reconcile(app, db):
                     "warnings": plan["warnings"],
                 },
                 "recentAdjustments": adjustments,
+                "events": events,
             }, PRIVATE)
+
+    @app.post(ROOT + "/checkpoint")
+    async def seal_checkpoint(request: Request):
+        if request.query_params:
+            raise HTTPException(400, "不接受这些查询参数")
+        who = await actor(request, db, write=True)
+        assert_expected_account(request, who.id)
+        raw = _parse_json(await bounded_body(request, BODY_LIMIT))
+        if set(raw) - {"requestId", "note"} or "requestId" not in raw:
+            raise HTTPException(400, "期初固化参数无效")
+        request_id = _validate_request_id(raw["requestId"])
+        note = _validate_note(raw.get("note"))
+        try:
+            async with db.connection() as conn, conn.transaction():
+                await serialize_brokers(conn, who.id, shared_read=False)
+                await lock_mutation_identity(conn, who, require_admin=False)
+                prior = await checkpoint_by_request(conn, who.id, request_id)
+                if prior is not None:
+                    return wire_response({
+                        "ownerId": who.id,
+                        "requestId": str(request_id),
+                        "checkpointVersion": prior["checkpoint_version"],
+                        "sourceAuthority": prior["source_authority"],
+                        "sourceSha256": prior["source_sha256"],
+                        "cashCurrencies": len(prior["cash_balances"]),
+                        "positionCount": len(prior["position_costs"]),
+                        "note": prior["note"],
+                        "createdAt": prior["created_at"].isoformat(),
+                    }, PRIVATE)
+                await require_domain(conn, who.id, request_id, "native_ledger")
+                archive = await registered_book_source(conn, who.id)
+                baseline, _ = await legacy_baseline(conn, db, who, lock_orders=False)
+                head = await ledger_head(conn, who.id)
+                cash_balances = {
+                    item["currency"]: item["balance"]
+                    for item in baseline["cash"]
+                    if item.get("brokerAccountId") is None and item.get("balance") is not None
+                }
+                if head is not None:
+                    for item in head["snapshot"]["cash"]:
+                        if item.get("brokerAccountId") is None and item.get("balance") is not None:
+                            cash_balances.setdefault(item["currency"], item["balance"])
+                position_costs = [
+                    {
+                        "recordId": item["recordId"], "market": item["market"],
+                        "code": item["code"], "quantity": item["quantity"], "unitCost": item["unitCost"],
+                    }
+                    for item in baseline["positions"]
+                    if item.get("unitCost") is not None
+                ]
+                if not cash_balances and not position_costs:
+                    raise HTTPException(400, "当前没有可固化的已核实期初数据")
+                authority = (
+                    "sealed_legacy_registered_book_checkpoint"
+                    if archive is not None else "owner_verified_opening_checkpoint"
+                )
+                result = await create_opening_checkpoint(
+                    conn, who.id,
+                    request_id=request_id,
+                    source_authority=authority,
+                    source_sha256=archive["source_sha256"] if archive is not None else None,
+                    cash_balances=cash_balances,
+                    position_costs=position_costs,
+                    note=note,
+                )
+                await conn.execute(
+                    "INSERT INTO asset_request_domains(owner_id,request_id,domain) VALUES(%s,%s,'native_ledger')",
+                    (who.id, request_id),
+                )
+                return wire_response(result, PRIVATE)
+        except UniqueViolation as exc:
+            if exc.diag.constraint_name not in ("asset_request_domain", "asset_request_domains_pkey", "broker_request_domain"):
+                raise
+            conflict("原请求编号已用于其他金融操作")
 
     @app.post(ROOT + "/baseline")
     async def apply_baseline(request: Request):

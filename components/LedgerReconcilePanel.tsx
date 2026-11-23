@@ -1,6 +1,6 @@
 "use client";
 
-import { IconCheck, IconChevronRight, IconPencil, IconSparkles } from "@tabler/icons-react";
+import { IconCheck, IconChevronRight, IconDatabase, IconPencil, IconSparkles } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Capsule } from "@/components/Capsule";
 import { clientRequestId } from "@/lib/randomId";
@@ -45,6 +45,30 @@ type CashUpdate = {
   balanceAfter: string | null;
 };
 
+type CheckpointStatus = {
+  sealed: boolean;
+  checkpointVersion: number;
+  sourceAuthority: string | null;
+  sourceSha256: string | null;
+  createdAt: string | null;
+  note: string;
+  diskArchiveDependency: boolean;
+  canSeal: boolean;
+};
+
+type LedgerEventRow = {
+  seq: number;
+  revision: number | null;
+  requestId: string;
+  kind: string;
+  occurredAt: string;
+  createdAt: string;
+  note: string;
+  orders: Record<string, unknown>[];
+  positions: Record<string, unknown>[];
+  cash: Record<string, unknown>[];
+};
+
 type ReconcileState = {
   ownerId: string;
   adopted: boolean;
@@ -52,6 +76,7 @@ type ReconcileState = {
   updatedAt: string | null;
   positions: ReconcilePosition[];
   cash: ReconcileCash[];
+  checkpoint: CheckpointStatus;
   baselineDiff: {
     hasGaps: boolean;
     positionUpdates: PositionUpdate[];
@@ -67,6 +92,7 @@ type ReconcileState = {
     positionUpdates: PositionUpdate[];
     cashUpdates: CashUpdate[];
   }[];
+  events: LedgerEventRow[];
 };
 
 type EditingTarget =
@@ -75,7 +101,15 @@ type EditingTarget =
 
 const fmtVal = (v: string | null | undefined) => (v == null || v === "" ? "—" : v);
 const fmtTime = (iso: string | null) => (iso ? iso.replace("T", " ").slice(0, 19) : "—");
-const kindLabel = (kind: string) => (kind === "repair_baseline" ? "基线自动核准" : "人工核准");
+const EVENT_LABELS: Record<string, string> = {
+  adopt: "账本接管",
+  trade: "交易提交",
+  merge: "成交合并",
+  repair_baseline: "基线自动核准",
+  reconcile_adjustment: "人工核准",
+  opening_checkpoint: "期初固化",
+};
+const kindLabel = (kind: string) => EVENT_LABELS[kind] ?? kind;
 
 function isNonZero(value: string | null | undefined): boolean {
   if (value == null || value === "") return false;
@@ -99,6 +133,7 @@ export default function LedgerReconcilePanel({
   const [showAllCurrencies, setShowAllCurrencies] = useState(false);
   const [editing, setEditing] = useState<EditingTarget | null>(null);
   const baselineRequestId = useRef<string | null>(null);
+  const checkpointRequestId = useRef<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -116,6 +151,7 @@ export default function LedgerReconcilePanel({
       if (signal?.aborted) return;
       setState(body as ReconcileState);
       baselineRequestId.current = null;
+      checkpointRequestId.current = null;
     } catch (err) {
       if (!signal?.aborted) {
         setError(err instanceof Error ? err.message : "读取账本核准数据失败");
@@ -151,6 +187,39 @@ export default function LedgerReconcilePanel({
         item.suggestedBalance != null,
     );
   }, [state, showAllCurrencies]);
+
+  async function sealCheckpoint() {
+    if (!state || !state.checkpoint.canSeal || busy) return;
+    setBusy(true);
+    setNotice(null);
+    const requestId = checkpointRequestId.current ?? clientRequestId();
+    checkpointRequestId.current = requestId;
+    try {
+      const response = await fetch(`${ENDPOINT}/checkpoint`, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Alcor-Expected-Account": ownerId,
+        },
+        body: JSON.stringify({ requestId, note: "固化期初核准点至单一 PG 库" }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(typeof body?.error === "string" ? body.error : typeof body?.detail === "string" ? body.detail : "固化期初未完成");
+      }
+      checkpointRequestId.current = null;
+      setNotice({
+        text: `已固化期初核准点（v${body?.checkpointVersion ?? 1}）：原币现金 ${body?.cashCurrencies ?? 0} 项、存量持仓 ${body?.positionCount ?? 0} 项。`,
+      });
+      window.dispatchEvent(new Event("fire:funds-updated"));
+      await load();
+    } catch (err) {
+      setNotice({ text: err instanceof Error ? err.message : "固化期初未完成", error: true });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function applyBaseline() {
     if (!state || !state.adopted || busy) return;
@@ -280,6 +349,32 @@ export default function LedgerReconcilePanel({
         <span className={styles.reconcileMeta}>
           持仓 {state.positions.length} 项 · 币种 {state.cash.length} 项
         </span>
+      </div>
+
+      <div className={styles.reconcileSummary}>
+        <div>
+          <span className={styles.reconcileBadge}>
+            <IconDatabase size={13} aria-hidden="true" />
+            {state.checkpoint.sealed
+              ? `单库期初已固化 · v${state.checkpoint.checkpointVersion}`
+              : state.checkpoint.diskArchiveDependency
+                ? "期初依赖磁盘迁移档案"
+                : "尚未固化期初"}
+          </span>
+          {state.checkpoint.createdAt && (
+            <span className={styles.reconcileMeta}>固化于 {fmtTime(state.checkpoint.createdAt)}</span>
+          )}
+        </div>
+        {state.checkpoint.canSeal && (
+          <Capsule
+            size="sm"
+            variant={state.checkpoint.sealed ? "secondary" : "primary"}
+            busy={busy}
+            onClick={() => void sealCheckpoint()}
+          >
+            {state.checkpoint.sealed ? "重新固化期初" : "固化期初到单库"}
+          </Capsule>
+        )}
       </div>
 
       {notice && (
@@ -529,31 +624,50 @@ export default function LedgerReconcilePanel({
         </div>
       </section>
 
-      {state.recentAdjustments.length > 0 && (
+      {state.events.length > 0 && (
         <details className={styles.evidence}>
           <summary>
             <IconChevronRight size={14} aria-hidden="true" />
-            最近核准记录 · {state.recentAdjustments.length}
+            结构化账本事件流 · {state.events.length}
           </summary>
           <div className={styles.reconcileAuditList}>
-            {state.recentAdjustments.map((entry) => (
+            {state.events.map((entry) => (
               <div key={entry.requestId} className={styles.reconcileAuditItem}>
                 <div className={styles.reconcileAuditHead}>
-                  <strong>v{entry.revision} · {kindLabel(entry.kind)}</strong>
-                  <span>{fmtTime(entry.createdAt)}</span>
+                  <strong>
+                    #{entry.seq}
+                    {entry.revision != null ? ` · v${entry.revision}` : ""}
+                    {` · ${kindLabel(entry.kind)}`}
+                  </strong>
+                  <span>{fmtTime(entry.occurredAt || entry.createdAt)}</span>
                 </div>
                 {entry.note && <p className={styles.reconcileAuditNote}>{entry.note}</p>}
                 <div className={styles.reconcileAuditTags}>
-                  {entry.positionUpdates.map((p) => (
-                    <span key={`${entry.requestId}:${p.recordId}`}>
-                      {p.code}: {fmtVal(p.unitCostBefore)} → {fmtVal(p.unitCostAfter)}
+                  {entry.orders.length > 0 && <span>订单 {entry.orders.length} 笔</span>}
+                  {entry.positions.slice(0, 6).map((p, idx) => (
+                    <span key={`${entry.requestId}:p:${idx}`}>
+                      {String(p.code ?? p.recordId ?? "持仓")}
+                      {p.unitCostAfter !== undefined
+                        ? `: ${fmtVal(p.unitCostBefore as string | null)} → ${fmtVal(p.unitCostAfter as string | null)}`
+                        : p.unitCost !== undefined
+                          ? `: ${fmtVal(p.unitCost as string | null)}`
+                          : p.quantityAfter !== undefined
+                            ? `: ${fmtVal(p.quantityBefore as string | null)} → ${fmtVal(p.quantityAfter as string | null)}`
+                            : ""}
                     </span>
                   ))}
-                  {entry.cashUpdates.map((c) => (
-                    <span key={`${entry.requestId}:${c.currency}`}>
-                      {c.currency}: {fmtVal(c.balanceBefore)} → {fmtVal(c.balanceAfter)}
+                  {entry.positions.length > 6 && <span>其余持仓 {entry.positions.length - 6} 项</span>}
+                  {entry.cash.slice(0, 6).map((c, idx) => (
+                    <span key={`${entry.requestId}:c:${idx}`}>
+                      {String(c.currency ?? "现金")}
+                      {c.balanceAfter !== undefined
+                        ? `: ${fmtVal(c.balanceBefore as string | null)} → ${fmtVal(c.balanceAfter as string | null)}`
+                        : c.balance !== undefined
+                          ? `: ${fmtVal(c.balance as string | null)}`
+                          : ""}
                     </span>
                   ))}
+                  {entry.cash.length > 6 && <span>其余币种 {entry.cash.length - 6} 项</span>}
                 </div>
               </div>
             ))}

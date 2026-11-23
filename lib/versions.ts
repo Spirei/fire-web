@@ -8469,6 +8469,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_89_ENTRY.software.map(item => ({ ...item, version: "v0.1.90" })),
   changes: [
     { kind: "feature", title: "数据管理账本核准工作台", desc: "在数据管理新增「账本核准」页签，直连 PostgreSQL 并排核对旧账本基线与 App 原生账本；支持一键回填基线缺口、逐项核准持仓单位成本与全局原币现金余额，写入不可变审计记录并递增账本版本同步至 App，无需进入容器手工执行命令。" },
+    { kind: "feature", title: "单库期初核准点与结构化账本事件流", desc: "新增 PostgreSQL 期初核准点表与不可变结构化事件流表并无损回填历史记录；在账本核准页一键固化期初后，资产与资金读取仅依赖单一 PostgreSQL 数据库而不再扫描磁盘迁移包，并配套无 Docker 裸机 Linux VPS 部署指南。" },
   ],
 };
 

@@ -526,6 +526,16 @@ async def commit(conn, db, who, raw):
         INSERT INTO native_ledger_transactions(owner_id,request_id,revision,fingerprint,event,receipt)
         VALUES(%s,%s,%s,%s,%s,%s)
     ''', (who.id, request_id, next_revision, expected, Jsonb(raw), Jsonb(value)))
+    from .ledger_events import append_ledger_event
+
+    await append_ledger_event(
+        conn, who.id,
+        request_id=request_id, kind=kind, ledger_revision=next_revision,
+        orders=raw.get('orders', []) if isinstance(raw.get('orders'), list) else [],
+        positions=raw.get('positions', []) if isinstance(raw.get('positions'), list) else [],
+        cash=raw.get('cash', []) if isinstance(raw.get('cash'), list) else [],
+        occurred_at=now,
+    )
     return value
 
 
