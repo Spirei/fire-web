@@ -10,7 +10,43 @@
 - Redis 7（行情/读取预算缓存，按最小 ACL 配置）
 - Caddy（自动申请与续期 TLS 证书）
 
-## 2. 目录与权限约定
+## 2. 一键初始化与迁移脚本（推荐）
+
+仓库已内置三套无 Docker 裸机自动化脚本（`scripts/vps/`），覆盖新 VPS 重装 PG 17 + Redis 7（含最小权限 ACL）、原站打包与新站校验恢复：
+
+1. **原站迁移前体检**：管理员登录旧站，打开「数据管理 → 账本与备份 → **VPS 迁移体检**」，确认：
+   - 所有账本账号均已完成单库期初固化（`已脱离磁盘迁移包`）；
+   - 4 个必要私有目录均存在；
+   - 复制当前实例的 `FIRE_INSTANCE_ID`（切记保留同一 UUID，Redis 无需迁移数据）。
+2. **新 VPS 一键安装 PG 17 + Redis 7 + Node 20 + uv + Caddy + systemd**：
+   ```bash
+   sudo bash scripts/vps/bootstrap-ubuntu.sh \
+     --domain your-domain.example \
+     --instance-id <从迁移体检复制的-FIRE_INSTANCE_ID>
+   ```
+   脚本会自动安装官方 PGDG 源 PostgreSQL 17（校验 GPG 指纹）、初始化唯一数据库 `alcorfire`（开启同步落盘）、配置 Redis 7 持久最小权限 ACL（仅放行 `alcor:<instance-id>:read-budget:*` 并自测拒绝跨命名空间访问），并生成 `0600` 的 `/etc/alcor/alcor.env`、`alcor.service` 与 `Caddyfile`。
+3. **在原站（如群晖）一键打包单一 PG 库与 4 个私有目录**：
+   ```bash
+   # 先在群晖暂停写入或直接一致性导出：
+   sudo bash scripts/vps/pack-migration-bundle.sh \
+     --container fire \
+     --out /tmp/alcor-migration-bundle
+   rsync -avz --progress /tmp/alcor-migration-bundle/ root@<new-vps-ip>:/root/alcor-migration-bundle/
+   ```
+4. **在新 VPS 拉取源码构建并一键校验恢复**：
+   ```bash
+   sudo -u alcor git clone https://github.com/<your-org>/fire-web.git /opt/alcor/app
+   cd /opt/alcor/app
+   sudo -u alcor npm ci
+   sudo -u alcor uv sync --frozen --no-dev --project platform --extra futu
+   sudo -u alcor npm run build
+   sudo bash scripts/vps/restore-on-vps.sh --bundle-dir /root/alcor-migration-bundle
+   sudo systemctl enable --now alcor
+   curl -fsS http://127.0.0.1:3000/health/ready
+   ```
+   确认新站正常且原站数据核对无误后，再切换域名 DNS 指向新 VPS，完成后清理临时迁移包 `/root/alcor-migration-bundle`。
+
+## 3. 手工目录与权限约定（如需手动部署参考）
 
 建议创建专用系统用户 `alcor`（无 root 权限运行）：
 

@@ -868,6 +868,8 @@ def create_app(settings: Settings | None = None):
     mount_native_ledger(app)
     from .ledger_reconcile_api import mount_ledger_reconcile
     mount_ledger_reconcile(app, db)
+    from .migration_readiness_api import mount_migration_readiness
+    mount_migration_readiness(app, db)
     from .legacy_native_orders import mount_legacy_native_orders
     mount_legacy_native_orders(app)
     from .legacy_flat_orders import mount_legacy_flat_orders

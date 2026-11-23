@@ -4,6 +4,7 @@ import { IconBriefcase, IconDatabaseExport, IconDatabaseImport, IconShieldCheck 
 import { useId, useRef, useState } from "react";
 import { Capsule } from "@/components/Capsule";
 import InvestmentDataManager, { InvestmentArchiveAction } from "@/components/InvestmentDataManager";
+import MigrationReadinessCard from "@/components/MigrationReadinessCard";
 import PlatformBackups from "@/components/PlatformBackups";
 import { platformRequest } from "@/lib/platformRequest";
 import { clientRequestId } from "@/lib/randomId";
@@ -133,6 +134,7 @@ export default function DataManagementView({ ownerId, admin, recordsCount, onExp
                 <Capsule variant="secondary" size="sm" aria-expanded={open} onClick={toggle}>{open ? "收起" : "管理备份"}</Capsule>
               </InvestmentArchiveAction>
             )} />}
+            {admin && <MigrationReadinessCard ownerId={ownerId} />}
             {notice && <p role={notice.error ? "alert" : "status"} className={`border-t border-edge px-4 py-2 text-xs ${notice.error ? "text-down" : "text-muted"}`}>{notice.message}</p>}
           </>
       } />
