@@ -181,11 +181,13 @@ async def require_legacy_write(conn, owner, account_kind):
 
 
 async def legacy_baseline(conn, db, who, *, lock_orders=False):
+    from .actual_projection import actual_records_dto
+    from .legacy_registered_cash import read_registered_cash
     from .scope_coverage import require_global
     from .native_ledger_handoff import pending
     await require_global(conn, who.id)
     records = await (await conn.execute('''
-        SELECT r.id,r.market,r.account_market,r.code,r.name,r.qty,r.broker_account_id
+        SELECT r.*
         FROM portfolio_records r LEFT JOIN broker_accounts b
           ON b.owner_id=r.owner_id AND b.id=r.broker_account_id AND b.deleted_at IS NULL
         WHERE r.owner_id=%s AND r.deleted_at IS NULL
@@ -194,14 +196,28 @@ async def legacy_baseline(conn, db, who, *, lock_orders=False):
           (b.account_kind='real' AND b.holding_source='manual'))
         ORDER BY r.id
     ''', (who.id,))).fetchall()
-    positions = [{'recordId': r['id'], 'brokerAccountId': r['broker_account_id'], 'market': r['market'],
-                  'accountMarket': r['account_market'] or r['market'], 'code': r['code'], 'name': r['name'],
-                  'quantity': decimal_text(r['qty']), 'unitCost': None} for r in records]
+    actual = await actual_records_dto(conn, who.id, records)
+    positions = []
+    for r in records:
+        cost = actual[r['id']]['cost']
+        positions.append({
+            'recordId': r['id'], 'brokerAccountId': r['broker_account_id'], 'market': r['market'],
+            'accountMarket': r['account_market'] or r['market'], 'code': r['code'], 'name': r['name'],
+            'quantity': decimal_text(r['qty']),
+            'unitCost': decimal_text(Decimal(cost)) if cost is not None else None,
+        })
     overview = await CashOverview(db).on_connection(conn, who)
     real = next(book for book in overview['books'] if book['accountKind'] == 'real')
-    cash = [{'currency': row['currency'], 'brokerAccountId': None,
-             'balance': decimal_text(Decimal(row['ownerBalance'])) if row['ownerBalance'] is not None else None}
-            for row in real['currencies']]
+    registered = await read_registered_cash(conn, who, db.settings, overview)
+    owner_cash = {
+        row['currency']: decimal_text(Decimal(row['ownerBalance'])) if row['ownerBalance'] is not None else None
+        for row in real['currencies']
+    }
+    if registered is not None and registered.dto['accountKind'] == 'real' and registered.dto['sourceComplete']:
+        for currency, balance in registered.exact_balances.items():
+            owner_cash[currency] = decimal_text(balance)
+    cash = [{'currency': currency, 'brokerAccountId': None, 'balance': balance}
+            for currency, balance in owner_cash.items()]
     for broker in overview['accounts']:
         if broker['accountKind'] != 'real' or broker['holdingSource'] != 'manual':
             continue

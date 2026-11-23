@@ -163,8 +163,9 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
     cycle = cycle_range(now)[0].isoformat()
     result = await data(client.get(ASSETS + '/trading-cycle', params={'cycleStart': cycle}, headers=headers))
     assert result['items'][0]['id'] == fill['tradeId']
-    assert result['items'][0]['positionQtyBefore'] is None
-    assert result['uncertainRecords'] == ['first-buy']
+    assert result['items'][0]['positionQtyBefore'] == 0
+    assert result['items'][0]['positionQtyAfter'] == 2
+    assert result['uncertainRecords'] == []
     assert (await data(client.get(LEDGER, headers=headers)))['cash'] == [
         {'currency': 'USD', 'brokerAccountId': None, 'balance': None},
     ]
@@ -446,3 +447,269 @@ async def test_app_attachment_batch_records_children_and_cancels_sibling_atomica
     }
     assert closed['positions'][0]['quantity'] == '0'
     assert {item['balance'] for item in closed['cash']} == {'14'}
+
+
+async def _create_manual_broker_and_record(client, *, name, code, qty, cost, price='100', currencies=('USD',)):
+    created = await client.post(
+        '/api/broker-accounts',
+        json={
+            'request_id': str(uuid4()), 'name': name, 'provider_id': None,
+            'account_kind': 'real', 'currency': currencies[0], 'currencies': list(currencies),
+        },
+    )
+    assert created.status_code == 201, created.text
+    broker = created.json()['data']['id']
+    preview = await client.post(
+        '/api/portfolio/records/preview',
+        json={
+            'kind': 'create',
+            'data': {
+                'name': f'Synthetic {code}', 'code': code, 'market': 'US', 'accountMarket': '',
+                'price': price, 'qty': qty, 'cost': cost, 'group': '', 'note': '',
+                'brokerAccountId': broker,
+            },
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    confirmed = await client.post(
+        '/api/portfolio/records/confirm',
+        json={'previewId': preview.json()['previewId'], 'requestId': str(uuid4())},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    return broker, confirmed.json()['record']
+
+
+@pytest.mark.asyncio
+async def test_adoption_preserves_legacy_cost_registered_cash_and_clears_past_cycle_uncertain(
+    client, app, admin, db, tmp_path,
+):
+    from test_legacy_registered_cash import archive, reseal, sealed_book, store_packet
+
+    stored = sealed_book()
+    stored['originals']['funds'][0]['amount'] = '12083.51'  # +27 stockNetFlow = 12110.51 USD
+    reseal(stored)
+    binding, _ = archive(tmp_path, stored)
+    app.state.db.settings.backup_dir = tmp_path
+    await store_packet(db, admin, stored, binding)
+
+    longbridge, googl = await _create_manual_broker_and_record(
+        client, name='Longbridge', code='GOOGL', qty='18', cost='367.486', price='320',
+    )
+    ibkr_resp = await client.post(
+        '/api/broker-accounts',
+        json={
+            'request_id': str(uuid4()), 'name': 'IBKR', 'provider_id': None,
+            'account_kind': 'real', 'currency': 'USD', 'currencies': ['USD'],
+        },
+    )
+    assert ibkr_resp.status_code == 201, ibkr_resp.text
+    ibkr = ibkr_resp.json()['data']['id']
+
+    headers = await native_headers(db, admin, SCOPES)
+    baseline = await data(client.get(LEDGER, headers=headers))
+    assert baseline['positions'] == [{
+        'recordId': googl['id'], 'brokerAccountId': longbridge, 'market': 'US', 'accountMarket': 'US',
+        'code': 'GOOGL', 'name': 'Synthetic GOOGL', 'quantity': '18', 'unitCost': '367.486',
+    }]
+    cash_by_key = {(item['brokerAccountId'], item['currency']): item['balance'] for item in baseline['cash']}
+    assert cash_by_key[(None, 'USD')] == '12110.51'
+    assert cash_by_key[(None, 'HKD')] == '0'
+    assert cash_by_key[(longbridge, 'USD')] is None
+    assert cash_by_key[(ibkr, 'USD')] is None
+
+    await adopt(client, headers, baseline)
+    old_buy_1 = order(
+        googl['id'], longbridge, at='2026-10-28T22:30:00+08:00',
+        quantity='15', price='300', fees='1.05', net='4501.05',
+    )
+    old_buy_1.update(code='GOOGL', name='Synthetic GOOGL')
+    tx1 = trade(1, old_buy_1, '18', '33', '12110.51', '7609.46', cost='336.84236364')
+    tx1['cash'][0].pop('brokerAccountId')
+    await data(client.post(TRANSACTIONS, headers=headers, json=tx1))
+
+    old_buy_2 = order(
+        'skuu-native-rec', ibkr, at='2026-11-20T22:30:00+08:00',
+        quantity='300', price='10.0068', fees='1.50', net='3003.54',
+    )
+    old_buy_2.update(code='SKUU', name='Synthetic SKUU')
+    tx2 = trade(2, old_buy_2, '0', '300', '7609.46', '4605.92', cost='10.0118')
+    tx2['cash'][0].pop('brokerAccountId')
+    await data(client.post(TRANSACTIONS, headers=headers, json=tx2))
+
+    positions = await data(client.get(ASSETS + '/positions', headers=headers))
+    by_code = {item['code']: item for item in positions['items']}
+    assert by_code['GOOGL']['qty'] == 33 and by_code['GOOGL']['cost'] == 336.84236364
+    assert by_code['SKUU']['qty'] == 300 and by_code['SKUU']['cost'] == 10.0118
+
+    cash = await data(client.get(ASSETS + '/cash', headers=headers))
+    assert cash['complete'] is True
+    assert cash['balances']['USD'] == 4605.92
+
+    summary = await data(client.get(ASSETS + '/summary', headers=headers))
+    assert summary['summary']['costComplete'] is True
+    assert summary['summary']['cashComplete'] is True
+    assert summary['summary']['totalCash'] == 4605.92
+
+    cycle = await data(client.get(ASSETS + '/trading-cycle', headers=headers))
+    assert cycle['items'] == []
+    assert cycle['uncertainRecords'] == []
+
+
+@pytest.mark.asyncio
+async def test_trading_cycle_reconstructs_same_day_chain_and_flags_ambiguous_cases(client, admin, db):
+    broker, record = await setup(client, amount='5000', qty='20', cost='100')
+    headers = await native_headers(db, admin, SCOPES)
+    await adopt(client, headers, await data(client.get(LEDGER, headers=headers)))
+    now = datetime.now(UTC)
+    wall, _ = cycle_range(now)
+    in_cycle_1 = wall + timedelta(minutes=1)
+    in_cycle_2 = wall + timedelta(minutes=2)
+    earlier_cycle = wall - timedelta(hours=2)
+
+    buy_old = order(record['id'], broker, at=earlier_cycle.isoformat(), created=earlier_cycle.isoformat(),
+                    side='buy', quantity='5', price='100', fees='0', net='500')
+    await data(client.post(TRANSACTIONS, headers=headers,
+                           json=trade(1, buy_old, '20', '25', '5000', '4500', cost='100')))
+
+    buy_today = order(record['id'], broker, at=in_cycle_1.isoformat(), created=in_cycle_1.isoformat(),
+                      side='buy', quantity='10', price='110', fees='0', net='1100')
+    await data(client.post(TRANSACTIONS, headers=headers,
+                           json=trade(2, buy_today, '25', '35', '4500', '3400', cost='102.85714286')))
+
+    sell_today = order(record['id'], broker, at=in_cycle_2.isoformat(), created=in_cycle_2.isoformat(),
+                       side='sell', quantity='4', price='120', fees='0', net='480')
+    await data(client.post(TRANSACTIONS, headers=headers,
+                           json=trade(3, sell_today, '35', '31', '3400', '3880', cost='102.85714286')))
+
+    today = await data(client.get(ASSETS + '/trading-cycle', headers=headers))
+    assert today['uncertainRecords'] == []
+    ordered = sorted(today['items'], key=lambda row: row['tradedAt'])
+    assert [(row['id'], row['positionQtyBefore'], row['positionQtyAfter']) for row in ordered] == [
+        (buy_today['tradeId'], 25, 35),
+        (sell_today['tradeId'], 35, 31),
+    ]
+
+    past_start = cycle_range(earlier_cycle)[0].isoformat()
+    past = await data(client.get(ASSETS + '/trading-cycle', params={'cycleStart': past_start}, headers=headers))
+    assert [row['id'] for row in past['items']] == [buy_old['tradeId']]
+    assert past['items'][0]['positionQtyBefore'] is None
+    assert past['uncertainRecords'] == [record['id']]
+
+
+@pytest.mark.asyncio
+async def test_repair_native_ledger_baseline_backfills_cost_and_registered_cash_idempotently(
+    client, app, admin, db, tmp_path,
+):
+    from psycopg.types.json import Jsonb
+    from alcor_api.native_ledger_repair import repair_native_ledger_baseline
+    from test_legacy_registered_cash import archive, reseal, sealed_book, store_packet
+
+    stored = sealed_book()
+    stored['originals']['funds'][0]['amount'] = '12083.51'  # +27 = 12110.51 USD
+    reseal(stored)
+    binding, _ = archive(tmp_path, stored)
+    app.state.db.settings.backup_dir = tmp_path
+    db.settings.backup_dir = tmp_path
+    await store_packet(db, admin, stored, binding)
+
+    longbridge, googl = await _create_manual_broker_and_record(
+        client, name='Longbridge', code='GOOGL', qty='18', cost='367.486', price='320',
+    )
+    nvda_preview = await client.post(
+        '/api/portfolio/records/preview',
+        json={
+            'kind': 'create',
+            'data': {
+                'name': 'Synthetic NVDA', 'code': 'NVDA', 'market': 'US', 'accountMarket': '',
+                'price': '130', 'qty': '10', 'cost': '120', 'group': '', 'note': '',
+                'brokerAccountId': longbridge,
+            },
+        },
+    )
+    assert nvda_preview.status_code == 200, nvda_preview.text
+    nvda = (await client.post(
+        '/api/portfolio/records/confirm',
+        json={'previewId': nvda_preview.json()['previewId'], 'requestId': str(uuid4())},
+    )).json()['record']
+
+    ibkr_resp = await client.post(
+        '/api/broker-accounts',
+        json={
+            'request_id': str(uuid4()), 'name': 'IBKR', 'provider_id': None,
+            'account_kind': 'real', 'currency': 'USD', 'currencies': ['USD'],
+        },
+    )
+    ibkr = ibkr_resp.json()['data']['id']
+
+    headers = await native_headers(db, admin, SCOPES)
+    # Simulate old ab36d6c8 buggy adoption (unitCost=None, global cash=None) + GOOGL/SKUU fills.
+    googl_fill = order(
+        googl['id'], longbridge, at='2026-10-28T22:30:00+08:00',
+        quantity='15', price='300', fees='1.05', net='4501.05',
+    )
+    googl_fill.update(code='GOOGL', name='Synthetic GOOGL')
+    skuu_fill = order(
+        'skuu-prod-rec', ibkr, at='2026-11-20T22:30:00+08:00',
+        quantity='300', price='10.0068', fees='1.50', net='3003.54',
+    )
+    skuu_fill.update(code='SKUU', name='Synthetic SKUU')
+    buggy_snapshot = {
+        'positions': [
+            {'recordId': googl['id'], 'brokerAccountId': longbridge, 'market': 'US', 'accountMarket': 'US',
+             'code': 'GOOGL', 'name': 'Synthetic GOOGL', 'quantity': '33', 'unitCost': None},
+            {'recordId': nvda['id'], 'brokerAccountId': longbridge, 'market': 'US', 'accountMarket': 'US',
+             'code': 'NVDA', 'name': 'Synthetic NVDA', 'quantity': '10', 'unitCost': None},
+            {'recordId': 'skuu-prod-rec', 'brokerAccountId': ibkr, 'market': 'US', 'accountMarket': 'US',
+             'code': 'SKUU', 'name': 'Synthetic SKUU', 'quantity': '300', 'unitCost': '10.0118'},
+        ],
+        'cash': [
+            {'currency': 'USD', 'brokerAccountId': None, 'balance': None},
+            {'currency': 'USD', 'brokerAccountId': longbridge, 'balance': None},
+            {'currency': 'USD', 'brokerAccountId': ibkr, 'balance': None},
+        ],
+        'orders': [googl_fill, skuu_fill],
+        'orderHistory': {},
+        'orderNumbers': {googl_fill['tradeId']: '0000000001', skuu_fill['tradeId']: '0000000002'},
+    }
+    async with db.connection() as conn, conn.transaction():
+        await conn.execute(
+            'INSERT INTO native_ledger_heads(owner_id,revision,snapshot) VALUES(%s,3,%s)',
+            (admin, Jsonb(buggy_snapshot)),
+        )
+
+    dry = await repair_native_ledger_baseline(db, admin, apply=False)
+    assert dry['changed'] is True and dry['applied'] is False and dry['revision'] == 3 and dry['nextRevision'] == 4
+    pos_map = {item['code']: item['unitCostAfter'] for item in dry['positionUpdates']}
+    assert pos_map == {'GOOGL': '336.84236364', 'NVDA': '120'}
+    cash_map = {item['currency']: item['balanceAfter'] for item in dry['cashUpdates']}
+    assert cash_map['USD'] == '4605.92'
+    assert (await data(client.get(LEDGER, headers=headers)))['sourceRevision'] == 3
+
+    applied = await repair_native_ledger_baseline(db, admin, apply=True)
+    assert applied['changed'] is True and applied['applied'] is True and applied['revision'] == 4
+
+    again = await repair_native_ledger_baseline(db, admin, apply=True)
+    assert again['changed'] is False and again['applied'] is False and again['revision'] == 4
+
+    repaired_ledger = await data(client.get(LEDGER, headers=headers))
+    assert repaired_ledger['sourceRevision'] == 4
+    repaired_positions = {item['code']: item for item in repaired_ledger['positions']}
+    assert repaired_positions['GOOGL']['unitCost'] == '336.84236364'
+    assert repaired_positions['NVDA']['unitCost'] == '120'
+    assert repaired_positions['SKUU']['unitCost'] == '10.0118'
+
+    summary = await data(client.get(ASSETS + '/summary', headers=headers))
+    assert summary['summary']['costComplete'] is True
+    assert summary['summary']['cashComplete'] is True
+    assert summary['summary']['totalCash'] == 4605.92
+
+    # Subsequent native trade on previously untouched NVDA succeeds cleanly at revision 4 -> 5.
+    nvda_buy = order(
+        nvda['id'], longbridge, at='2026-11-23T22:00:00+08:00',
+        quantity='5', price='150', fees='1', net='751',
+    )
+    nvda_buy.update(code='NVDA', name='Synthetic NVDA')
+    tx_nvda = trade(4, nvda_buy, '10', '15', '4605.92', '3854.92', cost='130.06666667')
+    tx_nvda['cash'][0].pop('brokerAccountId')
+    receipt = await data(client.post(TRANSACTIONS, headers=headers, json=tx_nvda))
+    assert receipt['sourceRevision'] == 5

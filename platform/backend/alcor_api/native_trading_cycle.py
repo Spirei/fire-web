@@ -160,6 +160,50 @@ async def opening_closes(conn, history, owner, records, items, start, end):
     return results
 
 
+def _order_sort_key(item):
+    traded = event_time(item["tradedAt"])
+    created = item.get("createdAt")
+    return (traded, event_time(created) if created is not None else traded, item["id"])
+
+
+def _reconstruct_native_chain(current_qty, legacy, in_cycle, exact_quantities):
+    if current_qty is None:
+        return None
+    running = Decimal(current_qty)
+    if running < 0:
+        return None
+    combined = []
+    try:
+        for item in legacy:
+            if (not item.get("identityMatches") or item.get("side") not in ("buy", "sell")
+                    or item.get("positionQtyBefore") is None or item.get("positionQtyAfter") is None):
+                return None
+            combined.append((*_order_sort_key(item), False, item))
+        for item in in_cycle:
+            if item.get("side") not in ("buy", "sell") or item["id"] not in exact_quantities:
+                return None
+            combined.append((*_order_sort_key(item), True, item))
+    except (ValueError, TypeError):
+        return None
+    combined.sort(key=lambda entry: entry[:3])
+    computed = {}
+    for _, _, _, is_native, item in reversed(combined):
+        qty = exact_quantities[item["id"]] if is_native else Decimal(str(item["qty"]))
+        if qty <= 0:
+            return None
+        delta = qty if item["side"] == "buy" else -qty
+        before = running - delta
+        if before < 0:
+            return None
+        if is_native:
+            computed[item["id"]] = (before, running)
+        elif (Decimal(str(item["positionQtyBefore"])) != before
+              or Decimal(str(item["positionQtyAfter"])) != running):
+            return None
+        running = before
+    return computed
+
+
 def mount(app, db, authority):
     from .market_history_reads import LicensedHistory
     history = LicensedHistory(authority)
@@ -197,22 +241,24 @@ def mount(app, db, authority):
             records = {row["id"]: row for row in rows}
             items = await period_fills(conn, who.id, records, start)
             native = await ledger_head(conn, who.id)
+            native_in_cycle = defaultdict(list)
+            native_after_cycle = set()
+            exact_quantities = {}
             if native:
                 rows = position_rows(rows, native)
                 records = {row["id"]: row for row in rows}
                 native_ids = {item["tradeId"] for item in native["snapshot"]["orders"]}
                 items = [item for item in items if item["id"] not in native_ids]
+                exact_quantities = {
+                    item["tradeId"]: Decimal(item["quantity"])
+                    for item in native["snapshot"]["orders"]
+                }
                 for item in financial_orders(native):
-                    if not start <= event_time(item["tradedAt"]) < end:
-                        continue
-                    record = records[item["recordId"]]
-                    # Current before/after quantities are good for syncing the
-                    # active book. They do not prove the historical day opening.
-                    items.append({**item, "recordRevision": record["revision"],
-                                  "positionQtyBefore": None, "positionQtyAfter": None})
-                if len(records) > MAX_ROWS or len(items) > MAX_ROWS:
-                    raise HTTPException(409, "本交易周期持仓或成交超出完整读取上限")
-                items.sort(key=lambda row: row["id"])
+                    traded_at = event_time(item["tradedAt"])
+                    if traded_at >= end:
+                        native_after_cycle.add(item["recordId"])
+                    elif traded_at >= start:
+                        native_in_cycle[item["recordId"]].append(item)
             transfers = await (await conn.execute("""
                 SELECT source_record_id,target_record_id FROM broker_position_transfers
                 WHERE owner_id=%s AND occurred_at>=%s LIMIT %s
@@ -221,7 +267,37 @@ def mount(app, db, authority):
                 raise HTTPException(409, "本交易周期转仓超出完整读取上限")
             uncertain = {row[key] for row in transfers for key in ("source_record_id", "target_record_id")}
             uncertain &= records.keys()
-            uncertain.update(rid for rid, row in records.items() if row.get("_native_ledger_position"))
+            if native:
+                legacy_by_record = defaultdict(list)
+                for item in items:
+                    legacy_by_record[item["recordId"]].append(item)
+                for rid, row in records.items():
+                    if not row.get("_native_ledger_position"):
+                        continue
+                    in_cycle = native_in_cycle.get(rid, [])
+                    legacy = legacy_by_record.get(rid, [])
+                    if rid in native_after_cycle or rid in uncertain or row["qty"] is None or Decimal(row["qty"]) < 0:
+                        uncertain.add(rid)
+                        for item in in_cycle:
+                            items.append({**item, "recordRevision": row["revision"],
+                                          "positionQtyBefore": None, "positionQtyAfter": None})
+                        continue
+                    if not in_cycle and not legacy:
+                        continue
+                    chain = _reconstruct_native_chain(row["qty"], legacy, in_cycle, exact_quantities)
+                    if chain is None:
+                        uncertain.add(rid)
+                        for item in in_cycle:
+                            items.append({**item, "recordRevision": row["revision"],
+                                          "positionQtyBefore": None, "positionQtyAfter": None})
+                    else:
+                        for item in in_cycle:
+                            before, after = chain[item["id"]]
+                            items.append({**item, "recordRevision": row["revision"],
+                                          "positionQtyBefore": before, "positionQtyAfter": after})
+                if len(records) > MAX_ROWS or len(items) > MAX_ROWS:
+                    raise HTTPException(409, "本交易周期持仓或成交超出完整读取上限")
+                items.sort(key=lambda row: row["id"])
             prices = []
             if closes:
                 # Optional price evidence has its own short budget so a

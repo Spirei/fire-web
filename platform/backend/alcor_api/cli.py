@@ -56,6 +56,9 @@ def main():
     key.add_argument("--source-key-env")
     e = sub.add_parser("export-openapi")
     e.add_argument("--output", type=Path, default=Path("contracts/platform.openapi.json"))
+    repair = sub.add_parser("repair-native-ledger-baseline")
+    repair.add_argument("--owner", required=True)
+    repair.add_argument("--apply", action="store_true")
     args = p.parse_args()
     try:
         if args.command == "export-openapi":
@@ -162,6 +165,18 @@ def main():
             print(json.dumps(result, ensure_ascii=False))
             if not result["compatible"]:
                 raise SystemExit(2)
+        elif args.command == "repair-native-ledger-baseline":
+            from .native_ledger_repair import repair_native_ledger_baseline
+
+            async def run_repair():
+                db = Database(Settings())
+                await db.open()
+                try:
+                    return await repair_native_ledger_baseline(db, args.owner, apply=args.apply)
+                finally:
+                    await db.close()
+
+            print(json.dumps(asyncio.run(run_repair()), ensure_ascii=False))
         elif args.command == "migrate":
             asyncio.run(migrate(Settings(), args.database, args.initialize_empty))
             print("Migration complete; target identity verified.")
