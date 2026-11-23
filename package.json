@@ -1,6 +1,6 @@
 {
   "name": "alcor",
-  "version": "0.1.89",
+  "version": "0.1.90",
   "private": true,
   "scripts": {
     "predev": "node scripts/prepare-system-media.mjs && node scripts/generate-api-request-routes.mjs",
@@ -25,6 +25,7 @@
     "platform:inspect": "node scripts/fire.mjs inspect-database",
     "platform:check": "node scripts/fire.mjs check-schema",
     "platform:migrate": "node scripts/fire.mjs migrate",
+    "platform:repair-native-ledger": "node scripts/fire.mjs repair-native-ledger",
     "dev:pm2": "node scripts/pm2-dev.mjs",
     "test:controls": "node tests/shared-controls.cjs && node tests/popover-interactions.cjs",
     "test:ui-state": "node tests/foreground-profile-browser.cjs"

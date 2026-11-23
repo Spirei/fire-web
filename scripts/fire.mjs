@@ -22,9 +22,13 @@ const python = pythonExecutable(backend);
 if (!fs.existsSync(path.join(backend, "backend/alcor_api/main.py")))
   throw new Error("Fire 内置后端源码缺失");
 if (
-  ["validate-config", "inspect-database", "check-schema", "migrate"].includes(
-    mode,
-  )
+  [
+    "validate-config",
+    "inspect-database",
+    "check-schema",
+    "migrate",
+    "repair-native-ledger",
+  ].includes(mode)
 ) {
   const child = spawn(
     python,

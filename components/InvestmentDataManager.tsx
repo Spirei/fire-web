@@ -1,9 +1,10 @@
 "use client";
 
-import { IconArchive, IconArrowsExchange, IconBriefcase, IconChartLine, IconChevronLeft, IconChevronRight, IconCopy, IconFileDescription, IconFolder, IconDownload, IconHistory, IconReceipt, IconRefresh } from "@tabler/icons-react";
+import { IconArchive, IconArrowsExchange, IconBriefcase, IconChartLine, IconChecklist, IconChevronLeft, IconChevronRight, IconCopy, IconFileDescription, IconFolder, IconDownload, IconHistory, IconReceipt, IconRefresh } from "@tabler/icons-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import AppSelect from "@/components/AppSelect";
 import { Capsule } from "@/components/Capsule";
+import LedgerReconcilePanel from "@/components/LedgerReconcilePanel";
 import { copyText } from "@/lib/clipboard";
 import { MARKET_BADGE_ITEMS } from "@/lib/marketBadge";
 import { useWorkspaceActive } from "@/lib/workspacePanel";
@@ -19,6 +20,7 @@ const FOLDERS = [
   { key: "funds", title: "资金流水", icon: IconArrowsExchange },
   { key: "corrections", title: "更正记录", icon: IconHistory },
   { key: "originals", title: "来源原件", icon: IconFileDescription },
+  { key: "reconcile", title: "账本核准", icon: IconChecklist },
   { key: "archive", title: "账本与备份", icon: IconArchive },
 ] as const;
 type Folder = typeof FOLDERS[number]["key"];
@@ -32,14 +34,14 @@ type MarketFolder = { market: string; count: number };
 type Row = LedgerRow | DailyRow | PeriodFolder | MarketFolder;
 type Cursor = [string, string, string] | string | null;
 type DirectoryPage = { items: Row[]; next: Cursor };
-const OTHER_LISTS = FOLDERS.filter(({ key }) => key !== "daily" && key !== "archive").map(({ key }) => key);
+const OTHER_LISTS = FOLDERS.filter(({ key }) => key !== "daily" && key !== "archive" && key !== "reconcile").map(({ key }) => key);
 const FIRST_PAGE = { index: 0, starts: [null] as Cursor[] };
 const MARKET_NAMES = new Map([...MARKET_BADGE_ITEMS.map(({ key, name }) => [key, name] as const),
   ["CN", "A 股"], ["ASSET", "其他资产"], ["brokers", "券商"]]);
 const marketName = (market: string) => MARKET_NAMES.get(market) ?? market;
 
 function directoryPath(folder: Folder, kind: AccountKind, { year, month }: DailyPath, cursor: Cursor, market?: string) {
-  if (folder === "archive") return null;
+  if (folder === "archive" || folder === "reconcile") return null;
   const daily = folder === "daily";
   const params = new URLSearchParams(daily ? { kind } : { section: folder });
   if (daily) {
@@ -408,6 +410,7 @@ export default function InvestmentDataManager({ ownerId, archiveActions, resumeB
   const [exporting, setExporting] = useState(false);
   const [fileStatus, setFileStatus] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [reconcileToken, setReconcileToken] = useState(0);
   const exportRequest = useRef<AbortController | null>(null);
   const previewContent = useRef<HTMLDivElement>(null);
   const previewTitle = useRef<HTMLHeadingElement>(null);
@@ -560,11 +563,15 @@ export default function InvestmentDataManager({ ownerId, archiveActions, resumeB
     <section className={styles.browser} aria-label={folderTitle}>
     <div className={styles.browserHeader}>
       <h2>{folderTitle}</h2>
-      {folder !== "archive" && <Capsule size="sm" variant="ghost" aria-label="重新读取列表" title="重新读取列表" disabled={loading} onClick={recheck}>
+      {folder === "reconcile" ? (
+        <Capsule size="sm" variant="ghost" aria-label="刷新账本核准" title="刷新账本核准" onClick={() => setReconcileToken((v) => v + 1)}>
+          <IconRefresh size={16} aria-hidden="true" />
+        </Capsule>
+      ) : folder !== "archive" && <Capsule size="sm" variant="ghost" aria-label="重新读取列表" title="重新读取列表" disabled={loading} onClick={recheck}>
         <IconRefresh size={16} aria-hidden="true" />
       </Capsule>}
     </div>
-    {folder === "archive" ? <div className={styles.archive}>
+    {folder === "reconcile" ? <LedgerReconcilePanel ownerId={ownerId} refreshToken={reconcileToken} /> : folder === "archive" ? <div className={styles.archive}>
       <InvestmentArchiveAction icon={<IconArchive size={18} />} title="完整个人账本" description="持仓、成交、资金流水、更正和日终快照。">
         <Capsule size="sm" variant="secondary" busy={exporting} onClick={() => void download()}><IconDownload size={15} />下载 JSON</Capsule>
       </InvestmentArchiveAction>

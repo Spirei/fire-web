@@ -866,6 +866,8 @@ def create_app(settings: Settings | None = None):
     from .native_ledger import mount_native_ledger
     app.state.native_ledger_enabled = settings.native_ledger_enabled
     mount_native_ledger(app)
+    from .ledger_reconcile_api import mount_ledger_reconcile
+    mount_ledger_reconcile(app, db)
     from .legacy_native_orders import mount_legacy_native_orders
     mount_legacy_native_orders(app)
     from .legacy_flat_orders import mount_legacy_flat_orders

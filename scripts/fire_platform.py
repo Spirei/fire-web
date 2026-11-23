@@ -126,6 +126,22 @@ async def command(mode, args):
 
         await migrate(settings, flags.database, initialize_empty=flags.initialize_empty)
         return {"migrated": True, "instance_id": str(settings.instance_id)}
+    if mode == "repair-native-ledger":
+        import argparse
+
+        parser = argparse.ArgumentParser(prog="fire platform:repair-native-ledger")
+        parser.add_argument("--owner", required=True)
+        parser.add_argument("--apply", action="store_true")
+        flags = parser.parse_args(args)
+        from alcor_api.db import Database
+        from alcor_api.native_ledger_repair import repair_native_ledger_baseline
+
+        db = Database(settings)
+        await db.open()
+        try:
+            return await repair_native_ledger_baseline(db, flags.owner, apply=flags.apply)
+        finally:
+            await db.close()
     raise ValueError("运行方式无效")
 
 

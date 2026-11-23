@@ -258,6 +258,101 @@
 :global(.dark) .jsonString { color: #91d6a8; }
 :global(.dark) .jsonLiteral { color: #ffbd9f; }
 .originalFile { min-width: 0; }
+.reconcileStack { display: flex; flex-direction: column; gap: 14px; }
+.reconcileSummary {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 10px 14px; border: 1px solid var(--data-edge); border-radius: 10px;
+  background: color-mix(in srgb, var(--data-soft) 55%, var(--data-surface));
+}
+.reconcileSummary > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.reconcileBadge {
+  display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px;
+  background: var(--data-selected); color: var(--data-accent); font-size: 12px; font-weight: 650;
+}
+.reconcileMeta { color: var(--data-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.reconcileNotice {
+  margin: 0; padding: 10px 14px; border-radius: 10px; font-size: 13px;
+  background: var(--data-selected); color: var(--data-ink);
+}
+.reconcileError {
+  margin: 0; padding: 10px 14px; border-radius: 10px; font-size: 13px;
+  background: color-mix(in srgb, #e5484d 12%, var(--data-surface));
+  color: #c62828; border: 1px solid color-mix(in srgb, #e5484d 28%, var(--data-edge));
+}
+:global(.dark) .reconcileError { color: #ff8a8a; }
+.reconcileAlert {
+  border: 1px solid color-mix(in srgb, var(--data-accent) 32%, var(--data-edge));
+  border-radius: 12px; padding: 13px 15px;
+  background: color-mix(in srgb, var(--data-accent) 6%, var(--data-surface));
+}
+.reconcileAlertHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.reconcileAlertHead h3 { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; font-weight: 650; color: var(--data-accent); }
+.reconcileAlertHead p { margin: 3px 0 0; font-size: 12px; color: var(--data-muted); }
+.reconcileDiffList {
+  display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 0; padding: 0; list-style: none;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.reconcileDiffList li {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px;
+  background: var(--data-surface); border: 1px solid var(--data-edge);
+}
+.reconcileWarnList { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: #b45309; }
+:global(.dark) .reconcileWarnList { color: #fbbf24; }
+.reconcileSection { display: flex; flex-direction: column; gap: 8px; }
+.reconcileSectionHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.reconcileSectionHead h3 { margin: 0; font-size: 14px; font-weight: 650; }
+.reconcilePosHead, .reconcilePosRow {
+  display: grid; grid-template-columns: minmax(7rem, 1.4fr) minmax(4rem, .7fr) minmax(5.5rem, .95fr) minmax(5rem, .85fr) auto;
+  align-items: center; gap: 10px; padding: 10px 14px;
+}
+.reconcilePosHead {
+  min-height: 36px; font-size: 12px; font-weight: 550; color: var(--data-muted);
+  background: color-mix(in srgb, var(--data-soft) 68%, var(--data-surface));
+}
+.reconcilePosHead > span:nth-child(2),
+.reconcilePosHead > span:nth-child(3),
+.reconcilePosHead > span:nth-child(4) { text-align: end; }
+.reconcilePosGroup { border-top: 1px solid var(--data-edge); }
+.reconcilePosRow { font-size: 13px; }
+.reconcilePosRow:hover { background: var(--data-hover); }
+.reconcileSymbol { display: flex; flex-direction: column; min-width: 0; }
+.reconcileSymbol strong { font-weight: 650; }
+.reconcileSymbol small { color: var(--data-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reconcileNum, .reconcileNumMuted {
+  display: flex; flex-direction: column; align-items: flex-end; text-align: end;
+  font-variant-numeric: tabular-nums; font-size: 13px; overflow-wrap: anywhere;
+}
+.reconcileNumMuted { color: var(--data-muted); }
+.reconcileSuggest { font-style: normal; font-size: 11px; color: var(--data-accent); }
+.reconcileActionCell { display: flex; justify-content: flex-end; }
+.reconcileEditor {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 10px;
+  padding: 12px 14px; border-top: 1px dashed var(--data-edge);
+  background: color-mix(in srgb, var(--data-soft) 60%, var(--data-surface));
+}
+.reconcileEditor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--data-muted); }
+.reconcileEditor input {
+  height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--data-edge);
+  background: var(--data-surface); color: var(--data-ink); font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.reconcileEditorActions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.reconcileAuditList { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 12px; }
+.reconcileAuditItem {
+  padding: 10px 12px; border-radius: 8px; border: 1px solid var(--data-edge);
+  background: var(--data-soft); font-size: 12px;
+}
+.reconcileAuditHead { display: flex; justify-content: space-between; gap: 8px; color: var(--data-muted); }
+.reconcileAuditHead strong { color: var(--data-ink); font-weight: 650; }
+.reconcileAuditNote { margin: 4px 0 0; color: var(--data-muted); }
+.reconcileAuditTags { display: flex; flex-wrap: wrap; gap: 5px 8px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.reconcileAuditTags span {
+  padding: 2px 7px; border-radius: 5px; background: var(--data-surface); border: 1px solid var(--data-edge);
+}
+@container (max-width: 560px) {
+  .reconcilePosHead, .reconcilePosRow { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .reconcilePosHead > span:nth-child(2), .reconcilePosRow > span:nth-child(2),
+  .reconcilePosHead > span:nth-child(4), .reconcilePosRow > span:nth-child(4) { display: none; }
+}
 .originalActions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
 .sheetLimit { margin: 0 0 6px; color: var(--data-muted); font-size: 12px; }
 .originalText, .sheet { border: 1px solid var(--data-edge); border-radius: 9px; background: var(--data-soft); }

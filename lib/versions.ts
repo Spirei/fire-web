@@ -8448,7 +8448,7 @@ const V0_1_88_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_89_ENTRY: VersionEntry = {
   ...V0_1_88_ENTRY,
   version: "v0.1.89", date: "2026-11-23", summary: "App 订单、持仓和原币现金一起同步",
   software: V0_1_88_ENTRY.software.map(item => ({ ...item, version: "v0.1.89" })),
@@ -8463,10 +8463,20 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_89_ENTRY,
+  version: "v0.1.90", date: "2026-11-24", summary: "数据管理新增账本核准工作台，可视化对比并核准持仓成本与原币现金",
+  software: V0_1_89_ENTRY.software.map(item => ({ ...item, version: "v0.1.90" })),
+  changes: [
+    { kind: "feature", title: "数据管理账本核准工作台", desc: "在数据管理新增「账本核准」页签，直连 PostgreSQL 并排核对旧账本基线与 App 原生账本；支持一键回填基线缺口、逐项核准持仓单位成本与全局原币现金余额，写入不可变审计记录并递增账本版本同步至 App，无需进入容器手工执行命令。" },
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_89_ENTRY,
   V0_1_88_ENTRY,
   V0_1_87_ENTRY,
   V0_1_86_ENTRY,
