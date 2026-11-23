@@ -145,9 +145,9 @@ async def create_opening_checkpoint(
     }
 
 
-def checkpoint_to_registered_cash(checkpoint, overview):
+async def checkpoint_to_registered_cash(conn, owner_id: str, checkpoint, overview):
     """Build a RegisteredCash-compatible payload purely from PG without touching disk archives."""
-    from .legacy_registered_cash import CURRENCIES, SUMMARY_FIELDS, RegisteredCash
+    from .legacy_registered_cash import CURRENCIES, RegisteredCash
 
     raw_cash = checkpoint["cash_balances"]
     exact_balances = {
@@ -157,17 +157,60 @@ def checkpoint_to_registered_cash(checkpoint, overview):
     for currency, value in raw_cash.items():
         if currency not in exact_balances and value is not None:
             exact_balances[currency] = Decimal(str(value))
+    # Incorporate any real-account PG cash postings written after the checkpoint
+    # (pre-adoption deposits/withdrawals; post-adoption writes are fenced off).
+    post_rows = await (await conn.execute('''
+        SELECT currency, kind, COALESCE(SUM(amount), 0) AS amount
+        FROM cash_ledger_entries
+        WHERE owner_id=%s AND account_kind=%s AND affects_owner AND created_at > %s
+        GROUP BY currency, kind
+        ORDER BY currency, kind
+    ''', (owner_id, checkpoint["account_kind"], checkpoint["created_at"]))).fetchall()
+    canonical = {
+        r["currency"]: r
+        for b in overview["books"]
+        if b["accountKind"] == checkpoint["account_kind"]
+        for r in b["currencies"]
+    }
+    opened_after = {row["currency"] for row in post_rows if row["kind"] == "opening"}
+    summaries = {
+        c: {
+            "openingAsset": Decimal(exact_balances[c]),
+            "cashNetFlow": Decimal(0),
+            "stockNetFlow": Decimal(0),
+            "otherNetFlow": Decimal(0),
+        }
+        for c in CURRENCIES
+    }
+    for currency in opened_after:
+        observed = canonical.get(currency)
+        if observed and observed["complete"] and observed["ownerBalance"] is not None:
+            exact_balances[currency] = Decimal(str(observed["ownerBalance"]))
+            if currency in summaries:
+                summaries[currency] = {
+                    "openingAsset": Decimal(0), "cashNetFlow": Decimal(0),
+                    "stockNetFlow": Decimal(0), "otherNetFlow": Decimal(0),
+                }
+    for row in post_rows:
+        currency = row["currency"]
+        delta = Decimal(str(row["amount"]))
+        if currency not in opened_after:
+            exact_balances[currency] = exact_balances.get(currency, Decimal(0)) + delta
+        if currency in summaries:
+            kind = row["kind"]
+            field = (
+                "openingAsset" if kind == "opening"
+                else "cashNetFlow" if kind in ("external_deposit", "external_withdrawal")
+                else "stockNetFlow" if kind.startswith(("trade_", "fee_"))
+                else "otherNetFlow"
+            )
+            summaries[currency][field] += delta
     values = {
         "balances": {c: float(v) for c, v in exact_balances.items()},
         "cardCash": {c: 0.0 for c in CURRENCIES},
         "summaries": {
-            c: {
-                "openingAsset": float(exact_balances[c]),
-                "cashNetFlow": 0.0,
-                "stockNetFlow": 0.0,
-                "otherNetFlow": 0.0,
-            }
-            for c in CURRENCIES
+            c: {k: float(v) for k, v in s.items()}
+            for c, s in summaries.items()
         },
     }
     dto = {

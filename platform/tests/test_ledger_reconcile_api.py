@@ -221,30 +221,47 @@ async def test_opening_checkpoint_removes_disk_archive_dependency_and_streams_ev
     assert cp_body["positionCount"] == 1
     replay = await client.post(RECONCILE + "/checkpoint", headers=web_headers, json=cp_req)
     assert replay.status_code == 200 and replay.json() == cp_body
+    cp_mismatch = await client.post(
+        RECONCILE + "/checkpoint",
+        headers=web_headers,
+        json={"requestId": cp_req["requestId"], "note": "不同固化备注"},
+    )
+    assert cp_mismatch.status_code == 409
 
     # Physically delete disk migration archive — reads must remain 100% intact from single PG!
     shutil.rmtree(tmp_path / "database-migrations")
 
+    # Pre-adoption canonical cash opening + deposit after checkpoint must not double-count.
+    from test_cash_ledger import command as cash_command, submit as cash_submit
+    await cash_submit(client, cash_command(longbridge, amount="12110.51", currency="USD", accountKind="real"))
+    await cash_submit(
+        client,
+        cash_command(longbridge, action="external_deposit", amount="100", currency="USD", accountKind="real"),
+    )
+
     phone = await native_headers(db, admin, SCOPES)
     assets = await data(client.get(ASSETS, headers=phone))
     assert assets["summary"]["cashComplete"] is True
-    assert assets["summary"]["totalCash"] == 12110.51
+    assert assets["summary"]["totalCash"] == 12210.51
     assert assets["cash"]["sourceAuthority"] == "sealed_legacy_registered_book_checkpoint"
 
     baseline = await data(client.get(LEDGER, headers=phone))
     usd_base = next(row for row in baseline["cash"] if row["brokerAccountId"] is None and row["currency"] == "USD")
-    assert usd_base["balance"] == "12110.51"
+    assert usd_base["balance"] == "12210.51"
 
-    # Adopt + trade after disk archive removal -> structured events recorded monotonically.
+    # Adopt + trade (including negative diluted unitCostAfter) after disk archive removal.
     await adopt(client, phone, baseline)
     buy = order(
         googl["id"], longbridge, at="2026-10-28T22:30:00+08:00",
         quantity="15", price="300", fees="1.05", net="4501.05",
     )
     buy.update(code="GOOGL", name="Synthetic GOOGL")
-    tx = trade(1, buy, "18", "33", "12110.51", "7609.46", cost="336.84236364")
+    tx = trade(1, buy, "18", "33", "12210.51", "7709.46", cost="-2100.25")
     tx["cash"][0].pop("brokerAccountId")
     await data(client.post(TRANSACTIONS, headers=phone, json=tx))
+    updated_ledger = await data(client.get(LEDGER, headers=phone))
+    googl_after = next(row for row in updated_ledger["positions"] if row["recordId"] == googl["id"])
+    assert googl_after["unitCost"] == "-2100.25"
 
     after = (await client.get(RECONCILE, headers=web_headers)).json()
     assert after["checkpoint"]["sealed"] is True

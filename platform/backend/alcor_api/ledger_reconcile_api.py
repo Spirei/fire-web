@@ -288,6 +288,8 @@ def mount_ledger_reconcile(app, db):
             raise HTTPException(400, "不接受这些查询参数")
         who = await actor(request, db, write=True)
         assert_expected_account(request, who.id)
+        if not await app.state.rate_limit(db, "ledger-reconcile:" + who.id, 60, window_seconds=60):
+            raise HTTPException(429, "核准操作过于频繁，请稍后再试")
         raw = _parse_json(await bounded_body(request, BODY_LIMIT))
         if set(raw) - {"requestId", "note"} or "requestId" not in raw:
             raise HTTPException(400, "期初固化参数无效")
@@ -299,6 +301,8 @@ def mount_ledger_reconcile(app, db):
                 await lock_mutation_identity(conn, who, require_admin=False)
                 prior = await checkpoint_by_request(conn, who.id, request_id)
                 if prior is not None:
+                    if prior["note"] != note:
+                        conflict("原请求编号已用于不同核准内容")
                     return wire_response({
                         "ownerId": who.id,
                         "requestId": str(request_id),
@@ -362,6 +366,8 @@ def mount_ledger_reconcile(app, db):
             raise HTTPException(400, "不接受这些查询参数")
         who = await actor(request, db, write=True)
         assert_expected_account(request, who.id)
+        if not await app.state.rate_limit(db, "ledger-reconcile:" + who.id, 60, window_seconds=60):
+            raise HTTPException(429, "核准操作过于频繁，请稍后再试")
         raw = _parse_json(await bounded_body(request, BODY_LIMIT))
         if set(raw) - {"requestId", "baseRevision", "note"} or not {"requestId", "baseRevision"} <= set(raw):
             raise HTTPException(400, "基线核准参数无效")
@@ -418,6 +424,8 @@ def mount_ledger_reconcile(app, db):
             raise HTTPException(400, "不接受这些查询参数")
         who = await actor(request, db, write=True)
         assert_expected_account(request, who.id)
+        if not await app.state.rate_limit(db, "ledger-reconcile:" + who.id, 60, window_seconds=60):
+            raise HTTPException(429, "核准操作过于频繁，请稍后再试")
         raw = _parse_json(await bounded_body(request, BODY_LIMIT))
         allowed = {"requestId", "baseRevision", "note", "positions", "cash"}
         if set(raw) - allowed or not {"requestId", "baseRevision"} <= set(raw):

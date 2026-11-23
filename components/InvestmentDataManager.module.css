@@ -266,7 +266,7 @@
 }
 .reconcileSummary > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .reconcileBadge {
-  display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px;
   background: var(--data-selected); color: var(--data-accent); font-size: 12px; font-weight: 650;
 }
 .reconcileMeta { color: var(--data-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -299,8 +299,15 @@
 .reconcileWarnList { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: #b45309; }
 :global(.dark) .reconcileWarnList { color: #fbbf24; }
 .reconcileSection { display: flex; flex-direction: column; gap: 8px; }
-.reconcileSectionHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.reconcileSectionHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .reconcileSectionHead h3 { margin: 0; font-size: 14px; font-weight: 650; }
+.reconcileSectionControls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.reconcileFilterInput {
+  height: 30px; width: 10.5rem; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--data-edge); background: var(--data-surface); color: var(--data-ink); font-size: 12px;
+}
+.reconcileMissing { font-style: normal; font-size: 12px; font-weight: 600; color: #b45309; }
+:global(.dark) .reconcileMissing { color: #fbbf24; }
 .reconcilePosHead, .reconcilePosRow {
   display: grid; grid-template-columns: minmax(7rem, 1.4fr) minmax(4rem, .7fr) minmax(5.5rem, .95fr) minmax(5rem, .85fr) auto;
   align-items: center; gap: 10px; padding: 10px 14px;

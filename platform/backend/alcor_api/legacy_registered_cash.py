@@ -232,7 +232,7 @@ async def _read_registered_cash(conn, who, settings, overview, *, source):
 
     checkpoint = await latest_checkpoint(conn, who.id)
     if checkpoint is not None:
-        return checkpoint_to_registered_cash(checkpoint, overview)
+        return await checkpoint_to_registered_cash(conn, who.id, checkpoint, overview)
     original = await registered_book_source(conn, who.id) if source is _LOAD_SOURCE else source
     if original is None:
         return None

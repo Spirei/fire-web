@@ -80,7 +80,7 @@ def validate_position(item):
     broker_id(account)
     amount(item['quantityBefore'], 8, nonnegative=True)
     amount(item['quantityAfter'], 8, nonnegative=True)
-    amount(item['unitCostAfter'], nullable=True, nonnegative=True)
+    amount(item['unitCostAfter'], nullable=True, nonnegative=False)
     return item['recordId']
 
 

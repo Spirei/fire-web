@@ -100,7 +100,20 @@ type EditingTarget =
   | { kind: "cash"; currency: string; value: string; note: string; requestId: string };
 
 const fmtVal = (v: string | null | undefined) => (v == null || v === "" ? "—" : v);
-const fmtTime = (iso: string | null) => (iso ? iso.replace("T", " ").slice(0, 19) : "—");
+function fmtTime(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso.replace("T", " ").slice(0, 19);
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
 const EVENT_LABELS: Record<string, string> = {
   adopt: "账本接管",
   trade: "交易提交",
@@ -130,6 +143,7 @@ export default function LedgerReconcilePanel({
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [showZeroPositions, setShowZeroPositions] = useState(false);
+  const [positionQuery, setPositionQuery] = useState("");
   const [showAllCurrencies, setShowAllCurrencies] = useState(false);
   const [editing, setEditing] = useState<EditingTarget | null>(null);
   const baselineRequestId = useRef<string | null>(null);
@@ -169,11 +183,19 @@ export default function LedgerReconcilePanel({
 
   const visiblePositions = useMemo(() => {
     if (!state) return [];
-    if (showZeroPositions) return state.positions;
-    return state.positions.filter(
-      (item) => isNonZero(item.quantity) || item.suggestedUnitCost != null || item.unitCost == null,
-    );
-  }, [state, showZeroPositions]);
+    const keyword = positionQuery.trim().toLowerCase();
+    return state.positions.filter((item) => {
+      if (!showZeroPositions && !isNonZero(item.quantity) && item.suggestedUnitCost == null && item.unitCost != null) {
+        return false;
+      }
+      if (!keyword) return true;
+      return (
+        item.code.toLowerCase().includes(keyword) ||
+        item.name.toLowerCase().includes(keyword) ||
+        item.market.toLowerCase().includes(keyword)
+      );
+    });
+  }, [state, showZeroPositions, positionQuery]);
 
   const visibleCash = useMemo(() => {
     if (!state) return [];
@@ -431,13 +453,23 @@ export default function LedgerReconcilePanel({
       <section className={styles.reconcileSection} aria-label="持仓成本核准">
         <div className={styles.reconcileSectionHead}>
           <h3>持仓成本</h3>
-          <Capsule
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowZeroPositions((v) => !v)}
-          >
-            {showZeroPositions ? "仅看活跃持仓" : `显示全部（${state.positions.length}）`}
-          </Capsule>
+          <div className={styles.reconcileSectionControls}>
+            <input
+              type="search"
+              className={styles.reconcileFilterInput}
+              value={positionQuery}
+              onChange={(e) => setPositionQuery(e.target.value)}
+              placeholder="筛选代码或名称"
+              aria-label="筛选持仓代码或名称"
+            />
+            <Capsule
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowZeroPositions((v) => !v)}
+            >
+              {showZeroPositions ? "仅看活跃持仓" : `显示全部（${state.positions.length}）`}
+            </Capsule>
+          </div>
         </div>
         <div className={styles.fileList}>
           <div className={styles.reconcilePosHead} aria-hidden="true">
@@ -461,7 +493,11 @@ export default function LedgerReconcilePanel({
                     </span>
                     <span className={styles.reconcileNum}>{fmtVal(item.quantity)}</span>
                     <span className={styles.reconcileNum}>
-                      {fmtVal(item.unitCost)}
+                      {item.unitCost == null && isNonZero(item.quantity) ? (
+                        <em className={styles.reconcileMissing}>缺成本</em>
+                      ) : (
+                        fmtVal(item.unitCost)
+                      )}
                       {item.suggestedUnitCost && (
                         <em className={styles.reconcileSuggest}>建议 {item.suggestedUnitCost}</em>
                       )}
