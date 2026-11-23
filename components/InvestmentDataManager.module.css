@@ -258,13 +258,13 @@
 :global(.dark) .jsonString { color: #91d6a8; }
 :global(.dark) .jsonLiteral { color: #ffbd9f; }
 .originalFile { min-width: 0; }
-.reconcileStack { display: flex; flex-direction: column; gap: 14px; }
+.reconcileStack { display: flex; flex-direction: column; gap: 12px; }
 .reconcileSummary {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
   padding: 10px 14px; border: 1px solid var(--data-edge); border-radius: 10px;
   background: color-mix(in srgb, var(--data-soft) 55%, var(--data-surface));
 }
-.reconcileSummary > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.reconcileStatusGroup { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .reconcileBadge {
   display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px;
   background: var(--data-selected); color: var(--data-accent); font-size: 12px; font-weight: 650;
@@ -298,10 +298,11 @@
 }
 .reconcileWarnList { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: #b45309; }
 :global(.dark) .reconcileWarnList { color: #fbbf24; }
-.reconcileSection { display: flex; flex-direction: column; gap: 8px; }
-.reconcileSectionHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.reconcileSectionHead h3 { margin: 0; font-size: 14px; font-weight: 650; }
-.reconcileSectionControls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.reconcileTabBar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  border-bottom: 1px solid var(--data-edge); padding-bottom: 2px;
+}
+.reconcileSectionControls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-bottom: 4px; }
 .reconcileFilterInput {
   height: 30px; width: 10.5rem; padding: 0 10px; border-radius: 999px;
   border: 1px solid var(--data-edge); background: var(--data-surface); color: var(--data-ink); font-size: 12px;
@@ -309,25 +310,31 @@
 .reconcileMissing { font-style: normal; font-size: 12px; font-weight: 600; color: #b45309; }
 :global(.dark) .reconcileMissing { color: #fbbf24; }
 .reconcilePosHead, .reconcilePosRow {
-  display: grid; grid-template-columns: minmax(7rem, 1.4fr) minmax(4rem, .7fr) minmax(5.5rem, .95fr) minmax(5rem, .85fr) auto;
-  align-items: center; gap: 10px; padding: 10px 14px;
+  display: grid;
+  grid-template-columns: minmax(8rem, 1.45fr) minmax(5rem, .8fr) minmax(6rem, .95fr) minmax(6rem, .9fr) 5.25rem;
+  align-items: center; gap: 12px; padding: 10px 14px;
 }
 .reconcilePosHead {
-  min-height: 36px; font-size: 12px; font-weight: 550; color: var(--data-muted);
+  min-height: 38px; font-size: 12px; font-weight: 550; color: var(--data-muted);
   background: color-mix(in srgb, var(--data-soft) 68%, var(--data-surface));
 }
-.reconcilePosHead > span:nth-child(2),
-.reconcilePosHead > span:nth-child(3),
-.reconcilePosHead > span:nth-child(4) { text-align: end; }
+.sortBtn, .sortBtnEnd {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0; font-size: 12px; font-weight: 550;
+  color: var(--data-muted); cursor: pointer; white-space: nowrap;
+}
+.sortBtnEnd { justify-content: flex-end; width: 100%; }
+.sortBtn:hover, .sortBtnEnd:hover { color: var(--data-ink); }
+.sortIdle { opacity: .45; }
+.reconcileHeadAction { text-align: end; white-space: nowrap; }
 .reconcilePosGroup { border-top: 1px solid var(--data-edge); }
 .reconcilePosRow { font-size: 13px; }
 .reconcilePosRow:hover { background: var(--data-hover); }
 .reconcileSymbol { display: flex; flex-direction: column; min-width: 0; }
-.reconcileSymbol strong { font-weight: 650; }
+.reconcileSymbol strong { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reconcileSymbol small { color: var(--data-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reconcileNum, .reconcileNumMuted {
   display: flex; flex-direction: column; align-items: flex-end; text-align: end;
-  font-variant-numeric: tabular-nums; font-size: 13px; overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap;
 }
 .reconcileNumMuted { color: var(--data-muted); }
 .reconcileSuggest { font-style: normal; font-size: 11px; color: var(--data-accent); }
@@ -343,9 +350,9 @@
   background: var(--data-surface); color: var(--data-ink); font-size: 13px; font-variant-numeric: tabular-nums;
 }
 .reconcileEditorActions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-.reconcileAuditList { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 12px; }
+.reconcileAuditList { display: flex; flex-direction: column; gap: 8px; }
 .reconcileAuditItem {
-  padding: 10px 12px; border-radius: 8px; border: 1px solid var(--data-edge);
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--data-edge);
   background: var(--data-soft); font-size: 12px;
 }
 .reconcileAuditHead { display: flex; justify-content: space-between; gap: 8px; color: var(--data-muted); }
@@ -356,9 +363,9 @@
   padding: 2px 7px; border-radius: 5px; background: var(--data-surface); border: 1px solid var(--data-edge);
 }
 @container (max-width: 560px) {
-  .reconcilePosHead, .reconcilePosRow { grid-template-columns: minmax(0, 1fr) auto auto; }
-  .reconcilePosHead > span:nth-child(2), .reconcilePosRow > span:nth-child(2),
-  .reconcilePosHead > span:nth-child(4), .reconcilePosRow > span:nth-child(4) { display: none; }
+  .reconcilePosHead, .reconcilePosRow { grid-template-columns: minmax(0, 1fr) auto 4.75rem; }
+  .reconcilePosHead > :nth-child(2), .reconcilePosRow > :nth-child(2),
+  .reconcilePosHead > :nth-child(4), .reconcilePosRow > :nth-child(4) { display: none; }
 }
 .originalActions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
 .sheetLimit { margin: 0 0 6px; color: var(--data-muted); font-size: 12px; }

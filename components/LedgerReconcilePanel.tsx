@@ -1,6 +1,14 @@
 "use client";
 
-import { IconCheck, IconChevronRight, IconDatabase, IconPencil, IconSparkles } from "@tabler/icons-react";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconArrowsSort,
+  IconCheck,
+  IconDatabase,
+  IconPencil,
+  IconSparkles,
+} from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Capsule } from "@/components/Capsule";
 import { clientRequestId } from "@/lib/randomId";
@@ -8,6 +16,11 @@ import styles from "./InvestmentDataManager.module.css";
 
 const ENDPOINT = "/api/personal-data-transfer/ledger-reconcile";
 const CORE_CURRENCIES = new Set(["USD", "HKD", "CNY"]);
+
+type SectionTab = "positions" | "cash" | "events";
+type PositionSortKey = "name" | "quantity" | "unitCost" | "legacyUnitCost";
+type CashSortKey = "currency" | "balance" | "legacyBalance" | "nativeCashDelta";
+type SortDir = "asc" | "desc";
 
 type ReconcilePosition = {
   recordId: string;
@@ -96,10 +109,53 @@ type ReconcileState = {
 };
 
 type EditingTarget =
-  | { kind: "position"; recordId: string; code: string; value: string; note: string; requestId: string }
+  | { kind: "position"; recordId: string; label: string; value: string; note: string; requestId: string }
   | { kind: "cash"; currency: string; value: string; note: string; requestId: string };
 
-const fmtVal = (v: string | null | undefined) => (v == null || v === "" ? "—" : v);
+const CASH_FMT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const COST_FMT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+const QTY_FMT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+
+const EVENT_LABELS: Record<string, string> = {
+  adopt: "账本接管",
+  trade: "交易提交",
+  merge: "成交合并",
+  repair_baseline: "基线自动核准",
+  reconcile_adjustment: "人工核准",
+  opening_checkpoint: "期初固化",
+};
+const kindLabel = (kind: string) => EVENT_LABELS[kind] ?? kind;
+
+function parseNum(value: string | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isNonZero(value: string | null | undefined): boolean {
+  const n = parseNum(value);
+  return n !== null && n !== 0;
+}
+
+function fmtCash(value: string | null | undefined): string {
+  const n = parseNum(value);
+  if (n === null) return "—";
+  const safe = Object.is(n, -0) ? 0 : n;
+  return CASH_FMT.format(safe);
+}
+
+function fmtCost(value: string | null | undefined): string {
+  const n = parseNum(value);
+  if (n === null) return "—";
+  return COST_FMT.format(Object.is(n, -0) ? 0 : n);
+}
+
+function fmtQty(value: string | null | undefined): string {
+  const n = parseNum(value);
+  if (n === null) return "—";
+  return QTY_FMT.format(Object.is(n, -0) ? 0 : n);
+}
+
 function fmtTime(iso: string | null): string {
   if (!iso) return "—";
   const date = new Date(iso);
@@ -114,20 +170,73 @@ function fmtTime(iso: string | null): string {
     hour12: false,
   });
 }
-const EVENT_LABELS: Record<string, string> = {
-  adopt: "账本接管",
-  trade: "交易提交",
-  merge: "成交合并",
-  repair_baseline: "基线自动核准",
-  reconcile_adjustment: "人工核准",
-  opening_checkpoint: "期初固化",
-};
-const kindLabel = (kind: string) => EVENT_LABELS[kind] ?? kind;
 
-function isNonZero(value: string | null | undefined): boolean {
-  if (value == null || value === "") return false;
-  const n = Number(value);
-  return Number.isFinite(n) && n !== 0;
+function compareNullableNum(a: string | null, b: string | null, dir: SortDir): number {
+  const na = parseNum(a);
+  const nb = parseNum(b);
+  if (na === null && nb === null) return 0;
+  if (na === null) return 1;
+  if (nb === null) return -1;
+  return dir === "asc" ? na - nb : nb - na;
+}
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <IconArrowsSort size={13} aria-hidden="true" className={styles.sortIdle} />;
+  return dir === "asc" ? <IconArrowUp size={13} aria-hidden="true" /> : <IconArrowDown size={13} aria-hidden="true" />;
+}
+
+function formatEventTags(entry: LedgerEventRow): string[] {
+  const tags: string[] = [];
+  if (entry.orders.length > 0) {
+    tags.push(`订单 ${entry.orders.length} 笔`);
+  }
+  if (entry.kind === "opening_checkpoint") {
+    const nonZeroCash = entry.cash.filter((c) => isNonZero(c.balance as string | null));
+    tags.push(`存量持仓 ${entry.positions.length} 项`);
+    tags.push(`原币现金 ${entry.cash.length} 项`);
+    for (const c of nonZeroCash.slice(0, 4)) {
+      tags.push(`${String(c.currency)}: ${fmtCash(c.balance as string | null)}`);
+    }
+    return tags;
+  }
+  if (entry.kind === "trade") {
+    for (const p of entry.positions.slice(0, 6)) {
+      const code = String(p.code ?? p.recordId ?? "持仓");
+      const qtyPart =
+        p.quantityBefore !== undefined && p.quantityAfter !== undefined
+          ? `${fmtQty(p.quantityBefore as string | null)} → ${fmtQty(p.quantityAfter as string | null)} 股`
+          : "";
+      const costPart = p.unitCostAfter != null ? ` · 成本 ${fmtCost(p.unitCostAfter as string)}` : "";
+      tags.push(`${code}${qtyPart ? `: ${qtyPart}` : ""}${costPart}`);
+    }
+    for (const c of entry.cash.slice(0, 4)) {
+      const currency = String(c.currency ?? "现金");
+      const before = fmtCash(c.balanceBefore as string | null);
+      const after = fmtCash(c.balanceAfter as string | null);
+      if (before === "—" && after === "—") {
+        tags.push(`${currency}: 未记录期初`);
+      } else {
+        tags.push(`${currency}: ${before} → ${after}`);
+      }
+    }
+    return tags;
+  }
+  for (const p of entry.positions.slice(0, 6)) {
+    const code = String(p.code ?? p.recordId ?? "持仓");
+    tags.push(`${code}: ${fmtCost(p.unitCostBefore as string | null)} → ${fmtCost(p.unitCostAfter as string | null)}`);
+  }
+  if (entry.positions.length > 6) tags.push(`其余持仓 ${entry.positions.length - 6} 项`);
+  const nonZeroCash = entry.cash.filter(
+    (c) => isNonZero(c.balanceBefore as string | null) || isNonZero(c.balanceAfter as string | null),
+  );
+  const cashShown = nonZeroCash.length > 0 ? nonZeroCash : entry.cash.slice(0, 4);
+  for (const c of cashShown.slice(0, 6)) {
+    const currency = String(c.currency ?? "现金");
+    tags.push(`${currency}: ${fmtCash(c.balanceBefore as string | null)} → ${fmtCash(c.balanceAfter as string | null)}`);
+  }
+  const hiddenCash = entry.cash.length - Math.min(cashShown.length, 6);
+  if (hiddenCash > 0) tags.push(`其余零余额币种 ${hiddenCash} 项`);
+  return tags;
 }
 
 export default function LedgerReconcilePanel({
@@ -142,8 +251,11 @@ export default function LedgerReconcilePanel({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<SectionTab>("positions");
   const [showZeroPositions, setShowZeroPositions] = useState(false);
   const [positionQuery, setPositionQuery] = useState("");
+  const [posSort, setPosSort] = useState<{ key: PositionSortKey; dir: SortDir }>({ key: "name", dir: "asc" });
+  const [cashSort, setCashSort] = useState<{ key: CashSortKey; dir: SortDir }>({ key: "currency", dir: "asc" });
   const [showAllCurrencies, setShowAllCurrencies] = useState(false);
   const [editing, setEditing] = useState<EditingTarget | null>(null);
   const baselineRequestId = useRef<string | null>(null);
@@ -181,10 +293,22 @@ export default function LedgerReconcilePanel({
     return () => controller.abort();
   }, [load, refreshToken]);
 
+  function togglePosSort(key: PositionSortKey) {
+    setPosSort((curr) =>
+      curr.key === key ? { key, dir: curr.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" },
+    );
+  }
+
+  function toggleCashSort(key: CashSortKey) {
+    setCashSort((curr) =>
+      curr.key === key ? { key, dir: curr.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "currency" ? "asc" : "desc" },
+    );
+  }
+
   const visiblePositions = useMemo(() => {
     if (!state) return [];
     const keyword = positionQuery.trim().toLowerCase();
-    return state.positions.filter((item) => {
+    const filtered = state.positions.filter((item) => {
       if (!showZeroPositions && !isNonZero(item.quantity) && item.suggestedUnitCost == null && item.unitCost != null) {
         return false;
       }
@@ -195,20 +319,39 @@ export default function LedgerReconcilePanel({
         item.market.toLowerCase().includes(keyword)
       );
     });
-  }, [state, showZeroPositions, positionQuery]);
+    return [...filtered].sort((a, b) => {
+      if (posSort.key === "name") {
+        const cmp = a.name.localeCompare(b.name, "zh-Hans-CN") || a.code.localeCompare(b.code);
+        return posSort.dir === "asc" ? cmp : -cmp;
+      }
+      if (posSort.key === "quantity") return compareNullableNum(a.quantity, b.quantity, posSort.dir);
+      if (posSort.key === "unitCost") return compareNullableNum(a.unitCost, b.unitCost, posSort.dir);
+      return compareNullableNum(a.legacyUnitCost, b.legacyUnitCost, posSort.dir);
+    });
+  }, [state, showZeroPositions, positionQuery, posSort]);
 
   const visibleCash = useMemo(() => {
     if (!state) return [];
-    if (showAllCurrencies) return state.cash;
-    return state.cash.filter(
-      (item) =>
-        CORE_CURRENCIES.has(item.currency) ||
-        isNonZero(item.balance) ||
-        isNonZero(item.legacyBalance) ||
-        isNonZero(item.nativeCashDelta) ||
-        item.suggestedBalance != null,
-    );
-  }, [state, showAllCurrencies]);
+    const filtered = showAllCurrencies
+      ? state.cash
+      : state.cash.filter(
+          (item) =>
+            CORE_CURRENCIES.has(item.currency) ||
+            isNonZero(item.balance) ||
+            isNonZero(item.legacyBalance) ||
+            isNonZero(item.nativeCashDelta) ||
+            item.suggestedBalance != null,
+        );
+    return [...filtered].sort((a, b) => {
+      if (cashSort.key === "currency") {
+        const cmp = a.currency.localeCompare(b.currency);
+        return cashSort.dir === "asc" ? cmp : -cmp;
+      }
+      if (cashSort.key === "balance") return compareNullableNum(a.balance, b.balance, cashSort.dir);
+      if (cashSort.key === "legacyBalance") return compareNullableNum(a.legacyBalance, b.legacyBalance, cashSort.dir);
+      return compareNullableNum(a.nativeCashDelta, b.nativeCashDelta, cashSort.dir);
+    });
+  }, [state, showAllCurrencies, cashSort]);
 
   async function sealCheckpoint() {
     if (!state || !state.checkpoint.canSeal || busy) return;
@@ -325,7 +468,7 @@ export default function LedgerReconcilePanel({
         }
         throw new Error(typeof body?.error === "string" ? body.error : typeof body?.detail === "string" ? body.detail : "核准提交未完成");
       }
-      const label = editing.kind === "position" ? editing.code : editing.currency;
+      const label = editing.kind === "position" ? editing.label : editing.currency;
       setEditing(null);
       setNotice({ text: `已核准 ${label}（版本 v${body?.sourceRevision ?? state.revision + 1}）。` });
       window.dispatchEvent(new Event("fire:records-updated"));
@@ -362,19 +505,10 @@ export default function LedgerReconcilePanel({
   return (
     <div className={styles.reconcileStack}>
       <div className={styles.reconcileSummary}>
-        <div>
+        <div className={styles.reconcileStatusGroup}>
           <span className={styles.reconcileBadge}>
             {state.adopted ? `原生账本 · v${state.revision}` : "旧账本直读"}
           </span>
-          {state.updatedAt && <span className={styles.reconcileMeta}>更新于 {fmtTime(state.updatedAt)}</span>}
-        </div>
-        <span className={styles.reconcileMeta}>
-          持仓 {state.positions.length} 项 · 币种 {state.cash.length} 项
-        </span>
-      </div>
-
-      <div className={styles.reconcileSummary}>
-        <div>
           <span className={styles.reconcileBadge}>
             <IconDatabase size={13} aria-hidden="true" />
             {state.checkpoint.sealed
@@ -383,9 +517,7 @@ export default function LedgerReconcilePanel({
                 ? "期初依赖磁盘迁移档案"
                 : "尚未固化期初"}
           </span>
-          {state.checkpoint.createdAt && (
-            <span className={styles.reconcileMeta}>固化于 {fmtTime(state.checkpoint.createdAt)}</span>
-          )}
+          {state.updatedAt && <span className={styles.reconcileMeta}>更新于 {fmtTime(state.updatedAt)}</span>}
         </div>
         {state.checkpoint.canSeal && (
           <Capsule
@@ -425,7 +557,7 @@ export default function LedgerReconcilePanel({
               {state.baselineDiff.positionUpdates.map((item) => (
                 <li key={item.recordId}>
                   <strong>{item.code}</strong>
-                  <span>{fmtVal(item.unitCostBefore)} → {fmtVal(item.unitCostAfter)}</span>
+                  <span>{fmtCost(item.unitCostBefore)} → {fmtCost(item.unitCostAfter)}</span>
                 </li>
               ))}
             </ul>
@@ -435,7 +567,7 @@ export default function LedgerReconcilePanel({
               {state.baselineDiff.cashUpdates.map((item) => (
                 <li key={item.currency}>
                   <strong>{item.currency}</strong>
-                  <span>{fmtVal(item.balanceBefore)} → {fmtVal(item.balanceAfter)}</span>
+                  <span>{fmtCash(item.balanceBefore)} → {fmtCash(item.balanceAfter)}</span>
                 </li>
               ))}
             </ul>
@@ -450,37 +582,83 @@ export default function LedgerReconcilePanel({
         </section>
       )}
 
-      <section className={styles.reconcileSection} aria-label="持仓成本核准">
-        <div className={styles.reconcileSectionHead}>
-          <h3>持仓成本</h3>
+      <div className={styles.reconcileTabBar}>
+        <nav className={styles.previewNav} aria-label="账本核准分类">
+          <button
+            type="button"
+            aria-pressed={tab === "positions"}
+            onClick={() => { setTab("positions"); setEditing(null); }}
+          >
+            持仓成本 ({state.positions.length})
+          </button>
+          <button
+            type="button"
+            aria-pressed={tab === "cash"}
+            onClick={() => { setTab("cash"); setEditing(null); }}
+          >
+            原币现金 ({state.cash.length})
+          </button>
+          <button
+            type="button"
+            aria-pressed={tab === "events"}
+            onClick={() => { setTab("events"); setEditing(null); }}
+          >
+            事件流 ({state.events.length})
+          </button>
+        </nav>
+
+        {tab === "positions" && (
           <div className={styles.reconcileSectionControls}>
             <input
               type="search"
               className={styles.reconcileFilterInput}
               value={positionQuery}
               onChange={(e) => setPositionQuery(e.target.value)}
-              placeholder="筛选代码或名称"
-              aria-label="筛选持仓代码或名称"
+              placeholder="筛选股票或代码"
+              aria-label="筛选股票名称或代码"
             />
             <Capsule
               size="sm"
               variant="ghost"
               onClick={() => setShowZeroPositions((v) => !v)}
             >
-              {showZeroPositions ? "仅看活跃持仓" : `显示全部（${state.positions.length}）`}
+              {showZeroPositions ? "仅看活跃" : `全部 (${state.positions.length})`}
             </Capsule>
           </div>
-        </div>
+        )}
+
+        {tab === "cash" && (
+          <div className={styles.reconcileSectionControls}>
+            <Capsule
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowAllCurrencies((v) => !v)}
+            >
+              {showAllCurrencies ? "仅看主要币种" : `全部 (${state.cash.length})`}
+            </Capsule>
+          </div>
+        )}
+      </div>
+
+      {tab === "positions" && (
         <div className={styles.fileList}>
-          <div className={styles.reconcilePosHead} aria-hidden="true">
-            <span>证券</span>
-            <span>数量</span>
-            <span>当前成本</span>
-            <span>旧基线</span>
-            <span />
+          <div className={styles.reconcilePosHead}>
+            <button type="button" className={styles.sortBtn} onClick={() => togglePosSort("name")}>
+              股票/代码 <SortIcon active={posSort.key === "name"} dir={posSort.dir} />
+            </button>
+            <button type="button" className={styles.sortBtnEnd} onClick={() => togglePosSort("quantity")}>
+              数量 <SortIcon active={posSort.key === "quantity"} dir={posSort.dir} />
+            </button>
+            <button type="button" className={styles.sortBtnEnd} onClick={() => togglePosSort("unitCost")}>
+              当前成本 <SortIcon active={posSort.key === "unitCost"} dir={posSort.dir} />
+            </button>
+            <button type="button" className={styles.sortBtnEnd} onClick={() => togglePosSort("legacyUnitCost")}>
+              旧基线 <SortIcon active={posSort.key === "legacyUnitCost"} dir={posSort.dir} />
+            </button>
+            <span className={styles.reconcileHeadAction}>操作</span>
           </div>
           {visiblePositions.length === 0 ? (
-            <p className={styles.empty}>暂无持仓记录</p>
+            <p className={styles.empty}>暂无匹配的持仓记录</p>
           ) : (
             visiblePositions.map((item) => {
               const active = editing?.kind === "position" && editing.recordId === item.recordId;
@@ -488,21 +666,25 @@ export default function LedgerReconcilePanel({
                 <div key={item.recordId} className={styles.reconcilePosGroup}>
                   <div className={styles.reconcilePosRow}>
                     <span className={styles.reconcileSymbol}>
-                      <strong>{item.code}</strong>
-                      <small>{item.name} · {item.market}</small>
+                      <strong>{item.name}</strong>
+                      <small>{item.code} · {item.market}</small>
                     </span>
-                    <span className={styles.reconcileNum}>{fmtVal(item.quantity)}</span>
-                    <span className={styles.reconcileNum}>
+                    <span className={styles.reconcileNum} title={item.quantity ?? undefined}>
+                      {fmtQty(item.quantity)}
+                    </span>
+                    <span className={styles.reconcileNum} title={item.unitCost ?? undefined}>
                       {item.unitCost == null && isNonZero(item.quantity) ? (
                         <em className={styles.reconcileMissing}>缺成本</em>
                       ) : (
-                        fmtVal(item.unitCost)
+                        fmtCost(item.unitCost)
                       )}
                       {item.suggestedUnitCost && (
-                        <em className={styles.reconcileSuggest}>建议 {item.suggestedUnitCost}</em>
+                        <em className={styles.reconcileSuggest}>建议 {fmtCost(item.suggestedUnitCost)}</em>
                       )}
                     </span>
-                    <span className={styles.reconcileNumMuted}>{fmtVal(item.legacyUnitCost)}</span>
+                    <span className={styles.reconcileNumMuted} title={item.legacyUnitCost ?? undefined}>
+                      {fmtCost(item.legacyUnitCost)}
+                    </span>
                     <span className={styles.reconcileActionCell}>
                       {state.adopted && !active && (
                         <Capsule
@@ -514,7 +696,7 @@ export default function LedgerReconcilePanel({
                             setEditing({
                               kind: "position",
                               recordId: item.recordId,
-                              code: item.code,
+                              label: `${item.name} (${item.code})`,
                               value: item.suggestedUnitCost ?? item.unitCost ?? item.legacyUnitCost ?? "",
                               note: "",
                               requestId: clientRequestId(),
@@ -562,26 +744,24 @@ export default function LedgerReconcilePanel({
             })
           )}
         </div>
-      </section>
+      )}
 
-      <section className={styles.reconcileSection} aria-label="原币现金核准">
-        <div className={styles.reconcileSectionHead}>
-          <h3>原币现金（全局）</h3>
-          <Capsule
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowAllCurrencies((v) => !v)}
-          >
-            {showAllCurrencies ? "仅看主要币种" : `显示全部（${state.cash.length}）`}
-          </Capsule>
-        </div>
+      {tab === "cash" && (
         <div className={styles.fileList}>
-          <div className={styles.reconcilePosHead} aria-hidden="true">
-            <span>币种</span>
-            <span>当前余额</span>
-            <span>接管基线</span>
-            <span>原生变动</span>
-            <span />
+          <div className={styles.reconcilePosHead}>
+            <button type="button" className={styles.sortBtn} onClick={() => toggleCashSort("currency")}>
+              币种 <SortIcon active={cashSort.key === "currency"} dir={cashSort.dir} />
+            </button>
+            <button type="button" className={styles.sortBtnEnd} onClick={() => toggleCashSort("balance")}>
+              当前余额 <SortIcon active={cashSort.key === "balance"} dir={cashSort.dir} />
+            </button>
+            <button type="button" className={styles.sortBtnEnd} onClick={() => toggleCashSort("legacyBalance")}>
+              接管基线 <SortIcon active={cashSort.key === "legacyBalance"} dir={cashSort.dir} />
+            </button>
+            <button type="button" className={styles.sortBtnEnd} onClick={() => toggleCashSort("nativeCashDelta")}>
+              原生变动 <SortIcon active={cashSort.key === "nativeCashDelta"} dir={cashSort.dir} />
+            </button>
+            <span className={styles.reconcileHeadAction}>操作</span>
           </div>
           {visibleCash.length === 0 ? (
             <p className={styles.empty}>暂无原币现金记录</p>
@@ -592,14 +772,18 @@ export default function LedgerReconcilePanel({
                 <div key={item.currency} className={styles.reconcilePosGroup}>
                   <div className={styles.reconcilePosRow}>
                     <span className={styles.reconcileSymbol}><strong>{item.currency}</strong></span>
-                    <span className={styles.reconcileNum}>
-                      {fmtVal(item.balance)}
+                    <span className={styles.reconcileNum} title={item.balance ?? undefined}>
+                      {fmtCash(item.balance)}
                       {item.suggestedBalance && (
-                        <em className={styles.reconcileSuggest}>建议 {item.suggestedBalance}</em>
+                        <em className={styles.reconcileSuggest}>建议 {fmtCash(item.suggestedBalance)}</em>
                       )}
                     </span>
-                    <span className={styles.reconcileNumMuted}>{fmtVal(item.legacyBalance)}</span>
-                    <span className={styles.reconcileNumMuted}>{fmtVal(item.nativeCashDelta)}</span>
+                    <span className={styles.reconcileNumMuted} title={item.legacyBalance ?? undefined}>
+                      {fmtCash(item.legacyBalance)}
+                    </span>
+                    <span className={styles.reconcileNumMuted} title={item.nativeCashDelta}>
+                      {fmtCash(item.nativeCashDelta)}
+                    </span>
                     <span className={styles.reconcileActionCell}>
                       {state.adopted && !active && (
                         <Capsule
@@ -608,10 +792,16 @@ export default function LedgerReconcilePanel({
                           disabled={busy}
                           onClick={() => {
                             setNotice(null);
+                            const raw = item.suggestedBalance ?? item.balance ?? item.legacyBalance ?? "";
+                            const n = parseNum(raw);
+                            const cleanDefault =
+                              n !== null && raw.includes(".") && raw.split(".")[1].length > 4
+                                ? n.toFixed(2)
+                                : raw;
                             setEditing({
                               kind: "cash",
                               currency: item.currency,
-                              value: item.suggestedBalance ?? item.balance ?? item.legacyBalance ?? "",
+                              value: cleanDefault,
                               note: "",
                               requestId: clientRequestId(),
                             });
@@ -640,7 +830,7 @@ export default function LedgerReconcilePanel({
                           type="text"
                           value={editing.note}
                           onChange={(e) => setEditing({ ...editing, note: e.target.value })}
-                          placeholder="例如：核对现金余额"
+                          placeholder="例如：消除历史浮点尾差"
                         />
                       </label>
                       <div className={styles.reconcileEditorActions}>
@@ -658,57 +848,40 @@ export default function LedgerReconcilePanel({
             })
           )}
         </div>
-      </section>
+      )}
 
-      {state.events.length > 0 && (
-        <details className={styles.evidence}>
-          <summary>
-            <IconChevronRight size={14} aria-hidden="true" />
-            结构化账本事件流 · {state.events.length}
-          </summary>
-          <div className={styles.reconcileAuditList}>
-            {state.events.map((entry) => (
-              <div key={entry.requestId} className={styles.reconcileAuditItem}>
-                <div className={styles.reconcileAuditHead}>
-                  <strong>
-                    #{entry.seq}
-                    {entry.revision != null ? ` · v${entry.revision}` : ""}
-                    {` · ${kindLabel(entry.kind)}`}
-                  </strong>
-                  <span>{fmtTime(entry.occurredAt || entry.createdAt)}</span>
-                </div>
-                {entry.note && <p className={styles.reconcileAuditNote}>{entry.note}</p>}
-                <div className={styles.reconcileAuditTags}>
-                  {entry.orders.length > 0 && <span>订单 {entry.orders.length} 笔</span>}
-                  {entry.positions.slice(0, 6).map((p, idx) => (
-                    <span key={`${entry.requestId}:p:${idx}`}>
-                      {String(p.code ?? p.recordId ?? "持仓")}
-                      {p.unitCostAfter !== undefined
-                        ? `: ${fmtVal(p.unitCostBefore as string | null)} → ${fmtVal(p.unitCostAfter as string | null)}`
-                        : p.unitCost !== undefined
-                          ? `: ${fmtVal(p.unitCost as string | null)}`
-                          : p.quantityAfter !== undefined
-                            ? `: ${fmtVal(p.quantityBefore as string | null)} → ${fmtVal(p.quantityAfter as string | null)}`
-                            : ""}
-                    </span>
-                  ))}
-                  {entry.positions.length > 6 && <span>其余持仓 {entry.positions.length - 6} 项</span>}
-                  {entry.cash.slice(0, 6).map((c, idx) => (
-                    <span key={`${entry.requestId}:c:${idx}`}>
-                      {String(c.currency ?? "现金")}
-                      {c.balanceAfter !== undefined
-                        ? `: ${fmtVal(c.balanceBefore as string | null)} → ${fmtVal(c.balanceAfter as string | null)}`
-                        : c.balance !== undefined
-                          ? `: ${fmtVal(c.balance as string | null)}`
-                          : ""}
-                    </span>
-                  ))}
-                  {entry.cash.length > 6 && <span>其余币种 {entry.cash.length - 6} 项</span>}
-                </div>
-              </div>
-            ))}
+      {tab === "events" && (
+        state.events.length === 0 ? (
+          <div className={styles.fileList}>
+            <p className={styles.empty}>暂无结构化账本事件</p>
           </div>
-        </details>
+        ) : (
+          <div className={styles.reconcileAuditList}>
+            {state.events.map((entry) => {
+              const tags = formatEventTags(entry);
+              return (
+                <div key={entry.requestId} className={styles.reconcileAuditItem}>
+                  <div className={styles.reconcileAuditHead}>
+                    <strong>
+                      #{entry.seq}
+                      {entry.revision != null ? ` · v${entry.revision}` : ""}
+                      {` · ${kindLabel(entry.kind)}`}
+                    </strong>
+                    <span>{fmtTime(entry.occurredAt || entry.createdAt)}</span>
+                  </div>
+                  {entry.note && <p className={styles.reconcileAuditNote}>{entry.note}</p>}
+                  {tags.length > 0 && (
+                    <div className={styles.reconcileAuditTags}>
+                      {tags.map((tag, idx) => (
+                        <span key={`${entry.requestId}:${idx}`}>{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
     </div>
   );
