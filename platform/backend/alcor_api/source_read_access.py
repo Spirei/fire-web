@@ -8,8 +8,9 @@ from .security import lock_read_identity
 
 async def source_read_lock(conn, who):
     # Same identity-management -> broker-accounts -> current user/session order
-    # as the old Cash/Trading lock; history reads need no financial row bootstrap.
-    await serialize_brokers(conn, who.id)
+    # as the old Cash/Trading lock, using shared read locks so concurrent GET
+    # views do not serialize each other or starve ledger writes.
+    await serialize_brokers(conn, who.id, shared_read=True)
     await lock_read_identity(conn, who, require_admin=False)
     row = await (await conn.execute('SELECT active,role FROM users WHERE id=%s', (who.id,))).fetchone()
     if not row or not row['active'] or row['role'] != who.role:

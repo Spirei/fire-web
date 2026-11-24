@@ -494,10 +494,19 @@ async def execute(authority, task, transport, *, owner_gate=None):
                 },
             )
             return "complete"
-        await conn.execute(
-            "UPDATE market_streams SET next_due=clock_timestamp()+make_interval(secs=>%s) WHERE owner_id=%s AND id=%s",
-            (5 if query.kind == "latest" else 0, task["owner_id"], stream["id"]),
-        )
+        if query.kind == "latest":
+            # Align five-second latest cadence to shared clock boundaries so
+            # claim_batch + LatestBatch coalesce symbols into one provider RPC
+            # instead of staggering them into OpenD rate limits.
+            await conn.execute(
+                "UPDATE market_streams SET next_due=to_timestamp(ceil(extract(epoch from clock_timestamp()+interval '3 seconds')/5.0)*5.0) WHERE owner_id=%s AND id=%s",
+                (task["owner_id"], stream["id"]),
+            )
+        else:
+            await conn.execute(
+                "UPDATE market_streams SET next_due=clock_timestamp() WHERE owner_id=%s AND id=%s",
+                (task["owner_id"], stream["id"]),
+            )
         await conn.execute(
             "UPDATE tasks SET status='queued',attempts=0,lease_until=NULL,result=%s WHERE id=%s",
             (

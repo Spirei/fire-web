@@ -370,7 +370,17 @@ class Authority:
                 "UPDATE market_streams SET demand_generation=demand_generation+1 WHERE owner_id=%s AND id=%s",
                 (who.id, stream["id"]),
             )
-            if query.kind=='latest' and (not observed or not old or not old['hot'] or old['session_version']!=user['session_version']):
+            sleeping = bool(
+                query.kind == "latest"
+                and stream["current_task_id"]
+                and await (
+                    await conn.execute(
+                        "SELECT 1 FROM market_data_jobs WHERE task_id=%s AND state='sleeping'",
+                        (stream["current_task_id"],),
+                    )
+                ).fetchone()
+            )
+            if query.kind=='latest' and (not observed or not old or not old['hot'] or old['session_version']!=user['session_version'] or sleeping):
                 # Repeated visible-page observations renew demand retention,
                 # but must not shorten the worker's five-second source cadence.
                 # New/revived demand still wakes a sleeping stream immediately.

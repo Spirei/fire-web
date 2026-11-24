@@ -161,6 +161,7 @@ async def test_real_worker_failure_reopens_generated_intent_in_the_same_window(m
     first = await client.post('/api/quotes', json=body())
     await schedule(authority)
     task = await claim(app.state.db, uuid4())
+    original_read = transport.read
     async def unavailable(*_args):
         raise TimeoutError('Synthetic provider timeout')
     monkeypatch.setattr(transport, 'read', unavailable)
@@ -168,6 +169,76 @@ async def test_real_worker_failure_reopens_generated_intent_in_the_same_window(m
     next_read = await client.post('/api/quotes', json=body())
     assert next_read.status_code == 200
     assert next_read.headers['x-alcor-request-id'] != first.headers['x-alcor-request-id']
+    # Hot observation must NOT trap a failed stream; the next schedule() must revive it.
+    assert await schedule(authority) == 1
+    revived = await claim(app.state.db, uuid4(), kind='market.latest')
+    assert revived is not None and revived['id'] != task['id']
+    monkeypatch.setattr(transport, 'read', original_read)
+    assert await execute(authority, revived, transport) == 'observed'
+    async with app.state.db.connection() as conn:
+        due = (await (await conn.execute("SELECT extract(epoch from next_due) AS ts FROM market_streams WHERE id=%s", (revived['payload']['streamId'],))).fetchone())['ts']
+    assert round(due) % 5 == 0
+
+
+async def test_hot_app_repoll_revives_failed_and_sleeping_streams(market, monkeypatch):
+    from alcor_api.market_worker import claim, execute, schedule
+
+    client, app, authority, transport, _revision = market
+    headers = await token(app, "portfolio.read portfolio.write")
+    monkeypatch.setattr("alcor_api.market_observation_receipts.observation_bucket", lambda _at: 200)
+    first = await client.post("/api/v2/quotes", json=body(), headers=headers)
+    assert first.status_code == 200, first.text
+    assert await schedule(authority) == 1
+    task = await claim(app.state.db, uuid4(), kind="market.latest")
+    assert task is not None
+    original_read = transport.read
+
+    async def unavailable(*_args):
+        raise TimeoutError("Synthetic Futu disconnect")
+
+    monkeypatch.setattr(transport, "read", unavailable)
+    assert await execute(authority, task, transport) == "source_outcome_unknown"
+    # Even while hot_until > now, the next App poll must bypass hot_observation
+    # and bump demand_generation so schedule() creates a fresh latest task.
+    repoll = await client.post("/api/v2/quotes", json=body(), headers=headers)
+    assert repoll.status_code == 200 and repoll.headers["x-alcor-quote-tracked"] == "true", repoll.text
+    assert await schedule(authority) == 1
+    revived = await claim(app.state.db, uuid4(), kind="market.latest")
+    assert revived is not None and revived["id"] != task["id"]
+    monkeypatch.setattr(transport, "read", original_read)
+    assert await execute(authority, revived, transport) == "observed"
+    # Simulate a sleeping task with a far-future next_due while hot_until is still active.
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE market_data_jobs SET state='sleeping' WHERE task_id=%s", (revived["id"],))
+        await conn.execute(
+            "UPDATE market_streams SET next_due=clock_timestamp()+interval '7 days' WHERE id=%s",
+            (revived["payload"]["streamId"],),
+        )
+    monkeypatch.setattr("alcor_api.market_observation_receipts.observation_bucket", lambda _at: 201)
+    wake = await client.post("/api/v2/quotes", json=body(), headers=headers)
+    assert wake.status_code == 200 and wake.headers["x-alcor-quote-tracked"] == "true", wake.text
+    async with app.state.db.connection() as conn:
+        awake = (await (await conn.execute(
+            "SELECT next_due<=clock_timestamp() AS awake FROM market_streams WHERE id=%s",
+            (revived["payload"]["streamId"],),
+        )).fetchone())["awake"]
+    assert awake
+
+
+def test_futu_snapshot_records_short_circuits_rate_limit_without_bisecting():
+    import pytest
+    from alcor_api.market_futu_sdk import snapshot_records
+
+    calls = []
+
+    class RateLimitedContext:
+        def get_market_snapshot(self, group):
+            calls.append(list(group))
+            return -1, "GetMarketSnapshot frequency limit: max 60 per 30s"
+
+    with pytest.raises(ValueError, match="sdk_read_rejected"):
+        snapshot_records(RateLimitedContext(), 0, [f"US.SYM{i}" for i in range(16)])
+    assert len(calls) == 1
 
 
 async def test_full_100_security_poll_does_not_rewrite_or_depend_on_display_ids(market, monkeypatch):

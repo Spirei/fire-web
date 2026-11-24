@@ -475,12 +475,16 @@ class CashLedger:
         return {"state": "completed", **row["result"]}
 
     async def close(self,who,request_id,*,connection=None):
-        from .source_read_access import source_read_lock
-
         try:identifier=str(UUID(str(request_id)))
         except (ValueError,TypeError,AttributeError):raise HTTPException(422,'请求编号无效') from None
         async with broker_connection(self.db, connection) as conn,conn.transaction():
-            await source_read_lock(conn,who)
+            # Closing a cash request writes an immutable operation row; hold
+            # the exclusive broker and mutation identity locks.
+            await serialize_brokers(conn,who.id)
+            await lock_mutation_identity(conn,who,require_admin=False)
+            actor=await(await conn.execute('SELECT active,role FROM users WHERE id=%s',(who.id,))).fetchone()
+            if not actor or not actor['active'] or actor['role']!=who.role:
+                raise HTTPException(403,'账号权限已变化',headers={'X-Alcor-Retire-Context':'true'})
             previous=await(await conn.execute('SELECT result FROM cash_ledger_operations WHERE owner_id=%s AND request_id=%s',(who.id,identifier))).fetchone()
             if previous:return {'state':'completed',**previous['result']}
             from .asset_request_domains import require_domain

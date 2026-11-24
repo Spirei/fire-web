@@ -97,7 +97,7 @@ class LegacyCashCommands:
         self.cash=CashLedger(self.db)
 
     async def overview(self,who,include_accounts=False,version=2):
-        async with self.authority.context(who) as conn:
+        async with self.authority.context(who,shared_read=True) as conn:
             result,_=await overview_on_connection(conn,who,self,include_accounts=include_accounts,version=version)
             return result
 

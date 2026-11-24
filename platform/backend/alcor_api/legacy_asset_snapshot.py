@@ -179,110 +179,110 @@ async def snapshot(service,who,options):
         from .legacy_identity import public_profile
         with measure('assets_profile'):
             owner=await public_profile(conn,who.id,scope='portfolio.read')
-        values=[];money={};kinds=set()
-        assemble_started=start()
-        with localcontext() as context:
-            context.prec=80
-            for row in rows:
-                rid = row['id']
-                record = actual[rid]
-                stored = declarations.get(rid)
-                declaration = service.project_declaration(row, stored)
-                basis='legacy_record_unit' if stored is None else 'owner_declared_unit' if declaration['identityMatches'] and declaration['kind']!='unknown' else 'unavailable'
-                known=basis!='unavailable';qty=decimal(record['qty']);diluted=decimal(record['cost'])
-                quote=quoted['quotes'].get(rid);state=quoted['quoteStates'].get(rid,{})
-                valid_quote=quote and (row['market']!='US' or selected['usPrice']=='observed' or quote.get('session')=='REGULAR')
-                price=decimal(state.get('priceExact')) if valid_quote else None
-                source='quote' if price is not None else 'unavailable';price_at=state.get('sourceTime') if price is not None else None
-                if price is None and (row['market']!='US' or selected['usPrice']=='observed'):
-                    price=decimal(record['price'])
-                    # Ordinary record zero is an unknown-price placeholder;
-                    # an explicit broker report retains its own observed mark.
-                    if price is not None and (price<0 or price==0 and not record.get('officialObservation')):
-                        price=None
-                    if price is not None:
-                        source='record';price_at=(record.get('officialObservation') or {}).get('reportDate') or record['updatedAt']
-                currency=CURRENCIES.get(row['market']);account=accounts.get(row['broker_account_id'])
-                kind=account['account_kind'] if account else row.get('account_kind', 'unknown')
-                position_status='closed' if rid in migrated_closed else position_state(row,record)
-                is_active=position_status in ('open','quantity_unknown')
-                if is_active:kinds.add(kind)
-                cost=(diluted if selected['costMethod']=='diluted' else average.get(rid)) if known else None
-                native_market=Decimal(0) if qty==0 else qty*price if known and qty is not None and qty>0 and price is not None and price>=0 else None
-                native_cost=Decimal(0) if qty==0 else qty*cost if known and qty is not None and qty>0 and cost is not None else None
-                native_pnl=native_market-native_cost if native_market is not None and native_cost is not None else None
-                market_value=convert(native_market,currency,selected['currency'],fx['rates'])
-                cost_value=convert(native_cost,currency,selected['currency'],fx['rates'])
-                pnl_value=convert(native_pnl,currency,selected['currency'],fx['rates'])
-                money[rid]=(market_value,cost_value,pnl_value,native_market,native_cost,native_pnl)
-                reason=None if market_value is not None else 'instrument_unclassified' if not known else 'unsupported_position_quantity' if qty is None or qty<0 else 'missing_price' if price is None else 'missing_exchange_rate'
-                market=row['account_market'] or row['market'];closed=cleared.get(rid) or migrated_closed.get(rid)
-                closed_today=bool(closed and row['market'] in ZONES and closed.astimezone(ZoneInfo(ZONES[row['market']])).date()==now.astimezone(ZoneInfo(ZONES[row['market']])).date())
-                values.append({'recordId':rid,'recordRevision':row['revision'],'name':row['name'],'code':row['code'],'market':row['market'],
-                    'accountMarket':market,'accountCurrency':CURRENCIES.get(market,'UNKNOWN'),'channel':'stock_connect' if row['market']=='HK' and market=='CN' else 'direct',
-                    'broker':row['group_name'],'brokerAccountId':row['broker_account_id'],'accountKind':kind,'currency':currency,'instrument':declaration,
-                    'valuationBasis':basis,'valuationUnitMultiplier':1 if known else None,'qty':display(qty),'price':display(price),'priceSource':source,'priceAt':price_at,
-                    'priceAuthority':'licensed_quote_observation' if source=='quote' else 'official_reported_mark_price' if source=='record' and record.get('officialObservation') else 'owner_saved_record_mark' if source=='record' else 'unavailable',
-                    'positionAsOf':(record.get('officialObservation') or {}).get('reportDate'),'officialObservation':record.get('officialObservation'),
-                    'quoteSession':quote.get('session') if source=='quote' else None,'quoteSource':quote.get('source') if source=='quote' else None,'quoteCached':bool(quote.get('cached')) if source=='quote' else False,
-                    'cost':display(cost),'dilutedCost':display(diluted) if known else None,'averageOpenCost':display(average.get(rid)) if known else None,
-                    'costMethod':selected['costMethod'],'averageCostComplete':known and rid in average,'costUnavailableReason':None if cost is not None else 'instrument_unclassified' if not known else 'missing_verified_economic_opening' if selected['costMethod']=='average_open' else 'missing_actual_cost',
-                    'cycleStartedAt':None,'nativeMarketValue':display(native_market,2),'nativeCostValue':display(native_cost,2),'nativeHoldingPnl':display(native_pnl,2),
-                    'valuationCurrency':selected['currency'],'marketValue':display(market_value,2),'costValue':display(cost_value,2),'holdingPnl':display(pnl_value,2),
-                    'holdingPnlPct':display(native_pnl/abs(native_cost)*100,2) if native_pnl is not None and native_cost not in (None,0) else None,
-                    'dayPnl':None,'dayPnlPct':None,'dayPnlUnavailableReason':'missing_verified_day_opening_position_and_cashflows',
-                    'weightPct':None,'clearedAt':iso(closed) if closed else None,'clearedToday':closed_today,'active':is_active,'positionState':position_status,
-                    'valuationComplete':market_value is not None,'valuationUnavailableReason':reason,'rawRecord':record})
-            active=[row for row in values if row['active']]
-            scoped_books=[book for book in overview['books'] if book['currencies']]
-            kinds.update(book['accountKind'] for book in scoped_books)
-            if registered_cash is not None:kinds.add(registered_cash['accountKind'])
-            separated=len(kinds)>1 or 'unknown' in kinds
-            total_market=None if separated else complete_sum([money[row['recordId']][0] for row in active])
-            total_cost=None if separated else complete_sum([money[row['recordId']][1] for row in active])
-            cash_rows=scoped_books[0]['currencies'] if len(scoped_books)==1 and not separated else []
-            source_complete=bool(cash_rows) and all(row['complete'] and row['ownerBalance'] is not None for row in cash_rows)
-            cash_values={row['currency']:decimal(row['ownerBalance']) for row in cash_rows}
-            if registered_cash is not None and not separated:
-                source_complete=registered_cash['sourceComplete']
-                cash_values=registered.exact_balances
-            cash_total=complete_sum([Decimal(0) if amount==0 else convert(amount,currency,selected['currency'],fx['rates']) for currency,amount in cash_values.items()]) if source_complete else None
-            cash_complete=source_complete and cash_total is not None
-            asset_total=total_market+cash_total if total_market is not None and cash_total is not None else None
-            for row in active:
-                row['weightPct']=display(money[row['recordId']][0]/total_market*100,2) if total_market is not None and total_market>0 and money[row['recordId']][0] is not None else None
-            markets=[]
-            for market in sorted({row['market'] for row in values}):
-                group=[row for row in active if row['market']==market]
-                totals=[None if separated else complete_sum([money[row['recordId']][index] for row in group]) for index in (0,2,3,5)]
-                markets.append({'market':market,'currency':CURRENCIES.get(market),'valuationCurrency':selected['currency'],
-                    'nativeMarketValue':display(totals[2],2),'nativeHoldingPnl':display(totals[3],2),'positionCount':len(group),
-                    'marketValue':display(totals[0],2),'holdingPnl':display(totals[1],2),
-                    'date':now.astimezone(ZoneInfo(ZONES[market])).date().isoformat() if market in ZONES else None,'timeZone':ZONES.get(market),
-                    'cash':None,'cashUnavailableReason':'currency_balances_not_allocated_to_markets','dayPnl':None,'sessionStatus':'unknown'})
-        elapsed('assets_assemble', assemble_started)
-        elapsed('assets_main', main_started)
-        result={'schemaVersion':1,'accountId':who.id,
-            'profile':{'accountId':who.id,'username':owner['username'],'nickname':owner.get('nickname'),'uid':owner.get('uid'),'avatar':owner.get('avatar')},
-            'collectionRevision':collection_revision(head['revision'] if head else 0, native),'currency':selected['currency'],'options':selected,
-            'positions':values,'markets':markets,'summary':{'totalMarket':display(total_market,2),'totalCost':display(total_cost,2),
-                'holdingPnl':display(total_market-total_cost,2) if total_market is not None and total_cost is not None else None,
-                'totalCash':display(cash_total,2),'totalAsset':display(asset_total,2),'holdingsComplete':total_market is not None,'costComplete':total_cost is not None,
-                'cashComplete':cash_complete,'totalAssetComplete':asset_total is not None,'dayPnl':None,'dayPnlPct':None,'dayPnlUnavailableReason':'missing_verified_account_day_opening_nav',
-                'unconvertedCurrencies':sorted({row['currency'] or 'UNKNOWN:'+row['market'] for row in active if money[row['recordId']][0] is None})},
-            'cash':{'nativeBalancesByCurrency':{key:display(value) for key,value in cash_values.items()} if source_complete else None,
-                    'sourceComplete':source_complete,'complete':cash_complete,'source':'recorded_cash_ledger',
-                    'sourceRevision':registered_cash['snapshotRevision'] if registered_cash is not None and not separated else overview['snapshotRevision'],
-                    'sourceAuthority':('app_native_ledger' if native else registered_cash['sourceAuthority']
-                        if registered_cash is not None and not separated else 'platform_owner_kind_posted_cash_ledger'),
-                    'valuationIndependent':True,'marketAllocationAvailable':False,
-                    'actualBrokerBalanceClaimed':False},
-            'todayOrders':{'items':[],'count':0,'available':False,'emptyReason':'snapshot_orders_not_included',
-                    'dateBasis':'exchange_local_calendar_date','timeZones':ZONES,'unknownDateOrderIds':[],'settlesPendingOrders':False},
-            'unavailable':['account_day_pnl','position_day_pnl','today_orders','derivatives','underlying_merge'],
-            'migration':{'coverageScope':'platform_owned_records_quotes_fx_cash_books','accountKindsSeparated':separated,'cashBooks':overview['books'],
-                         'quoteStates':quoted['quoteStates'],'fxObservation':{key:value for key,value in fx.items() if key!='rates'},
-                         'historicalCoverageKnown':False,'realTimePricesAssumed':False,'financialWrites':False}}
-        result['snapshotRevision']=fingerprint(result)
-        result['asOf']=iso(now)
-        return result
+    values=[];money={};kinds=set()
+    assemble_started=start()
+    with localcontext() as context:
+        context.prec=80
+        for row in rows:
+            rid = row['id']
+            record = actual[rid]
+            stored = declarations.get(rid)
+            declaration = service.project_declaration(row, stored)
+            basis='legacy_record_unit' if stored is None else 'owner_declared_unit' if declaration['identityMatches'] and declaration['kind']!='unknown' else 'unavailable'
+            known=basis!='unavailable';qty=decimal(record['qty']);diluted=decimal(record['cost'])
+            quote=quoted['quotes'].get(rid);state=quoted['quoteStates'].get(rid,{})
+            valid_quote=quote and (row['market']!='US' or selected['usPrice']=='observed' or quote.get('session')=='REGULAR')
+            price=decimal(state.get('priceExact')) if valid_quote else None
+            source='quote' if price is not None else 'unavailable';price_at=state.get('sourceTime') if price is not None else None
+            if price is None and (row['market']!='US' or selected['usPrice']=='observed'):
+                price=decimal(record['price'])
+                # Ordinary record zero is an unknown-price placeholder;
+                # an explicit broker report retains its own observed mark.
+                if price is not None and (price<0 or price==0 and not record.get('officialObservation')):
+                    price=None
+                if price is not None:
+                    source='record';price_at=(record.get('officialObservation') or {}).get('reportDate') or record['updatedAt']
+            currency=CURRENCIES.get(row['market']);account=accounts.get(row['broker_account_id'])
+            kind=account['account_kind'] if account else row.get('account_kind', 'unknown')
+            position_status='closed' if rid in migrated_closed else position_state(row,record)
+            is_active=position_status in ('open','quantity_unknown')
+            if is_active:kinds.add(kind)
+            cost=(diluted if selected['costMethod']=='diluted' else average.get(rid)) if known else None
+            native_market=Decimal(0) if qty==0 else qty*price if known and qty is not None and qty>0 and price is not None and price>=0 else None
+            native_cost=Decimal(0) if qty==0 else qty*cost if known and qty is not None and qty>0 and cost is not None else None
+            native_pnl=native_market-native_cost if native_market is not None and native_cost is not None else None
+            market_value=convert(native_market,currency,selected['currency'],fx['rates'])
+            cost_value=convert(native_cost,currency,selected['currency'],fx['rates'])
+            pnl_value=convert(native_pnl,currency,selected['currency'],fx['rates'])
+            money[rid]=(market_value,cost_value,pnl_value,native_market,native_cost,native_pnl)
+            reason=None if market_value is not None else 'instrument_unclassified' if not known else 'unsupported_position_quantity' if qty is None or qty<0 else 'missing_price' if price is None else 'missing_exchange_rate'
+            market=row['account_market'] or row['market'];closed=cleared.get(rid) or migrated_closed.get(rid)
+            closed_today=bool(closed and row['market'] in ZONES and closed.astimezone(ZoneInfo(ZONES[row['market']])).date()==now.astimezone(ZoneInfo(ZONES[row['market']])).date())
+            values.append({'recordId':rid,'recordRevision':row['revision'],'name':row['name'],'code':row['code'],'market':row['market'],
+                'accountMarket':market,'accountCurrency':CURRENCIES.get(market,'UNKNOWN'),'channel':'stock_connect' if row['market']=='HK' and market=='CN' else 'direct',
+                'broker':row['group_name'],'brokerAccountId':row['broker_account_id'],'accountKind':kind,'currency':currency,'instrument':declaration,
+                'valuationBasis':basis,'valuationUnitMultiplier':1 if known else None,'qty':display(qty),'price':display(price),'priceSource':source,'priceAt':price_at,
+                'priceAuthority':'licensed_quote_observation' if source=='quote' else 'official_reported_mark_price' if source=='record' and record.get('officialObservation') else 'owner_saved_record_mark' if source=='record' else 'unavailable',
+                'positionAsOf':(record.get('officialObservation') or {}).get('reportDate'),'officialObservation':record.get('officialObservation'),
+                'quoteSession':quote.get('session') if source=='quote' else None,'quoteSource':quote.get('source') if source=='quote' else None,'quoteCached':bool(quote.get('cached')) if source=='quote' else False,
+                'cost':display(cost),'dilutedCost':display(diluted) if known else None,'averageOpenCost':display(average.get(rid)) if known else None,
+                'costMethod':selected['costMethod'],'averageCostComplete':known and rid in average,'costUnavailableReason':None if cost is not None else 'instrument_unclassified' if not known else 'missing_verified_economic_opening' if selected['costMethod']=='average_open' else 'missing_actual_cost',
+                'cycleStartedAt':None,'nativeMarketValue':display(native_market,2),'nativeCostValue':display(native_cost,2),'nativeHoldingPnl':display(native_pnl,2),
+                'valuationCurrency':selected['currency'],'marketValue':display(market_value,2),'costValue':display(cost_value,2),'holdingPnl':display(pnl_value,2),
+                'holdingPnlPct':display(native_pnl/abs(native_cost)*100,2) if native_pnl is not None and native_cost not in (None,0) else None,
+                'dayPnl':None,'dayPnlPct':None,'dayPnlUnavailableReason':'missing_verified_day_opening_position_and_cashflows',
+                'weightPct':None,'clearedAt':iso(closed) if closed else None,'clearedToday':closed_today,'active':is_active,'positionState':position_status,
+                'valuationComplete':market_value is not None,'valuationUnavailableReason':reason,'rawRecord':record})
+        active=[row for row in values if row['active']]
+        scoped_books=[book for book in overview['books'] if book['currencies']]
+        kinds.update(book['accountKind'] for book in scoped_books)
+        if registered_cash is not None:kinds.add(registered_cash['accountKind'])
+        separated=len(kinds)>1 or 'unknown' in kinds
+        total_market=None if separated else complete_sum([money[row['recordId']][0] for row in active])
+        total_cost=None if separated else complete_sum([money[row['recordId']][1] for row in active])
+        cash_rows=scoped_books[0]['currencies'] if len(scoped_books)==1 and not separated else []
+        source_complete=bool(cash_rows) and all(row['complete'] and row['ownerBalance'] is not None for row in cash_rows)
+        cash_values={row['currency']:decimal(row['ownerBalance']) for row in cash_rows}
+        if registered_cash is not None and not separated:
+            source_complete=registered_cash['sourceComplete']
+            cash_values=registered.exact_balances
+        cash_total=complete_sum([Decimal(0) if amount==0 else convert(amount,currency,selected['currency'],fx['rates']) for currency,amount in cash_values.items()]) if source_complete else None
+        cash_complete=source_complete and cash_total is not None
+        asset_total=total_market+cash_total if total_market is not None and cash_total is not None else None
+        for row in active:
+            row['weightPct']=display(money[row['recordId']][0]/total_market*100,2) if total_market is not None and total_market>0 and money[row['recordId']][0] is not None else None
+        markets=[]
+        for market in sorted({row['market'] for row in values}):
+            group=[row for row in active if row['market']==market]
+            totals=[None if separated else complete_sum([money[row['recordId']][index] for row in group]) for index in (0,2,3,5)]
+            markets.append({'market':market,'currency':CURRENCIES.get(market),'valuationCurrency':selected['currency'],
+                'nativeMarketValue':display(totals[2],2),'nativeHoldingPnl':display(totals[3],2),'positionCount':len(group),
+                'marketValue':display(totals[0],2),'holdingPnl':display(totals[1],2),
+                'date':now.astimezone(ZoneInfo(ZONES[market])).date().isoformat() if market in ZONES else None,'timeZone':ZONES.get(market),
+                'cash':None,'cashUnavailableReason':'currency_balances_not_allocated_to_markets','dayPnl':None,'sessionStatus':'unknown'})
+    elapsed('assets_assemble', assemble_started)
+    elapsed('assets_main', main_started)
+    result={'schemaVersion':1,'accountId':who.id,
+        'profile':{'accountId':who.id,'username':owner['username'],'nickname':owner.get('nickname'),'uid':owner.get('uid'),'avatar':owner.get('avatar')},
+        'collectionRevision':collection_revision(head['revision'] if head else 0, native),'currency':selected['currency'],'options':selected,
+        'positions':values,'markets':markets,'summary':{'totalMarket':display(total_market,2),'totalCost':display(total_cost,2),
+            'holdingPnl':display(total_market-total_cost,2) if total_market is not None and total_cost is not None else None,
+            'totalCash':display(cash_total,2),'totalAsset':display(asset_total,2),'holdingsComplete':total_market is not None,'costComplete':total_cost is not None,
+            'cashComplete':cash_complete,'totalAssetComplete':asset_total is not None,'dayPnl':None,'dayPnlPct':None,'dayPnlUnavailableReason':'missing_verified_account_day_opening_nav',
+            'unconvertedCurrencies':sorted({row['currency'] or 'UNKNOWN:'+row['market'] for row in active if money[row['recordId']][0] is None})},
+        'cash':{'nativeBalancesByCurrency':{key:display(value) for key,value in cash_values.items()} if source_complete else None,
+                'sourceComplete':source_complete,'complete':cash_complete,'source':'recorded_cash_ledger',
+                'sourceRevision':registered_cash['snapshotRevision'] if registered_cash is not None and not separated else overview['snapshotRevision'],
+                'sourceAuthority':('app_native_ledger' if native else registered_cash['sourceAuthority']
+                    if registered_cash is not None and not separated else 'platform_owner_kind_posted_cash_ledger'),
+                'valuationIndependent':True,'marketAllocationAvailable':False,
+                'actualBrokerBalanceClaimed':False},
+        'todayOrders':{'items':[],'count':0,'available':False,'emptyReason':'snapshot_orders_not_included',
+                'dateBasis':'exchange_local_calendar_date','timeZones':ZONES,'unknownDateOrderIds':[],'settlesPendingOrders':False},
+        'unavailable':['account_day_pnl','position_day_pnl','today_orders','derivatives','underlying_merge'],
+        'migration':{'coverageScope':'platform_owned_records_quotes_fx_cash_books','accountKindsSeparated':separated,'cashBooks':overview['books'],
+                     'quoteStates':quoted['quoteStates'],'fxObservation':{key:value for key,value in fx.items() if key!='rates'},
+                     'historicalCoverageKnown':False,'realTimePricesAssumed':False,'financialWrites':False}}
+    result['snapshotRevision']=fingerprint(result)
+    result['asOf']=iso(now)
+    return result

@@ -124,7 +124,7 @@ class BrokerMetadata:
         return before, fingerprint(before)
 
     async def state(self, who):
-        async with self.context(who) as conn:
+        async with self.context(who, shared_read=True) as conn:
             collection, records = await self.versions(conn, who.id)
             rows = await (
                 await conn.execute(

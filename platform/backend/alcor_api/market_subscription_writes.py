@@ -107,10 +107,13 @@ class Subscriptions:
             """SELECT s.id,s.query FROM market_streams s
                JOIN market_demands d ON d.owner_id=s.owner_id AND d.stream_id=s.id
                JOIN users u ON u.id=d.owner_id
+               LEFT JOIN tasks t ON t.id=s.current_task_id
+               LEFT JOIN market_data_jobs j ON j.task_id=t.id
                WHERE s.owner_id=%s AND s.source_revision=%s AND d.principal=%s
                  AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp()
                  AND d.hot_until>clock_timestamp() AND d.session_version=u.session_version AND u.active
                  AND s.query->>'kind'='latest'
+                 AND (t.id IS NULL OR (t.status IN ('queued','running') AND COALESCE(j.state,'')<>'sleeping'))
                  AND (s.query->>'market',s.query->>'code') IN
                      (SELECT * FROM unnest(%s::text[],%s::text[]))""",
             (who.id, revision, principal, [market for market, _ in pairs], [code for _, code in pairs]),

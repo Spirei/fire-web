@@ -122,7 +122,7 @@ async def account_projector(app, version):
 async def operation_receipt(app, who, original_id, *, version=2, expected=None):
     """Project only the immutable operation snapshot, never a later account state."""
     identifier = UUID(request_id(original_id))
-    async with app.state.broker_metadata.context(who) as conn:
+    async with app.state.broker_metadata.context(who, shared_read=True) as conn:
         row = await (await conn.execute('SELECT result,created_at FROM broker_account_operations WHERE owner_id=%s AND request_id=%s', (who.id, identifier))).fetchone()
         if not row:
             raise HTTPException(404, '回执不存在')

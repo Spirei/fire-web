@@ -30,7 +30,7 @@ async def owner_cash_page(service,commands,who,query):
             or currency is not None and currency not in LEGACY_CURRENCIES
             or expected is not None and not HASH.fullmatch(expected)):
         raise HTTPException(400,'资金分页或币种无效')
-    async with service.context(who) as conn:
+    async with service.context(who,shared_read=True) as conn:
         from .cash_overview import CashOverview
         from .native_ledger import ledger_head
         from .native_ledger_projection import cash_overview

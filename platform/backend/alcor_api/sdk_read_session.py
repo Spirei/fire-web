@@ -14,6 +14,10 @@ class LatestSDKSession:
     argument = '--latest-stream'
     protocol = b'{"ready":true,"protocol":"futu-read-v1"}\n'
     actions = frozenset({'latest', 'futu.test', 'futu.quota'})
+    # Coalesced latest batches carry up to 20 securities (plus optional
+    # extended rt_data tails). Single-security provenance stays capped at 128KB
+    # after LatestBatch splits each security back out.
+    response_limit = 2 * 1024 * 1024
 
     def __init__(self, script=None, *, timeout=12, startup_timeout=45, maximum=128):
         self.script = script or Path(__file__).with_name('market_futu_sdk.py')
@@ -79,7 +83,7 @@ class LatestSDKSession:
                         self.process = await asyncio.create_subprocess_exec(
                             sys.executable, '-I', str(self.script), self.argument,
                             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.DEVNULL, limit=131073,
+                            stderr=asyncio.subprocess.DEVNULL, limit=self.response_limit + 1,
                             env={'PATH':'/usr/bin:/bin','PYTHONIOENCODING':'utf-8',
                                  'HOME':pwd.getpwuid(os.getuid()).pw_dir},
                         )
@@ -101,7 +105,7 @@ class LatestSDKSession:
                         raw = await self.process.stdout.readline()
                     self.reads += 1
                     self.last_used = monotonic()
-                    if not raw.endswith(b'\n') or not 1 < len(raw) <= 131072:
+                    if not raw.endswith(b'\n') or not 1 < len(raw) <= self.response_limit:
                         raise ValueError('sdk_response_too_large_or_incomplete')
                     result = json.loads(raw)
                     if not isinstance(result, dict):
@@ -129,3 +133,4 @@ class HistorySDKSession(LatestSDKSession):
     argument = '--history-stream'
     protocol = b'{"ready":true,"protocol":"futu-history-read-v1"}\n'
     actions = frozenset({'history'})
+    response_limit = 131072

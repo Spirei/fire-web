@@ -101,16 +101,32 @@ async def test_versioned_success_failure_and_no_redirect_share_the_protocol(clie
         if status==405: assert 'GET' in response.headers['allow']
 
 
-async def test_same_app_can_read_in_parallel_without_initializing_financial_state(client,admin,app):
-    pair,headers=await connect(client)
+async def test_same_app_can_read_in_parallel_without_initializing_financial_state(client,admin,app,monkeypatch):
+    from alcor_api.native_app_auth import issue_grant
+    monkeypatch.setattr(app.state,'native_ledger_enabled',True)
+    async with app.state.db.connection() as conn,conn.transaction():
+        user=await(await conn.execute('SELECT * FROM users WHERE id=%s',(admin,))).fetchone()
+        pair=await issue_grant(conn,user,'portfolio.read portfolio.write cash.read','Synthetic parallel reader')
+    headers={'authorization':'Bearer '+pair['access_token']}
     async with app.state.db.connection() as conn,conn.transaction():
         who=identity_from_grant(await authenticate(conn,pair['access_token']),pair['access_token'],'portfolio.read')
         await source_read_lock(conn,who)
-        # The old UPDATE identity lock would wait for this shared proof to end.
-        paths=['/api/v2/auth/me','/api/v2/records','/api/v2/quote-subscriptions']
+        # Shared broker + identity read locks must allow concurrent read views
+        # (assets, cash, broker directory, native-ledger, quotes) in parallel.
+        paths=[
+            '/api/v2/auth/me',
+            '/api/v2/records',
+            '/api/v2/quote-subscriptions',
+            '/api/v2/broker-accounts',
+            '/api/v2/broker-accounts/cash',
+            '/api/v2/account-assets',
+            '/api/v2/account-assets/cash',
+            '/api/v2/account-assets/native-ledger',
+            '/api/v2/account-assets/financing-policy',
+        ]
         responses=await asyncio.wait_for(asyncio.gather(*(client.get(path,headers=headers) for path in paths)),5)
-        for response in responses:
-            assert response.status_code==200,response.text
+        for path,response in zip(paths,responses,strict=True):
+            assert response.status_code==200,(path,response.text)
             protocol(response,2)
         quote=await asyncio.wait_for(client.post('/api/v2/quotes',headers=headers,json={'items':[{'id':'synthetic-record','market':'US','code':'AAPL'}]}),5)
         assert quote.status_code in (200,503),quote.text

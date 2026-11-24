@@ -81,6 +81,19 @@ def diagnostic_collect(factory, ret_ok, payload):
         context.close()
 
 
+def _transient_snapshot_error(message):
+    text = str(message).lower()
+    return any(
+        token in text
+        for token in (
+            'frequency', 'freq', 'rate limit', 'too frequent', 'too many',
+            'timeout', 'timed out', 'connect', 'disconnect', 'broken pipe',
+            'not login', 'unlogin', 'qot_logined',
+            '频繁', '频次', '频率', '限流', '超时', '连接', '断开', '未登录',
+        )
+    )
+
+
 def snapshot_records(context, ret_ok, symbols):
     """An unsupported security cannot reject the other requested snapshots."""
     import re
@@ -97,6 +110,8 @@ def snapshot_records(context, ret_ok, symbols):
                 raise ValueError('sdk_records_invalid')
             continue
         if len(group) == 1:
+            if not result and _transient_snapshot_error(frame):
+                raise ValueError('sdk_read_rejected')
             skipped.extend(group)
             continue
         # Provider error text stays in this process. Only an exact requested
@@ -105,6 +120,13 @@ def snapshot_records(context, ret_ok, symbols):
         if len(named) == 1:
             skipped.extend(named)
             pending.insert(0, [symbol for symbol in group if symbol != named[0]])
+        elif _transient_snapshot_error(frame):
+            # Rate-limit or connection faults affect the whole OpenD link;
+            # bisecting would amplify RPC traffic and exhaust quota further.
+            if not result:
+                raise ValueError('sdk_read_rejected')
+            skipped.extend(group)
+            break
         else:
             middle = len(group) // 2
             pending[:0] = [group[:middle], group[middle:]]
