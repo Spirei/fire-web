@@ -506,3 +506,88 @@ async def test_native_account_hint_is_only_a_guard_never_an_identity(quoted):
     other=await client.post('/api/v2/quotes',json=body(),headers={**headers,'x-alcor-expected-account':'another-owner'})
     assert other.status_code==403 and other.headers['x-alcor-retire-context']=='true'
     assert transport.calls==1
+
+
+async def test_auto_read_stays_on_fresh_backup_past_60s_until_primary_actually_recovers(quoted, monkeypatch):
+    from datetime import timedelta
+    from types import SimpleNamespace
+    from alcor_api.market_contract import Query
+    from alcor_api.market_subscription_writes import Subscriptions
+
+    client, app, authority, transport, revision, headers, source = quoted
+    original = authority.policies[0]
+    backup_policy = replace(original, id='backup-live', source='controlled_backup', license_revision='backup-live-v1')
+    authority.policies += (backup_policy,)
+    configured = await client.post('/api/market/sources', json={'request_id': str(uuid4()), 'policy_id': backup_policy.id})
+    assert configured.status_code == 200, configured.text
+    backup_revision = configured.json()['revision']
+    app.state.db.settings._legacy_quote_source = 'auto'
+    app.state.db.settings._legacy_quote_order = [original.source, backup_policy.source]
+    monkeypatch.setattr('alcor_api.legacy_quote_api.requested_session', lambda: 'REGULAR')
+
+    now = datetime.now(UTC)
+    authority.clock = lambda: now
+    # Primary (futu-like) already has an older observation (120 from fixture), then fails 5 minutes ago (>60s).
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE market_streams SET next_due=clock_timestamp() WHERE source_revision=%s", (revision,))
+
+    async def broken(*_):
+        raise ValueError('synthetic_primary_outage')
+
+    transport.read = broken
+    failed_task = await claim(app.state.db, uuid4())
+    assert failed_task and await execute(authority, failed_task, transport) == 'source_outcome_unknown'
+    # Age the failure beyond 60 seconds (5 minutes ago): reads must NOT revert to stale primary.
+    async with app.state.db.connection() as conn:
+        await conn.execute(
+            "UPDATE tasks SET finished_at=clock_timestamp()-interval '5 minutes' WHERE id=%s",
+            (failed_task['id'],),
+        )
+
+    # Backup records a fresh live quote (135 at t-5s).
+    async def backup_read(policy, query, _cursor):
+        price = '135' if policy.id == backup_policy.id else '142'
+        at = (now - timedelta(seconds=5 if policy.id == backup_policy.id else 2)).isoformat()
+        fact = {**source, 'price': price, 'at': at, 'source': policy.source, 'sourceVersion': policy.source_version}
+        return canonical({'query': asdict(query), 'licenseRevision': policy.license_revision, 'facts': [fact], 'nextCursor': None}).encode(), 'controlled_http_response_body'
+
+    transport.read = backup_read
+    await demand(client, backup_revision, Query('latest', 'US', 'AAPL'))
+    assert await schedule(authority) == 1
+    backup_task = await claim(app.state.db, uuid4(), kind='market.latest')
+    assert backup_task and await execute(authority, backup_task, transport) == 'observed'
+
+    # 1. Past 60s while primary is still failed -> must serve fresh backup (135), NOT stale primary (120).
+    res1 = await client.post('/api/v2/quotes', json=body(), headers=headers)
+    assert res1.status_code == 200, res1.text
+    assert res1.json()['data']['quotes']['known']['price'] == 135
+    assert res1.json()['data']['quotes']['known']['source'] == backup_policy.source
+
+    # 2. Even after primary is re-scheduled (probing, status='queued') -> must stay on fresh backup (135).
+    await demand(client, revision, expected=1)
+    assert await schedule(authority) == 1
+    res2 = await client.post('/api/v2/quotes', json=body(), headers=headers)
+    assert res2.status_code == 200, res2.text
+    assert res2.json()['data']['quotes']['known']['price'] == 135
+    assert res2.json()['data']['quotes']['known']['source'] == backup_policy.source
+
+    # 3. Once primary actually recovers with a fresh observation (142) -> immediately switch back to primary.
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE market_streams SET next_due=clock_timestamp() WHERE source_revision=%s", (revision,))
+    probe_task = await claim(app.state.db, uuid4(), kind='market.latest')
+    assert probe_task and await execute(authority, probe_task, transport) == 'observed'
+    res3 = await client.post('/api/v2/quotes', json=body(), headers=headers)
+    assert res3.status_code == 200, res3.text
+    assert res3.json()['data']['quotes']['known']['price'] == 142
+    assert res3.json()['data']['quotes']['known']['source'] == original.source
+
+    # 4. retry_budget_exhausted must also trigger write-side 60s cooldown to backup.
+    async with app.state.db.connection() as conn:
+        owner = (await (await conn.execute("SELECT id FROM users WHERE username='MarketReader'")).fetchone())['id']
+        await conn.execute(
+            "UPDATE tasks SET status='failed', error_code='retry_budget_exhausted', finished_at=clock_timestamp() WHERE id=%s",
+            (probe_task['id'],),
+        )
+        await conn.execute("UPDATE market_data_jobs SET state='running', last_source_error=NULL WHERE task_id=%s", (probe_task['id'],))
+        selected = await Subscriptions(authority).source(conn, SimpleNamespace(id=owner), [{'market': 'US', 'code': 'AAPL'}], None, 'auto')
+        assert str(selected) == backup_revision

@@ -492,7 +492,7 @@ class BatchQuotes:
                                 retained_policy_ids.add(stream["policy_id"])
                             continue
                         query, approved = authorization
-                        if stream.get('task_status')=='failed' and stream.get('task_finished_at') and (now-stream['task_finished_at']).total_seconds()<60:
+                        if stream.get('task_status')=='failed' and stream.get('task_finished_at'):
                             cooling_sources.add(stream['source_revision'])
                         sources.add(stream["source_revision"])
                         source_families[stream["source_revision"]] = approved.source
@@ -560,7 +560,18 @@ class BatchQuotes:
                     if source_revision is None and source_preference == "auto" and market != "ASSET":
                         cooling_sources.update(failures_by_security.get(cache_key, ()))
                         usable=[c for c in candidates if c[0]['source_revision'] not in cooling_sources]
-                        if usable:candidates=usable
+                        if usable:
+                            fresh = [c for c in usable if (now - c[0]['source_time']).total_seconds() <= 90]
+                            if fresh:
+                                latest_fresh = max(c[0]['source_time'] for c in fresh)
+                                non_stale = [
+                                    c for c in usable
+                                    if (now - c[0]['source_time']).total_seconds() <= 90
+                                    or c[0]['source_time'] >= latest_fresh
+                                ]
+                                if non_stale:
+                                    usable = non_stale
+                            candidates = usable
                         order = getattr(self.db.settings, "_legacy_quote_order", None) or ["futu", "tencent", "eastmoney", "yahoo"]
                         for provider in order:
                             prioritized = [c for c in candidates if c[1].source == provider]

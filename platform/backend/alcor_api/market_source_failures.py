@@ -1,16 +1,22 @@
 """Latest-source cooldown survives scheduling the next attempt; newer success clears it."""
 
+_FAILURE_PREDICATE = (
+    "(j.last_source_error IN ('source_outcome_unknown','source_pagination_unclosed') "
+    "OR t.error_code='retry_budget_exhausted')"
+)
+
 
 async def recent_failed_sources(conn, owner, revisions, market, code, instrument):
+    """Write-side cooldown (60s) so demand registration switches away, then re-probes."""
     if not revisions:
         return set()
-    rows = await (await conn.execute("""SELECT DISTINCT s.source_revision
+    rows = await (await conn.execute(f"""SELECT DISTINCT s.source_revision
         FROM market_streams s JOIN market_data_jobs j ON j.owner_id=s.owner_id AND j.stream_id=s.id
         JOIN tasks t ON t.id=j.task_id
         WHERE s.owner_id=%s AND s.source_revision=ANY(%s)
         AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s
         AND s.query->>'instrument'=%s AND t.status='failed'
-        AND j.last_source_error IN ('source_outcome_unknown','source_pagination_unclosed')
+        AND {_FAILURE_PREDICATE}
         AND t.finished_at>clock_timestamp()-interval '60 seconds'
         AND NOT EXISTS(SELECT 1 FROM market_data_jobs recovered
             WHERE recovered.owner_id=s.owner_id AND recovered.stream_id=s.id
@@ -22,11 +28,11 @@ async def recent_failed_sources(conn, owner, revisions, market, code, instrument
 
 
 async def recent_failed_sources_by_pair(conn, owner, revisions, pairs, instrument_for):
-    """Resolve a whole multi-security quote read in one statement, not one per symbol."""
+    """Read-side unrecovered failures (up to 24h) so reads stay on backup until recovery succeeds."""
     requested = sorted({(market, code, instrument_for(market)) for market, code in pairs})
     if not revisions or not requested:
         return set()
-    rows = await (await conn.execute("""SELECT DISTINCT s.query->>'market' AS market,s.query->>'code' AS code,s.source_revision
+    rows = await (await conn.execute(f"""SELECT DISTINCT s.query->>'market' AS market,s.query->>'code' AS code,s.source_revision
         FROM market_streams s JOIN market_data_jobs j ON j.owner_id=s.owner_id AND j.stream_id=s.id
         JOIN tasks t ON t.id=j.task_id
         JOIN unnest(%s::text[],%s::text[],%s::text[]) wanted(market,code,instrument)
@@ -34,8 +40,8 @@ async def recent_failed_sources_by_pair(conn, owner, revisions, pairs, instrumen
           AND s.query->>'instrument'=wanted.instrument
         WHERE s.owner_id=%s AND s.source_revision=ANY(%s)
         AND s.query->>'kind'='latest' AND t.status='failed'
-        AND j.last_source_error IN ('source_outcome_unknown','source_pagination_unclosed')
-        AND t.finished_at>clock_timestamp()-interval '60 seconds'
+        AND {_FAILURE_PREDICATE}
+        AND t.finished_at>clock_timestamp()-interval '24 hours'
         AND NOT EXISTS(SELECT 1 FROM market_data_jobs recovered
             WHERE recovered.owner_id=s.owner_id AND recovered.stream_id=s.id
             AND recovered.state='observed' AND
