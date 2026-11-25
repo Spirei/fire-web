@@ -7,10 +7,11 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request, Response
 
+from .fire_web import bound_member
 from .legacy_identity import assert_native_origin, envelope, native_identity
 from .market_contract import CURRENCIES, ZONES
 from .portfolio_series import packed
-from .security import identity, lock_read_identity
+from .security import lock_read_identity
 
 PATH = "/api/v2/account-assets/analysis-days"
 WEB_PATH = "/api/fire/asset-analysis/trend"
@@ -180,8 +181,8 @@ def mount(app, db, authority):
 
     @app.get(WEB_PATH, operation_id="web_asset_analysis_trend")
     async def web_trend(request: Request, response: Response):
-        assert_native_origin(request, db.settings)
-        who = await identity(request)
+        assert_native_origin(request, db.settings, web_session_cookies=True)
+        who = await bound_member(request)
         if request.query_params:
             raise HTTPException(400, "日终趋势查询参数无效")
         response.headers["Cache-Control"] = "no-store, private"

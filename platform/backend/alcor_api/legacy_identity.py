@@ -53,17 +53,17 @@ def native_version(request):
     return value
 
 
-def assert_native_origin(request,settings):
+def assert_native_origin(request,settings,*,web_session_cookies=False):
     actual=f'{request.url.scheme}://{request.url.netloc}'
-    token = request.cookies.get(COOKIE, '')
+    cookies = (COOKIE, WEB_COOKIE, OLD_COOKIE) if web_session_cookies else (COOKIE,)
     binding = request.headers.get("x-csrf-token", "")
     bound_web = bool(
         actual != settings.public_origin
         and not getattr(settings, "trusted_proxy_ips", ())
-        and token and len(token) <= 128
         and "authorization" not in request.headers
         and len(binding) == 64 and binding.isascii()
-        and secrets.compare_digest(binding, csrf_token(token))
+        and any(0 < len(token) <= 128 and secrets.compare_digest(binding, csrf_token(token))
+                for name in cookies if (token := request.cookies.get(name)))
     )
     # A bound Web session is checked again by the route's identity service.
     # An explicit proxy policy must still match the translated scheme and authority.

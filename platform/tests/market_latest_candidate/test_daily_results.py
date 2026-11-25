@@ -3,6 +3,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
+import httpx
+
 from alcor_api.cli import create_user
 from alcor_api.fx_reference import persist as store_fx
 from alcor_api.market_calendar import Calendars
@@ -158,6 +160,25 @@ async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap
     assert stale["retired"] and stale["equity"] is None and stale["calendar"] is None
     web_stale = (await client.get(web_path)).json()["items"][0]
     assert web_stale["retired"] and web_stale["equity"] is None
+
+
+async def test_web_trend_accepts_the_displayed_browser_session_through_proxy(app, admin):
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver",
+                                 headers={"origin": "http://testserver"}) as browser:
+        login = await browser.post("/api/auth/login", json={"username": "AdminOne", "password": "Synthetic9Pass"})
+        assert login.status_code == 200, login.text
+        profile = await browser.get("/api/fire/session")
+        assert profile.status_code == 200, profile.text
+        headers = {"X-CSRF-Token": profile.json()["csrf"], "X-Alcor-Expected-Account": admin}
+        target = "https://testserver/api/fire/asset-analysis/trend"
+        assert (await browser.get(target)).status_code == 403
+        result = await browser.get(target, headers=headers)
+        assert result.status_code == 200 and result.json()["accountId"] == admin
+        assert (await browser.get(target, headers={**headers, "X-Alcor-Expected-Account": "another-user"})).status_code == 403
+        assert (await browser.get(target, headers={**headers, "Sec-Fetch-Site": "cross-site"})).status_code == 403
+        native = await browser.get("https://testserver/api/v2/account-assets/analysis-days", headers=headers)
+        assert native.status_code == 403
 
 
 async def test_same_day_fx_stays_frozen_when_cash_is_revised(market):  # noqa: F811
