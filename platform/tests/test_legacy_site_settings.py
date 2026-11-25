@@ -489,7 +489,8 @@ async def test_source_probe_reuses_the_same_fixed_targets(monkeypatch):
     async def diagnostic(self,policy, action):
         owned.append(self)
         assert self.reuse_latest is True
-        return {'responded':True,'qotLogined':True,'quotePermissionVerified':True,'quote':{'code':'US.AAPL','price':210.25}}
+        return {'responded':True,'qotLogined':True,'quotePermissionVerified':True,'quote':{'code':'US.AAPL','price':210.25},
+                'quoteElapsedMs':48,'quoteUpdateTime':'2026-01-02 15:59:00'}
     async def read(self,policy,query,cursor):
         assert self.targets=={'fixed':target} and self.target_provider is None
         assert self.reuse_latest is True
@@ -501,6 +502,8 @@ async def test_source_probe_reuses_the_same_fixed_targets(monkeypatch):
     transport=SimpleNamespace(targets={'fixed':target},target_provider=None,controlled_http={})
     result=await probe_markets(authority,transport,SimpleNamespace(markets=('US','HK'),source='futu',fixture=False))
     assert result['state']=='available' and result['markets']['HK']['price']==409.6
+    assert result['markets']['US']['elapsedMs']==48
+    assert result['markets']['US']['sourceTime']=='2026-01-02T20:59:00+00:00'
 
 
 async def test_source_probe_current_night_never_uses_diagnostic_regular_close(monkeypatch):

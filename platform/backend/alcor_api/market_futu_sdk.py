@@ -41,12 +41,17 @@ def diagnostic_collect(factory, ret_ok, payload):
             }
             if logged is True and payload.get("quoteProbe") is True:
                 try:
+                    started = time.perf_counter()
                     ret, frame = context.get_market_snapshot(["US.AAPL"])
+                    elapsed = round((time.perf_counter() - started) * 1000)
                     rows = records(frame, limit=1) if ret == ret_ok else []
                     row = rows[0] if len(rows) == 1 else {}
                     price = row.get("last_price")
                     if row.get("code") == "US.AAPL" and type(price) in (int, float) and math.isfinite(price) and price > 0:
-                        result.update(quotePermissionVerified=True, quote={"code": "US.AAPL", "price": price})
+                        result.update(quotePermissionVerified=True, quote={"code": "US.AAPL", "price": price}, quoteElapsedMs=elapsed)
+                        stamp = row.get("update_time")
+                        if isinstance(stamp, str) and len(stamp) <= 64:
+                            result["quoteUpdateTime"] = stamp
                 except Exception:  # noqa: BLE001 -- SDK text may contain private target details.
                     pass
             return result

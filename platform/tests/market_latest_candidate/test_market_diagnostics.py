@@ -47,7 +47,7 @@ def test_explicit_authorized_snapshot_verifies_aapl_without_subscribing():
     context = DiagnosticContext()
     class Frame:
         def to_dict(self, mode):
-            return [{'code': 'US.AAPL', 'last_price': 123.45, 'private': 'discarded'}]
+            return [{'code': 'US.AAPL', 'last_price': 123.45, 'update_time': '2026-01-02 15:59:00', 'private': 'discarded'}]
     def snapshot(symbols):
         assert symbols == ['US.AAPL']
         context.calls.append('snapshot')
@@ -57,6 +57,8 @@ def test_explicit_authorized_snapshot_verifies_aapl_without_subscribing():
     assert context.calls == ['state', 'snapshot', 'close']
     assert result['quotePermissionVerified'] is True
     assert result['quote'] == {'code':'US.AAPL','price':123.45}
+    assert type(result['quoteElapsedMs']) is int and result['quoteElapsedMs'] >= 0
+    assert result['quoteUpdateTime'] == '2026-01-02 15:59:00'
     assert 'private' not in repr(result)
 
 

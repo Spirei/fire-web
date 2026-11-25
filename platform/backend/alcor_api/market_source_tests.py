@@ -10,7 +10,7 @@ from psycopg.types.json import Jsonb
 
 from .fx_reference import external_delivery_blocked
 from .legacy_identity import assert_native_origin, body, native_identity
-from .market_contract import Query
+from .market_contract import Query, source_time
 from .market_worker import decode
 from .market_sessions import requested_session
 from .security import lock_mutation_identity, lock_read_identity
@@ -80,6 +80,7 @@ async def probe_markets(authority, transport, policy):
     try:
         async with asyncio.timeout(55 if policy.source=='futu' else 18):
             reader = transport
+            regular_us = {}
             if policy.source == "futu":
                 # One probe owns one imported SDK lane for both connection and
                 # market checks; importing pandas/Futu twice exhausted the probe.
@@ -94,8 +95,28 @@ async def probe_markets(authority, transport, policy):
                     for row in markets.values(): row.update(state="unavailable", message="OpenD 未连接")
                     return result
                 result.update(state="connected", message="OpenD 已连接，报价暂不可用")
+                quote = observed.get("quote") or {}
+                price = quote.get("price")
+                if (observed.get("quotePermissionVerified") is True and quote.get("code") == "US.AAPL"
+                        and type(price) in (int, float) and math.isfinite(price) and price > 0):
+                    now = datetime.now(UTC)
+                    regular_us = {"state": "available", "price": price, "session": "REGULAR",
+                                  "message": "报价可用", "observedAt": now.isoformat()}
+                    elapsed = observed.get("quoteElapsedMs")
+                    if type(elapsed) is int and elapsed >= 0:
+                        regular_us["elapsedMs"] = elapsed
+                    if observed.get("quoteUpdateTime"):
+                        try:
+                            stamp = source_time(observed["quoteUpdateTime"], "America/New_York")
+                            if stamp <= now + timedelta(seconds=5):
+                                regular_us["sourceTime"] = stamp.isoformat()
+                        except (ValueError, TypeError):
+                            pass
             for query in queries:
                 row = markets[query.market]
+                if query.market == "US" and query.code == "AAPL" and query.session == "REGULAR" and regular_us:
+                    row.update(regular_us)
+                    continue
                 started = time.perf_counter()
                 try:
                     original, _ = await reader.read(policy, query, None)
