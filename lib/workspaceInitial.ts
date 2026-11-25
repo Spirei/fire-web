@@ -4,7 +4,7 @@ import type { FeedPayload } from "./feedTypes";
 import type { CelebsResult } from "./celebsData";
 import type { PoolBootstrap } from "./quotePoolView";
 import type { ApiOperation } from "@/components/ApiCatalogue";
-export type MaterialListing = {marketCounts:Record<string,number>;removedCount?:number;reviewCount?:number;marketOrder?:string[];assets:{id:string;type:string;market:string;code:string;name:string;url:string;urlDark?:string;imageUrl?:string;listingCandidate?:boolean;imageReview?:{state:"unverified-underlying"}|{state:"missing-artwork";code:string};brokerMarkets:string[]}[];total:number;page:number;revision:string};
+export type MaterialListing = {marketCounts:Record<string,number>;removedCount?:number;reviewCount?:number;marketOrder?:string[];assets:{id:string;type:string;market:string;code:string;displayCode?:string;name:string;url:string;urlDark?:string;imageUrl?:string;listingCandidate?:boolean;imageReview?:{state:"unverified-underlying"}|{state:"missing-artwork";code:string};brokerMarkets:string[]}[];total:number;page:number;revision:string};
 export type PersonalProfile = {revision:number;bio:string;gender:string;background:{sha256:string}|null};
 export type PersonalActivity = {total:number;activeDays:number;longest:number;current:number;since:number;today:string;days:Record<string,number>};
 export type ApiDirectory = {etag?:string;items:ApiOperation[];schemas?:Record<string,unknown>;summary:Record<string,number>;retirements?:{method:string;path:string;reason:string;replacement:string}[]};

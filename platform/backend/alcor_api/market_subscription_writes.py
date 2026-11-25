@@ -88,6 +88,71 @@ class Subscriptions:
         if len(approved)!=1:raise HTTPException(409,"存在多个行情来源，请明确选择当前来源版本")
         return approved[0]
 
+    async def fastest_plan(self, conn, who, items, configs, session, instrument):
+        from .market_source_speed import PROVIDERS, read_samples, score
+
+        samples = await read_samples(conn, who.id)
+        rows = await (await conn.execute(
+            """SELECT s.query->>'market' AS market,s.query->>'code' AS code,s.query->>'session' AS session,s.source_revision,f.sequence
+                 FROM unnest(%s::text[],%s::text[]) AS requested(market,code)
+                 JOIN market_streams s ON s.owner_id=%s AND s.query->>'kind'='latest'
+                    AND (s.query->>'market',s.query->>'code')=(requested.market,requested.code)
+                 JOIN LATERAL (
+                    SELECT f.sequence FROM market_facts f WHERE f.owner_id=s.owner_id AND f.stream_id=s.id
+                       AND f.source_time BETWEEN clock_timestamp()-interval '90 seconds' AND clock_timestamp()+interval '5 seconds'
+                       AND f.contents->>'cached' IS DISTINCT FROM 'true'
+                    ORDER BY f.source_time DESC,f.sequence DESC LIMIT 1
+                 ) f ON true
+                 WHERE s.source_revision=ANY(%s)""",
+            ([item["market"] for item in items], [item["code"] for item in items], who.id,
+             [revision for revision, _ in configs]),
+        )).fetchall()
+        ready = {}
+        for row in rows:
+            key = row["market"], row["code"], row["source_revision"], row["session"]
+            ready[key] = min(row["sequence"], ready.get(key, row["sequence"]))
+        plan = {}
+        cold_budget = 24
+        for item in items:
+            market, code = item["market"], item["code"]
+            if market == "ASSET":
+                try:
+                    plan[market, code] = [await self.source(conn, who, [item], None, "auto", instrument, session, configs=configs)]
+                except HTTPException:
+                    plan[market, code] = []
+                continue
+            choices = {}
+            ambiguous = set()
+            for revision, policy in configs:
+                if policy.source not in PROVIDERS or market not in policy.markets or "latest" not in policy.purposes:
+                    continue
+                try:
+                    query = self.query(item, instrument, session, policy)
+                    self.authority.validate_query(policy, query)
+                except (HTTPException, ValueError):
+                    continue
+                if policy.source in choices:
+                    ambiguous.add(policy.source)
+                choices[policy.source] = (revision, score(samples, revision, market, query.session), query.session)
+            ranked = sorted((value for provider, value in choices.items() if provider not in ambiguous),
+                            key=lambda value: (value[1] is None, value[1] or (0, 0), str(value[0])))
+            ranked_revisions = [revision for revision, _, _ in ranked]
+            stable = next((revision for revision, sample, _ in ranked if sample is not None), None)
+            current = [(ready[market, code, revision, kind], revision) for revision, _, kind in ranked
+                       if (market, code, revision, kind) in ready]
+            if current:
+                # Keep an already-ready source working while the measured leader warms up.
+                selected = [min(current)[1]]
+                if stable is not None and stable not in selected:
+                    selected.append(stable)
+            elif cold_budget > 0 and len(ranked_revisions) > 1:
+                selected = ranked_revisions
+                cold_budget -= 1
+            else:
+                selected = ranked_revisions[:1]
+            plan[market, code] = selected
+        return plan
+
     async def hot_observation(self, conn, who, items, selected, session, source_preference, instrument):
         """Renew an already-hot licensed demand without per-item registration."""
         if not items:
@@ -169,7 +234,7 @@ class Subscriptions:
             if await self.current_role(conn,who,identity)!=who.role:raise HTTPException(403,"账号权限已变化")
             previous=await self.authority.receipt(conn,who.id,request_id,operation)
             if previous:return previous,True
-            if observe and not remove:
+            if observe and not remove and source_preference != "fastest":
                 hot = await self.hot_observation(conn, who, items, selected, session, source_preference, instrument)
                 if hot is not None:
                     result = {
@@ -187,21 +252,28 @@ class Subscriptions:
                 # This cache belongs only to the already locked owner operation.
                 # Each demand still rechecks its selected actual config/license.
                 configs=await self.approved_sources(conn,who) if selected is None else None
-                revision = None if selected is None and source_preference == 'auto' else await self.source(conn,who,items,selected,source_preference,instrument,session,configs=configs)
+                fastest = selected is None and source_preference == "fastest"
+                plan = await self.fastest_plan(conn, who, items, configs, session, instrument) if fastest else None
+                revision = None if selected is None and source_preference in ("auto", "fastest") else await self.source(conn,who,items,selected,source_preference,instrument,session,configs=configs)
                 rows=await (await conn.execute("SELECT DISTINCT s.query->>'market' AS market,s.query->>'code' AS code FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id WHERE d.owner_id=%s AND d.origin='client' AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp() AND s.query->>'kind'='latest'",(who.id,))).fetchall()
                 if len({(row["market"],row["code"]) for row in rows}|{(row["market"],row["code"]) for row in items})>256:raise HTTPException(409,"最多保留 256 个行情订阅")
                 principal=str(getattr(who,"grant_id",None) or "web:"+who.token_hash)
                 for item in items:
-                    item_revision = revision or await self.source(conn,who,[item],None,source_preference,instrument,session,configs=configs)
-                    _, selected_policy = await self.authority.config(conn,who.id,item_revision)
-                    desired = self.query(item,instrument,session,selected_policy)
-                    rows=await (await conn.execute("SELECT * FROM market_streams WHERE owner_id=%s AND source_revision=%s AND query->>'kind'='latest' AND query->>'market'=%s AND query->>'code'=%s AND query->>'instrument'=%s AND (%s::text IS NULL OR query->>'session'=%s) FOR UPDATE",(who.id,item_revision,item["market"],item["code"],desired.instrument,desired.session if session is not None else None,desired.session))).fetchall()
-                    if len(rows)>1:raise HTTPException(409,"该证券存在多个采集口径，请先明确需求范围")
-                    query=query_from(rows[0]["query"]) if rows else desired
-                    old=await (await conn.execute("SELECT revision FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s",(who.id,rows[0]["id"],principal))).fetchone() if rows else None
-                    child=uuid5(request_id,"subscription:"+str(item_revision)+":"+canonical(asdict(query)))
-                    result=await bound.demand(who,child,item_revision,asdict(query),old["revision"] if old else 0,observed=observe)
-                    streams.add(UUID(result["streamId"]))
+                    revisions = plan[item["market"], item["code"]] if fastest else [
+                        revision or await self.source(conn, who, [item], None, source_preference, instrument, session, configs=configs)
+                    ]
+                    for item_revision in revisions:
+                        _, selected_policy = await self.authority.config(conn,who.id,item_revision)
+                        desired = self.query(item,instrument,session,selected_policy)
+                        rows=await (await conn.execute("SELECT * FROM market_streams WHERE owner_id=%s AND source_revision=%s AND query->>'kind'='latest' AND query->>'market'=%s AND query->>'code'=%s AND query->>'instrument'=%s AND (%s::text IS NULL OR query->>'session'=%s) FOR UPDATE",(who.id,item_revision,item["market"],item["code"],desired.instrument,desired.session if session is not None else None,desired.session))).fetchall()
+                        if len(rows)>1:raise HTTPException(409,"该证券存在多个采集口径，请先明确需求范围")
+                        query=query_from(rows[0]["query"]) if rows else desired
+                        old=await (await conn.execute("SELECT revision FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s",(who.id,rows[0]["id"],principal))).fetchone() if rows else None
+                        child=uuid5(request_id,"subscription:"+str(item_revision)+":"+canonical(asdict(query)))
+                        result=await bound.demand(who,child,item_revision,asdict(query),old["revision"] if old else 0,observed=observe)
+                        streams.add(UUID(result["streamId"]))
+                if fastest and not streams:
+                    raise HTTPException(503, "本人行情来源尚未配置或未获当前许可")
             else:
                 # Old subscriptions are owner-wide intent. Remove client leases from
                 # all devices, never the independent price-alert/background demand.

@@ -321,6 +321,7 @@ def project(row, policy, market, now, *, include_market_cap=True):
 class BatchQuotes:
     def __init__(self, authority):
         self.authority, self.db = authority, authority.db
+        self.fast_winners = {}
 
     async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None, legacy_instruments=False, include_historical_extended=False):
         if instrument not in (None, "equity", "index", "asset"):
@@ -333,6 +334,7 @@ class BatchQuotes:
             except (ValueError, TypeError, AttributeError):
                 raise HTTPException(400, "行情来源版本无效") from None
         quotes, states = {}, {}
+        fastest = source_revision is None and source_preference == "fastest"
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             identity = await lock_read_identity(conn, who, require_admin=False)
@@ -424,8 +426,10 @@ class BatchQuotes:
                             ORDER BY source_time DESC,sequence DESC LIMIT 1) f""",
                         ([s['id'] for s in all_streams],[s['source_revision'] for s in all_streams],who.id))).fetchall()
                     latest_facts = {fact['stream_id']:fact for fact in facts}
+            from .market_source_speed import choose_quote, read_samples
+            samples = await read_samples(conn, who.id) if fastest and all_streams else {}
             failures_by_security = defaultdict(set)
-            if all_streams and source_revision is None and source_preference == "auto":
+            if all_streams and source_revision is None and source_preference in ("auto", "fastest"):
                 from .market_source_failures import recent_failed_sources_by_pair
 
                 def instrument_for(market):
@@ -541,7 +545,7 @@ class BatchQuotes:
                         # Auto selection may use a currently authorized alternate
                         # even when a different old provider no longer covers
                         # this security. Never return that old provider's fact.
-                        authorized_alternate = source_preference == 'auto' and bool(candidates)
+                        authorized_alternate = source_preference in ("auto", "fastest") and bool(candidates)
                         if not retained_policy_ids <= confirmed and not authorized_alternate:
                             raise HTTPException(403, "行情来源的当前许可已变化，请撤下旧报价")
                     friday = weekend_after_date(now) if include_historical_extended and preferred_session == 'REGULAR' and market == 'US' else None
@@ -557,6 +561,22 @@ class BatchQuotes:
                         chosen = {c[0]['source_revision'] for c in candidates}
                         sources &= chosen
                         instruments = set().union(*(source_instruments[r] for r in sources)) if sources else set()
+                    if fastest and market != "ASSET":
+                        cooling_sources.update(failures_by_security.get(cache_key, ()))
+                        usable = [item for item in candidates if item[0]["source_revision"] not in cooling_sources]
+                        route_key = who.id, market, symbol, preferred_session
+                        held = self.fast_winners.get(route_key)
+                        existing = held[0] if held and held[1] > now else None
+                        chosen = choose_quote(usable or candidates, samples, market, now, existing)
+                        if chosen is not None:
+                            if chosen != existing:
+                                if len(self.fast_winners) >= 2048:
+                                    self.fast_winners.pop(next(iter(self.fast_winners)))
+                                self.fast_winners[route_key] = chosen, now + timedelta(seconds=30)
+                            candidates = [item for item in candidates if item[0]["source_revision"] == chosen]
+                            sources = {chosen}
+                            instruments = source_instruments[chosen]
+                            integrity_failure = chosen in unverified_sources
                     if source_revision is None and source_preference == "auto" and market != "ASSET":
                         cooling_sources.update(failures_by_security.get(cache_key, ()))
                         usable=[c for c in candidates if c[0]['source_revision'] not in cooling_sources]

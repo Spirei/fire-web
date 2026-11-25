@@ -10,6 +10,7 @@ import {
   IconRestore,
   IconCheck,
   IconDotsVertical,
+  IconPlus,
 } from "@tabler/icons-react";
 import {
   useWorkspaceSearchParams,
@@ -27,6 +28,7 @@ import Pagination from "@/components/Pagination";
 import AppSelect from "@/components/AppSelect";
 import { materialMarketSlots } from "@/lib/materialMarkets";
 import { readMaterialResponse } from "@/lib/materialRead";
+import { accountReadHeaders } from "@/lib/privateReadContext";
 import { clearCachedMaterialListings, materialListingKey, materialListingScope, pendingMaterialCatalog, prefetchMaterialCatalog, readCachedMaterialListing, saveCachedMaterialListing } from "@/lib/materialCatalogCache";
 import { Capsule } from "@/components/Capsule";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
@@ -110,6 +112,8 @@ export default function AssetCatalogView({
         }[]
       | null
     >(null);
+  const [brokerDraft, setBrokerDraft] = useState<{ name: string; code: string; error: string } | null>(null);
+  const brokerCreateRequest = useRef<{ name: string; code: string; id: string } | null>(null);
   const marketCountCache = useRef(new Map<string, Record<string, number>>());
   const pageCache = useRef(new Map<string, { data: Listing; at: number }>(initial ? [[initial.key, {data:initial.data,at:Date.now()}]] : []));
   const cacheEpoch = useRef(0);
@@ -231,6 +235,11 @@ export default function AssetCatalogView({
       return navigation?.from === draft.key && navigation.to === readKey ? { ...draft, key: readKey } : undefined;
     });
   }, [readKey]);
+  useEffect(() => {
+    setBrokerDraft(null);
+    brokerCreateRequest.current = null;
+  }, [type, removed, ownerId]);
+
   // A saved icon or metadata edit must not leave an obsolete listing to be
   // restored after the next refresh.
   const invalidate = useCallback(() => {
@@ -557,6 +566,41 @@ export default function AssetCatalogView({
       showToast(e instanceof Error ? e.message : "保存失败", "err");
     }
   }
+  function openBrokerForm() {
+    setBrokerDraft(current => current ?? { name: "", code: "", error: "" });
+    setSelecting(false);
+    setSelection([]);
+  }
+  async function createBroker() {
+    const brokerName = brokerDraft?.name.trim();
+    const code = brokerDraft?.code.trim().toUpperCase();
+    if (!brokerName || !code || busy) return;
+    if (brokerCreateRequest.current?.name !== brokerName || brokerCreateRequest.current?.code !== code) {
+      brokerCreateRequest.current = { name: brokerName, code, id: clientRequestId() };
+    }
+    setBusy(true);
+    try {
+      const response = await fetch("/api/assets/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...accountReadHeaders(ownerId) },
+        body: JSON.stringify({ action: "create-broker", name: brokerName, code, requestId: brokerCreateRequest.current.id }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw Error(data.detail || data.error || "新增券商失败");
+      setBrokerDraft(null);
+      brokerCreateRequest.current = null;
+      update({ market: null, q: code, page: null });
+      refresh();
+      window.dispatchEvent(new Event("fire:settings-updated"));
+      window.dispatchEvent(new Event("fire:assets-updated"));
+      showToast("券商已新增，可在本页上传图标");
+    } catch (error) {
+      setBrokerDraft(current => current && { ...current, error: error instanceof Error ? error.message : "新增券商失败" });
+    } finally {
+      setBusy(false);
+    }
+  }
   const beginEdit = (item: Item) => {
     setEditing(item);
     setName(item.name);
@@ -566,10 +610,6 @@ export default function AssetCatalogView({
     <div className="material-catalog">
       <header className="flex items-center justify-between gap-3">
         <h2>素材库</h2>
-        {type === "broker" && <a
-          href="/settings?sub=stocks"
-          className="rounded-full border border-edge px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-brand-hover dark:border-white/20"
-        >新增券商</a>}
       </header>
       <section className="material-catalog-panel">
         <nav
@@ -677,8 +717,32 @@ export default function AssetCatalogView({
           onRefresh={refresh}
           refreshing={pending && !activeError}
           busy={busy || replacing}
-          onImport={() => directoryFile.current?.click()}
+          onImport={removed ? undefined : () => directoryFile.current?.click()}
+          primaryAction={type === "broker" && !removed && (
+            <button type="button" data-capsule="off" className="collection-select-button material-add-broker"
+              aria-expanded={!!brokerDraft} disabled={busy} onClick={openBrokerForm}>
+              <IconPlus size={17} />新增券商
+            </button>
+          )}
         />
+        {brokerDraft && type === "broker" && !removed && (
+          <form className="material-broker-form" aria-label="新增券商" onSubmit={event => { event.preventDefault(); void createBroker(); }}>
+            <label className="collection-search">
+              <input aria-label="券商名称" placeholder="输入券商名称" autoFocus required maxLength={120}
+                disabled={busy} value={brokerDraft.name}
+                onChange={event => setBrokerDraft({ ...brokerDraft, name: event.target.value, error: "" })} />
+            </label>
+            <label className="collection-search">
+              <input aria-label="券商英文代码" placeholder="英文简称（如 IBKR）" required maxLength={35}
+                pattern={String.raw`[A-Za-z][A-Za-z0-9._\-]{0,34}`} autoCapitalize="characters" spellCheck={false}
+                disabled={busy} value={brokerDraft.code}
+                onChange={event => setBrokerDraft({ ...brokerDraft, code: event.target.value, error: "" })} />
+            </label>
+            <Capsule variant="secondary" disabled={busy} onClick={() => setBrokerDraft(null)}>取消</Capsule>
+            <Capsule type="submit" disabled={busy || !brokerDraft.name.trim() || !brokerDraft.code.trim()}>{busy ? "保存中" : "保存券商"}</Capsule>
+            {brokerDraft.error && <p role="alert" className="text-red-600 dark:text-red-400">{brokerDraft.error}</p>}
+          </form>
+        )}
         <div className="material-count">
           <span>{visibleListing ? `${total} 项素材${removed ? " · 已移除" : ""}` : <CollectionSkeleton count />}</span>
           {underlyingOrigin && (
@@ -819,9 +883,10 @@ export default function AssetCatalogView({
                   <IdentityText type={selecting ? undefined : "button"} className="material-identity-text" data-capsule="off"
                     disabled={selecting ? undefined : busy || item.listingCandidate} onClick={selecting || item.listingCandidate ? undefined : () => beginEdit(item)}>
                     <strong title={item.name || item.code}>{item.name || item.code}</strong>
-                    {type !== "group" && (type !== "card" || item.code.toLocaleLowerCase() !== item.name.toLocaleLowerCase()) && <small>
+                    {type !== "group" && (type !== "broker" || !!item.displayCode) &&
+                      (type !== "card" || item.code.toLocaleLowerCase() !== item.name.toLocaleLowerCase()) && <small>
                       {type === "stock" && <MarketCodeBadge market={item.market} code={item.code} alwaysVisible className="material-stock-badge" />}
-                      <span className="material-code" title={item.code}>{item.code}</span>
+                      <span className="material-code" title={item.displayCode ?? item.code}>{item.displayCode ?? item.code}</span>
                       {item.listingCandidate && <span>SEC 证券目录 · 待上传图标</span>}
                       {item.imageReview?.state === "unverified-underlying" && <span>待核实跟踪标的</span>}
                       {item.imageReview?.state === "missing-artwork" && <span>正股 {item.imageReview.code} 缺少图标</span>}
@@ -882,7 +947,7 @@ export default function AssetCatalogView({
               </article>
             ))}
             {!rows.length && <p className="material-empty">
-              {review ? "当前范围没有待核实的标的" : type === "broker" ? <>没有匹配的券商图标 · <a href="/settings?sub=stocks" className="font-semibold text-ink hover:underline">新增券商</a></> : "没有匹配的素材"}
+              {review ? "当前范围没有待核实的标的" : type === "broker" ? "没有匹配的券商图标" : "没有匹配的素材"}
             </p>}
           </div>
         )}
@@ -928,7 +993,7 @@ export default function AssetCatalogView({
               .map((file) => {
                 const stem = file.name.replace(/\.[^.]+$/, "").toLowerCase();
                 const candidates = rows.filter(
-                  (r) => r.code.toLowerCase() === stem,
+                  (r) => r.code.toLowerCase() === stem || r.displayCode?.toLowerCase() === stem,
                 );
                 const unique =
                   files.filter(

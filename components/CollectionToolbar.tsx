@@ -9,6 +9,7 @@ import {
   IconRestore,
   IconFolderPlus,
 } from "@tabler/icons-react";
+import type { ReactNode } from "react";
 import { IconButton } from "@/components/Capsule";
 
 export default function CollectionToolbar({
@@ -26,6 +27,7 @@ export default function CollectionToolbar({
   refreshing = false,
   busy = false,
   onImport,
+  primaryAction,
 }: {
   query: string;
   onQuery: (value: string) => void;
@@ -41,6 +43,7 @@ export default function CollectionToolbar({
   refreshing?: boolean;
   busy?: boolean;
   onImport?: () => void;
+  primaryAction?: ReactNode;
 }) {
   return (
     <div className="collection-toolbar">
@@ -58,6 +61,7 @@ export default function CollectionToolbar({
           }}
         />
       </label>
+      {primaryAction}
       <button
         type="button"
         data-capsule="off"
@@ -72,6 +76,7 @@ export default function CollectionToolbar({
         {onImport && (
           <IconButton
             label="导入目录"
+            title="导入目录，按文件名匹配并批量替换本页素材"
             disabled={busy || refreshing}
             onClick={onImport}
           >

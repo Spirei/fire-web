@@ -302,3 +302,121 @@ async def test_web_app_and_ticker_share_typed_index_facts_and_reads_never_collec
     subscribed=await legacy.get('/api/v2/quote-subscriptions',headers=native_headers)
     assert subscribed.status_code==200,subscribed.text
     assert len(subscribed.json()['data']['subscriptions'])==1,'stock subscription presentation excludes internal index intent'
+
+
+def test_fast_sources_prefer_first_valid_then_reliable_market_session_median():
+    from types import SimpleNamespace
+    from alcor_api.market_source_speed import choose_quote
+
+    at = datetime(2026, 11, 25, 15, tzinfo=UTC)
+    futu, tencent, yahoo = uuid4(), uuid4(), uuid4()
+
+    def observation(revision, provider, sequence, *, age=0, session="REGULAR", cached=False):
+        return (dict(source_revision=revision, sequence=sequence, source_time=at-timedelta(seconds=age)),
+                SimpleNamespace(source=provider), dict(session=session, cached=cached), "observed")
+
+    a = observation(futu, "futu", 1)
+    b = observation(tencent, "tencent", 2)
+    slow_clock = observation(yahoo, "yahoo", 0, age=45)
+    assert choose_quote([b, a, slow_clock], {}, "US", at) == futu
+    assert choose_quote([b, a], {}, "US", at, existing=tencent) == tencent
+    samples = {(futu, "US", "REGULAR"): [200, 280],
+               (tencent, "US", "REGULAR"): [75, 101],
+               (tencent, "HK", "REGULAR"): [500, 800],
+               (yahoo, "US", "REGULAR"): [5, None, None, 8]}
+    assert choose_quote([a], samples, "US", at) == futu
+    assert choose_quote([a, b, slow_clock], samples, "US", at) == tencent
+    assert choose_quote([a, b], samples, "HK", at) == tencent
+    assert choose_quote([observation(futu, "futu", 3, session="AFTER"), b], samples, "US", at) == tencent
+    assert choose_quote([a, observation(tencent, "tencent", 2, cached=True)], samples, "US", at) == futu
+
+
+async def test_native_quote_diagnostics_is_owner_scoped_and_admin_probe_is_idempotent(client, admin, db, app):
+    from alcor_api.cli import create_user
+    from alcor_api.native_app_auth import issue_grant
+
+    member = await create_user(app.state.db.settings, "QuoteMember", "Synthetic9Pass", email="member@example.invalid")
+    async with db.connection() as conn, conn.transaction():
+        await conn.execute("UPDATE users SET role='user' WHERE id=%s", (member,))
+        identities = {}
+        for owner in (admin, member):
+            user = await (await conn.execute("SELECT * FROM users WHERE id=%s", (owner,))).fetchone()
+            grant = await issue_grant(conn, user, "portfolio.read", "Quote diagnostics fixture")
+            identities[owner] = {"authorization": "Bearer " + grant["access_token"]}
+    route = "/api/v2/market-source-tests"
+    assert (await client.get(route)).status_code == 401
+    for owner, headers in identities.items():
+        read = await client.get(route, headers=headers)
+        assert read.status_code == 200, read.text
+        assert read.json()["data"]["canProbe"] is (owner == admin)
+    command = {"provider": "tencent", "requestId": str(uuid4())}
+    assert (await client.post(route, headers=identities[member], json=command)).status_code == 403
+    first = await client.post(route, headers=identities[admin], json=command)
+    assert first.status_code == 200, first.text
+    assert first.json()["data"]["state"] == "unconfigured"
+    again = await client.post(route, headers=identities[admin], json=command)
+    assert again.json() == first.json()
+    async with db.connection() as conn:
+        rows = await (await conn.execute("SELECT owner_id FROM market_source_tests")).fetchall()
+        assert rows == [{"owner_id": admin}]
+
+
+async def test_native_tencent_and_yahoo_return_app_market_contract(legacy, app, monkeypatch):
+    from alcor_api.market_contract import CURRENCIES, ZONES
+    from alcor_api.market_tencent_latest import symbol as tencent_symbol
+    from alcor_api.market_yahoo_history import symbol as yahoo_symbol
+    from alcor_api.native_app_auth import issue_grant
+    from zoneinfo import ZoneInfo
+
+    async def resolve(host, port):
+        return ["8.8.8.8"]
+
+    monkeypatch.setattr("alcor_api.market_source_setup.resolve", resolve)
+    setup = await legacy.post("/api/fire/market-sources/setup", json={"requestId": str(uuid4())})
+    assert setup.status_code == 200, setup.text
+    async with app.state.db.connection() as conn, conn.transaction():
+        user = await (await conn.execute("SELECT * FROM users WHERE username='AdminOne'")).fetchone()
+        grant = await issue_grant(conn, user, "portfolio.read", "App market diagnostics fixture")
+    headers = {"authorization": "Bearer " + grant["access_token"]}
+    stamp = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=5)
+    calls = []
+
+    async def read(transport, policy, query, cursor):
+        calls.append((policy.source, query.market))
+        if policy.source == "tencent":
+            if query.market == "HK":
+                raise TimeoutError()
+            fields = [""] * 35
+            fields[1], fields[3] = query.code, "123.45"
+            fields[30] = stamp.astimezone(ZoneInfo(ZONES[query.market])).strftime("%Y%m%d%H%M%S")
+            return (f'v_{tencent_symbol(query.market, query.code)}="' + "~".join(fields) + '";').encode("gbk"), "http_response_body_gbk"
+        meta = {"symbol": yahoo_symbol(query, policy)[0], "instrumentType": "EQUITY",
+                "currency": CURRENCIES[query.market], "regularMarketPrice": 123.45, "regularMarketTime": int(stamp.timestamp())}
+        return json.dumps({"chart": {"error": None, "result": [{"meta": meta}]}}).encode(), "http_response_body"
+
+    monkeypatch.setattr("alcor_api.market_transport.Transport.read", read)
+    route = "/api/v2/market-source-tests"
+    retained = (await legacy.get(route, headers=headers)).json()["data"]
+    assert retained["canProbe"] is True
+    assert set(retained["results"]) == {"futu", "eastmoney", "tencent", "yahoo"}
+    assert {retained["results"][source]["state"] for source in ("tencent", "yahoo")} == {"untested"}
+    for provider, markets in (("tencent", {"US", "HK", "CN"}), ("yahoo", {"US", "HK", "CN", "JP", "KR"})):
+        command = {"provider": provider, "requestId": str(uuid4())}
+        response = await legacy.post(route, headers=headers, json=command)
+        assert response.status_code == 200, response.text
+        envelope = response.json()
+        result = envelope["data"]
+        assert envelope["code"] == 0 and envelope["message"] == "ok"
+        assert set(result["markets"]) == markets
+        for market, row in result["markets"].items():
+            assert type(row["elapsedMs"]) is int and row["elapsedMs"] >= 0
+            if provider == "tencent" and market == "HK":
+                assert row["state"] == "unavailable" and row["message"]
+            else:
+                assert row["state"] == "available" and row["sourceTime"] == stamp.isoformat()
+                assert row["session"] == ("REGULAR" if provider == "yahoo" else None)
+        before = len(calls)
+        assert (await legacy.post(route, headers=headers, json=command)).json() == envelope
+        assert len(calls) == before
+        saved = (await legacy.get(route, headers=headers)).json()["data"]
+        assert saved["results"][provider] == result

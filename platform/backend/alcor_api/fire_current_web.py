@@ -324,6 +324,7 @@ async def asset_catalog(request: Request, who: Member):
         {
             **{k: item.get(k, "") for k in ("id", "type", "market", "code", "name", "url", "urlDark", "imageUrl", "imageUrlDark")},
             "brokerMarkets": item.get("brokerMarkets", []),
+            **({"displayCode": item["displayCode"]} if "displayCode" in item else {}),
             **({"listingCandidate": True} if item.get("listingCandidate") else {}),
             **({"imageReview": review} if not deleted and (review := stock_image_review(item)) else {}),
         }
@@ -358,8 +359,13 @@ async def change_asset_catalog(request: Request, who: Member):
     if who.role != "admin":
         raise HTTPException(403, "需要管理员权限")
     await budget(request, who, "fire-catalog", 30)
-    raw = await body(request, ("action", "ids", "revision", "markets", "name", "requestId"), limit=32768)
+    raw = await body(request, ("action", "ids", "revision", "markets", "name", "code", "requestId"), limit=32768)
     action, ids = raw.get("action"), raw.get("ids")
+    if action == "create-broker":
+        if set(raw) != {"action", "name", "code", "requestId"}:
+            raise HTTPException(400, "新增券商字段无效")
+        result = await request.app.state.shared_broker_directory.add(who, identifier(raw["requestId"]), raw["name"], raw["code"])
+        return JSONResponse(result, headers=PRIVATE)
     fields = {"action", "ids", "revision", "requestId"} | ({"markets"} if action == "classify" else {"name"} if action == "rename" else set())
     if action == "rename" and "markets" in raw:
         fields.add("markets")

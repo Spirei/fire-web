@@ -2,6 +2,19 @@
 
 # Alcor · API 规范（v2）
 
+## App 行情源检测
+
+| 方法 | 路径 | 权限 |
+| --- | --- | --- |
+| GET | `/api/v2/market-source-tests` | App Bearer，`portfolio.read` |
+| POST | `/api/v2/market-source-tests` | App Bearer，`portfolio.read`，且当前账号是管理员 |
+
+GET 的成功信封为 `{"code":0,"message":"ok","data":{"canProbe":true,"results":{"futu":{},"eastmoney":{},"tencent":{},"yahoo":{}}}}`。结果按当前账号的来源配置读取，`canProbe` 由服务器按实际权限返回。POST 接收 `{"provider":"tencent","requestId":"客户端生成的 UUID"}`，成功信封的 `data` 是所选来源的一次检测结果。用同一 UUID 重查原结果。
+
+`markets` 使用 `US`、`HK`、`CN`、`JP`、`KR`。逐市场 `state` 为 `available`、`unavailable` 或 `unknown`。`session` 为 `REGULAR`、`PRE`、`AFTER` 或 `OVERNIGHT`，时段未知时可为空。`elapsedMs` 为该市场实际检测请求的整数毫秒数，未知时可省略或为空。`sourceTime` 来自报价本身。失败结果可带 `message`。
+
+`POST /api/v2/quotes` 支持 `preferFastSources: true`。`data.quotes[证券ID].source` 标明该条报价的实际来源。长桥直连由 App 处理。
+
 ## App 资产快照与证券资料声明
 
 匿名 auth/config 的 account_assets 声明能力；精确字段、类型和缺失语义见 [冻结合约](native-account-assets-contract.md)。新接口只接受 App Bearer，后台读取不结算挂单。

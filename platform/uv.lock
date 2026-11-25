@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "fire-platform"
-version = "0.1.90"
+version = "0.1.91"
 source = { editable = "." }
 dependencies = [
     { name = "brotli" },

@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import re
+from functools import cache
 from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
@@ -51,8 +52,75 @@ def public_identity(row):
 def broker_name_key(value):
     """Compare broker names without 证劵/证券, spacing or an account suffix."""
     text = re.sub(r"[\s_\-·]+", "", (value or "").strip())
-    text = text.replace("證", "证").replace("劵", "券")
+    text = broker_display_name(text)
     return re.sub(r"(?:账户|帐号|账号)$", "", text).casefold()
+
+
+def broker_display_name(name):
+    return re.sub(r"[证證][券劵卷]", "证券", name)
+
+
+def broker_internal_code(code):
+    return re.fullmatch(r"(?:G[0-9]{13}-[0-9]+|IMG-[0-9A-F]{12,64})", code, re.IGNORECASE) is not None
+
+
+@cache
+def broker_aliases():
+    from .legacy_broker_read import PRESETS
+
+    return {
+        broker_name_key(alias): ("HTSC" if preset["id"] == "huatai" else preset["id"].upper(), preset["name"])
+        for preset in PRESETS
+        for alias in (preset["id"], preset["name"], *preset["aliases"])
+    }
+
+
+def broker_code(value):
+    return bool(re.fullmatch(r"[A-Z][A-Z0-9._-]{0,34}", value, re.ASCII)) and not broker_internal_code(value)
+
+
+async def broker_catalog_records(conn, records, legacy_entries, legacy_directory):
+    """Collapse broker aliases before search, market counts and pagination."""
+    originals = [row for row in legacy_entries if row["type"] == "broker"]
+    named, opaque = set(), set()
+    for row in originals:
+        (opaque if broker_internal_code(row["code"]) else named).add(row["id"])
+    # Legacy aliases use different filenames for the exact same bytes. Reuse
+    # the file verification cache and avoid digesting unrelated asset classes.
+    hashes, named_digests = {}, set()
+    if any(source == "legacy-file" and row["id"] in opaque for row, source in records):
+        versions = [row["light_version"] for row, source in records if source is False and row.get("light_version")]
+        if versions:
+            named_digests.update(row["original_sha256"] for row in await (await conn.execute(
+                "SELECT original_sha256 FROM system_asset_versions WHERE id=ANY(%s)", (versions,),
+            )).fetchall())
+        budget = {"bytes": 0}
+        for row in originals:
+            projected = await legacy_directory.project(row, budget)
+            hashes[row["id"]] = {variant["originalSha256"] for variant in projected["fileVariants"]
+                                 if not variant["dark"] and variant.get("originalSha256")}
+            if row["id"] in named:
+                named_digests.update(hashes[row["id"]])
+
+    ranked = sorted(records, key=lambda pair: (
+        pair[1] == "legacy-file", not bool(pair[0].get("light_version")),
+        broker_internal_code(pair[0]["code"]), pair[0]["name"] != broker_display_name(pair[0]["name"]),
+    ))
+    names, visible = set(), []
+    for row, source in ranked:
+        aid, code = row["id"], row["code"]
+        name = broker_display_name(row["name"])
+        preset = broker_aliases().get(broker_name_key(name))
+        display_code, name = preset or (code if broker_code(code) else "", name)
+        key = broker_name_key(name)
+        if key and key in names:
+            continue
+        if source == "legacy-file" and aid in opaque and hashes.get(aid, set()) & named_digests:
+            continue
+        if key:
+            names.add(key)
+        visible.append(({**row, "name": name, "displayCode": display_code}, source))
+    return visible
 
 
 def stock_image_reference_counts(records):
@@ -694,6 +762,8 @@ class AssetManagement:
                     key = aid.removeprefix('market:')
                     if aid.startswith('market:') and key in MARKET_NAMES and key not in represented:
                         records.append(({'id':aid,'type':'market','market':key,'code':key,'name':MARKET_NAMES[key],'imageUrl':'','readOnly':True},'placeholder'))
+            if directory is not None and kind == "broker" and not deleted:
+                records = await broker_catalog_records(conn, records, legacy_entries, self.legacy_directory)
             market_counts, removed_count = {}, 0
             if directory is not None:
                 removed_count = (await (await conn.execute("SELECT count(*) AS n FROM asset_catalog_tombstones t JOIN asset_catalog_entries e ON e.id=t.asset_id WHERE t.restored_at IS NULL AND e.type=%s", (kind,))).fetchone())["n"]
@@ -742,6 +812,7 @@ class AssetManagement:
                     if not query
                     or query.upper() in row["code"].upper()
                     or query.upper() in row["name"].upper()
+                    or query.upper() in row.get("displayCode", "").upper()
                     or query.upper() in listing_name(row)
                     or (public_listing_identities and row["type"] == "stock"
                         and stock_identity(row["market"], row["code"]) in public_listing_identities)
@@ -842,6 +913,11 @@ class AssetManagement:
             revision = (await (await conn.execute("SELECT revision FROM asset_catalog_scope")).fetchone())[
                 "revision"
             ]
+            if directory is not None and kind == "broker":
+                for asset, (row, _source) in zip(assets, selected, strict=True):
+                    asset["name"] = row["name"]
+                    preset = broker_aliases().get(broker_name_key(row["name"]))
+                    asset["displayCode"] = row.get("displayCode", preset[0] if preset else row["code"] if broker_code(row["code"]) else "")
             return {
                 "assets": assets,
                 **({"marketCounts": market_counts, "removedCount": removed_count} if directory is not None else {}),

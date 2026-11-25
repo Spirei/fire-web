@@ -8463,7 +8463,7 @@ export const V0_1_89_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+export const V0_1_90_ENTRY: VersionEntry = {
   ...V0_1_89_ENTRY,
   version: "v0.1.90", date: "2026-11-24", summary: "数据管理新增账本核准工作台，可视化对比并核准持仓成本与原币现金",
   software: V0_1_89_ENTRY.software.map(item => ({ ...item, version: "v0.1.90" })),
@@ -8477,10 +8477,21 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_90_ENTRY,
+  version: "v0.1.91", date: "2026-11-25", summary: "券商图标整理，App 支持行情源检测与测速择优",
+  software: V0_1_90_ENTRY.software.map(item => ({ ...item, version: "v0.1.91" })),
+  changes: [
+    { kind: "fix", title: "整理券商图标与新增入口", desc: "合并重复素材，券商图标显示名称和英文简称。可在券商图标工具栏展开新增表单，保存后在本页上传图标。" },
+    { kind: "feature", title: "App 行情源检测", desc: "提供富途、东方财富、腾讯与 Yahoo 的分市场检测结果和实际耗时。App 可请求优先读取先到达的有效报价，并依据同市场、同时段的检测记录择优。" },
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_90_ENTRY,
   V0_1_89_ENTRY,
   V0_1_88_ENTRY,
   V0_1_87_ENTRY,

@@ -9,14 +9,33 @@ from fastapi import HTTPException, Request
 from psycopg.types.json import Jsonb
 
 from .fx_reference import external_delivery_blocked
-from .legacy_identity import assert_native_origin, body
+from .legacy_identity import assert_native_origin, body, native_identity
 from .market_contract import Query
 from .market_worker import decode
 from .market_sessions import requested_session
-from .security import lock_mutation_identity
+from .security import lock_mutation_identity, lock_read_identity
 
 PROVIDERS = ("futu", "tencent", "eastmoney", "yahoo")
 SAMPLES = (("US", "AAPL"), ("HK", "00700"), ("CN", "600519"), ("JP", "7203"), ("KR", "005930"))
+MARKET_STATES = frozenset(("available", "unavailable", "unknown"))
+SESSIONS = frozenset(("REGULAR", "PRE", "AFTER", "OVERNIGHT"))
+
+
+def app_result(result):
+    """Project historical receipts to the App's market and session vocabulary."""
+    value = dict(result)
+    for field in ("session", "requestedSession"):
+        if field in value and value[field] not in SESSIONS:
+            value[field] = None
+    if "markets" in value:
+        value["markets"] = {
+            market: {
+                **app_result(row),
+                "state": row["state"] if row.get("state") in MARKET_STATES else "unknown",
+            }
+            for market, _ in SAMPLES if isinstance(row := value["markets"].get(market), dict)
+        }
+    return value
 
 
 def public_probe_failure(error):
@@ -54,12 +73,12 @@ def market_queries(authority, policy):
 
 async def probe_markets(authority, transport, policy):
     queries = market_queries(authority, policy)
-    markets = {query.market: {"market": query.market, "code": query.code, "state": "unknown", "message": "未完成检测"} for query in queries}
+    markets = {query.market: {"market": query.market, "code": query.code, "requestedSession": query.session,
+                              "state": "unknown", "message": "未完成检测"} for query in queries}
     result = {"state": "unavailable", "message": "未取得有效报价", "markets": markets}
     private_transport = None
     try:
         async with asyncio.timeout(55 if policy.source=='futu' else 18):
-            known = None
             reader = transport
             if policy.source == "futu":
                 # One probe owns one imported SDK lane for both connection and
@@ -75,26 +94,19 @@ async def probe_markets(authority, transport, policy):
                     for row in markets.values(): row.update(state="unavailable", message="OpenD 未连接")
                     return result
                 result.update(state="connected", message="OpenD 已连接，报价暂不可用")
-                candidate = observed.get("quote") or {}
-                if observed.get("quotePermissionVerified") is True and candidate.get("code") == "US.AAPL":
-                    known = candidate.get("price")
             for query in queries:
                 row = markets[query.market]
                 started = time.perf_counter()
                 try:
-                    if query.market == "US" and known is not None and query.session=='REGULAR':
-                        price = known
-                        row['session']='REGULAR'
-                    else:
-                        original, _ = await reader.read(policy, query, None)
-                        facts, _, _ = decode(policy, query, original,observed_at=datetime.now(UTC))
-                        fact = facts[-1] if facts else {}
-                        price = float(fact["price"]) if fact.get("price") is not None else None
-                        stamp = datetime.fromisoformat(fact["at"]) if fact.get("at") else None
-                        if stamp is not None and (stamp.tzinfo is None or stamp > datetime.now(UTC)+timedelta(seconds=5)):
-                            price = None
-                        row["sourceTime"] = fact.get("at")
-                        row['session']=fact.get('session')
+                    original, _ = await reader.read(policy, query, None)
+                    facts, _, _ = decode(policy, query, original, observed_at=datetime.now(UTC))
+                    fact = facts[-1] if facts else {}
+                    price = float(fact["price"]) if fact.get("price") is not None else None
+                    stamp = datetime.fromisoformat(fact["at"]) if fact.get("at") else None
+                    if stamp is None or stamp.tzinfo is None or stamp > datetime.now(UTC) + timedelta(seconds=5):
+                        price = None
+                    row["sourceTime"] = fact.get("at")
+                    row["session"] = fact["session"] if fact.get("session") in SESSIONS else None
                     if type(price) not in (int, float) or not math.isfinite(price) or price <= 0:
                         raise ValueError("quote_not_observed")
                     row.update(state="available", price=price, message="报价可用")
@@ -188,28 +200,64 @@ def mount(app, settings, authority, transport, member):
         from fastapi.responses import JSONResponse
         return JSONResponse(await setup(db,authority,who,rid),headers={'Cache-Control':'private, no-store'})
 
-    @app.get("/api/fire/market-sources/tests")
-    async def retained(request: Request):
-        who = await administrator(request)
+    async def retained_results(who, *, include_legacy):
         results = {}
         async with db.connection() as conn, conn.transaction():
-            await lock_mutation_identity(conn, who)
+            await lock_read_identity(conn, who, require_admin=include_legacy)
             for provider in PROVIDERS:
                 selected = await selection(authority, conn, who, provider)
                 row = await (await conn.execute("SELECT * FROM market_source_tests WHERE owner_id=%s AND provider=%s ORDER BY created_at DESC,request_id DESC LIMIT 1", (who.id, provider))).fetchone()
                 matches = selected and row and row["source_revision"] == selected[0] and row["policy_fingerprint"] == selected[1].fingerprint
-                if provider == "futu" and selected:
+                if include_legacy and provider == "futu" and selected:
                     legacy = await (await conn.execute("SELECT coalesce(o.result,a.result) AS result,a.created_at FROM market_diagnostic_admissions a LEFT JOIN market_data_operations o ON o.owner_id=a.owner_id AND o.request_id=a.request_id WHERE a.owner_id=%s AND a.source_revision=%s AND a.action='futu.test' ORDER BY a.created_at DESC,a.request_id DESC LIMIT 1", (who.id, selected[0]))).fetchone()
                     if legacy and (not row or legacy["created_at"] > row["created_at"]):
                         results[provider] = retained_futu(authority,selected[1],legacy["result"],row["result"] if matches else None)
                         continue
                 results[provider] = (row["result"] or {"state": "unknown", "requestId": str(row["request_id"]), "message": "上次检测结果尚未确认"}) if matches else {"state": "untested" if selected else "unconfigured"}
+        return results
+
+    @app.get("/api/fire/market-sources/tests")
+    async def retained(request: Request):
         from fastapi.responses import JSONResponse
-        return JSONResponse({"results": results}, headers={"Cache-Control": "private, no-store"})
+        who = await administrator(request)
+        return JSONResponse({"results": await retained_results(who, include_legacy=True)}, headers={"Cache-Control": "private, no-store"})
+
+    async def native_member(request):
+        from .native_app_auth import CLIENT
+        assert_native_origin(request, settings)
+        who, grant = await native_identity(request, db, "portfolio.read")
+        if grant["client_id"] != CLIENT:
+            raise HTTPException(401, "连接已失效")
+        return who
+
+    @app.get("/api/v2/market-source-tests")
+    async def native_retained(request: Request):
+        from fastapi.responses import JSONResponse
+        who = await native_member(request)
+        results = await retained_results(who, include_legacy=False)
+        return JSONResponse({"code": 0, "message": "ok", "data": {"results": {key: app_result(result) for key, result in results.items()}, "canProbe": who.role == "admin"}},
+                            headers={"Cache-Control": "private, no-store"})
+
+    async def lock_probe_identity(conn, who):
+        native = getattr(who, "native_client", False)
+        identity = await lock_mutation_identity(conn, who, require_admin=not native)
+        if identity["role"] != "admin":
+            raise HTTPException(403, "需要管理员权限")
+
+    @app.post("/api/v2/market-source-tests")
+    async def native_probe(request: Request):
+        from fastapi.responses import JSONResponse
+        who = await native_member(request)
+        if who.role != "admin":
+            raise HTTPException(403, "需要管理员权限")
+        result = await probe_for(request, who)
+        return JSONResponse({"code": 0, "message": "ok", "data": app_result(result)}, headers={"Cache-Control": "private, no-store"})
 
     @app.post("/api/fire/market-sources/tests")
     async def probe(request: Request):
-        who = await administrator(request)
+        return await probe_for(request, await administrator(request))
+
+    async def probe_for(request, who):
         raw = await body(request, ("provider", "requestId"))
         if set(raw) != {"provider", "requestId"} or raw.get("provider") not in PROVIDERS:
             raise HTTPException(400, "行情源检测参数无效")
@@ -222,7 +270,7 @@ def mount(app, settings, authority, transport, member):
             raise HTTPException(429, "检测过于频繁，请稍后再试")
         async with db.connection() as conn, conn.transaction():
             await authority.owner_lock(conn, who)
-            await lock_mutation_identity(conn, who)
+            await lock_probe_identity(conn, who)
             previous = await (await conn.execute("SELECT * FROM market_source_tests WHERE owner_id=%s AND request_id=%s", (who.id, identifier))).fetchone()
             if previous:
                 if previous["provider"] != provider:
@@ -242,7 +290,7 @@ def mount(app, settings, authority, transport, member):
         result = {"requestId": str(identifier), **await probe_markets(authority, transport, policy)}
         result.update(elapsedMs=round((time.perf_counter() - start) * 1000), observedAt=datetime.now(UTC).isoformat())
         async with db.connection() as conn, conn.transaction():
-            await lock_mutation_identity(conn, who)
+            await lock_probe_identity(conn, who)
             _, current = await authority.config(conn, who.id, revision)
             if current.fingerprint != policy.fingerprint:
                 raise HTTPException(403, "来源配置已变化，请重新检测")

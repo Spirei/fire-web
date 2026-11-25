@@ -111,6 +111,68 @@ class SharedBrokerDirectory:
                     'coverage': 'shared_directory_only', 'historicalCoverageKnown': False,
                     'personalAccounts': False, 'financialFieldsChanged': False}
 
+    async def add(self, who, request, name, code):
+        from .asset_catalog_management import broker_aliases, broker_code, broker_name_key
+
+        name = text(name)
+        code = text(code).upper()
+        key = broker_name_key(name)
+        if not key or len(name) > 120:
+            raise HTTPException(400, '请输入 1–120 字的券商名称')
+        if not broker_code(code):
+            raise HTTPException(400, '英文代码须以字母开头，可使用字母、数字、点、下划线及连字符，最多 35 字')
+        fp = fingerprint(['add', name, code])
+
+        def aliases(*values):
+            keys = {broker_name_key(value) for value in values if value}
+            return keys | {broker_name_key(broker_aliases()[key][0]) for key in keys if key in broker_aliases()}
+
+        requested = aliases(name, code)
+        async with self.context(who, write=True) as conn:
+            prior = await (await conn.execute(
+                'SELECT fingerprint,result FROM shared_broker_directory_operations WHERE actor_id=%s AND request_id=%s',
+                (who.id, request),
+            )).fetchone()
+            if prior:
+                if prior['fingerprint'] != fp:
+                    raise HTTPException(409, '原操作编号已用于其他目录操作')
+                return prior['result']
+            row = await self.row(conn)
+            if len(row['groups']) >= 2000 or row['revision'] >= 9007199254740990:
+                raise HTTPException(409, '共享券商目录已达上限')
+            group = {'id': code.lower(), 'name': name, 'alias': code}
+            if any(requested & aliases(item['name'], item['id'], item.get('alias')) for item in row['groups']):
+                raise HTTPException(409, '此券商已存在')
+            await self.plan(conn, [], [group])
+            async with self.catalog.context(who, True, connection=conn):
+                registered = (await (await conn.execute(
+                    "SELECT type,name,code FROM asset_catalog_entries WHERE type='broker' LIMIT 10001"
+                )).fetchall())
+                if len(registered) > 10000:
+                    raise HTTPException(503, '共享券商图标目录超出完整读取范围')
+                legacy = await self.assets.legacy_directory.entries() if self.assets.legacy_directory is not None else []
+                if any(item['type'] == 'broker' and requested & aliases(item['name'], item['code'])
+                       for item in (*registered, *legacy)):
+                    raise HTTPException(409, '素材库已有同名券商图标，请在已有条目中维护')
+                revision = (await (await conn.execute('SELECT revision FROM asset_catalog_scope FOR UPDATE')).fetchone())['revision']
+                material = await self.assets.write(
+                    who, uuid5(request, 'shared-broker-add'), revision,
+                    {'type': 'broker', 'market': 'OTHER', 'code': group['id'], 'name': name}, connection=conn,
+                )
+            groups = [*row['groups'], group]
+            await conn.execute(
+                'UPDATE shared_broker_directory SET groups=%s,revision=revision+1,updated_at=clock_timestamp() WHERE singleton',
+                (Jsonb(groups),),
+            )
+            result = {'requestId': str(request), 'state': 'completed', 'revision': row['revision'] + 1,
+                      'group': group, 'assetId': material['asset']['id']}
+            await conn.execute(
+                'INSERT INTO shared_broker_directory_operations(actor_id,request_id,fingerprint,result) VALUES(%s,%s,%s,%s)',
+                (who.id, request, fp, Jsonb(result)),
+            )
+            await conn.execute("INSERT INTO audit_events(actor_id,action,request_id) VALUES(%s,'shared-broker-directory.add',%s)", (who.id, request))
+            return result
+
     async def plan(self, conn, before, groups):
         old, new = {group['id']:group for group in before}, {group['id']:group for group in groups}
         renamed = [{'id':key,'from':value['name'],'to':new[key]['name']} for key,value in old.items() if key in new and new[key]['name']!=value['name']]

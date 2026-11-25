@@ -340,3 +340,67 @@ async def test_passkey_admin_metadata_no_secrets(client, admin, settings, app):
     assert (await client.get('/api/users/absent/passkeys')).status_code==404
     await fire_login(client,'PasskeyOther')
     assert (await client.get('/api/users/'+target+'/passkeys')).status_code==403
+
+
+async def test_broker_catalog_collapses_legacy_aliases_and_creates_shared_broker(client, admin, app, settings, tmp_path):
+    from test_legacy_asset_directory import SVG, write
+
+    await fire_login(client)
+    root = tmp_path / "uploads"
+    app.state.legacy_asset_directory.root = root
+    for file in ("华泰证卷.svg", "IMG-123456789ABC.svg"):
+        write(root, "asset/broker/" + file, SVG)
+    await seed_asset(app, "broker:G1792232973092-0")
+    async with app.state.db.connection() as conn:
+        await conn.execute("UPDATE asset_catalog_entries SET name='华泰证券' WHERE id='broker:G1792232973092-0'")
+    url = "/api/assets/catalog"
+    before = await client.get(url, params={"type": "broker"})
+    assert before.status_code == 200, before.text
+    assert before.json()["total"] == 1
+    [item] = before.json()["assets"]
+    assert (item["displayCode"], item["name"]) == ("HTSC", "华泰证券")
+    assert item["code"] == "G1792232973092-0"
+    assert (await client.get(url, params={"type": "broker", "q": "HTSC"})).json()["assets"] == [item]
+    duplicate = {"action": "create-broker", "name": "华泰证劵", "code": "HTSC", "requestId": str(uuid4())}
+    assert (await client.post(url, json=duplicate)).status_code == 409
+
+    name = "验收券商"
+    create = {"action": "create-broker", "name": name, "code": "TESTBROKER", "requestId": str(uuid4())}
+    assert (await client.post(url, json={**create, "code": "G1792232973092-0"})).status_code == 400
+    first = await client.post(url, json=create)
+    assert first.status_code == 200, first.text
+    assert (await client.post(url, json=create)).json() == first.json()
+    assert (await client.post(url, json={**create, "name": "另一个券商"})).status_code == 409
+    group = first.json()["group"]
+    listing = (await client.get(url, params={"type": "broker", "q": name})).json()
+    [created] = listing["assets"]
+    assert created["id"] == first.json()["assetId"]
+    assert created["displayCode"] == "TESTBROKER" and group["id"] == created["code"].lower()
+    settings.asset_root = tmp_path / "private-assets"
+    settings.asset_root.mkdir(mode=0o700)
+    settings.file_root = tmp_path / "private-files"
+    settings.file_root.mkdir(mode=0o700)
+    scope = (await client.get("/api/admin/shared-assets")).json()
+    upload = await client.post("/api/admin/shared-assets/upload", data={
+        "kind": "asset", "folder": "broker", "market": created["market"], "name": name,
+        "code": created["code"], "assetId": created["id"], "catalogRevision": listing["revision"],
+        "requestId": str(uuid4()), "expectedRevision": str(scope["revision"]), "publicMetadataConfirmed": "true",
+    }, files={"file": ("broker.svg", SVG, "image/svg+xml")})
+    assert upload.status_code == 200, upload.text
+    [with_icon] = (await client.get(url, params={"type": "broker", "q": "TESTBROKER"})).json()["assets"]
+    assert with_icon["id"] == created["id"]
+    assert (await client.get(with_icon["imageUrl"])).status_code == 200
+    from alcor_api.native_app_auth import issue_grant
+    async with app.state.db.connection() as conn, conn.transaction():
+        owner = await (await conn.execute("SELECT * FROM users WHERE id=%s", (admin,))).fetchone()
+        grant = await issue_grant(conn, owner, "portfolio.read", "Broker catalog fixture")
+    response = await client.get("/api/v2/brokers", headers={"authorization": "Bearer " + grant["access_token"]})
+    assert response.status_code == 200, response.text
+    groups = [{key: value[key] for key in ("id", "name", "alias")} for value in response.json()["data"]]
+    assert groups[-1] == group
+    assert len(groups) == len({value["id"] for value in groups})
+    assert response.json()["data"][-1]["icon"] == with_icon["imageUrl"]
+
+    await create_user(settings, "BrokerCatalogMember", "Synthetic9Pass", role="user")
+    await fire_login(client, "BrokerCatalogMember")
+    assert (await client.post(url, json={**create, "requestId": str(uuid4())})).status_code == 403

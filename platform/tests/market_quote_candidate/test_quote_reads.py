@@ -591,3 +591,59 @@ async def test_auto_read_stays_on_fresh_backup_past_60s_until_primary_actually_r
         await conn.execute("UPDATE market_data_jobs SET state='running', last_source_error=NULL WHERE task_id=%s", (probe_task['id'],))
         selected = await Subscriptions(authority).source(conn, SimpleNamespace(id=owner), [{'market': 'US', 'code': 'AAPL'}], None, 'auto')
         assert str(selected) == backup_revision
+
+
+async def test_fastest_visible_quotes_register_independent_approved_sources(market, monkeypatch):
+    from alcor_api.market_tencent_latest import VERSION as tencent_version
+
+    client, app, authority, _transport, _revision = market
+    original = authority.policies[0]
+    variants = [
+        replace(original, id="fixture-eastmoney", source="eastmoney"),
+        replace(original, id="fixture-tencent", source="tencent", source_version=tencent_version),
+    ]
+    authority.policies += tuple(variants)
+    revisions = set()
+    for policy in variants:
+        registered = await client.post("/api/market/sources", json={"request_id": str(uuid4()), "policy_id": policy.id})
+        assert registered.status_code == 200, registered.text
+        revisions.add(registered.json()["revision"])
+    async with app.state.db.connection() as conn:
+        owner = await (await conn.execute("SELECT * FROM users WHERE username='MarketReader'")).fetchone()
+        grant = await issue_grant(conn, owner, "portfolio.read portfolio.write", "Fastest quote fixture")
+    monkeypatch.setattr("alcor_api.legacy_quote_api.requested_session", lambda: "REGULAR")
+    query = {**body(), "preferFastSources": True}
+    response = await client.post("/api/v2/quotes", json=query,
+                                 headers={"authorization": "Bearer " + grant["access_token"], "x-alcor-register-demand": "true"})
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["tracking"]["tracked"] is True
+    async with app.state.db.connection() as conn:
+        streams = await (await conn.execute("SELECT source_revision,query FROM market_streams")).fetchall()
+        assert {str(row["source_revision"]) for row in streams} == revisions
+        assert {row["query"]["session"] for row in streams} == {"REGULAR"}
+    assert response.json()["data"]["quotes"] == {}
+    authority.clock = lambda: AT + timedelta(seconds=1)
+
+    async def collect_first(policy, requested, cursor):
+        return canonical({
+            "query": asdict(requested), "licenseRevision": policy.license_revision,
+            "facts": [{"at": AT.isoformat(), "price": "124.25", "currency": "USD",
+                       "session": "REGULAR", "cached": False, "name": "First provider"}],
+            "nextCursor": None,
+        }).encode(), "controlled_http_response_body"
+
+    _transport.read = collect_first
+    await schedule(authority)
+    pending = [await claim(app.state.db, uuid4()) for _ in variants]
+    assert all(pending)
+    async with app.state.db.connection() as conn:
+        receipt = await (await conn.execute(
+            """SELECT s.id FROM market_streams s JOIN market_source_configs c
+               ON c.owner_id=s.owner_id AND c.revision=s.source_revision WHERE c.policy_id='fixture-eastmoney'"""
+        )).fetchone()
+    first = next(task for task in pending if task["payload"]["streamId"] == str(receipt["id"]))
+    assert await execute(authority, first, _transport) == "observed"
+    arrived = await client.post("/api/v2/quotes", json=query, headers={"authorization": "Bearer " + grant["access_token"]})
+    assert arrived.status_code == 200, arrived.text
+    assert arrived.json()["data"]["quotes"]["known"]["source"] == "eastmoney"
+    assert arrived.json()["data"]["quotes"]["known"]["price"] == 124.25

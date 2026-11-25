@@ -7066,6 +7066,10 @@ html[data-platform-reduced="true"] .app-shell-root *,html[data-platform-reduced=
 .material-row.is-selected .material-selection-mark { background:var(--capsule-fill); border-color:var(--capsule-fill); }
 .material-markets > .material-market-more { display:flex; align-items:center; justify-content:center; gap:0; flex:none; width:42px; height:42px; padding:0!important; border-radius:50%; }
 
+.material-add-broker { display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+.material-broker-form { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 16px; }
+.material-broker-form .collection-search { flex:1 1 210px; }
+.material-broker-form [role="alert"] { flex-basis:100%; }
 .collection-toolbar { display:flex; align-items:center; gap:12px; margin:22px 0 16px; }
 .collection-search { display:flex; align-items:center; gap:10px; min-width:100px; flex:1; min-height:44px; padding:10px 14px; border:1px solid rgb(var(--site-edge)); border-radius:999px; background:rgb(var(--site-bg)); color:rgb(var(--site-muted)); }
 .collection-search input { width:100%; min-width:0; padding:0; border:0!important; box-shadow:none!important; background:transparent!important; color:rgb(var(--site-ink)); font-size:14px; }
