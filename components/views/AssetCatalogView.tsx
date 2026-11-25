@@ -21,6 +21,7 @@ import SafeAssetImage from "@/components/SafeAssetImage";
 import MarketIcon from "@/components/MarketIcon";
 import AppModal, { ModalForm, ModalField, ModalMedia, ModalActions, ModalChoiceGrid } from "@/components/AppModal";
 import AssetImageControl from "@/components/AssetImageControl";
+import BrokerMaterialForm from "@/components/BrokerMaterialForm";
 import { uploadMaterialImage } from "@/lib/materialImageUpload";
 import CollectionToolbar from "@/components/CollectionToolbar";
 import CollectionSkeleton from "@/components/CollectionSkeleton";
@@ -28,7 +29,6 @@ import Pagination from "@/components/Pagination";
 import AppSelect from "@/components/AppSelect";
 import { materialMarketSlots } from "@/lib/materialMarkets";
 import { readMaterialResponse } from "@/lib/materialRead";
-import { accountReadHeaders } from "@/lib/privateReadContext";
 import { clearCachedMaterialListings, materialListingKey, materialListingScope, pendingMaterialCatalog, prefetchMaterialCatalog, readCachedMaterialListing, saveCachedMaterialListing } from "@/lib/materialCatalogCache";
 import { Capsule } from "@/components/Capsule";
 import MarketCodeBadge from "@/components/MarketCodeBadge";
@@ -112,8 +112,8 @@ export default function AssetCatalogView({
         }[]
       | null
     >(null);
-  const [brokerDraft, setBrokerDraft] = useState<{ name: string; code: string; error: string } | null>(null);
-  const brokerCreateRequest = useRef<{ name: string; code: string; id: string } | null>(null);
+  const [brokerFormOpen, setBrokerFormOpen] = useState(false);
+  const brokerFormTrigger = useRef<HTMLButtonElement>(null);
   const marketCountCache = useRef(new Map<string, Record<string, number>>());
   const pageCache = useRef(new Map<string, { data: Listing; at: number }>(initial ? [[initial.key, {data:initial.data,at:Date.now()}]] : []));
   const cacheEpoch = useRef(0);
@@ -236,8 +236,7 @@ export default function AssetCatalogView({
     });
   }, [readKey]);
   useEffect(() => {
-    setBrokerDraft(null);
-    brokerCreateRequest.current = null;
+    setBrokerFormOpen(false);
   }, [type, removed, ownerId]);
 
   // A saved icon or metadata edit must not leave an obsolete listing to be
@@ -567,39 +566,13 @@ export default function AssetCatalogView({
     }
   }
   function openBrokerForm() {
-    setBrokerDraft(current => current ?? { name: "", code: "", error: "" });
+    setBrokerFormOpen(true);
     setSelecting(false);
     setSelection([]);
   }
-  async function createBroker() {
-    const brokerName = brokerDraft?.name.trim();
-    const code = brokerDraft?.code.trim().toUpperCase();
-    if (!brokerName || !code || busy) return;
-    if (brokerCreateRequest.current?.name !== brokerName || brokerCreateRequest.current?.code !== code) {
-      brokerCreateRequest.current = { name: brokerName, code, id: clientRequestId() };
-    }
-    setBusy(true);
-    try {
-      const response = await fetch("/api/assets/catalog", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...accountReadHeaders(ownerId) },
-        body: JSON.stringify({ action: "create-broker", name: brokerName, code, requestId: brokerCreateRequest.current.id }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      const data = await response.json();
-      if (!response.ok) throw Error(data.detail || data.error || "新增券商失败");
-      setBrokerDraft(null);
-      brokerCreateRequest.current = null;
-      update({ market: null, q: code, page: null });
-      refresh();
-      window.dispatchEvent(new Event("fire:settings-updated"));
-      window.dispatchEvent(new Event("fire:assets-updated"));
-      showToast("券商已新增，可在本页上传图标");
-    } catch (error) {
-      setBrokerDraft(current => current && { ...current, error: error instanceof Error ? error.message : "新增券商失败" });
-    } finally {
-      setBusy(false);
-    }
+  function closeBrokerForm() {
+    setBrokerFormOpen(false);
+    requestAnimationFrame(() => { if (foregroundRef.current) brokerFormTrigger.current?.focus(); });
   }
   const beginEdit = (item: Item) => {
     setEditing(item);
@@ -719,29 +692,20 @@ export default function AssetCatalogView({
           busy={busy || replacing}
           onImport={removed ? undefined : () => directoryFile.current?.click()}
           primaryAction={type === "broker" && !removed && (
-            <button type="button" data-capsule="off" className="collection-select-button material-add-broker"
-              aria-expanded={!!brokerDraft} disabled={busy} onClick={openBrokerForm}>
+            <button ref={brokerFormTrigger} type="button" data-capsule="off" className="collection-select-button material-add-broker"
+              aria-expanded={brokerFormOpen} aria-controls="material-new-broker" disabled={busy} onClick={openBrokerForm}>
               <IconPlus size={17} />新增券商
             </button>
           )}
         />
-        {brokerDraft && type === "broker" && !removed && (
-          <form className="material-broker-form" aria-label="新增券商" onSubmit={event => { event.preventDefault(); void createBroker(); }}>
-            <label className="collection-search">
-              <input aria-label="券商名称" placeholder="输入券商名称" autoFocus required maxLength={120}
-                disabled={busy} value={brokerDraft.name}
-                onChange={event => setBrokerDraft({ ...brokerDraft, name: event.target.value, error: "" })} />
-            </label>
-            <label className="collection-search">
-              <input aria-label="券商英文代码" placeholder="英文简称（如 IBKR）" required maxLength={35}
-                pattern={String.raw`[A-Za-z][A-Za-z0-9._\-]{0,34}`} autoCapitalize="characters" spellCheck={false}
-                disabled={busy} value={brokerDraft.code}
-                onChange={event => setBrokerDraft({ ...brokerDraft, code: event.target.value, error: "" })} />
-            </label>
-            <Capsule variant="secondary" disabled={busy} onClick={() => setBrokerDraft(null)}>取消</Capsule>
-            <Capsule type="submit" disabled={busy || !brokerDraft.name.trim() || !brokerDraft.code.trim()}>{busy ? "保存中" : "保存券商"}</Capsule>
-            {brokerDraft.error && <p role="alert" className="text-red-600 dark:text-red-400">{brokerDraft.error}</p>}
-          </form>
+        {brokerFormOpen && type === "broker" && !removed && (
+          <BrokerMaterialForm key={ownerId} ownerId={ownerId} locked={busy} onBusy={setBusy} onCancel={closeBrokerForm}
+            onCreated={() => window.dispatchEvent(new Event("fire:settings-updated"))}
+            onFinish={broker => {
+              closeBrokerForm();
+              if (foregroundRef.current) update({ market: null, q: broker.code, page: null });
+              showToast("券商已保存");
+            }} />
         )}
         <div className="material-count">
           <span>{visibleListing ? `${total} 项素材${removed ? " · 已移除" : ""}` : <CollectionSkeleton count />}</span>

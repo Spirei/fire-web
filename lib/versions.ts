@@ -8483,6 +8483,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   software: V0_1_90_ENTRY.software.map(item => ({ ...item, version: "v0.1.91" })),
   changes: [
     { kind: "fix", title: "整理券商图标与新增入口", desc: "合并重复素材，券商图标显示名称和英文简称。可在券商图标工具栏展开新增表单，保存后在本页上传图标。" },
+    { kind: "fix", title: "新增券商时可选图预览", desc: "新增表单支持同时选择图标，并显示保存与上传进度。券商已保存时，图片失败后可重试上传，结果未确认时查询原上传回执。" },
     { kind: "feature", title: "App 行情源检测", desc: "提供富途、东方财富、腾讯与 Yahoo 的分市场检测结果和实际耗时。App 可请求优先读取先到达的有效报价，并依据同市场、同时段的检测记录择优。" },
   ],
 };
