@@ -126,7 +126,7 @@ def longbridge_rows(order_rows, log_rows):
     return order_rows
 
 
-def read_sheet(raw):
+def read_sheet(raw, *, normalized_record=False):
     try:
         if not 0 < len(raw) <= MAX_BYTES:
             raise ValueError("文件过大，最大16MB")
@@ -208,7 +208,11 @@ def read_sheet(raw):
                             raise ValueError("订单单元格过长")
                         cells[match[1]] = value
                     rows.append(cells)
-                if title == "Trade Log":
+                if normalized_record:
+                    record_rows = named_rows(rows, "订单状态", ())
+                    if record_rows is not None:
+                        return record_rows
+                elif title == "Trade Log":
                     log_rows = named_rows(rows, "订单号", LONGBRIDGE_LOG)
                 elif order_rows is None:
                     order_rows = named_rows(rows, "订单状态", ("市场", "股票代码", "方向", "成交数量", "成交均价"))

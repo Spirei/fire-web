@@ -67,4 +67,4 @@ def record_sheet(raw):
         with ZipFile(output, 'w') as target:
             for name, content in blobs.items():
                 target.writestr(name, content)
-    return read_sheet(output.getvalue())
+    return read_sheet(output.getvalue(), normalized_record=True)
