@@ -41,6 +41,8 @@ def body_budget(path):
         return 16384
     if path in {'/api/v1/orders/import','/api/trading/history/import/preview'}:
         return 16 * 1024 * 1024 + 65536
+    if re.fullmatch(r"/api/trading/history/import/longbridge-archive/[a-f0-9]{64}", path):
+        return 16 * 1024 * 1024
     if path == '/api/trading/history/import/submissions':
         return 16384
     if re.fullmatch(r"/api/v[12]/broker-accounts/ba-[a-f0-9]{24}/(?:bindings|unbindings)", path):

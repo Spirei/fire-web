@@ -1,6 +1,7 @@
 """Workbook export of registered facts; unknown cells remain unknown."""
 
 import re
+from collections import Counter
 from datetime import UTC, datetime
 from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -9,7 +10,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
 from .legacy_flat_orders import order_identity, select_orders, snapshot
-from .legacy_order_workbooks import DETAIL, HEADERS, build_xlsx
+from .legacy_order_workbooks import DETAIL, HEADERS, LONGBRIDGE_HEADERS, LONGBRIDGE_LOG, build_xlsx
 
 MARKET_LABEL = {
     "US": "美股",
@@ -40,12 +41,18 @@ def time_text(value, market):
     return when.astimezone(UTC).isoformat()
 
 
-def workbook(orders, detail, *, include_fees=False):
-    rows = [HEADERS + ["费用"] if include_fees else HEADERS]
+def workbook(orders, detail, *, include_fees=False, longbridge_layout=False):
+    rows = [HEADERS + ["费用", "券商", "券商账户标识", "原券商订单号"] if include_fees else HEADERS]
     details = [DETAIL]
+    longbridge_orders = [LONGBRIDGE_HEADERS + HEADERS[21:] + ["费用", "成交时间", "来源", "原券商订单号"]]
+    longbridge_log = [LONGBRIDGE_LOG]
+    order_numbers = Counter(str(order["orderNo"]) for order in orders if order.get("orderNo")) if longbridge_layout else {}
     for order in orders:
         market = order["market"]
         filled = order["status"] == "filled"
+        fee = order.get("fees") if filled and order.get("feeSource") not in (
+            "legacy_import_placeholder", "unverified_legacy", "estimated_not_actual_paid",
+        ) else None
         status = {
             "filled": "已成交",
             "cancelled": "已撤销",
@@ -57,6 +64,11 @@ def workbook(orders, detail, *, include_fees=False):
         amount = order.get("amount") if filled else None
         price = order.get("executedPrice") if filled else None
         quantity = order.get("filledQty") if filled else None
+        if filled and order["side"] in ("buy", "sell"):
+            if price is None:
+                price = order.get("price")
+            if quantity is None:
+                quantity = order.get("qty")
         typ = order.get("orderType")
         row = [
             status,
@@ -87,8 +99,24 @@ def workbook(orders, detail, *, include_fees=False):
             order.get("settlementAmount"),
         ]
         if include_fees:
-            row.append(order.get("fees") if filled else None)
+            row.extend([fee, order.get("broker"), order.get("brokerAccountId"), order.get("originalOrderNo")])
         rows.append(row)
+        if longbridge_layout:
+            # Fire's recorded fill time is authoritative only as a Fire receipt.
+            # Leave order placement unknown when the origin did not supply it.
+            broker_row = row[:24].copy()
+            broker_row[1] = market
+            broker_row[4] = {"buy": "买", "sell": "卖"}.get(order["side"], side)
+            broker_row[10] = None
+            broker_row[12] = quantity if quantity is not None else 0
+            original = order.get("orderNo")
+            broker_row[19] = str(original if original and order_numbers.get(str(original)) == 1 else order["id"])
+            longbridge_orders.append(broker_row[:11] + [None] + broker_row[11:] + [
+                fee, order["tradedAt"] if filled else None, "Fire登记历史", order.get("originalOrderNo"),
+            ])
+            if filled and order["side"] in ("buy", "sell") and price is not None and quantity is not None:
+                longbridge_log.append([broker_row[19], market, order["code"], order["name"], broker_row[4],
+                                       order["tradedAt"], status, price, quantity, "Fire登记成交"])
         details.append(
             [
                 order.get("orderNo"),
@@ -105,7 +133,7 @@ def workbook(orders, detail, *, include_fees=False):
                 price,
                 quantity,
                 amount,
-                order.get("fees") if filled else None,
+                fee if include_fees else order.get("fees") if filled else None,
                 order.get("realizedPnl"),
                 order.get("positionQtyAfter"),
                 order.get("positionCostAfter"),
@@ -119,6 +147,9 @@ def workbook(orders, detail, *, include_fees=False):
                 order.get("settlementAmount"),
             ]
         )
+    if longbridge_layout:
+        return build_xlsx([("Orders", longbridge_orders), ("Trade Log", longbridge_log)]
+                          + ([("订单明细", details)] if detail else []))
     return build_xlsx([("订单", rows)] + ([("订单明细", details)] if detail else []))
 
 
@@ -178,7 +209,8 @@ def mount_order_export(app, db):
             + ".xlsx"
         )
         return Response(
-            workbook(orders, query.get("detail") == "1", include_fees=canonical),
+            workbook(orders, query.get("detail") == "1", include_fees=canonical,
+                     longbridge_layout=canonical and query.get("format") == "longbridge"),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
                 "Cache-Control": "no-store",

@@ -9,6 +9,7 @@ import { useRates } from "@/lib/useRates";
 
 interface Props {
   initialModuleOrder?: { left: string[]; right: string[] };
+  sessionCsrf: string;
   records: StockRecord[];
   quotes: Record<string, Quote>;
   livePrice: (r: StockRecord) => number;
@@ -19,7 +20,7 @@ interface Props {
 }
 
 /** 独立页签：资产分析（从我的持仓剥离），行情/汇率/记录刷新与持仓页共用链路 */
-export default function AssetAnalysisView({ initialModuleOrder, records, quotes, livePrice, user, refreshQuotes, onOpenPnlAnalysis, onReady }: Props) {
+export default function AssetAnalysisView({ initialModuleOrder, sessionCsrf, records, quotes, livePrice, user, refreshQuotes, onOpenPnlAnalysis, onReady }: Props) {
   useLayoutEffect(() => onReady?.(), [onReady]);
   const { stockIcons } = useAssetIcons(["stock"]);
   const rates = useRates();
@@ -34,6 +35,7 @@ export default function AssetAnalysisView({ initialModuleOrder, records, quotes,
   return (
     <AssetAnalysisDashboard
       initialModuleOrder={initialModuleOrder}
+      sessionCsrf={sessionCsrf}
       readSignature={recordsReadSignature(records)}
       positions={positions}
       quotes={quotes}

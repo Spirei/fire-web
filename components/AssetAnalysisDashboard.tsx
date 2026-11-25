@@ -67,6 +67,7 @@ const EMPTY_CURRENCY_BALANCES: Record<FundCurrency, number> = emptyFundBalances(
 interface Props {
   readSignature?: string;
   initialModuleOrder?: { left: string[]; right: string[] };
+  sessionCsrf: string;
   positions: StockRecord[];
   quotes: Record<string, Quote>;
   livePrice: (record: StockRecord) => number;
@@ -264,7 +265,7 @@ function DateRangePicker({ id, range, onApply, onClose }: { id: string; range: D
   </div>;
 }
 
-export default function AssetAnalysisDashboard({ initialModuleOrder, readSignature, positions, quotes, livePrice, rates, currency, stockIcons, user, onRefreshMarketData, onOpenPnlAnalysis }: Props) {
+export default function AssetAnalysisDashboard({ initialModuleOrder, readSignature, sessionCsrf, positions, quotes, livePrice, rates, currency, stockIcons, user, onRefreshMarketData, onOpenPnlAnalysis }: Props) {
   const canUseWorkspaceUrl = useWorkspaceLocationGuard();
   const foreground = useWorkspaceForeground();
   const readRevision = usePrivateReadRevision();
@@ -728,7 +729,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
     const controller = new AbortController();
     const epoch = privateReadEpoch();
     void platformRequest<unknown>("/api/fire/asset-analysis/trend", {
-      headers: accountReadHeaders(ownerId), signal: controller.signal, cache: "no-store",
+      headers: { ...accountReadHeaders(ownerId), "X-CSRF-Token": sessionCsrf }, signal: controller.signal, cache: "no-store",
     }).then(data => {
       if (!controller.signal.aborted && epoch === privateReadEpoch()) {
         setTrendRead({ scope: trendScope, days: verifiedAssetDays(data, ownerId), failed: false });
@@ -742,7 +743,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
       }));
     });
     return () => controller.abort();
-  }, [foreground, ownerId, trendScope, retryTick]);
+  }, [foreground, ownerId, sessionCsrf, trendScope, retryTick]);
 
   const selectedBenchmark = BENCHMARKS.find(item => item.key === benchKey) ?? BENCHMARKS[0];
   const benchmarkDays = period === "all" ? 1200 : period === "custom"

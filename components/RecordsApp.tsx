@@ -1132,6 +1132,7 @@ export default function RecordsApp({
           {activeTab === "assets" && (
             <AssetAnalysisView
               initialModuleOrder={initialSettings.assetAnalysisOrder}
+              sessionCsrf={sessionCsrf}
               records={records}
               quotes={quotes}
               livePrice={livePrice}

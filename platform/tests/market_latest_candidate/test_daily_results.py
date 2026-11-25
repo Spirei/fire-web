@@ -135,6 +135,11 @@ async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap
     assert web_data["accountId"] == owner
     web_days = {row["day"]: row for row in web_data["items"]}
     assert web_days["2026-10-20"] == {**latest, "calendar": None}
+    proxied = "https://testserver" + web_path
+    assert (await client.get(proxied, headers={"x-csrf-token": ""})).status_code == 403
+    proxy_read = await client.get(proxied)
+    assert proxy_read.status_code == 200 and proxy_read.json() == web_data
+    assert (await client.get(proxied, headers={"sec-fetch-site": "cross-site"})).status_code == 403
     assert (await client.get(web_path, headers={"X-Alcor-Expected-Account": "another-user"})).status_code == 403
     assert (await client.get(web_path, params={"ownerId": "another-user"})).status_code == 400
     detail = await client.get(path, headers=headers, params={"day": "2026-10-20"})

@@ -1,10 +1,11 @@
 """Bounded OOXML order-sheet transport; no workbook code or formulas execute."""
 
 import io
+import json
 import posixpath
 import re
 import zipfile
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
@@ -67,6 +68,8 @@ DETAIL = [
     "结算币种",
     "实际结算净额",
 ]
+LONGBRIDGE_HEADERS = HEADERS[:11] + ["定时下单"] + HEADERS[11:21]
+LONGBRIDGE_LOG = ["订单号", "市场", "股票代码", "股票名称", "方向", "时间", "订单状态", "委托价格", "委托数量", "消息"]
 
 
 def xml(raw):
@@ -75,6 +78,52 @@ def xml(raw):
     if b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
         raise ValueError("不支持XML实体")
     return ET.fromstring(raw)
+
+
+def named_rows(rows, first, required):
+    for index, row in enumerate(rows):
+        if row.get("A") != first:
+            continue
+        labels = [label for label in row.values() if label]
+        if len(labels) != len(set(labels)) or not set(required).issubset(labels):
+            continue
+        return [
+            {**item, **{label: item.get(column, "") for column, label in row.items() if label}}
+            for item in rows[index + 1:] if any(item.values())
+        ]
+    return None
+
+
+def longbridge_rows(order_rows, log_rows):
+    events = {}
+    for row in log_rows:
+        if row["订单状态"] not in ("已成交", "部分成交"):
+            continue
+        if not row["委托价格"] and not row["委托数量"] and row["消息"]:
+            continue
+        events.setdefault(row["订单号"], []).append([
+            row["市场"], row["股票代码"], row["方向"], row["时间"], row["委托数量"], row["委托价格"],
+        ])
+    ids = set()
+    for row in order_rows:
+        identifier = row["订单号"]
+        fire_export = row.get("来源") == "Fire登记历史"
+        if (not re.fullmatch(r"[0-9]{1,32}", identifier)
+            and not (fire_export and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", identifier))) or identifier in ids:
+            raise ValueError("长桥原件订单号缺失或重复")
+        ids.add(identifier)
+        row["_sourceFormat"] = "fire-order-export" if fire_export else "longbridge"
+        row["_executionEvents"] = json.dumps(events.get(identifier, []), ensure_ascii=False, separators=(",", ":"))
+        try:
+            count = Decimal(row["成交数量"])
+        except InvalidOperation:
+            count = Decimal(-1)
+        if not count.is_finite() or count < 0:
+            raise ValueError("长桥原件成交数量无效")
+        row["_hasExecution"] = "true" if count > 0 else "false"
+    if events.keys() - ids:
+        raise ValueError("长桥成交日志包含未在订单表中登记的订单号")
+    return order_rows
 
 
 def read_sheet(raw):
@@ -118,13 +167,22 @@ def read_sheet(raw):
                         else target.lstrip("/")
                     )
                     if name.startswith("xl/worksheets/") and name in blobs:
-                        names.append(name)
+                        names.append((node.attrib.get("name", ""), name))
             if not names:
-                names = sorted(k for k in blobs if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", k))
-            for name in names:
+                names = [("", k) for k in sorted(blobs) if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", k)]
+            strings = []
+            if "xl/sharedStrings.xml" in blobs:
+                for item in xml(blobs["xl/sharedStrings.xml"]).iter(NS + "si"):
+                    if len(strings) >= 200000:
+                        raise ValueError("xlsx共享字符串过多")
+                    strings.append("".join(n.text or "" for n in item.iter(NS + "t")))
+            order_rows, log_rows, order_title = None, None, None
+            for title, name in names:
+                if order_rows is not None and title != "Trade Log":
+                    continue
                 rows = []
                 for row in xml(blobs[name]).iter(NS + "row"):
-                    if len(rows) >= 20001:
+                    if len(rows) >= (100001 if title == "Trade Log" else 20001):
                         raise ValueError("单次最多导入20000条订单，请拆分文件")
                     cells = {}
                     nodes = list(row)
@@ -135,27 +193,33 @@ def read_sheet(raw):
                         match = re.fullmatch(r"([A-Z]{1,3})\d+", ref)
                         if not match:
                             continue
+                        if cell.find(NS + "f") is not None:
+                            raise ValueError("订单数据须为原始值，不能使用公式")
                         if cell.attrib.get("t") == "inlineStr":
                             value = "".join(n.text or "" for n in cell.iter(NS + "t"))
                         elif cell.attrib.get("t") == "s":
-                            raise ValueError("订单导入只接受原协议inlineStr或数值单元格")
+                            index = cell.findtext(NS + "v", "")
+                            if not index.isdecimal() or len(index) > 6 or int(index) >= len(strings):
+                                raise ValueError("xlsx共享字符串索引无效")
+                            value = strings[int(index)]
                         else:
                             value = cell.findtext(NS + "v", "")
                         if len(value) > 8192:
                             raise ValueError("订单单元格过长")
                         cells[match[1]] = value
                     rows.append(cells)
-                if not rows:
-                    continue
-                header = next((index for index, row in enumerate(rows) if row.get("A") == "订单状态"), None)
-                if header is None:
-                    continue
-                mapping = rows[header]
-                return [
-                    {**row, **{label: row.get(column, "") for column, label in mapping.items() if label}}
-                    for row in rows[header + 1 :]
-                    if any(row.values())
-                ]
+                if title == "Trade Log":
+                    log_rows = named_rows(rows, "订单号", LONGBRIDGE_LOG)
+                elif order_rows is None:
+                    order_rows = named_rows(rows, "订单状态", ("市场", "股票代码", "方向", "成交数量", "成交均价"))
+                    if order_rows is not None:
+                        order_title = title
+                        if title != "Orders":
+                            return order_rows
+            if order_rows is not None and order_title == "Orders":
+                if log_rows is None or any(not set(LONGBRIDGE_HEADERS).issubset(row) for row in order_rows):
+                    raise ValueError("长桥文件须包含原始 Orders 和 Trade Log")
+                return longbridge_rows(order_rows, log_rows)
             raise ValueError("未找到订单状态表头")
     except (
         ValueError,

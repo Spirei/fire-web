@@ -4,11 +4,13 @@ Missing fee, owner/account identity or historical opening facts are blockers.
 No exporter row is evidence of cash completeness and no position is backfilled.
 """
 
+import asyncio
 import hashlib
 import json
 import re
+from collections import defaultdict
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation, localcontext
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
@@ -22,6 +24,7 @@ from .legacy_flat_orders import FlatOrders, TransactionDB, order_identity, packe
 from .legacy_order_workbooks import MAX_BYTES, read_sheet
 from .notification_security import principal
 from .profile_http import bounded_body
+from .security import lock_mutation_identity
 from .trading import MARKET_CURRENCY, Trading
 
 MARKETS = {
@@ -85,6 +88,90 @@ def amount(value, *, positive=False):
         raise ValueError("金额或数量缺失") from exc
 
 
+def longbridge_time(value, market):
+    local_zones = {"HK": "Asia/Hong_Kong", "CN": "Asia/Shanghai", "SG": "Asia/Singapore", "JP": "Asia/Tokyo"}
+    if market in local_zones and re.fullmatch(r"\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d", value.strip()):
+        local = datetime.fromisoformat(value.strip())
+        zone = ZoneInfo(local_zones[market])
+        first = local.replace(tzinfo=zone, fold=0)
+        if first.utcoffset() != local.replace(tzinfo=zone, fold=1).utcoffset():
+            raise ValueError("成交时区处于重叠或跳时")
+        return first.astimezone(UTC).isoformat()
+    return at(value)
+
+
+def longbridge_events(row, market, symbol, side, qty, gross):
+    events = json.loads(row["_executionEvents"])
+    if not events:
+        raise ValueError("原表有有效成交汇总，未提供对应分笔")
+    execution_days = set()
+    normalized = []
+    contract = re.fullmatch(r"([A-Z.]{1,8})\d{6}[CP]\d{6,9}", symbol) if market == "US" else None
+    allowed_codes = {symbol, contract[1]} if contract else {symbol}
+    multiplier = 100 if contract else 1
+    minor_unit = Decimal(1) if row["币种"] == "JPY" else Decimal("0.01")
+    for event_market, event_code, event_side, stamp, quantity, price in events:
+        if event_market != market or code(event_code) not in allowed_codes or event_side != ("买" if side == "buy" else "卖"):
+            raise ValueError("长桥订单和成交日志的市场、代码或方向不一致")
+        executed_at = longbridge_time(stamp, market)
+        execution_days.add(stamp[:10])
+        normalized.append((executed_at, Decimal(amount(quantity, positive=True)), Decimal(amount(price, positive=True))))
+    with localcontext() as precision:
+        precision.prec = 80
+        amounts = [q * p * multiplier for _, q, p in normalized]
+        total = sum(amounts)
+        if sum(q for _, q, _ in normalized) != Decimal(qty) or gross not in (
+            total, total.quantize(minor_unit, rounding=ROUND_HALF_UP),
+            sum(amount.quantize(minor_unit, rounding=ROUND_HALF_UP) for amount in amounts),
+        ):
+            raise ValueError("成交日志股数或总额与长桥订单汇总不一致")
+    return normalized, execution_days
+
+
+def longbridge_execution(row, market, symbol, side, qty, gross):
+    normalized, execution_days = longbridge_events(row, market, symbol, side, qty, gross)
+    with localcontext() as precision:
+        precision.prec = 80
+        weighted = gross / Decimal(qty)
+        if len(execution_days) != 1:
+            raise ValueError("同一订单跨交易日成交，须按分笔和实付费用核对")
+        if weighted * Decimal(qty) != gross or weighted.normalize().as_tuple().exponent < -8:
+            raise ValueError("成交均价无法精确表示，须按长桥分笔核对")
+    return max(t for t, _, _ in normalized), format(weighted, "f"), len(normalized)
+
+
+def verified_longbridge_archive(raw):
+    rows = read_sheet(raw)
+    if not rows or len(rows) > 20_000:
+        raise HTTPException(422, "没有可保存的长桥有效成交")
+    try:
+        for row in rows:
+            market, direction = row.get("市场"), row.get("方向")
+            currency = MARKET_CURRENCY.get(market)
+            if (row.get("_sourceFormat") != "longbridge" or row.get("_hasExecution") != "true"
+                    or direction not in ("买", "卖") or currency is None or row.get("币种") != currency):
+                raise ValueError()
+            symbol = code(row["股票代码"])
+            if not symbol:
+                raise ValueError()
+            longbridge_events(row, market, symbol, "buy" if direction == "买" else "sell",
+                              amount(row["成交数量"], positive=True),
+                              Decimal(amount(row["成交金额"], positive=True)))
+    except (KeyError, TypeError, ValueError, InvalidOperation) as exc:
+        raise HTTPException(422, "仅可保存已经分笔核对的长桥成交文件") from exc
+    return rows
+
+
+def economic_signature(order):
+    try:
+        if order.get("status") != "filled" or order.get("side") not in ("buy", "sell") or order.get("amount") is None:
+            return None
+        return (order["market"], code(order["code"]), order["side"],
+                Decimal(str(order["qty"])), Decimal(str(order["price"])), Decimal(str(order["amount"])))
+    except (InvalidOperation, KeyError, TypeError):
+        return None
+
+
 class OrderImport:
     def __init__(self, db):
         self.db = db
@@ -111,10 +198,22 @@ class OrderImport:
             )
         ).fetchall()
         prior_hashes = {row["content_hash"] for row in prior_links}
+        original_orders = defaultdict(list)
+        economic_orders = defaultdict(list)
+        security_records = defaultdict(list)
+        for record in records:
+            security_records[record["market"], code(record["code"])].append(record)
+        for order in view["orders"]:
+            if order.get("originalOrderNo"):
+                original_orders[str(order["originalOrderNo"])].append(order)
+            if (signature := economic_signature(order)) is not None:
+                economic_orders[signature].append(order)
         for index, row in enumerate(rows, 1):
             result = {"rowIndex": index, "raw": row, "state": "ignored", "feesKnown": False, "recordId": None}
             plans.append(result)
-            if row.get("订单状态", row.get("A")) != "已成交":
+            longbridge = row.get("_sourceFormat") == "longbridge"
+            execution = row.get("_hasExecution") == "true" if longbridge else row.get("订单状态", row.get("A")) == "已成交"
+            if not execution:
                 result["reason"] = "not_filled"
                 continue
             filled += 1
@@ -132,14 +231,39 @@ class OrderImport:
                 side = "buy" if "买" in direction else "sell" if "卖" in direction else None
                 if not side:
                     raise ValueError("股息或未知方向须独立实际收款记录")
+                qty = amount(row.get("成交数量", row.get("M", "")), positive=True)
+                price = amount(row.get("成交均价", row.get("L", "")), positive=True)
+                stated_amount = row.get("成交金额", row.get("N", "")).strip()
+                original = row.get("订单号", row.get("T", ""))
+                if longbridge:
+                    booked = Decimal(amount(stated_amount, positive=True))
+                    when, price, event_count = longbridge_execution(row, market, symbol, side, qty, booked)
+                    result.update(sourceFormat="longbridge", originalOrderNo=original, executionCount=event_count,
+                                  orderSubmittedAt=longbridge_time(row["委托时间"], market))
+                else:
+                    when = at(row.get("成交时间") or row.get("委托时间", row.get("K", "")))
+                result.update(quantity=qty, price=price, amount=stated_amount or None, side=side, tradedAt=when,
+                              currency=row.get("币种", row.get("J")) or None)
+                if (row.get("币种", row.get("J", ""))).strip().upper() != MARKET_CURRENCY.get(market):
+                    raise ValueError("原件币种缺失或与证券原币不一致，不能按当前账户补填")
                 mapped = mappings.get(str(index))
+                matching = [o for o in original_orders.get(original, []) if longbridge and o.get("status") == "filled"
+                            and o.get("side") == side and o.get("market") == market and code(o.get("code", "")) == symbol]
+                match_basis = "original_order_number"
+                if longbridge and not matching:
+                    match_basis = "matching_original_terms"
+                    signature = (market, symbol, side, Decimal(qty), Decimal(price), booked)
+                    matching = [o for o in economic_orders[signature] if at(o["tradedAt"]) in (when, result["orderSubmittedAt"])]
+                if longbridge and len(matching) == 1:
+                    result.update(existingOrderId=matching[0]["id"], matchBasis=match_basis)
                 if mapped is not None:
                     if not isinstance(mapped, dict) or set(mapped) != {"recordId"}:
                         raise ValueError("逐行归属映射无效")
                     record = known.get(mapped["recordId"])
                     candidates = [record] if record else []
                 else:
-                    candidates = [r for r in records if r["market"] == market and code(r["code"]) == symbol]
+                    matched_ids = {o["recordId"] for o in matching}
+                    candidates = [r for r in security_records[market, symbol] if not matched_ids or r["id"] in matched_ids]
                 if len(candidates) != 1:
                     raise ValueError("未找到唯一已登记证券，请明确本人账户下的recordId")
                 record = candidates[0]
@@ -151,17 +275,36 @@ class OrderImport:
                 ):
                     raise ValueError("证券市场、代码或稳定账户关系尚未核对")
                 result["recordId"] = record["id"]
-                qty = amount(row.get("成交数量", row.get("M", "")), positive=True)
-                price = amount(row.get("成交均价", row.get("L", "")), positive=True)
-                when = at(row.get("委托时间", row.get("K", "")))
                 raw_fee = row.get("费用", row.get("手续费"))
-                if raw_fee is None or raw_fee.strip() in ("", "—", "--"):
+                has_paid_fee = raw_fee is not None and raw_fee.strip() not in ("", "—", "--")
+                if longbridge:
+                    bound = [o for o in matching if o["recordId"] == record["id"]]
+                    if len(bound) > 1:
+                        raise ValueError("同一长桥订单号命中多笔已登记成交，须逐笔核对")
+                    if bound:
+                        existing = bound[0]
+                        result["existingOrderId"] = existing["id"]
+                        if existing.get("brokerAccountId") != record["broker_account_id"]:
+                            raise ValueError("原成交的券商账户关联尚未核实")
+                        fee_matches = not has_paid_fee or (
+                            existing.get("fees") is not None
+                            and existing.get("feeSource") not in ("legacy_import_placeholder", "unverified_legacy", "estimated_not_actual_paid")
+                            and Decimal(str(existing["fees"])) == Decimal(amount(raw_fee))
+                        )
+                        if (at(existing["tradedAt"]) == when and Decimal(str(existing["qty"])) == Decimal(qty)
+                             and Decimal(str(existing["price"])) == Decimal(price)
+                             and existing.get("amount") is not None and Decimal(str(existing["amount"])) == booked
+                             and fee_matches):
+                            result.update(state="duplicate", reason="existing_original_fill")
+                            continue
+                        result["requiresCorrection"] = True
+                        raise ValueError("长桥原订单号已存在，成交时间、数量或金额有差异，请核对后更正原成交")
+                if not has_paid_fee:
                     raise ValueError("原件缺少实付费用，不能按旧导入器默认零")
                 fees = amount(raw_fee)
                 with localcontext() as precision:
                     precision.prec = 80
                     gross = Decimal(qty) * Decimal(price)
-                stated_amount = row.get("成交金额", row.get("N", "")).strip()
                 if stated_amount and Decimal(amount(stated_amount)) != gross:
                     raise ValueError("原成交金额与数量均价不同，请使用实际结算来源核对")
                 result.update(
@@ -572,6 +715,42 @@ def mount_order_import(app, db):
     @app.get("/api/trading/history/import/operations/{request_id}")
     async def receipt(request: Request, request_id: UUID):
         return await service.receipt(await order_identity(request, db), request_id)
+
+    @app.api_route("/api/trading/history/import/longbridge-archive/{digest}", methods=["GET", "PUT"])
+    async def longbridge_archive(request: Request, digest: str):
+        writing = request.method == "PUT"
+        who = await order_identity(request, db, write=writing)
+        if not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise HTTPException(400, "文件校验值无效")
+        instance = db.settings.instance_id
+        identifier = uuid5(NAMESPACE_URL, f"fire:longbridge-archive:{instance}:{who.id}:{digest}")
+        if writing:
+            if not await app.state.rate_limit(db, "longbridge-archive:" + who.id, 10, window_seconds=60):
+                raise HTTPException(429, "保存过于频繁，请稍后重试")
+            raw = await bounded_body(request, MAX_BYTES)
+            if hashlib.sha256(raw).hexdigest() != digest:
+                raise HTTPException(422, "上传文件完整性校验失败")
+            rows = await asyncio.to_thread(verified_longbridge_archive, raw)
+        async with db.connection() as conn, conn.transaction():
+            await lock_mutation_identity(conn, who, require_admin=False)
+            if writing:
+                await conn.execute(
+                    """INSERT INTO legacy_order_import_sources(owner_id,id,filename,sha256,raw,rows,principal,origin_instance)
+                       VALUES(%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(owner_id,id) DO NOTHING""",
+                    (who.id, identifier, "longbridge-verified.xlsx", digest, raw, Jsonb(rows), principal(who), instance),
+                )
+            saved = await (await conn.execute(
+                """SELECT raw,sha256,origin_instance,created_at,jsonb_array_length(rows) AS count
+                   FROM legacy_order_import_sources WHERE owner_id=%s AND id=%s""", (who.id, identifier),
+            )).fetchone()
+            if not saved:
+                return JSONResponse({"saved": False}, headers={"Cache-Control": "no-store, private"})
+            if (str(saved["origin_instance"]) != str(instance) or saved["sha256"] != digest
+                    or hashlib.sha256(saved["raw"]).hexdigest() != digest):
+                raise HTTPException(409, "保存记录完整性核对失败")
+            return JSONResponse({"saved": True, "sourceId": str(identifier), "sha256": digest,
+                                 "orderCount": saved["count"], "savedAt": saved["created_at"].isoformat()},
+                                headers={"Cache-Control": "no-store, private"})
 
     @app.get("/api/trading/history/import/sources/{source_id}/original")
     async def original(request: Request, source_id: UUID):
