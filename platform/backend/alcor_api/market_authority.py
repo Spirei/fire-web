@@ -247,6 +247,8 @@ class Authority:
         from .market_tencent_minute import VERSION as TENCENT_MINUTE_VERSION,installed as tencent_minute_installed
         tencent_minute=policy.source=='tencent'and policy.source_version==TENCENT_MINUTE_VERSION and tencent_minute_installed(query)
         from .market_eastmoney_latest import VERSION as EASTMONEY_VERSION, installed as eastmoney_installed
+        from .market_eastmoney_minute import VERSION as EM_MINUTE, installed as em_minute_installed
+        eastmoney_minute = policy.source == 'eastmoney' and policy.source_version == EM_MINUTE and em_minute_installed(query)
         eastmoney = policy.source == 'eastmoney' and policy.source_version == EASTMONEY_VERSION and eastmoney_installed(query)
         crypto = False
         if policy.source == 'coingecko':
@@ -263,7 +265,7 @@ class Authority:
         if policy.source == 'yahoo' and not yahoo:
             raise HTTPException(503, '此来源尚未安装该证券或行情口径')
         if query.kind != "latest" and not (
-            yahoo or tencent_minute or
+            yahoo or tencent_minute or eastmoney_minute or
             (installed_bar_semantics(query) or installed_price_series_semantics(query))
             and (
                 policy.source == "futu"

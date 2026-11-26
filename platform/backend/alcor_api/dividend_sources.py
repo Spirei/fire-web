@@ -124,7 +124,7 @@ class Target:
     def path(self, symbol):
         if self.source=='tencent':
             if not re.fullmatch(r'(?:us|hk|sh|sz|bj|jp|kr)[A-Z0-9._]+',symbol):raise ValueError('tencent_symbol_invalid')
-            if self.host=='web.ifzq.gtimg.cn':return '/appstock/app/minute/query'
+            if self.host=='web.ifzq.gtimg.cn':return '/appstock/app/UsMinute/query' if symbol.startswith('us') else '/appstock/app/minute/query'
             return '/q='+symbol
         if self.source == 'coingecko':
             return '/api/v3/coins/markets'

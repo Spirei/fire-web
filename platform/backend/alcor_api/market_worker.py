@@ -218,6 +218,12 @@ def decode(policy, query, raw, *, cursor_in=None, observed_at=None):
         facts, issues, cursor = parse(raw, query, cursor_in=cursor_in, policy=policy)
         return [{**fact, 'fixture': policy.fixture} for fact in facts], issues, cursor
     if policy.source == 'eastmoney' and not policy.fixture:
+        from . import market_eastmoney_minute as minutes
+        if policy.source_version == minutes.VERSION:
+            if cursor_in is not None:
+                raise ValueError('eastmoney_minute_cursor_invalid')
+            facts,issues,cursor = minutes.parse(raw,query)
+            return [{**fact,'fixture':False} for fact in facts],issues,cursor
         from .market_eastmoney_latest import VERSION, parse
         if policy.source_version != VERSION:
             raise ValueError('eastmoney_quote_version_not_installed')

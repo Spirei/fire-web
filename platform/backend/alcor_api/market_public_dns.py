@@ -8,7 +8,7 @@ from .fx_provider_parser import approved_target
 
 HOSTS = {
     'tencent': ('qt.gtimg.cn', 'web.ifzq.gtimg.cn'),
-    'eastmoney': ('push2delay.eastmoney.com', 'push2.eastmoney.com'),
+    'eastmoney': ('push2delay.eastmoney.com', 'push2.eastmoney.com', 'push2his.eastmoney.com'),
     'yahoo': ('query1.finance.yahoo.com', 'query2.finance.yahoo.com'),
 }
 
@@ -44,8 +44,9 @@ def fixed_quote_url(parsed):
     host,path=parsed.hostname,parsed.path
     return parsed.scheme=='https' and (parsed.port or 443)==443 and (
         host=='qt.gtimg.cn' and re.fullmatch(r'/q=(?:us|hk|sh|sz|bj|jp|kr)[A-Z0-9._]+',path)
-        or host=='web.ifzq.gtimg.cn' and path=='/appstock/app/minute/query'
-        or host in HOSTS['eastmoney'] and path=='/api/qt/ulist.np/get'
+        or host=='web.ifzq.gtimg.cn' and path in ('/appstock/app/minute/query','/appstock/app/UsMinute/query')
+        or host=='push2his.eastmoney.com' and path=='/api/qt/stock/trends2/get'
+        or host in ('push2.eastmoney.com','push2delay.eastmoney.com') and path=='/api/qt/ulist.np/get'
         or host in HOSTS['yahoo'] and path.startswith('/v8/finance/chart/')
         and unquote(path.removeprefix('/v8/finance/chart/')) not in ('','.','..')
         and not any(c in unquote(path.removeprefix('/v8/finance/chart/')) for c in '/\\'))

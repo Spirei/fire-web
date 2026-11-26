@@ -25,6 +25,7 @@ CRYPTOS = {
 def symbol(query, policy=None):
     equity = query.instrument == 'equity' and (
         query.kind == 'latest' and query.frame == 'latest' and query.adjust == 'none' and (query.session == 'REGULAR' or query.market == 'US' and query.session in ('PRE','AFTER'))
+        or query.market == 'US' and query.kind == 'bars' and query.frame == 'minute' and query.adjust == 'none' and query.session in ('ALL','REGULAR')
         or query.kind == 'bars' and query.frame == 'day' and query.adjust in ('none', 'qfq') and query.session == 'REGULAR'
     )
     if equity:
@@ -76,7 +77,7 @@ def page_window(query, cursor):
     start = date.fromisoformat(cursor) if cursor is not None else begin
     if not begin <= start <= through:
         raise ValueError('history_cursor_outside_window')
-    end = min(through, start + timedelta(days=365))
+    end = start if query.frame == "minute" else min(through, start + timedelta(days=365))
     return start, end, (end + timedelta(days=1)).isoformat() if end < through else None
 
 
@@ -96,7 +97,7 @@ async def fetch(target, query, cursor, policy=None):
         first = datetime.combine(start, datetime.min.time(), zone)
         after = datetime.combine(end + timedelta(days=1), datetime.min.time(), zone)
         parameters = urlencode({'period1': int(first.timestamp()), 'period2': int(after.timestamp()),
-                                'interval': '1d', 'includePrePost': 'false',
+                                'interval': '1m' if query.frame == 'minute' else '1d', 'includePrePost': 'true' if query.session == 'ALL' else 'false',
                                 'includeAdjustedClose': 'true' if query.instrument == 'equity' and query.adjust == 'qfq' else 'false'})
     url = f'https://{target.host}{target.path(provider_symbol)}?{parameters}'
     # Approval includes exact escaped path and operator-pinned addresses, never a caller URL.
@@ -210,10 +211,12 @@ def parse(raw, query, *, cursor_in=None, policy=None):
     start, end, next_cursor = page_window(query, cursor_in)
     timestamps = result.get('timestamp', [])
     quotes = result.get('indicators', {}).get('quote') if isinstance(result.get('indicators'), dict) else None
-    if not isinstance(timestamps, list) or len(timestamps) > 500:
+    if not isinstance(timestamps, list) or len(timestamps) > (1500 if query.frame == "minute" else 500):
         raise ValueError('yahoo_history_timestamp_count')
     if not isinstance(quotes, list) or len(quotes) != 1 or not isinstance(quotes[0], dict):
         raise ValueError('yahoo_history_ohlc_missing')
+    if query.frame == 'minute' and meta.get('dataGranularity') != '1m':
+        raise ValueError('yahoo_minute_granularity_required')
     columns = quotes[0]
     if any(not isinstance(columns.get(key), list) or len(columns[key]) != len(timestamps)
            for key in ('open', 'high', 'low', 'close')):
@@ -260,7 +263,7 @@ def parse(raw, query, *, cursor_in=None, policy=None):
                     raise ValueError('adjusted_ohlc_precision_inconsistent')
             fact = {'at': stamp.isoformat(), 'currency': CURRENCIES[query.market],
                     'marketTimezone': ZONES[query.market], 'source': 'yahoo', 'sourceVersion': VERSION,
-                    'session': 'REGULAR', 'instrument': query.instrument, 'sourceSymbol': provider_symbol,
+                    'session': query.session, 'instrument': query.instrument, 'sourceSymbol': provider_symbol,
                     'sourceInstrumentType': meta['instrumentType'],
                     'corporateAdjustment': 'source_adjusted_close' if adjusted is not None else 'provider_reported' if query.instrument == 'equity' else 'not_applicable',
                     **{key: str(value) for key, value in values.items()}, **adjustment}

@@ -1,7 +1,8 @@
 """Explicit bounded history intent over the existing source/worker authority."""
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid5
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
@@ -10,11 +11,14 @@ from .market_contract import Query, canonical, digest
 from .market_worker import Bound
 
 
-async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust='none',observation=False,opportunistic=False):
+async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust='none',observation=False,opportunistic=False,source_revision=None):
     if type(days) is not int or not 1<=days<=3300:raise HTTPException(400,'历史期间无效')
     if adjust not in ('none','qfq','hfq'):raise HTTPException(400,'历史复权口径无效')
     if not isinstance(items,list) or not 1<=len(items)<=100:raise HTTPException(400,'历史证券数量无效')
     rid=UUID(str(request_id));operation={'action':'history.prepare','items':items,'days':days,'minute':minute,'adjust':adjust}
+    if source_revision is not None:
+        source_revision = UUID(str(source_revision))
+        operation['sourceRevision'] = str(source_revision)
     async with authority.db.connection() as conn,conn.transaction():
         # Automatic chart observation renews source demand. Hold the current
         # write scope with shared identity proof, like quote observation; the
@@ -30,17 +34,42 @@ async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust=
         configs=await (await conn.execute('SELECT revision FROM market_source_configs WHERE owner_id=%s',(who.id,))).fetchall()
         policies=[]
         for config in configs:
+            if source_revision is not None and config['revision'] != source_revision:continue
             try:_,policy=await authority.config(conn,who.id,config['revision'])
             except HTTPException:continue
             policies.append((config['revision'],policy))
         end=datetime.now(UTC).date();begin=end-timedelta(days=7 if minute else int(days*365/252)+20)
+        settled = None
+        if minute and any(item['market'] == 'US' for item in items):
+            local_day = datetime.now(ZoneInfo('America/New_York')).date()
+            # Read only the active plan. Stop at the first unknown/missing day.
+            calendar_rows = await (await conn.execute(
+                """SELECT day,status FROM market_calendar_days d JOIN market_calendar_active a
+                   ON a.singleton AND a.revision=d.revision WHERE market='US' AND day BETWEEN %s AND %s
+                   ORDER BY day DESC""", (local_day-timedelta(days=10), local_day)
+            )).fetchall()
+            for offset, row in enumerate(calendar_rows):
+                if row['day'] != local_day-timedelta(days=offset):
+                    break
+                if row['status'] in ('trading', 'half_day'):
+                    if offset:
+                        settled = row['day']
+                    break
+                if row['status'] not in ('holiday', 'weekend'):
+                    break
         streams=[];unavailable=[]
         for item in items:
             query=Query('price_series' if minute else 'bars',item['market'],item['code'],frame='minute' if minute else 'day',adjust=adjust if not minute and item.get('instrument','equity')=='equity' else 'none',session='ALL' if minute and item['market']=='US' else 'REGULAR',instrument=item.get('instrument','equity'),start=begin.isoformat(),through=end.isoformat()).validate()
             usable=[]
+            queries={}
             for revision,policy in policies:
-                try:authority.validate_query(policy,query)
+                candidate = query
+                if minute and query.market == 'US' and policy.source == 'yahoo':
+                    last = settled or datetime.now(ZoneInfo('America/New_York')).date()
+                    candidate = replace(query, kind='bars', start=(last-timedelta(days=1)).isoformat(), through=last.isoformat())
+                try:authority.validate_query(policy,candidate)
                 except HTTPException:continue
+                queries[revision] = candidate
                 usable.append((revision,policy))
             if not usable:
                 unavailable.append(item);continue
@@ -56,9 +85,19 @@ async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust=
                 usable.sort(key=lambda row:order.index(row[1].source) if row[1].source in order else 99)
                 usable=[v for v in usable if v[1].source==usable[0][1].source]
             if len(usable)!=1:raise HTTPException(409,'历史来源不唯一，请先核对行情源配置')
-            revision,_=usable[0]
+            revision,policy=usable[0]
+            query=queries[revision]
+            if settled and query.market == 'US' and policy.source == 'futu':
+                historical = replace(query, kind='bars', start=(settled-timedelta(days=1)).isoformat(),
+                                     through=settled.isoformat()).validate()
+                try:
+                    authority.validate_query(policy, historical)
+                except HTTPException:
+                    pass
+                else:
+                    query = historical
             stream=await (await conn.execute('SELECT s.id,t.status FROM market_streams s LEFT JOIN tasks t ON t.id=s.current_task_id WHERE s.owner_id=%s AND s.source_revision=%s AND s.query_fingerprint=%s',(who.id,revision,digest(asdict(query))))).fetchone()
-            if stream and (stream['status'] in ('queued','running') or not minute and stream['status']=='succeeded'):
+            if stream and (stream['status'] in ('queued','running') or (not minute or settled and query.kind == 'bars') and stream['status']=='succeeded'):
                 streams.append(str(stream['id']));continue
             principal=str(getattr(who,'grant_id',None) or 'web:'+who.token_hash)
             old=await (await conn.execute('SELECT revision FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s',(who.id,stream['id'],principal))).fetchone() if stream else None

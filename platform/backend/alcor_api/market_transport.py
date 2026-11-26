@@ -71,6 +71,12 @@ class Transport:
             raise ValueError("source_target_unavailable")
         target.validate(self.db.settings.environment)
         if policy.source == 'eastmoney':
+            from . import market_eastmoney_minute as minutes
+            if policy.source_version == minutes.VERSION:
+                if not minutes.installed(query) or collection_purpose(query) not in policy.purposes:
+                    raise ValueError('eastmoney_minute_protocol_not_licensed')
+                async with self.http_limit:
+                    return await minutes.fetch(target, query, cursor)
             from .market_eastmoney_latest import VERSION, fetch, installed
             if policy.source_version != VERSION or not installed(query) or 'latest' not in policy.purposes:
                 raise ValueError('eastmoney_source_protocol_not_installed')
