@@ -62,7 +62,7 @@ class LicensedHistory:
                 return await self.choices(
                     conn, who.id, market, symbol, frame=frame, adjust=adjust,
                     instrument=instrument, session=session, kind=candidate_kind,
-                    revision=requested_revision,
+                    revision=requested_revision, prefer_full=limit >= 3300,
                 )
 
             choices, retained = await candidates(kind)
@@ -141,7 +141,7 @@ class LicensedHistory:
                 raise HTTPException(409, "历史来源或展示口径已变化，请重新读取")
         return list(reversed(rows)), policy, query, str(revision)
 
-    async def choices(self, conn, owner, market, symbol, *, frame, adjust, instrument, session, kind, revision=None):
+    async def choices(self, conn, owner, market, symbol, *, frame, adjust, instrument, session, kind, revision=None, prefer_full=False):
         streams = await (await conn.execute("""SELECT DISTINCT ON(source_revision,query->>'adjust') * FROM market_streams WHERE owner_id=%s
             AND query->>'kind'=%s AND query->>'frame'=%s AND query->>'market'=%s AND query->>'code'=%s
             AND (%s::text IS NULL OR query->>'adjust'=%s) AND query->>'session'=%s AND query->>'instrument'=%s
@@ -189,6 +189,17 @@ class LicensedHistory:
                 days={key:stamp.astimezone(ZoneInfo(ZONES[market])).date() for key,stamp in times.items()}
                 newest=max(days.values())
                 choices={key:value for key,value in choices.items() if days.get(key)==newest}
+                if prefer_full and len(choices) > 1:
+                    counts = {}
+                    for key in choices:
+                        observed_days = await (await conn.execute(
+                            """SELECT count(DISTINCT (source_time AT TIME ZONE %s)::date) AS count
+                               FROM market_facts WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s""",
+                            (ZONES[market], owner, *key),
+                        )).fetchone()
+                        counts[key] = observed_days['count']
+                    fullest = max(counts.values())
+                    choices = {key: value for key, value in choices.items() if counts[key] == fullest}
             order=getattr(self.db.settings,'_legacy_quote_order',None) or ['futu','tencent','eastmoney','yahoo']
             for provider in order:
                 selected={key:value for key,value in choices.items() if value[0].source==provider}

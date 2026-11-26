@@ -198,7 +198,7 @@ async def test_legacy_default_history_uses_one_current_authorized_source_and_pre
     authority.policies=(replace(base,id='futu',source='futu',source_version='futu-sdk-records-v1'),
                         replace(base,id='backup',source='eastmoney'))
     revisions={}
-    q=Query('bars','US','AAPL','day','qfq',start='2026-10-20',through='2026-10-21')
+    q=Query('bars','US','AAPL','day','qfq',start='2026-10-19',through='2026-10-21')
     class Sources:
         fixture=True
         calls=0
@@ -209,7 +209,8 @@ async def test_legacy_default_history_uses_one_current_authorized_source_and_pre
                 return canonical({'records':[{'code':'US.AAPL','time_key':f'2026-10-{self.futu_day} 00:00:00',
                     'open':10,'high':12,'low':9,'close':10}],'nextCursor':None}).encode(),'controlled_sdk_body'
             return canonical({'query':asdict(query),'licenseRevision':policy.license_revision,
-                'facts':[{'at':'2026-10-21T14:00:00+00:00','o':'10','h':'12','l':'9','c':'11','currency':'USD','session':query.session}],
+                'facts':[{'at':at,'o':'10','h':'12','l':'9','c':'11','currency':'USD','session':query.session}
+                         for at in ['2026-10-19T14:00:00+00:00','2026-10-20T14:00:00+00:00','2026-10-21T14:00:00+00:00']],
                 'nextCursor':None}).encode(),'controlled_source_body'
     source=Sources()
     for policy in authority.policies:
@@ -230,7 +231,7 @@ async def test_legacy_default_history_uses_one_current_authorized_source_and_pre
         response=await client.get(path,headers=headers)
         assert response.status_code==200,response.text
         assert response.headers['x-alcor-market-source']==revisions['backup']
-        assert [row['c'] for row in response.json()['data']['kline']]==[11]
+        assert [row['c'] for row in response.json()['data']['kline']]==[11,11,11]
         explicit=await client.get(path,headers={**headers,'x-alcor-market-source':revisions['futu']})
         assert explicit.status_code==200,explicit.text
         assert [row['c'] for row in explicit.json()['data']['kline']]==[10]
@@ -249,6 +250,10 @@ async def test_legacy_default_history_uses_one_current_authorized_source_and_pre
     response=await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history',headers=headers)
     assert response.status_code==200,response.text
     assert response.headers['x-alcor-market-source']==revisions['futu']
+    full = await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history&limit=12000', headers=headers)
+    assert full.status_code == 200, full.text
+    assert full.headers['x-alcor-market-source'] == revisions['backup']
+    assert [row['d'] for row in full.json()['data']['kline']] == ['2026-10-19', '2026-10-20', '2026-10-21']
     # Removing the live licence never authorizes reuse of the retained originals.
     authority.policies=tuple(p for p in authority.policies if p.id!='futu')
     response=await client.get('/api/v2/stock-detail?market=US&code=AAPL&view=history',headers=headers)

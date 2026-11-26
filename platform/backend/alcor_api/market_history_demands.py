@@ -79,7 +79,17 @@ async def prepare(authority,who,request_id,items,days=330,*,minute=False,adjust=
             # Reuse the existing authorized history rather than introducing a
             # parallel series every time a page is reopened.
             existing=await (await conn.execute("SELECT source_revision FROM market_streams WHERE owner_id=%s AND source_revision=ANY(%s) AND query->>'kind'=%s AND query->>'frame'=%s AND query->>'adjust'=%s AND query->>'session'=%s AND query->>'market'=%s AND query->>'code'=%s AND query->>'instrument'=%s ORDER BY id LIMIT 1",(who.id,[v[0] for v in usable],query.kind,query.frame,query.adjust,query.session,query.market,query.code,query.instrument))).fetchone()
-            if existing:usable=[v for v in usable if v[0]==existing['source_revision']]
+            # Whole-series US backfills require bounded calendar pages. A
+            # recent completed Futu stream must not pin every long repair to
+            # the same partially collected history when Yahoo is licensed.
+            bulk = [v for v in usable if v[1].source == 'yahoo'] if (
+                not minute and days >= 330 and query.market == 'US' and query.adjust == 'qfq'
+                and source_revision is None
+            ) else []
+            if bulk:
+                usable = bulk
+            elif existing:
+                usable = [v for v in usable if v[0] == existing['source_revision']]
             else:
                 order=getattr(authority.db.settings,'_legacy_quote_order',None) or ['futu','tencent','eastmoney','yahoo']
                 usable.sort(key=lambda row:order.index(row[1].source) if row[1].source in order else 99)
