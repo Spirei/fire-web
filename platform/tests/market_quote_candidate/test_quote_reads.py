@@ -647,3 +647,31 @@ async def test_fastest_visible_quotes_register_independent_approved_sources(mark
     assert arrived.status_code == 200, arrived.text
     assert arrived.json()["data"]["quotes"]["known"]["source"] == "eastmoney"
     assert arrived.json()["data"]["quotes"]["known"]["price"] == 124.25
+
+    header = {"authorization": "Bearer " + grant["access_token"]}
+    orders = [
+        ["tencent", "eastmoney", "futu", "yahoo"],
+        ["eastmoney", "tencent", "futu", "yahoo"],
+    ]
+    # The only observation remains available while the preferred source is pending.
+    manual = await client.post("/api/v2/quotes", json={**body(), "marketSourceOrder": orders[0]}, headers=header)
+    assert manual.status_code == 200, manual.text
+    assert manual.json()["data"]["marketSourceOrder"] == orders[0]
+    assert manual.json()["data"]["quotes"]["known"]["source"] == "eastmoney"
+
+    async def collect_tencent(policy, requested, cursor):
+        from f31_settings_candidate.test_tencent_protocol import original
+
+        return original(AT.isoformat()), "http_response_body_gbk"
+
+    _transport.read = collect_tencent
+    other = next(task for task in pending if task["id"] != first["id"])
+    assert await execute(authority, other, _transport) == "observed"
+    for order in orders:
+        manual = await client.post("/api/v2/quotes", json={**body(), "marketSourceOrder": order}, headers=header)
+        assert manual.status_code == 200, manual.text
+        payload = manual.json()["data"]
+        assert payload["marketSourceOrder"] == order
+        assert payload["quotes"]["known"]["source"] == order[0]
+    invalid = await client.post("/api/v2/quotes", json={**body(), "marketSourceOrder": ["tencent"] * 4}, headers=header)
+    assert invalid.status_code == 400

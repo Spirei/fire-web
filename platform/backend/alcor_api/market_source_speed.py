@@ -42,6 +42,21 @@ def score(samples, revision, market, session):
     return 1 - len(successful) / len(values), median(successful)
 
 
+def choose_manual_quote(candidates, order, now):
+    rank = {provider: index for index, provider in enumerate(order)}
+    eligible = [item for item in candidates if item[1].source in rank]
+    if not eligible:
+        return None
+    fresh = [item for item in eligible
+             if -timedelta(seconds=5) <= now - item[0]["source_time"] <= MAX_QUOTE_AGE
+             and item[2].get("cached") is not True]
+    if fresh:
+        chosen = max(fresh, key=lambda item: (-rank[item[1].source], item[0]["source_time"], -item[0]["sequence"]))
+    else:
+        chosen = max(eligible, key=lambda item: (item[0]["source_time"], -rank[item[1].source], -item[0]["sequence"]))
+    return chosen[0]["source_revision"]
+
+
 def choose_quote(candidates, samples, market, now, existing=None):
     """Choose a valid source without waiting for an absent competitor."""
     eligible = [item for item in candidates if item[1].source in PROVIDERS]

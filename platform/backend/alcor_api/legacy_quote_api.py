@@ -12,6 +12,7 @@ from .fx_provider_parser import unique
 from .legacy_identity import OLD_COOKIE, WEB_COOKIE, assert_native_origin, native_identity, web_identity
 from .market_quote_reads import BatchQuotes, items_from
 from .market_sessions import requested_session
+from .market_source_speed import PROVIDERS
 from .market_subscription_writes import Subscriptions, subscription_items
 from .native_app_auth import CLIENT
 from .profile_http import bounded_body
@@ -71,15 +72,26 @@ def mount_legacy_quote_reads(app,settings,authority):
             if selected_session not in (None,"REGULAR","PRE","AFTER","OVERNIGHT"):raise HTTPException(400,"最新报价时段无效")
             if selected_session is None and not canonical:selected_session=requested_session()
             preference = getattr(settings, "_legacy_quote_source", None)
+            provider_order = None
+            if not canonical and isinstance(body, dict) and "marketSourceOrder" in body:
+                order = body["marketSourceOrder"]
+                if (not isinstance(order, list) or len(order) != len(PROVIDERS)
+                        or any(not isinstance(provider, str) for provider in order)
+                        or set(order) != set(PROVIDERS) or "x-alcor-market-source" in request.headers):
+                    raise HTTPException(400, "行情来源顺序无效")
+                provider_order = tuple(order)
             if (not canonical and isinstance(body, dict) and body.get("preferFastSources") is True
-                    and "x-alcor-market-source" not in request.headers):
+                    and provider_order is None and "x-alcor-market-source" not in request.headers):
                 preference = "fastest"
+            collection_preference = "fastest" if provider_order else preference
             tracking={"tracked":False,"automaticCollection":False,"reason":"canonical_explicit_demand_only" if canonical else "empty_request"}
             if not items:
                 result={"quotes":{},"quoteStates":{}}
             else:
                 public = not canonical and version != 2 and "authorization" not in request.headers and not auth_cookie
                 if public:
+                    if provider_order is not None:
+                        raise HTTPException(401, "手动行情顺序需要已登录的行情连接")
                     reader = getattr(app.state, "public_market_quotes", None)
                     if reader is None:
                         raise HTTPException(503, "公共报价再分发许可未配置或已失效")
@@ -104,12 +116,12 @@ def mount_legacy_quote_reads(app,settings,authority):
                             if generated:
                                 from .market_observation_receipts import generated_observation_id
                                 identifier=await generated_observation_id(authority,writer,normalized,selected=selected,
-                                    session=selected_session,source_preference=preference)
+                                    session=selected_session,source_preference=collection_preference)
                             else:
                                 identifier=UUID(identifier)
                             headers["X-Alcor-Request-Id"]=str(identifier)
                             operation_started=True
-                            tracked,_=await Subscriptions(authority).mutate(writer,identifier,normalized,selected=selected,observe=True,legacy_generated=generated,source_preference=preference,session=selected_session)
+                            tracked,_=await Subscriptions(authority).mutate(writer,identifier,normalized,selected=selected,observe=True,legacy_generated=generated,source_preference=collection_preference,session=selected_session)
                             tracking={"tracked":True,"requestId":str(identifier),"receiptId":str(identifier),"legacyClientIdempotency":tracked.get("legacyClientIdempotency",not generated),
                                       "collection":tracked['collection'],"automaticCollection":False,"scope":"explicit_post_quote_request"}
                             headers["X-Alcor-Request-Id"]=str(identifier)
@@ -127,8 +139,10 @@ def mount_legacy_quote_reads(app,settings,authority):
                             else:
                                 tracking={"tracked":False,"reason":"demand_precondition_unavailable","automaticCollection":False}
                         headers["X-Alcor-Quote-Tracked"]="unknown" if tracking["tracked"] is None else "true" if tracking["tracked"] else "false"
-                    result=await service.read(who,items,request.headers.get("x-alcor-market-source"),session=selected_session if canonical else None,preferred_session=None if canonical else selected_session,instrument=selected_instrument,legacy_instruments=not canonical,include_historical_extended=not canonical and isinstance(body,dict) and body.get("includeHistoricalExtended") is True,include_market_cap=not isinstance(body,dict) or body.get("includeMarketCap") is not False,strict_sources=not canonical,source_preference=None if canonical else preference)
+                    result=await service.read(who,items,request.headers.get("x-alcor-market-source"),session=selected_session if canonical else None,preferred_session=None if canonical else selected_session,instrument=selected_instrument,legacy_instruments=not canonical,include_historical_extended=not canonical and isinstance(body,dict) and body.get("includeHistoricalExtended") is True,include_market_cap=not isinstance(body,dict) or body.get("includeMarketCap") is not False,strict_sources=not canonical,source_preference=None if canonical else "auto" if provider_order else preference,provider_order=provider_order)
             data=result if canonical else {"quotes":result["quotes"]}
+            if provider_order is not None:
+                data["marketSourceOrder"] = list(provider_order)
             if not canonical and items and request.headers.get("x-alcor-register-demand") == "true":
                 data["tracking"]=tracking
             payload={"code":0,"message":"ok","data":data} if version else data

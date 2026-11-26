@@ -323,7 +323,7 @@ class BatchQuotes:
         self.authority, self.db = authority, authority.db
         self.fast_winners = {}
 
-    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None, legacy_instruments=False, include_historical_extended=False):
+    async def read(self, who, items, source_revision=None, *, session=None, include_market_cap=True, strict_sources=False, source_preference=None, instrument=None, preferred_session=None, legacy_instruments=False, include_historical_extended=False, provider_order=None):
         if instrument not in (None, "equity", "index", "asset"):
             raise HTTPException(400, "证券类型无效")
         if session not in (None, "REGULAR", "PRE", "AFTER", "OVERNIGHT"):
@@ -426,7 +426,7 @@ class BatchQuotes:
                             ORDER BY source_time DESC,sequence DESC LIMIT 1) f""",
                         ([s['id'] for s in all_streams],[s['source_revision'] for s in all_streams],who.id))).fetchall()
                     latest_facts = {fact['stream_id']:fact for fact in facts}
-            from .market_source_speed import choose_quote, read_samples
+            from .market_source_speed import choose_manual_quote, choose_quote, read_samples
             samples = await read_samples(conn, who.id) if fastest and all_streams else {}
             failures_by_security = defaultdict(set)
             if all_streams and source_revision is None and source_preference in ("auto", "fastest"):
@@ -577,7 +577,17 @@ class BatchQuotes:
                             sources = {chosen}
                             instruments = source_instruments[chosen]
                             integrity_failure = chosen in unverified_sources
-                    if source_revision is None and source_preference == "auto" and market != "ASSET":
+                    if provider_order and market != "ASSET":
+                        cooling_sources.update(failures_by_security.get(cache_key, ()))
+                        verified = [item for item in candidates if item[0]["source_revision"] not in unverified_sources]
+                        reachable = [item for item in verified if item[0]["source_revision"] not in cooling_sources]
+                        chosen = choose_manual_quote(reachable or verified, provider_order, now)
+                        candidates = [item for item in verified if item[0]["source_revision"] == chosen]
+                        if chosen is not None:
+                            sources = {chosen}
+                            instruments = source_instruments[chosen]
+                            integrity_failure = False
+                    elif source_revision is None and source_preference == "auto" and market != "ASSET":
                         cooling_sources.update(failures_by_security.get(cache_key, ()))
                         usable=[c for c in candidates if c[0]['source_revision'] not in cooling_sources]
                         if usable:
