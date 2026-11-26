@@ -10,12 +10,12 @@ from f16_history_candidate.test_history_protocols import seeded
 from market_latest_candidate.test_market_authority import market, market_settings  # noqa: F401
 
 
-async def wait_started(event):
+async def wait_started(event, timeout=.25):
     began = time.monotonic()
-    async with asyncio.timeout(.25):
+    async with asyncio.timeout(timeout):
         while not event.is_set():
             await asyncio.sleep(.005)
-    assert time.monotonic() - began < .25, 'Original decoding blocked the HTTP event loop'
+    assert time.monotonic() - began < timeout, 'Original decoding did not reach the test barrier'
 
 
 async def test_web_and_app_reads_survive_busy_automatic_collection_lock(market):  # noqa: F811
@@ -98,7 +98,9 @@ async def test_native_proof_cannot_publish_after_authority_changes(market, monke
         url = url.split('&source_revision=')[0]
     pending = asyncio.create_task(client.get(url, headers=headers))
     try:
-        await wait_started(entered)
+        # This scenario checks revocation during proof. The separate readiness
+        # test checks the 250 ms limit while decoding is already paused.
+        await wait_started(entered, timeout=1.5)
         if change == 'source':
             revoked = await asyncio.wait_for(client.request('DELETE', '/api/market/sources/' + revision,
                 json={'request_id': str(uuid4())}), .5)
