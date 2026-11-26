@@ -9,14 +9,15 @@ def public_policy(policy):
     controlled = policy.fixture and policy.source not in ('futu', 'yahoo')
     tencent=policy.source=='tencent'and policy.source_version=='tencent-quotes-v1'
     crypto = policy.source=='coingecko' and policy.source_version=='coingecko-latest-v1'
+    minute_prices = (policy.source,policy.source_version) in (('tencent','tencent-minute-v1'),('eastmoney','eastmoney-us-minute-v1'))
     purposes = set(policy.purposes)
     equity_markets = [market for market in policy.markets if market in ('US','HK','CN','JP','KR')]
-    markets = [market for market in policy.markets if (market in ('US','HK','CN') if futu else yahoo or controlled)]
+    markets = [market for market in policy.markets if (market in ('US','HK','CN') if futu else yahoo or controlled or minute_prices)]
     minute_sessions = [session for session in ('REGULAR','ALL')
                        if (futu or controlled) and markets and 'bars.minute.'+session in purposes
                        and (session!='ALL' or 'US' in markets)]
     rt_sessions = [session for session in ('REGULAR','ALL')
-                   if futu and markets and 'price_series.minute.'+session in purposes
+                   if (futu or minute_prices) and markets and 'price_series.minute.'+session in purposes
                    and (session!='ALL' or 'US' in markets)]
     frames = [frame for frame in ('minute','day','week','month','quarter','year')
               if (futu or controlled) and markets and (bool(minute_sessions) if frame=='minute' else 'bars.'+frame in purposes)]
@@ -42,6 +43,11 @@ def public_policy(policy):
                                          'adjustments':['none'],'sessions':['REGULAR']})
             if capabilities:
                 frames = ['day']
+        minute_sessions = [s for s in ('REGULAR','ALL') if 'US' in markets and 'bars.minute.'+s in purposes]
+        if minute_sessions:
+            frames = list(dict.fromkeys(frames + ['minute']))
+            capabilities.append({'instrument':'equity','markets':['US'],'frames':['minute'],
+                                 'adjustments':['none'],'sessions':minute_sessions,'minuteSessions':minute_sessions})
     instruments = list(dict.fromkeys(item['instrument'] for item in capabilities))
     if rt_sessions and 'equity' not in instruments:
         instruments.append('equity')

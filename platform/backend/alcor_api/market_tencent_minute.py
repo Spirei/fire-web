@@ -17,9 +17,9 @@ PATH = '/appstock/app/minute/query'
 
 
 def installed(query):
-    return (query.market in ('CN', 'HK') and query.instrument == 'equity'
+    return (query.market in ('CN', 'HK', 'US') and query.instrument == 'equity'
             and (query.kind, query.frame, query.adjust, query.session)
-            == ('price_series', 'minute', 'none', 'REGULAR'))
+            in ([('price_series','minute','none','ALL'), ('price_series','minute','none','REGULAR')] if query.market == 'US' else [('price_series','minute','none','REGULAR')]))
 
 
 async def fetch(target, query, cursor):
@@ -27,7 +27,7 @@ async def fetch(target, query, cursor):
             or target.host != HOST or target.scheme != 'https' or target.port != 443 or target.fixture):
         raise ValueError('tencent_minute_fixed_target_required')
     code = symbol(query.market, query.code)
-    return await fetch_page('https://' + HOST + PATH + '?code=' + code, target.approval(code)), 'http_response_body'
+    return await fetch_page('https://' + HOST + target.path(code) + '?code=' + code, target.approval(code)), 'http_response_body'
 
 
 def parse(raw, query):
@@ -75,4 +75,7 @@ def parse(raw, query):
     # Duplicate minutes make the complete frame ambiguous; never keep one side.
     if duplicate:
         raise ValueError('tencent_minute_duplicate_clock')
+    if query.market == 'US' and query.session == 'ALL':
+        for fact in facts:
+            fact['session'] = query.session
     return facts, issues, None

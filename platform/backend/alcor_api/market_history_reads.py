@@ -44,6 +44,7 @@ class LicensedHistory:
         session="REGULAR",
         kind="bars",
         minute_series_fallback=False,
+        minute_window=None,
         source_revision=None,
         limit=3300,
     ):
@@ -68,12 +69,23 @@ class LicensedHistory:
             if minute_series_fallback and not retained and len(choices) <= 1:
                 preferred = next(iter(choices), None)
                 if preferred is not None:
-                    has_facts = await (await conn.execute(
-                        """SELECT EXISTS(SELECT 1 FROM market_facts
-                        WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s) AS observed""",
-                        (who.id, *preferred),
-                    )).fetchone()
-                    if has_facts["observed"]:
+                    async def latest(key):
+                        window = " AND source_time >= %s AND source_time < %s" if minute_window else ""
+                        row = await (await conn.execute(
+                            """SELECT max(source_time) AS at FROM market_facts
+                               WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s""" + window,
+                            (who.id, *key, *(minute_window or ())),
+                        )).fetchone()
+                        return row["at"]
+                    bars_end = await latest(preferred)
+                    if bars_end is not None:
+                        if choices[preferred][0].source in ("futu", "tencent", "eastmoney", "yahoo") and market == "US":
+                            alternatives, _ = await candidates("price_series")
+                            for key, value in alternatives.items():
+                                if key[0] == preferred[0]:
+                                    end = await latest(key)
+                                    if end is not None and end > bars_end:
+                                        return {key: value}, []
                         return choices, retained
                 return await candidates("price_series")
             return choices, retained
@@ -91,12 +103,20 @@ class LicensedHistory:
             if len(choices) != 1:
                 raise HTTPException(409, "存在多个历史来源，请显式选择来源版本及复权口径")
             (revision, fingerprint), (policy, query) = next(iter(choices.items()))
+            # Bound the raw read before applying the proof/page budget. Long-lived
+            # symbols may retain more than 16,000 minutes across unrelated days.
+            window_clause = ""
+            arguments = [who.id, revision, fingerprint]
+            if minute_window is not None:
+                window_clause = " AND source_time >= %s AND source_time < %s"
+                arguments.extend(minute_window)
             rows = await (
                 await conn.execute(
                     """SELECT * FROM (SELECT DISTINCT ON(source_time) * FROM market_facts
-                WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s
-                ORDER BY source_time DESC,sequence DESC) newest ORDER BY source_time DESC LIMIT %s""",
-                    (who.id, revision, fingerprint, limit),
+                       WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s"""
+                    + window_clause
+                    + " ORDER BY source_time DESC,sequence DESC) newest ORDER BY source_time DESC LIMIT %s",
+                    (*arguments, limit),
                 )
             ).fetchall()
             if not rows:

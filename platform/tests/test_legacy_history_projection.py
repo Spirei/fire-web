@@ -40,3 +40,16 @@ def test_full_session_and_session_day_select_different_observed_windows():
     assert whole[0]['volume']==0 and whole[1]['volume'] is None
     daytime=minute_points(rows,policy,query,1,now,session_day=True)
     assert [(point['date'],point['time']) for point in daytime]==[('2026-10-21','04:00')]
+
+
+def test_closed_day_read_does_not_select_following_overnight_prefix():
+    policy = SimpleNamespace(source="futu", source_version="test")
+    query = SimpleNamespace(market="US", session="ALL")
+    times = ["2026-11-24T20:00:00-05:00", "2026-11-25T15:59:00-05:00",
+             "2026-11-25T19:59:00-05:00", "2026-11-25T20:01:00-05:00"]
+    rows = [{"source_time": datetime.fromisoformat(at), "contents": {
+        "at": at, "c": 10, "source": "futu", "sourceVersion": "test", "currency": "USD", "session": "ALL"
+    }} for at in times]
+    now = datetime.fromisoformat("2026-11-26T12:00:00-05:00")
+    assert [p["time"] for p in minute_points(rows, policy, query, 1, now, trading_day="2026-11-25")] == [
+        "20:00", "15:59", "19:59"]

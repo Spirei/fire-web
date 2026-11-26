@@ -58,6 +58,10 @@ async def test_four_capabilities_share_real_history_and_never_collect(market):  
         series = await client.get(f'/api/{version}/chart-series?market=US&code=AAPL&days=1',headers=headers)
         assert series.status_code == 200,series.text
         assert [point['price'] for point in series.json()['data']['points']] == [10,11]
+        dated = await client.get(f'/api/{version}/chart-series?market=US&code=AAPL&days=1&tradingDay=2026-10-21', headers=headers)
+        assert dated.status_code == 200 and dated.json()['data']['points'] == series.json()['data']['points']
+        missing = await client.get(f'/api/{version}/chart-series?market=US&code=AAPL&days=1&tradingDay=2026-10-20', headers=headers)
+        assert missing.status_code == 503
         sessions = await client.get(f'/api/{version}/kline-sessions?market=US&code=AAPL',headers=headers)
         assert sessions.status_code == 200,sessions.text
         assert sessions.json()['data']['sessionClassificationAuthority'] == 'legacy_clock_ranges_not_verified_trading_calendar'

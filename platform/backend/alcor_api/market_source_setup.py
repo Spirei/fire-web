@@ -18,9 +18,10 @@ from .security import lock_mutation_identity
 
 SPECS = {
     'tencent': ('qt.gtimg.cn','tencent-quotes-v1',('US','HK','CN'),('latest',)),
-    'tencent-minute': ('web.ifzq.gtimg.cn','tencent-minute-v1',('HK','CN'),('price_series.minute.REGULAR',)),
+    'tencent-minute': ('web.ifzq.gtimg.cn','tencent-minute-v1',('US','HK','CN'),('price_series.minute.REGULAR','price_series.minute.ALL')),
+    'eastmoney-minute': ('push2his.eastmoney.com','eastmoney-us-minute-v1',('US',),('price_series.minute.REGULAR','price_series.minute.ALL')),
     'eastmoney': ('push2delay.eastmoney.com','eastmoney-quotes-v1',('US','HK','CN','JP','KR','SG'),('latest',)),
-    'yahoo': ('query1.finance.yahoo.com','yahoo-chart-history-v1',('US','HK','CN','JP','KR','SG'),('latest','bars.day')),
+    'yahoo': ('query1.finance.yahoo.com','yahoo-chart-history-v1',('US','HK','CN','JP','KR','SG'),('latest','bars.day','bars.minute.ALL','bars.minute.REGULAR')),
 }
 
 
@@ -63,7 +64,7 @@ async def setup(db, authority, who, request_id):
         for target,policy in generated:
             # Preserve any already configured, usable provider and its approval.
             selected=None
-            if policy['source_version']=='tencent-minute-v1':
+            if policy['source_version'] in ('tencent-minute-v1','eastmoney-us-minute-v1'):
                 previous=await (await conn.execute('SELECT revision FROM market_source_configs WHERE owner_id=%s AND policy_id=%s ORDER BY revision LIMIT 1001',(who.id,policy['id']))).fetchall()
                 if len(previous)>1000:raise HTTPException(503,'当前分时来源超过核对范围')
                 active=[]
@@ -80,11 +81,17 @@ async def setup(db, authority, who, request_id):
                 prior_target=next((t for t in targets if t.get('id')==prior_policy.target_id),None)
                 managed=(prior_policy.id==policy['id'] and prior_policy.source_version==policy['source_version']
                     and prior_target is not None and all(prior_target.get(k)==target[k] for k in ('id','source','host','port','scheme','allow_plaintext','fixture')))
-                if not managed or prior_target.get('dns_policy','pinned')=='public_dns':
+                expand = managed and policy['source_version'] in ('tencent-minute-v1','yahoo-chart-history-v1') and (
+                    not set(policy['purposes']).issubset(prior_policy.purposes) or not set(policy['markets']).issubset(prior_policy.markets))
+                if not managed or prior_target.get('dns_policy','pinned')=='public_dns' and not expand:
                     chosen.append((None,selected[0]));continue
                 # Explicit setup upgrades only this owner's generated fixed host;
                 # preserve its licensed purposes, markets and symbol declarations.
+                requested = policy
                 policy=asdict(prior_policy)
+                if expand:
+                    for field in ('purposes','markets'):
+                        policy[field] = list(dict.fromkeys([*policy[field], *requested[field]]))
                 policy['target_fingerprint']=Target(**target).fingerprint
             targets=[t for t in targets if t.get('id')!=target['id']]+[target]
             policies=[p for p in policies if p.get('id')!=policy['id']]+[policy]

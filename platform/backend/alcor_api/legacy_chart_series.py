@@ -25,7 +25,7 @@ from .profile_http import bounded_body
 from .request_timing import measure
 
 
-def minute_points(rows, policy, query, days, now=None, *, session_day=False):
+def minute_points(rows, policy, query, days, now=None, *, session_day=False, trading_day=None):
     now = now or datetime.now(UTC)
     points, conflicts = {}, set()
     zone = ZoneInfo(ZONES[query.market])
@@ -34,7 +34,7 @@ def minute_points(rows, policy, query, days, now=None, *, session_day=False):
         try:
             at = datetime.fromisoformat(value["at"])
             real_time = getattr(query, "kind", "bars") == "price_series"
-            source_point = (policy.source == 'tencent' and policy.source_version == 'tencent-minute-v1'
+            source_point = ((policy.source, policy.source_version) in (('tencent','tencent-minute-v1'),('eastmoney','eastmoney-us-minute-v1'))
                             and value.get('dataKind') == 'provider_observed_minute_price')
             if real_time and not source_point and (value.get("dataKind") != "provider_real_time_time_frame" or value.get("sourceBlank") is not False):
                 continue
@@ -77,7 +77,7 @@ def minute_points(rows, policy, query, days, now=None, *, session_day=False):
             return (datetime.fromisoformat(date) + timedelta(days=1)).date().isoformat()
         return date
 
-    dates = list(dict.fromkeys(session_date(point) for point in points))[-days:]
+    dates = [trading_day] if trading_day else list(dict.fromkeys(session_date(point) for point in points))[-days:]
     return [point for point in points if session_date(point) in dates]
 
 
@@ -98,23 +98,27 @@ def sample_points(points, target=60):
     return out + [points[-1]]
 
 
-async def read_minute_rows(history, who, market, symbol, *, session, source_revision):
+async def read_minute_rows(history, who, market, symbol, *, session, source_revision, trading_day=None):
     """Read OHLC closes or independently licensed RT observations; never convert RT to bars."""
+    options = {}
+    if trading_day:
+        close = datetime.fromisoformat(trading_day).replace(hour=20, tzinfo=ZoneInfo(ZONES["US"]))
+        options["minute_window"] = (close - timedelta(days=1), close)
     return await history.read(
         who, market, symbol, frame="minute", adjust="none", session=session,
-        source_revision=source_revision, limit=16001, minute_series_fallback=True,
+        source_revision=source_revision, limit=16001, minute_series_fallback=True, **options,
     )
 
 
 def mount_legacy_chart_series(app, settings, authority):
     history = LicensedHistory(authority,automatic=True)
 
-    async def observed(request, who, market, symbol, days, *, sessions=False, minimum_points=2):
+    async def observed(request, who, market, symbol, days, *, sessions=False, minimum_points=2, trading_day=None):
         session = "ALL" if market == "US" and (days == 1 or sessions) else "REGULAR"
         source_revision = request.headers.get("x-alcor-market-source")
         try:
             rows, policy, query, revision = await read_minute_rows(
-                history, who, market, symbol, session=session, source_revision=source_revision,
+                history, who, market, symbol, session=session, source_revision=source_revision, **({"trading_day": trading_day} if trading_day else {}),
             )
         except HistoryUnavailable:
             if market != "US" or days != 5:
@@ -127,7 +131,7 @@ def mount_legacy_chart_series(app, settings, authority):
         if len(rows) > 16000:
             raise HTTPException(503, "分时原始记录超过读取预算")
         with measure("history_assemble"):
-            points = minute_points(rows, policy, query, days, authority.clock() if authority.clock else None, session_day=sessions)
+            points = minute_points(rows, policy, query, days, authority.clock() if authority.clock else None, session_day=sessions, trading_day=trading_day)
         if len(points) < minimum_points:
             raise HTTPException(503, "尚无足够的真实分时观察点")
         return points, policy.source, revision
@@ -174,9 +178,18 @@ def mount_legacy_chart_series(app, settings, authority):
                 window_seconds=60,
             ):
                 raise HTTPException(429, "请求过于频繁，请稍后重试")
+            trading_day = params.get("tradingDay")
+            if trading_day is not None:
+                if (mode != "series" or market != "US" or days != 1
+                        or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", trading_day)):
+                    raise HTTPException(400, "交易日参数无效")
+                try:
+                    datetime.strptime(trading_day, "%Y-%m-%d")
+                except ValueError:
+                    raise HTTPException(400, "交易日参数无效")
             points, source, revision = await observed(
                 request, who, market, symbol, days, sessions=mode == "sessions",
-                minimum_points=2 if mode == "series" else 1,
+                minimum_points=2 if mode == "series" else 1, trading_day=trading_day,
             )
             if mode == "sessions":
                 selected = []
@@ -359,9 +372,14 @@ def mount_legacy_chart_series(app, settings, authority):
                         )
                     else:
                         identifier = UUID(raw_identifier)
+                    source_header = request.headers.get("x-alcor-market-source")
+                    if source_header and generated:
+                        from uuid import uuid5
+                        identifier = uuid5(identifier, str(UUID(source_header)))
                     await prepare(
                         authority, writer, identifier, normalized, 5,
                         minute=True, observation=True, opportunistic=generated,
+                        **({"source_revision": source_header} if source_header else {}),
                     )
                 except (HTTPException, ValueError, LockNotAvailable, QueryCanceled, PoolTimeout, TooManyRequests):
                     # Read-only App grants may consume already observed facts.

@@ -12,13 +12,19 @@ async def rebuild(conn, stream, policy, query, now=None):
     """Build the latest one-day chart payload from the facts just collected."""
     if query.frame != "minute" or query.kind not in ("bars", "price_series"):
         return False
+    fingerprint = series_fingerprint(query)
     rows = await (
         await conn.execute(
-            """SELECT * FROM (SELECT DISTINCT ON (source_time) * FROM market_facts
+            """WITH recent AS (
+                   SELECT max(source_time) AS last_at FROM market_facts
+                   WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s
+               ) SELECT * FROM (SELECT DISTINCT ON (source_time) * FROM market_facts
                WHERE owner_id=%s AND source_revision=%s AND series_fingerprint=%s
+               AND source_time >= (SELECT last_at FROM recent) - interval '48 hours'
                ORDER BY source_time DESC,sequence DESC) newest
                ORDER BY source_time DESC LIMIT %s""",
-            (stream["owner_id"], stream["source_revision"], series_fingerprint(query), 16001),
+            (stream["owner_id"], stream["source_revision"], fingerprint,
+             stream["owner_id"], stream["source_revision"], fingerprint, 16001),
         )
     ).fetchall()
     if not rows or len(rows) > 16000:
@@ -55,7 +61,14 @@ async def rebuild(conn, stream, policy, query, now=None):
            VALUES(%s,%s,%s,%s,%s,%s)
            ON CONFLICT(owner_id,source_revision,market,code,session) DO UPDATE
            SET payload=excluded.payload,generation=market_chart_projections.generation+1,
-               updated_at=clock_timestamp()""",
+               updated_at=clock_timestamp()
+           WHERE excluded.payload->>'source' NOT IN ('futu','tencent','eastmoney','yahoo')
+              OR (excluded.payload->>'sourceObservedAt')::timestamptz >
+                 (market_chart_projections.payload->>'sourceObservedAt')::timestamptz
+              OR ((excluded.payload->>'sourceObservedAt')::timestamptz =
+                  (market_chart_projections.payload->>'sourceObservedAt')::timestamptz
+                  AND jsonb_array_length(excluded.payload->'points') >=
+                      jsonb_array_length(market_chart_projections.payload->'points'))""",
         (
             stream["owner_id"],
             stream["source_revision"],
@@ -112,7 +125,8 @@ async def read_current(conn, owner, pairs, session):
                FROM market_chart_projections
                WHERE owner_id=%s AND session=%s
                  AND (market,code) IN (SELECT * FROM unnest(%s::text[],%s::text[]))
-               ORDER BY market,code,updated_at DESC""",
+               ORDER BY market,code,(payload->>'sourceObservedAt')::timestamptz DESC NULLS LAST,
+                        jsonb_array_length(payload->'points') DESC, updated_at DESC""",
             (owner, session, [market for market, _ in unique], [code for _, code in unique]),
         )
     ).fetchall()

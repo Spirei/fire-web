@@ -91,7 +91,7 @@ async def test_explicit_setup_is_owner_bound_durable_and_ticker_get_is_pure(lega
     rid=str(uuid4())
     response=await legacy.post('/api/fire/market-sources/setup',json={'requestId':rid})
     assert response.status_code==200,response.text
-    assert response.json()['state']=='configured' and len(calls)==4
+    assert response.json()['state']=='configured' and len(calls)==5
     replay=await legacy.post('/api/fire/market-sources/setup',json={'requestId':rid})
     assert replay.json()==response.json()
     settings=app.state.db.settings
@@ -99,7 +99,7 @@ async def test_explicit_setup_is_owner_bound_durable_and_ticker_get_is_pure(lega
     assert {p['source'] for p in policies}=={'tencent','eastmoney','yahoo'}
     assert next(p for p in policies if p['source']=='tencent')['timestamp_zones']
     async with app.state.db.connection() as conn:
-        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==4
+        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==5
     quote=await legacy.post('/api/quotes',json={'items':[{'id':'a','market':'CN','code':'002602'}]})
     assert quote.status_code==200 and quote.headers['x-alcor-quote-tracked']=='true',quote.text
     prep=await legacy.post('/api/kline/prepare',json={'requestId':str(uuid4()),'items':[{'market':'HK','code':'00700'}],'days':330})
@@ -136,14 +136,14 @@ async def test_setup_upgrades_owned_pins_once_and_dns_rotation_does_not_reset_so
         assert policy['target_fingerprint']!=previous['target_fingerprint']
         assert {k:v for k,v in policy.items() if k!='target_fingerprint'}=={k:v for k,v in previous.items() if k!='target_fingerprint'}
     async with app.state.db.connection() as conn:
-        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==8
+        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==10
     assert (await legacy.post('/api/fire/market-sources/setup',json={'requestId':rid})).json()==upgraded.json()
     address='8.8.4.4'
     repeated=await legacy.post('/api/fire/market-sources/setup',json={'requestId':str(uuid4())})
     assert repeated.status_code==200,repeated.text
     assert app.state.db.settings.dividend_source_targets==targets
     async with app.state.db.connection() as conn:
-        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==8
+        assert (await (await conn.execute('SELECT count(*) n FROM market_source_configs')).fetchone())['n']==10
 
 
 def test_futu_night_uses_real_minute_clock_when_snapshot_keeps_regular_close():
