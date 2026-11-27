@@ -137,9 +137,25 @@ async def claim(db, worker, *, kind=None):
     return tasks[0] if tasks else None
 
 
+def latest_cadence_seconds(policy, query, *, hot=True):
+    """Per-source latest-quote cadence bounded well below upstream limits.
+
+    Returns (cadence_seconds, lead_seconds) for shared clock-boundary alignment.
+    Futu OpenD allows 60 get_market_snapshot calls / 30s (up to 400 symbols/call).
+    With up to 100 symbols coalesced per batch, 2s regular / 3s extended hot
+    cadence stays well inside quota while keeping non-Futu sources at 5s to
+    avoid Tencent CDN duplication and Yahoo/Eastmoney 429 throttling.
+    """
+    if query.kind != "latest":
+        return 0, 0
+    if hot and policy.source == "futu":
+        return (2, 1) if query.session == "REGULAR" else (3, 2)
+    return 5, 3
+
+
 async def claim_batch(db, worker, *, kind=None, maximum=20):
     """Commit one bounded lease set before any provider IO; retain each task's proof."""
-    if type(maximum) is not int or not 1 <= maximum <= 20:
+    if type(maximum) is not int or not 1 <= maximum <= 100:
         raise ValueError('market_worker_batch_invalid')
     async with db.connection() as conn, conn.transaction():
         return await (
@@ -501,12 +517,14 @@ async def execute(authority, task, transport, *, owner_gate=None):
             )
             return "complete"
         if query.kind == "latest":
-            # Align five-second latest cadence to shared clock boundaries so
-            # claim_batch + LatestBatch coalesce symbols into one provider RPC
-            # instead of staggering them into OpenD rate limits.
+            # Align latest cadence to shared clock boundaries so claim_batch +
+            # LatestBatch coalesce symbols into one provider RPC instead of
+            # staggering them into OpenD rate limits.
+            hot = any(d.get("hot_until") is not None and d["hot_until"] > job["now"] for d in demands)
+            cadence, lead = latest_cadence_seconds(policy, query, hot=hot)
             await conn.execute(
-                "UPDATE market_streams SET next_due=to_timestamp(ceil(extract(epoch from clock_timestamp()+interval '3 seconds')/5.0)*5.0) WHERE owner_id=%s AND id=%s",
-                (task["owner_id"], stream["id"]),
+                "UPDATE market_streams SET next_due=to_timestamp(ceil(extract(epoch from clock_timestamp()+make_interval(secs=>%s))/%s::double precision)*%s::double precision) WHERE owner_id=%s AND id=%s",
+                (lead, cadence, cadence, task["owner_id"], stream["id"]),
             )
         else:
             await conn.execute(

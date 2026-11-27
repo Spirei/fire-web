@@ -34,7 +34,7 @@ class Transport:
         from .market_latest_batch import LatestBatch
         self.latest_session = LatestSDKSession()
         self.history_session = HistorySDKSession()
-        self.latest_batch = LatestBatch(self.latest_session)
+        self.latest_batch = LatestBatch(self.latest_session, maximum=100)
         self.reuse_latest = reuse_latest
         self.reuse_history = reuse_history
 
@@ -43,7 +43,7 @@ class Transport:
         await self.latest_session.close()
         await self.history_session.close()
         from .market_latest_batch import LatestBatch
-        self.latest_batch = LatestBatch(self.latest_session)
+        self.latest_batch = LatestBatch(self.latest_session, maximum=100)
 
     async def retire_idle(self):
         await self.latest_session.retire_idle()

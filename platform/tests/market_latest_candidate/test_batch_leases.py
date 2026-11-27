@@ -66,7 +66,7 @@ async def test_114_real_tasks_commit_twenty_leases_once_and_keep_revocation_and_
         assert (await (await conn.execute('SELECT count(*) AS n FROM market_facts')).fetchone())['n'] == 0
 
 
-@pytest.mark.parametrize('maximum', [0, 21, True, 2.0])
+@pytest.mark.parametrize('maximum', [0, 101, True, 2.0])
 async def test_lease_batch_rejects_unbounded_or_noninteger_capacity(maximum):
     with pytest.raises(ValueError, match='market_worker_batch_invalid'):
         await claim_batch(None, uuid4(), maximum=maximum)

@@ -8,7 +8,7 @@ from .sdk_read_session import SDKReadRejected
 
 class LatestBatch:
     def __init__(self, session, *, maximum=20, delay=.1):
-        if type(maximum) is not int or not 1 <= maximum <= 20 or not 0 <= delay <= .1:
+        if type(maximum) is not int or not 1 <= maximum <= 100 or not 0 <= delay <= .1:
             raise ValueError('sdk_batch_bounds_invalid')
         self.session, self.maximum, self.delay = session, maximum, delay
         self.pending = {}

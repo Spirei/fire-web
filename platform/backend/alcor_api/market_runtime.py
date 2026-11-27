@@ -45,7 +45,7 @@ async def cycle(authority, transport, worker_id, *, history_turn=False):
 
 async def batch_cycle(authority, transport, worker_id, *, history_turn=False, maximum=20, allow_history=True):
     """Lease a bounded set of independent reads; every result keeps its own proof."""
-    if type(maximum) is not int or not 1 <= maximum <= 20:
+    if type(maximum) is not int or not 1 <= maximum <= 100:
         raise ValueError("market_worker_batch_invalid")
     await project_alert_demands(authority)
     await schedule(authority)
@@ -111,7 +111,7 @@ async def loop(db, stop, current=lambda: True):
             progressed = False
             if current():
                 try:
-                    progressed = await batch_cycle(authority, transport, worker_id, allow_history=False)
+                    progressed = await batch_cycle(authority, transport, worker_id, maximum=100, allow_history=False)
                     from .public_market_worker import cycle as public_cycle
                     await public_cycle(db, worker_id)
                 except Exception:  # noqa: BLE001 -- Keep source errors and credentials out of platform logs.

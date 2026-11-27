@@ -81,6 +81,36 @@ async def test_114_securities_use_six_bounded_sdk_requests_with_no_cross_securit
         await batch.close()
 
 
+async def test_100_symbol_batch_and_per_source_latest_cadence():
+    from alcor_api.market_worker import latest_cadence_seconds
+
+    source = Source()
+    batch = LatestBatch(source, maximum=100)
+    symbols = [f'US.BIG{i:03}' for i in range(100)]
+    try:
+        results = await asyncio.gather(*(batch.read(('owner', 'source', 'license', 'target'), request(symbol)) for symbol in symbols))
+        assert len(source.calls) == 1
+        assert len(source.calls[0]['symbols']) == 100
+        assert len(results) == 100
+    finally:
+        await batch.close()
+
+    futu = SimpleNamespace(source='futu')
+    tencent = SimpleNamespace(source='tencent')
+    yahoo = SimpleNamespace(source='yahoo')
+    eastmoney = SimpleNamespace(source='eastmoney')
+    reg = SimpleNamespace(kind='latest', session='REGULAR')
+    pre = SimpleNamespace(kind='latest', session='PRE')
+    hist = SimpleNamespace(kind='bars', session='REGULAR')
+    assert latest_cadence_seconds(futu, reg, hot=True) == (2, 1)
+    assert latest_cadence_seconds(futu, pre, hot=True) == (3, 2)
+    assert latest_cadence_seconds(futu, reg, hot=False) == (5, 3)
+    assert latest_cadence_seconds(tencent, reg, hot=True) == (5, 3)
+    assert latest_cadence_seconds(yahoo, reg, hot=True) == (5, 3)
+    assert latest_cadence_seconds(eastmoney, reg, hot=True) == (5, 3)
+    assert latest_cadence_seconds(futu, hist, hot=True) == (0, 0)
+
+
 async def test_http_provider_reads_remain_limited_to_six_while_worker_batches_twenty(monkeypatch):
     from alcor_api.market_transport import Transport
 
@@ -169,4 +199,4 @@ async def test_real_worker_batch_is_bounded_and_awaits_all_failed_and_successful
         assert len(set(owner_gates.values())) == len(owner_gates) == 2
     assert completed == 114 and maximum == 20 and calls.count('market.history') >= 6
     with pytest.raises(ValueError):
-        await runtime.batch_cycle(authority, None, uuid4(), maximum=21)
+        await runtime.batch_cycle(authority, None, uuid4(), maximum=101)
