@@ -8477,7 +8477,7 @@ export const V0_1_90_ENTRY: VersionEntry = {
   ],
 };
 
-export const CURRENT_VERSION_ENTRY: VersionEntry = {
+const V0_1_91_ENTRY: VersionEntry = {
   ...V0_1_90_ENTRY,
   version: "v0.1.91", date: "2026-11-25", summary: "券商图标整理，App 支持行情源检测与测速择优",
   software: V0_1_90_ENTRY.software.map(item => ({ ...item, version: "v0.1.91" })),
@@ -8488,10 +8488,21 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   ],
 };
 
+export const CURRENT_VERSION_ENTRY: VersionEntry = {
+  ...V0_1_91_ENTRY,
+  version: "v0.1.92", date: "2026-11-28", summary: "保留部分卖出后的持仓成本",
+  software: V0_1_91_ENTRY.software.map(item => ({ ...item, version: "v0.1.92" })),
+  changes: [
+    { kind: "fix", title: "部分卖出后的持仓成本", desc: "Fire 对 App 提交的减仓成本做一致性校验，拒绝清空已知成本的操作。旧账本核准能按同一券商和证券重放部分卖出，恢复有依据的缺失成本。" },
+    { kind: "fix", title: "原生订单跨设备同步", desc: "App 的订单新增、修改或删除与变更信号一同保存，其他设备按同一登录账户的已提交版本更新订单、持仓和资金。" },
+  ],
+};
+
 export const CURRENT_VERSION: VersionEntry = CURRENT_VERSION_ENTRY;
 
 export const VERSIONS: VersionEntry[] = [
   CURRENT_VERSION,
+  V0_1_91_ENTRY,
   V0_1_90_ENTRY,
   V0_1_89_ENTRY,
   V0_1_88_ENTRY,

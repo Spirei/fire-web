@@ -339,12 +339,29 @@ def order_history_item(item, occurred, revision):
             **{key: item[key] for key in ('quantity', 'price', 'orderPrice', 'fees')}}
 
 
+def carries_existing_cost(record, applied_fills, orders):
+    """A pure partial sale leaves the App unit cost intact when appended."""
+    changes = applied_fills[record]
+    if any(prior is not None or item['side'] != 'sell' for prior, item in changes):
+        return False
+    earliest_sale = min(order_time(item['filledAt']) for _, item in changes)
+    identifiers = {item['tradeId'] for _, item in changes}
+    return not any(
+        row['recordId'] == record and row['tradeId'] not in identifiers
+        and (row['status'] == 'filled' or row.get('mergedIntoOrderId') is not None)
+        and not row.get('mergedFromOrderIds') and row['side'] == 'buy'
+        and order_time(row['filledAt']) > earliest_sale
+        for row in orders.values()
+    )
+
+
 def apply_trade(state, changed_orders, changed_positions, changed_cash, now, request_id):
     orders = {item['tradeId']: item for item in state['orders']}
     positions = {item['recordId']: item for item in state['positions']}
     cash = {cash_key(item): item for item in state['cash']}
     history = dict(state.get('orderHistory', {}))
     quantity_delta, cash_delta = defaultdict(Decimal), defaultdict(Decimal)
+    applied_fills = defaultdict(list)
     identities = {}
     for identifier, item in changed_orders.items():
         before = orders.get(identifier)
@@ -362,6 +379,8 @@ def apply_trade(state, changed_orders, changed_positions, changed_cash, now, req
         if record in identities and identity != identities[record]:
             conflict('同一笔持仓存在不同券商或证券')
         identities[record] = identity
+        if item['status'] == 'filled' or (before and before['status'] == 'filled'):
+            applied_fills[record].append((before if before and before['status'] == 'filled' else None, item))
         for sign, version in ((-1, before), (1, item)):
             if version and version['status'] == 'filled':
                 key, quantity, money = settlement(version)
@@ -382,11 +401,18 @@ def apply_trade(state, changed_orders, changed_positions, changed_cash, now, req
             conflict('持仓数量已变化或仍未知')
         if position_identity(change) != identities[record] or after != before + quantity_delta[record]:
             raise HTTPException(400, '订单与持仓数量变更不一致')
-        if before > 0 and after > 0 and position['unitCost'] is None and change['unitCostAfter'] is not None:
+        cost = change['unitCostAfter']
+        if before > 0 and after > 0 and position['unitCost'] is None and cost is not None:
             raise HTTPException(400, '缺少旧持仓成本依据')
+        if (before > after > 0 and position['unitCost'] is not None
+                and carries_existing_cost(record, applied_fills, orders)):
+            existing_cost = Decimal(position['unitCost'])
+            if cost is None or Decimal(cost) not in (
+                    existing_cost, existing_cost.quantize(Decimal('0.00000001'), rounding=ROUND_HALF_UP)):
+                raise HTTPException(400, '部分卖出后的每股成本与原持仓不一致')
         market, account_market, code, broker = position_identity(change)
         positions[record] = {'recordId': record, 'brokerAccountId': broker, 'market': market, 'accountMarket': account_market,
-                             'code': code, 'name': change['name'], 'quantity': decimal_text(after), 'unitCost': change['unitCostAfter']}
+                             'code': code, 'name': change['name'], 'quantity': decimal_text(after), 'unitCost': cost}
 
     totals = defaultdict(Decimal)
     for (_, currency), delta in cash_delta.items():

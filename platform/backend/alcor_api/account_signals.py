@@ -61,6 +61,7 @@ EXPECTED_SOURCES = {
         ("legacy_flat_order_operations", "owner_id", "", ""),
         ("internal_order_family_legs", "owner_id", "", ""),
         ("card_wallet_collections", "owner_id", "", ""),
+        ("native_ledger_transactions", "owner_id", "", ""),
     ],
     "watch": [
         ("watch_groups", "owner_id", "", ""),

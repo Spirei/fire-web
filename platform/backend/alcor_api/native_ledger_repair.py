@@ -10,7 +10,7 @@ from psycopg.types.json import Jsonb
 
 from .broker_accounts import serialize_brokers
 from .broker_metadata import fingerprint
-from .native_ledger import cash_key, decimal_text, ledger_head, legacy_baseline, settlement
+from .native_ledger import cash_key, decimal_text, ledger_head, legacy_baseline, position_identity, settlement
 from .native_trade_sync import order_time
 
 COST_QUANT = Decimal('0.00000001')
@@ -60,6 +60,13 @@ async def plan_baseline_repair(conn, db, who, head, *, strict: bool = True):
             if base is None or base.get('unitCost') is None:
                 continue
             fills = fills_by_record.get(pos['recordId'], [])
+            identity = position_identity(pos)
+            if position_identity(base) != identity or any(position_identity(fill) != identity for fill in fills):
+                message = f"原生成交、旧持仓与当前券商或证券归属不一致: {pos['recordId']}"
+                if strict:
+                    raise ValueError(message)
+                warnings.append({'recordId': pos['recordId'], 'code': pos['code'], 'message': message})
+                continue
             if not fills:
                 if pos.get('quantity') != base.get('quantity'):
                     message = f"无原生交易持仓数量与基线不一致: {pos['recordId']}"
@@ -77,6 +84,8 @@ async def plan_baseline_repair(conn, db, who, head, *, strict: bool = True):
                     continue
                 qty = Decimal(base['quantity'])
                 unit_cost = Decimal(base['unitCost'])
+                has_buy = any(fill['side'] == 'buy' for fill in fills)
+                opened_natively = qty == 0
                 blocked = None
                 for fill in fills:
                     fill_qty = Decimal(fill['quantity'])
@@ -92,11 +101,15 @@ async def plan_baseline_repair(conn, db, who, head, *, strict: bool = True):
                         if next_qty < 0:
                             blocked = f"成交重放出现负持仓: {pos['recordId']}"
                             break
-                        if next_qty > 0:
-                            blocked = f"含卖出减仓的缺失成本持仓需人工核对口径: {pos['recordId']}"
+                        if next_qty > 0 and has_buy and not opened_natively:
+                            # The legacy unit cost may be diluted. A mixed, backdated
+                            # history needs a separately verified opening before replay.
+                            blocked = f"旧基线含买入及部分卖出，需核对期初成本口径: {pos['recordId']}"
                             break
                         qty = next_qty
-                        unit_cost = None
+                        if qty == 0:
+                            unit_cost = Decimal(0)
+                            opened_natively = True
                     else:
                         blocked = f"不支持的成交方向: {fill['side']}"
                         break

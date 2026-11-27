@@ -149,14 +149,24 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
 @pytest.mark.asyncio
 async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admin, db):
     headers = await native_headers(db, admin, SCOPES)
+    other_device = await native_headers(db, admin, SCOPES)
     baseline = await data(client.get(LEDGER, headers=headers))
     await adopt(client, headers, baseline)
+
+    async def portfolio_revision():
+        changes = await data(client.get('/api/v2/account-sync', headers=other_device))
+        return changes['revisions']['portfolio']
+
+    revision = await portfolio_revision()
     now = datetime.now(UTC)
     fill = order('first-buy', at=now.isoformat(), quantity='2', price='25', fees='1', net='51')
-    receipt = await data(client.post(TRANSACTIONS, headers=headers,
-                                     json=trade(1, fill, '0', '2', None, None, cost='25.5')))
+    create = trade(1, fill, '0', '2', None, None, cost='25.5')
+    receipt = await data(client.post(TRANSACTIONS, headers=headers, json=create))
     assert receipt['sourceRevision'] == 2
-    record = await data(client.get('/api/v2/records/first-buy', headers=headers))
+    assert await portfolio_revision() == revision + 1
+    assert await data(client.post(TRANSACTIONS, headers=headers, json=create)) == receipt
+    assert await portfolio_revision() == revision + 1
+    record = await data(client.get('/api/v2/records/first-buy', headers=other_device))
     assert record['qty'] == 2 and record['cost'] == 25.5
     by_record = await data(client.get(ASSETS + '/orders?scope=all&recordId=first-buy', headers=headers))
     assert [item['id'] for item in by_record['items']] == [fill['tradeId']]
@@ -183,6 +193,9 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
             'kind': 'trade', 'baseRevision': base, 'orders': [item], 'positions': [], 'cash': []}))
 
     await data(client.post(TRANSACTIONS, headers=headers, json=trade(2, amended, '2', '2', None, None, cost='26.5')))
+    assert await portfolio_revision() == revision + 2
+    amended_record = await data(client.get('/api/v2/records/first-buy', headers=other_device))
+    assert amended_record['qty'] == 2 and amended_record['cost'] == 26.5
     await orders_only(3, pending)
     opened = await data(client.get(LEDGER, headers=headers))
     pending_number = opened['orderNumbers'][pending['tradeId']]
@@ -200,15 +213,20 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
     await data(client.post(TRANSACTIONS, headers=headers,
                            json=trade(6, fresh_sell, '2', '1', None, None, cost='26.5')))
     deleted_sale = dict(fresh_sell, status='deleted', deletedFrom='filled', deletedAt=stamp)
+    before_delete = await portfolio_revision()
+    invalid_delete = trade(7, deleted_sale, '1', '3', None, None, cost='26.5')
+    await data(client.post(TRANSACTIONS, headers=headers, json=invalid_delete), 400)
+    assert await portfolio_revision() == before_delete
     await data(client.post(TRANSACTIONS, headers=headers,
                            json=trade(7, deleted_sale, '1', '2', None, None, cost='26.5')))
-    snapshot = await data(client.get(LEDGER, headers=headers))
+    assert await portfolio_revision() == before_delete + 1
+    snapshot = await data(client.get(LEDGER, headers=other_device))
     assert snapshot['sourceRevision'] == 8 and snapshot['positions'][0]['quantity'] == '2'
     assert [item['status'] for item in snapshot['orders']] == ['filled', 'deleted', 'deleted']
     assert snapshot['orderNumbers'][pending['tradeId']] == pending_number
     assert snapshot['orderNumbers'][fill['tradeId']] == opened['orderNumbers'][fill['tradeId']]
     for suffix in ('/orders?scope=all', '/native-orders'):
-        items = (await data(client.get(ASSETS + suffix, headers=headers)))['items']
+        items = (await data(client.get(ASSETS + suffix, headers=other_device)))['items']
         assert [(item['id'], item['price'], item['editCount']) for item in items] == [(fill['tradeId'], 26, 1)]
     eventual_sell = dict(sell, tradeId=str(uuid4()), execution='conditional')
     new_pending = {k: v for k, v in eventual_sell.items() if k not in ('filledAt', 'settlementCurrency', 'settlementAmount')}
@@ -713,3 +731,71 @@ async def test_repair_native_ledger_baseline_backfills_cost_and_registered_cash_
     tx_nvda['cash'][0].pop('brokerAccountId')
     receipt = await data(client.post(TRANSACTIONS, headers=headers, json=tx_nvda))
     assert receipt['sourceRevision'] == 5
+
+
+@pytest.mark.asyncio
+async def test_partial_sale_keeps_cost_and_repairs_old_missing_basis(client, admin, db):
+    from psycopg.types.json import Jsonb
+    from alcor_api.native_ledger import ledger_head
+    from alcor_api.native_ledger_repair import repair_native_ledger_baseline
+
+    broker, record = await setup(client, amount='100', qty='47', cost='-0.125')
+    first_device = await native_headers(db, admin, SCOPES)
+    second_device = await native_headers(db, admin, SCOPES)
+    baseline = await data(client.get(LEDGER, headers=first_device))
+    await adopt(client, first_device, baseline)
+    now = datetime.now(UTC)
+    sell = order(record['id'], broker, at=now.isoformat(), side='sell',
+                 quantity='30', price='12.5', fees='0.75', net='374.25')
+    body = trade(1, sell, '47', '17', '100', '474.25', cost='-0.125')
+    body['cash'][0].pop('brokerAccountId')
+    lost_cost = {**body, 'positions': [{**body['positions'][0], 'unitCostAfter': None}]}
+    await data(client.post(TRANSACTIONS, headers=first_device, json=lost_cost), 400)
+    wrong_cost = {**body, 'positions': [{**body['positions'][0], 'unitCostAfter': '12.5'}]}
+    await data(client.post(TRANSACTIONS, headers=first_device, json=wrong_cost), 400)
+    await data(client.get(TRANSACTIONS + '/' + body['requestId'], headers=second_device), 404)
+    receipt = await data(client.post(TRANSACTIONS, headers=first_device, json=body))
+    assert await data(client.get(TRANSACTIONS + '/' + body['requestId'], headers=second_device)) == receipt
+    snapshot = await data(client.get(LEDGER, headers=second_device))
+    assert [(p['quantity'], p['unitCost']) for p in snapshot['positions']] == [('17', '-0.125')]
+    assert snapshot['orders'][0]['tradeId'] == sell['tradeId']
+
+    async with db.connection() as conn, conn.transaction():
+        head = await ledger_head(conn, admin)
+        head['snapshot']['positions'][0]['unitCost'] = None
+        await conn.execute('UPDATE native_ledger_heads SET snapshot=%s WHERE owner_id=%s', (Jsonb(head['snapshot']), admin))
+    preview = await repair_native_ledger_baseline(db, admin, apply=False)
+    assert [p['unitCostAfter'] for p in preview['positionUpdates']] == ['-0.125']
+    assert preview['cashUpdates'] == []
+    assert (await data(client.get(LEDGER, headers=second_device)))['positions'][0]['unitCost'] is None
+    assert (await repair_native_ledger_baseline(db, admin, apply=True))['applied']
+    assert not (await repair_native_ledger_baseline(db, admin, apply=True))['applied']
+    repaired = await data(client.get(LEDGER, headers=second_device))
+    assert repaired['orders'] == snapshot['orders'] and repaired['cash'] == snapshot['cash']
+    assert repaired['positions'][0]['unitCost'] == '-0.125'
+    summary = await data(client.get(ASSETS + '/summary', headers=second_device))
+    assert summary['summary']['costComplete']
+
+    later = order(record['id'], broker, at=now.isoformat(), side='sell',
+                  quantity='5', price='10', fees='1', net='49')
+    later_trade = trade(repaired['sourceRevision'], later, '17', '12', '474.25', '523.25', cost='-0.125')
+    later_trade['cash'][0].pop('brokerAccountId')
+    later_receipt = await data(client.post(TRANSACTIONS, headers=first_device, json=later_trade))
+    stamp = datetime.now(UTC).isoformat()
+    removed = [
+        dict(original, status='deleted', deletedFrom='filled', deletedAt=stamp) for original in (sell, later)
+    ]
+    batch = trade(later_receipt['sourceRevision'], removed[0], '12', '47', '523.25', '100', cost='-0.125')
+    batch['orders'] = removed
+    batch['cash'][0].pop('brokerAccountId')
+    invalid = {**batch, 'cash': [{**batch['cash'][0], 'balanceAfter': '101'}]}
+    await data(client.post(TRANSACTIONS, headers=first_device, json=invalid), 400)
+    before_delete = await data(client.get(LEDGER, headers=second_device))
+    assert [o['status'] for o in before_delete['orders']] == ['filled', 'filled']
+    assert before_delete['positions'][0]['quantity'] == '12'
+    deleted = await data(client.post(TRANSACTIONS, headers=first_device, json=batch))
+    assert await data(client.get(TRANSACTIONS + '/' + batch['requestId'], headers=second_device)) == deleted
+    after_delete = await data(client.get(LEDGER, headers=second_device))
+    assert [o['status'] for o in after_delete['orders']] == ['deleted', 'deleted']
+    assert (after_delete['positions'][0]['quantity'], after_delete['positions'][0]['unitCost']) == ('47', '-0.125')
+    assert next(c['balance'] for c in after_delete['cash'] if c['brokerAccountId'] is None) == '100'
