@@ -196,6 +196,8 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
         return await data(client.post(TRANSACTIONS, headers=headers, json={'requestId': str(uuid4()),
             'kind': 'trade', 'baseRevision': base, 'orders': [item], 'positions': [], 'cash': []}))
 
+    await data(client.post(TRANSACTIONS, headers=headers, json=trade(2, amended, '2', '2', None, None)), 400)
+    assert await portfolio_revision() == revision + 1
     await data(client.post(TRANSACTIONS, headers=headers, json=trade(2, amended, '2', '2', None, None, cost='26.5')))
     assert await portfolio_revision() == revision + 2
     amended_record = await data(client.get('/api/v2/records/first-buy', headers=other_device))

@@ -404,6 +404,9 @@ def apply_trade(state, changed_orders, changed_positions, changed_cash, now, req
         cost = change['unitCostAfter']
         if before > 0 and after > 0 and position['unitCost'] is None and cost is not None:
             raise HTTPException(400, '缺少旧持仓成本依据')
+        if (before > 0 and after > 0 and position['unitCost'] is not None and cost is None
+                and any(previous is not None for previous, _ in applied_fills[record])):
+            raise HTTPException(400, '更正成交须保留已核对的持仓成本')
         if (before > after > 0 and position['unitCost'] is not None
                 and carries_existing_cost(record, applied_fills, orders)):
             existing_cost = Decimal(position['unitCost'])

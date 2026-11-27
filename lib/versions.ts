@@ -8495,6 +8495,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   changes: [
     { kind: "fix", title: "部分卖出后的持仓成本", desc: "Fire 对 App 提交的减仓成本做一致性校验，拒绝清空已知成本的操作。旧账本核准能按同一券商和证券重放部分卖出，恢复有依据的缺失成本。" },
     { kind: "fix", title: "原生订单跨设备同步", desc: "App 的订单新增、修改或删除与变更信号一同保存，其他设备按同一登录账户的已提交版本更新订单、持仓和资金。" },
+    { kind: "fix", title: "成交更正成本核对", desc: "更正已成交订单时核对已有持仓成本。Fire 会拒绝清空已知成本的更正。" },
   ],
 };
 
