@@ -327,7 +327,10 @@ class Authority:
                 ).fetchone()
             old = await (
                 await conn.execute(
-                    "SELECT *,revoked_at IS NULL AND hot_until>clock_timestamp() AND expires_at>clock_timestamp() AS hot FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s FOR UPDATE",
+                    """SELECT *,
+                       revoked_at IS NULL AND hot_until>clock_timestamp() AND expires_at>clock_timestamp() AS hot,
+                       revoked_at IS NULL AND hot_until>clock_timestamp()+interval '60 seconds' AND expires_at>clock_timestamp() AS fresh_hot
+                       FROM market_demands WHERE owner_id=%s AND stream_id=%s AND principal=%s FOR UPDATE""",
                     (who.id, stream["id"], principal),
                 )
             ).fetchone()
@@ -348,30 +351,48 @@ class Authority:
                 ).fetchone()
                 same_security=await (await conn.execute("SELECT 1 FROM market_demands d JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id WHERE d.owner_id=%s AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp() AND s.query->>'kind'='latest' AND s.query->>'market'=%s AND s.query->>'code'=%s AND s.query->>'instrument'=%s LIMIT 1",(who.id,query.market,query.code,query.instrument))).fetchone()
                 if count["n"] >= 256 and not same_security:
-                    raise HTTPException(409, "最多保留256个行情订阅")
+                    # LRU-evict the oldest cold (non-hot) client security before refusing with 409.
+                    evict = await (
+                        await conn.execute(
+                            """SELECT d.stream_id FROM market_demands d
+                               JOIN market_streams s ON s.owner_id=d.owner_id AND s.id=d.stream_id
+                               WHERE d.owner_id=%s AND d.revoked_at IS NULL AND d.origin='client'
+                                 AND d.expires_at>clock_timestamp()
+                                 AND (d.hot_until IS NULL OR d.hot_until<=clock_timestamp())
+                                 AND s.query->>'kind'='latest'
+                                 AND NOT EXISTS (
+                                     SELECT 1 FROM market_demands other
+                                     JOIN market_streams os ON os.owner_id=other.owner_id AND os.id=other.stream_id
+                                     WHERE other.owner_id=d.owner_id AND other.revoked_at IS NULL
+                                       AND (other.expires_at IS NULL OR other.expires_at>clock_timestamp())
+                                       AND os.query->>'kind'='latest'
+                                       AND os.query->>'market'=s.query->>'market'
+                                       AND os.query->>'code'=s.query->>'code'
+                                       AND os.query->>'instrument'=s.query->>'instrument'
+                                       AND (other.origin<>'client' OR other.hot_until>clock_timestamp())
+                                 )
+                               ORDER BY COALESCE(d.hot_until, d.expires_at) ASC, d.stream_id ASC
+                               LIMIT 1""",
+                            (who.id,),
+                        )
+                    ).fetchone()
+                    if not evict:
+                        raise HTTPException(409, "最多保留256个行情订阅")
+                    await conn.execute(
+                        """UPDATE market_demands d SET revoked_at=clock_timestamp()
+                           FROM market_streams s, market_streams target
+                           WHERE d.owner_id=%s AND d.revoked_at IS NULL AND d.origin='client'
+                             AND s.owner_id=d.owner_id AND s.id=d.stream_id
+                             AND target.owner_id=%s AND target.id=%s
+                             AND s.query->>'kind'='latest'
+                             AND s.query->>'market'=target.query->>'market'
+                             AND s.query->>'code'=target.query->>'code'
+                             AND s.query->>'instrument'=target.query->>'instrument'""",
+                        (who.id, who.id, evict["stream_id"]),
+                    )
             user = await (
                 await conn.execute("SELECT session_version FROM users WHERE id=%s", (who.id,))
             ).fetchone()
-            row = await (
-                await conn.execute(
-                    """INSERT INTO market_demands(owner_id,stream_id,principal,native_grant_id,session_version,expires_at,hot_until,origin,revoked_at)
-                VALUES(%s,%s,%s,%s,%s,clock_timestamp()+interval '7 days',clock_timestamp()+interval '90 seconds','client',CASE WHEN %s THEN clock_timestamp() ELSE NULL END)
-                ON CONFLICT(owner_id,stream_id,principal) DO UPDATE SET revision=market_demands.revision+1,session_version=excluded.session_version,
-                expires_at=excluded.expires_at,hot_until=excluded.hot_until,revoked_at=excluded.revoked_at RETURNING *""",
-                    (
-                        who.id,
-                        stream["id"],
-                        principal,
-                        getattr(who, "grant_id", None),
-                        user["session_version"],
-                        remove,
-                    ),
-                )
-            ).fetchone()
-            await conn.execute(
-                "UPDATE market_streams SET demand_generation=demand_generation+1 WHERE owner_id=%s AND id=%s",
-                (who.id, stream["id"]),
-            )
             sleeping = bool(
                 query.kind == "latest"
                 and stream["current_task_id"]
@@ -382,9 +403,42 @@ class Authority:
                     )
                 ).fetchone()
             )
+            if (
+                observed
+                and not remove
+                and query.kind == "latest"
+                and old
+                and old["fresh_hot"]
+                and old["session_version"] == user["session_version"]
+                and not sleeping
+            ):
+                # Hot client demand was renewed within the last 30s; skip redundant
+                # demand/stream write churn while preserving receipt semantics.
+                row = old
+            else:
+                row = await (
+                    await conn.execute(
+                        """INSERT INTO market_demands(owner_id,stream_id,principal,native_grant_id,session_version,expires_at,hot_until,origin,revoked_at)
+                    VALUES(%s,%s,%s,%s,%s,clock_timestamp()+interval '7 days',clock_timestamp()+interval '90 seconds','client',CASE WHEN %s THEN clock_timestamp() ELSE NULL END)
+                    ON CONFLICT(owner_id,stream_id,principal) DO UPDATE SET revision=market_demands.revision+1,session_version=excluded.session_version,
+                    expires_at=excluded.expires_at,hot_until=excluded.hot_until,revoked_at=excluded.revoked_at RETURNING *""",
+                        (
+                            who.id,
+                            stream["id"],
+                            principal,
+                            getattr(who, "grant_id", None),
+                            user["session_version"],
+                            remove,
+                        ),
+                    )
+                ).fetchone()
+                await conn.execute(
+                    "UPDATE market_streams SET demand_generation=demand_generation+1 WHERE owner_id=%s AND id=%s",
+                    (who.id, stream["id"]),
+                )
             if query.kind=='latest' and (not observed or not old or not old['hot'] or old['session_version']!=user['session_version'] or sleeping):
                 # Repeated visible-page observations renew demand retention,
-                # but must not shorten the worker's five-second source cadence.
+                # but must not shorten the worker's source cadence.
                 # New/revived demand still wakes a sleeping stream immediately.
                 await conn.execute('UPDATE market_streams SET next_due=least(next_due,clock_timestamp()) WHERE owner_id=%s AND id=%s',(who.id,stream['id']))
             return await self.save_receipt(

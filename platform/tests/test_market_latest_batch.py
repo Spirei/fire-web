@@ -95,13 +95,19 @@ async def test_100_symbol_batch_and_per_source_latest_cadence():
     finally:
         await batch.close()
 
+    from datetime import UTC, datetime
+    from alcor_api.market_worker import is_market_active, latest_cadence_seconds
+
     futu = SimpleNamespace(source='futu')
     tencent = SimpleNamespace(source='tencent')
     yahoo = SimpleNamespace(source='yahoo')
     eastmoney = SimpleNamespace(source='eastmoney')
-    reg = SimpleNamespace(kind='latest', session='REGULAR')
-    pre = SimpleNamespace(kind='latest', session='PRE')
-    hist = SimpleNamespace(kind='bars', session='REGULAR')
+    reg = SimpleNamespace(kind='latest', session='REGULAR', market='US')
+    pre = SimpleNamespace(kind='latest', session='PRE', market='US')
+    cn_reg = SimpleNamespace(kind='latest', session='REGULAR', market='CN')
+    hk_reg = SimpleNamespace(kind='latest', session='REGULAR', market='HK')
+    crypto = SimpleNamespace(kind='latest', session='REGULAR', market='CRYPTO')
+    hist = SimpleNamespace(kind='bars', session='REGULAR', market='US')
     assert latest_cadence_seconds(futu, reg, hot=True) == (2, 1)
     assert latest_cadence_seconds(futu, pre, hot=True) == (3, 2)
     assert latest_cadence_seconds(futu, reg, hot=False) == (5, 3)
@@ -109,6 +115,21 @@ async def test_100_symbol_batch_and_per_source_latest_cadence():
     assert latest_cadence_seconds(yahoo, reg, hot=True) == (5, 3)
     assert latest_cadence_seconds(eastmoney, reg, hot=True) == (5, 3)
     assert latest_cadence_seconds(futu, hist, hot=True) == (0, 0)
+
+    # Friday 10:30 NY (15:30 UTC) -> US open, CN/HK closed (23:30 Shanghai/HK)
+    us_live_asia_closed = datetime(2026, 11, 27, 15, 30, tzinfo=UTC)
+    assert is_market_active('US', us_live_asia_closed) is True
+    assert is_market_active('CN', us_live_asia_closed) is False
+    assert is_market_active('HK', us_live_asia_closed) is False
+    assert is_market_active('CRYPTO', us_live_asia_closed) is True
+    assert latest_cadence_seconds(futu, reg, hot=True, now=us_live_asia_closed) == (2, 1)
+    assert latest_cadence_seconds(futu, cn_reg, hot=True, now=us_live_asia_closed) == (60, 30)
+    assert latest_cadence_seconds(futu, hk_reg, hot=True, now=us_live_asia_closed) == (60, 30)
+    assert latest_cadence_seconds(futu, crypto, hot=True, now=us_live_asia_closed) == (2, 1)
+    # Saturday 15:30 UTC -> US weekend closed
+    us_weekend = datetime(2026, 11, 28, 15, 30, tzinfo=UTC)
+    assert is_market_active('US', us_weekend) is False
+    assert latest_cadence_seconds(futu, reg, hot=True, now=us_weekend) == (60, 30)
 
 
 async def test_http_provider_reads_remain_limited_to_six_while_worker_batches_twenty(monkeypatch):

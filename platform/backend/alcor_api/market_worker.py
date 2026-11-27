@@ -137,7 +137,41 @@ async def claim(db, worker, *, kind=None):
     return tasks[0] if tasks else None
 
 
-def latest_cadence_seconds(policy, query, *, hot=True):
+def is_market_active(market, now):
+    """Conservative exchange clock check with 5-minute open/close buffer.
+
+    Returns False only when the exchange is definitively outside trading hours
+    (overnight for Asian exchanges or weekends), so off-hours streams downshift
+    to 60s instead of polling dead prices every 2-5 seconds.
+    """
+    code = (market or "").upper()
+    if code not in ZONES:
+        return True
+    local = now.astimezone(ZoneInfo(ZONES[code]))
+    weekday = local.weekday()  # 0=Mon .. 6=Sun
+    minute = local.hour * 60 + local.minute
+    if code == "US":
+        if weekday == 5:
+            return False
+        if weekday == 6:
+            return minute >= 1195  # Sun 19:55 NY (overnight opens 20:00)
+        if weekday == 4:
+            return minute <= 1205  # Fri 20:05 NY (after-hours ends 20:00)
+        return True
+    if weekday >= 5:
+        return False
+    windows = {
+        "HK": (535, 975),   # 08:55 - 16:15 HKT
+        "CN": (550, 910),   # 09:10 - 15:10 Shanghai
+        "JP": (535, 935),   # 08:55 - 15:35 Tokyo
+        "KR": (535, 935),   # 08:55 - 15:35 Seoul
+        "SG": (535, 1030),  # 08:55 - 17:10 Singapore
+    }
+    bounds = windows.get(code)
+    return True if bounds is None else bounds[0] <= minute <= bounds[1]
+
+
+def latest_cadence_seconds(policy, query, *, hot=True, now=None):
     """Per-source latest-quote cadence bounded well below upstream limits.
 
     Returns (cadence_seconds, lead_seconds) for shared clock-boundary alignment.
@@ -145,9 +179,12 @@ def latest_cadence_seconds(policy, query, *, hot=True):
     With up to 100 symbols coalesced per batch, 2s regular / 3s extended hot
     cadence stays well inside quota while keeping non-Futu sources at 5s to
     avoid Tencent CDN duplication and Yahoo/Eastmoney 429 throttling.
+    Closed exchanges downshift to 60s automatically.
     """
     if query.kind != "latest":
         return 0, 0
+    if now is not None and not is_market_active(query.market, now):
+        return 60, 30
     if hot and policy.source == "futu":
         return (2, 1) if query.session == "REGULAR" else (3, 2)
     return 5, 3
@@ -521,7 +558,7 @@ async def execute(authority, task, transport, *, owner_gate=None):
             # LatestBatch coalesce symbols into one provider RPC instead of
             # staggering them into OpenD rate limits.
             hot = any(d.get("hot_until") is not None and d["hot_until"] > job["now"] for d in demands)
-            cadence, lead = latest_cadence_seconds(policy, query, hot=hot)
+            cadence, lead = latest_cadence_seconds(policy, query, hot=hot, now=job["now"])
             await conn.execute(
                 "UPDATE market_streams SET next_due=to_timestamp(ceil(extract(epoch from clock_timestamp()+make_interval(secs=>%s))/%s::double precision)*%s::double precision) WHERE owner_id=%s AND id=%s",
                 (lead, cadence, cadence, task["owner_id"], stream["id"]),
