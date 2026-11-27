@@ -393,15 +393,22 @@ class Authority:
             user = await (
                 await conn.execute("SELECT session_version FROM users WHERE id=%s", (who.id,))
             ).fetchone()
-            sleeping = bool(
-                query.kind == "latest"
-                and stream["current_task_id"]
-                and await (
+            current_task = (
+                await (
                     await conn.execute(
-                        "SELECT 1 FROM market_data_jobs WHERE task_id=%s AND state='sleeping'",
+                        """SELECT t.status, COALESCE(j.state, '') AS state
+                           FROM tasks t
+                           LEFT JOIN market_data_jobs j ON j.task_id=t.id
+                           WHERE t.id=%s""",
                         (stream["current_task_id"],),
                     )
                 ).fetchone()
+                if query.kind == "latest" and stream["current_task_id"]
+                else None
+            )
+            sleeping = bool(current_task and current_task["state"] == "sleeping")
+            task_healthy = current_task is None or (
+                current_task["status"] in ("queued", "running") and not sleeping
             )
             if (
                 observed
@@ -410,10 +417,11 @@ class Authority:
                 and old
                 and old["fresh_hot"]
                 and old["session_version"] == user["session_version"]
-                and not sleeping
+                and task_healthy
             ):
-                # Hot client demand was renewed within the last 30s; skip redundant
-                # demand/stream write churn while preserving receipt semantics.
+                # Hot client demand was renewed within the last 30s and the current
+                # worker task is healthy; skip redundant demand/stream write churn
+                # while preserving receipt semantics.
                 row = old
             else:
                 row = await (

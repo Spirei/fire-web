@@ -276,8 +276,8 @@ async def test_worker_closes_the_import_lane_on_retirement_stop_and_failed_cycle
     def configured(db, *, reuse_latest=False, reuse_history=False):
         assert reuse_latest is True and reuse_history is True
         return object(),lane
-    async def cycle(*args,allow_history=True):
-        assert allow_history is False
+    async def cycle(*args,allow_history=True,maximum=20):
+        assert allow_history is False and 1 <= maximum <= 100
         stop.set()
         if state=='database_unavailable':raise RuntimeError('controlled unavailable')
     async def public(*args):pass
@@ -320,8 +320,8 @@ async def test_history_and_latest_progress_independently_with_one_history_child_
                 return True
         finally:running-=1
 
-    async def latest(*args,allow_history=True):
-        assert allow_history is False
+    async def latest(*args,allow_history=True,maximum=20):
+        assert allow_history is False and 1 <= maximum <= 100
         if blocked_lane=='latest':
             entered.set()
             await progress.wait()
