@@ -153,11 +153,15 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
     baseline = await data(client.get(LEDGER, headers=headers))
     await adopt(client, headers, baseline)
 
-    async def portfolio_revision():
-        changes = await data(client.get('/api/v2/account-sync', headers=other_device))
+    foreign_owner = await create_user(db.settings, 'separate-ledger', 'separate-ledger-test-password-1')
+    foreign_device = await native_headers(db, foreign_owner, SCOPES)
+
+    async def portfolio_revision(device=other_device):
+        changes = await data(client.get('/api/v2/account-sync', headers=device))
         return changes['revisions']['portfolio']
 
     revision = await portfolio_revision()
+    foreign_revision = await portfolio_revision(foreign_device)
     now = datetime.now(UTC)
     fill = order('first-buy', at=now.isoformat(), quantity='2', price='25', fees='1', net='51')
     create = trade(1, fill, '0', '2', None, None, cost='25.5')
@@ -220,6 +224,8 @@ async def test_first_trade_and_order_lifecycle_with_no_cash_opening(client, admi
     await data(client.post(TRANSACTIONS, headers=headers,
                            json=trade(7, deleted_sale, '1', '2', None, None, cost='26.5')))
     assert await portfolio_revision() == before_delete + 1
+    assert await portfolio_revision(foreign_device) == foreign_revision
+    assert (await data(client.get(LEDGER, headers=foreign_device)))['orders'] == []
     snapshot = await data(client.get(LEDGER, headers=other_device))
     assert snapshot['sourceRevision'] == 8 and snapshot['positions'][0]['quantity'] == '2'
     assert [item['status'] for item in snapshot['orders']] == ['filled', 'deleted', 'deleted']

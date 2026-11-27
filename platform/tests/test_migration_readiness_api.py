@@ -75,7 +75,8 @@ async def test_migration_readiness_admin_only_and_tracks_checkpoint_sealing(
     assert before["redis"]["statelessCacheOnly"] is True
     assert before["redis"]["migrationRequired"] is False
     assert before["redis"]["aclKeyPrefix"] == f"alcor:{before['database']['instanceId']}:read-budget:*"
-    assert before["database"]["latestMigration"].startswith("0176_")
+    latest = max(path.name for path in db.settings.migration_dir.glob("[0-9]*.sql"))
+    assert before["database"]["latestMigration"] == latest
     dirs = {d["key"]: d for d in before["directories"]}
     assert dirs["backupSecretDir"]["exists"] is True and dirs["backupSecretDir"]["modeOctal"] == "0700"
     assert dirs["backupSecretDir"]["fileCount"] == 1
