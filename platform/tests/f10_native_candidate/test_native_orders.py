@@ -275,24 +275,25 @@ async def test_licensed_saved_quote_triggers_four_conditions_without_real_fill_o
     assert installed.status_code==200,installed.text
     revision=installed.json()['revision']
     now=datetime.now(UTC)
-    hhmm=now.astimezone(ZoneInfo('America/New_York')).strftime('%H:%M')
-    session='PRE' if '04:00'<=hhmm<'09:30' else 'REGULAR' if '09:30'<=hhmm<'16:00' else 'AFTER' if '16:00'<=hhmm<'20:00' else 'OVERNIGHT'
+    await Calendars(db).ensure_builtin()
+    local=now.astimezone(ZoneInfo('America/New_York'))
+    trading_date=local.date()+timedelta(days=1) if local.hour>=20 else local.date()
+    async with db.connection() as conn:
+        calendar=await(await conn.execute('SELECT d.status,d.continuous_close FROM market_calendar_active a JOIN market_calendar_days d ON d.revision=a.revision WHERE a.singleton AND d.market=%s AND d.day=%s',('US',trading_date))).fetchone()
+    if not calendar or calendar['status'] not in ('trading','half_day'):
+        pytest.skip('Current real source/session day has no verified trading calendar; never fabricate readiness')
+    hhmm=local.strftime('%H:%M')
+    close=calendar['continuous_close'] if calendar['status']=='half_day' else '16:00'
+    session='PRE' if '04:00'<=hhmm<'09:30' else 'REGULAR' if '09:30'<=hhmm<close else 'AFTER' if close<=hhmm<'20:00' else 'OVERNIGHT'
     query=Query('latest','US','AAPL',session=session)
     demand=await client.post('/api/market/demands',json={'request_id':str(uuid4()),'source_revision':revision,'query':asdict(query),'expected_revision':0})
     assert demand.status_code==200,demand.text
-    await Calendars(db).ensure_builtin()
-    local=now.astimezone(ZoneInfo('America/New_York'))
-    trading_date=local.date()+timedelta(days=1) if session=='OVERNIGHT' and local.hour>=20 else local.date()
-    async with db.connection() as conn:
-        calendar=await(await conn.execute('SELECT d.status FROM market_calendar_active a JOIN market_calendar_days d ON d.revision=a.revision WHERE a.singleton AND d.market=%s AND d.day=%s',('US',trading_date))).fetchone()
-    if not calendar or calendar['status'] not in ('trading','half_day'):
-        pytest.skip('Current real source/session day has no verified trading calendar; never fabricate readiness')
     class ControlledTransport:
         fixture=True
         calls=0
         async def read(self,policy,query,cursor):
             self.calls+=1
-            return canonical({'query':asdict(query),'licenseRevision':policy.license_revision,'facts':[{'at':datetime.now(UTC).isoformat(),'price':'10','currency':'USD','session':session,'cached':False}],'nextCursor':None}).encode(),'controlled_http_response_body'
+            return canonical({'query':asdict(query),'licenseRevision':policy.license_revision,'facts':[{'at':now.isoformat(),'price':'10','currency':'USD','session':session,'cached':False}],'nextCursor':None}).encode(),'controlled_http_response_body'
     transport=ControlledTransport()
     assert await schedule(authority)==1
     task=await claim(db,uuid4())
