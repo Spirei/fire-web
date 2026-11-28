@@ -604,7 +604,7 @@ def mount_native_ledger(app):
         headers = {'Cache-Control': 'no-store, private', 'Vary': 'Authorization', 'X-Alcor-API-Version': '2'}
         write = request.method == 'POST'
         try:
-            if not app.state.native_ledger_enabled:
+            if not app.state.native_ledger_enabled and request_id is None:
                 raise HTTPException(404, '接口未启用')
             assert_native_origin(request, db.settings)
             who, grant = await native_identity(request, db, 'portfolio.write' if write else 'portfolio.read')
@@ -620,8 +620,10 @@ def mount_native_ledger(app):
             if write:
                 if request.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
                     raise ValueError
-                if not await app.state.rate_limit(db, 'native-ledger:' + who.id, 120, window_seconds=60):
-                    raise HTTPException(429, '同步频率过高，请稍后再试')
+                window_seconds = 60
+                if not await app.state.rate_limit(db, 'native-ledger:' + who.id, 120, window_seconds=window_seconds):
+                    raise HTTPException(429, '同步频率过高，请稍后再试',
+                                        headers={'Retry-After': str(window_seconds)})
                 raw = json.loads(await bounded_body(request, body_budget(TRANSACTIONS)), object_pairs_hook=unique)
             async with db.connection() as conn, conn.transaction():
                 if write:

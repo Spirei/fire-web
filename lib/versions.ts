@@ -8505,6 +8505,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "fix", title: "订单与盈亏窄屏浏览", desc: "长证券名称支持两行，盈亏明细保留成交价精度，返回持仓时恢复原行位置。" },
     { kind: "feature", title: "数据管理可调整页面宽度", desc: "桌面从右缘拖动调宽，双击恢复默认，刷新后保留宽度。" },
     { kind: "fix", title: "原生账本读取与写入并行", desc: "写入进行时，App 仍可读取已提交的订单、持仓、原币现金和回执。已完成请求可直接恢复原回执。" },
+    { kind: "fix", title: "App 同步回执恢复", desc: "暂停原生账本写入时仍可查询本人已提交的订单回执。订单、自选和费率写入限流时返回重试间隔。" },
   ],
 };
 

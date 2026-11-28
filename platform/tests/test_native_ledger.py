@@ -16,6 +16,7 @@ from alcor_api.internal_orders import pending_reservations
 from alcor_api.main import create_app
 from alcor_api.native_app_auth import CLIENT
 from alcor_api.native_trading_cycle import cycle_range
+from alcor_api.security import digest
 from test_legacy_trade_corrections import native_headers
 from test_trading import setup
 
@@ -40,6 +41,41 @@ async def test_disabled_ledger_does_not_discover_or_accept_writes(client, admin,
     assert 'native_ledger' not in await data(client.get('/api/v2/auth/config'))
     await data(client.get(LEDGER, headers=headers), 404)
     await data(client.post(TRANSACTIONS, headers=headers, json={}), 404)
+
+
+@pytest.mark.asyncio
+async def test_committed_receipt_remains_readable_with_ledger_disabled(client, admin, db, app):
+    author = await native_headers(db, admin, SCOPES)
+    reader = await native_headers(db, admin, 'portfolio.read')
+    baseline = await data(client.get(LEDGER, headers=author))
+    committed = await adopt(client, author, baseline)
+    path = TRANSACTIONS + '/' + committed['requestId']
+
+    app.state.native_ledger_enabled = False
+    app.state.db.settings.native_ledger_enabled = False
+    assert 'native_ledger' not in await data(client.get('/api/v2/auth/config'))
+    assert await data(client.get(path, headers=reader)) == committed
+    missing = await client.get(TRANSACTIONS + '/' + str(uuid4()), headers=reader)
+    assert missing.status_code == 404 and missing.json()['code'] == 40401
+    await data(client.get(path, headers={}), 401)
+    await data(client.get(path, headers={**reader, 'X-Alcor-Expected-Account': 'different'}), 403)
+    await data(client.get(LEDGER, headers=reader), 404)
+    await data(client.post(TRANSACTIONS, headers=author, json={}), 404)
+
+
+@pytest.mark.asyncio
+async def test_app_mutation_limits_include_retry_after(client, admin, db):
+    headers = await native_headers(db, admin, SCOPES)
+    async with db.connection() as conn:
+        for bucket in ('native-ledger:' + admin, digest('app-state:' + admin)):
+            await conn.execute(
+                'INSERT INTO auth_rate_limits(bucket,window_start,attempts) VALUES(%s,clock_timestamp(),120)',
+                (bucket,),
+            )
+    for path in (TRANSACTIONS, '/api/v2/app-state'):
+        response = await client.post(path, headers=headers, json={})
+        assert response.status_code == 429 and response.json()['code'] == 42901
+        assert response.headers['Retry-After'] == '60'
 
 
 def order(record, broker=None, *, at, created=None, side='buy', quantity='15', price='300',

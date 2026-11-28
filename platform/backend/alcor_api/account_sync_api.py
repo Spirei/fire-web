@@ -81,7 +81,9 @@ def mount_account_sync(app, settings, db, rate_limit):
             else:
                 if request.query_params:
                     raise HTTPException(400, "不支持查询参数")
-                if not await rate_limit(db, digest("app-state:" + who.id), 120, window_seconds=60):
+                window_seconds = 60
+                if not await rate_limit(db, digest("app-state:" + who.id), 120, window_seconds=window_seconds):
+                    headers["Retry-After"] = str(window_seconds)
                     raise HTTPException(429, "操作过于频繁")
                 import json
                 def reject_constant(_):

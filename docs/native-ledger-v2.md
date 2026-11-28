@@ -2,13 +2,13 @@
 
 匿名 `GET /api/v2/auth/config` 中的 `native_ledger.version == 1` 是原生账本写入协议版本，`native_ledger.operations` 列出当前可提交的 `kind`。使用现有同源 App Bearer 和本人账户，无需第二套登录。读权限为 `portfolio.read`，写权限为 `portfolio.write`。所有响应沿用 `{code,message,data}` 信封。
 
-接口默认关闭。隔离联调用 `ALCOR_NATIVE_LEDGER_ENABLED=1` 启用。App 的交易流程全部迁到原生事务并完成联调后才启用正式环境。
+接口默认关闭。隔离联调用 `ALCOR_NATIVE_LEDGER_ENABLED=1` 启用。App 的交易流程全部迁到原生事务并完成联调后才启用正式环境。原生能力关闭期间，已授权 App 仍可按原请求 UUID 读取本人的已提交回执。
 
 ## 路径与来源版本
 
 - `GET /api/v2/account-assets/native-ledger` 原子回读本人订单、持仓及原币现金。返回 `{ownerId,source,sourceRevision,legacyRevision,positions,cash,orders}`。`source` 为 `legacy` 或 `native`。未接管时 `sourceRevision=0`，`legacyRevision` 是服务端返回的不透明版本，取自本次只读快照。接管后每个已提交事务递增 `sourceRevision`，`legacyRevision=null`。
 - `POST /api/v2/account-assets/native-ledger/transactions` 写入一个原子事务。首次成功及同本人、同 UUID 和同内容的重试都返回 HTTP 200 和原 `{ownerId,requestId,kind,sourceRevision}`。旧版本或不同内容复用 UUID 返回 HTTP 409。跨设备读到旧版本时先重新回读，保留本机未确认操作。
-- `GET /api/v2/account-assets/native-ledger/transactions/{requestId}` 读取原回执，用于请求结果未知的恢复。已有回执返回 HTTP 200，本人尚无该回执返回 HTTP 404。他人编号同样为 404。操作重试须使用原 UUID 和同一内容。
+- `GET /api/v2/account-assets/native-ledger/transactions/{requestId}` 读取原回执，用于请求结果未知的恢复。已有回执返回 HTTP 200，本人尚无该回执返回 HTTP 404 和业务码 `40401`。他人编号使用同样的缺失响应。操作重试须使用原 UUID 和同一内容。
 
 日期须带时区。保留实际成交时间，录入时间仍单独记录。数量、价格、费用和余额采用普通十进制字符串。无来源依据的金额及单位成本为 `null`，缺少的币种等同未知，负余额合法。持仓编号为不透明字符串。
 
