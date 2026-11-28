@@ -173,7 +173,7 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
       const currentGeneration = generation;
       try {
         const res = configuration ? null : await fetch("/api/ticker", { cache: "no-store", signal });
-        const data = configuration ? await readWorkspaceTicker(configuration, signal) : await res!.json().catch(() => null);
+        const data = configuration ? await readWorkspaceTicker(configuration, signal, ownerId) : await res!.json().catch(() => null);
         if (signal.aborted || currentGeneration !== generation) return;
         if (res && !res.ok) {
           // Unavailable public facts must not erase the configured index names
@@ -212,7 +212,7 @@ export default function IndexTicker({configuration,ownerId=""}:{configuration?:T
       polling.stop();
       window.removeEventListener("fire:settings-updated", onSettings);
     };
-  }, [configuration,cacheKey]);
+  }, [configuration,cacheKey,ownerId]);
 
   // 按设置的时间轮换一个指数
   useEffect(() => {

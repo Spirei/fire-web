@@ -54,6 +54,8 @@ import { animateWorkspaceEntrance } from "@/lib/workspaceMotion";
 import { ownWorkspaceScroll, restoreWorkspaceScroll } from "@/lib/workspaceScroll";
 import { mobileWorkspaceGroups } from "@/lib/workspaceNavigation";
 import { createRecordsRefresh, RECORDS_WORKSPACES } from "@/lib/recordsRefresh";
+import { accountReadHeaders } from "@/lib/privateReadContext";
+import { startVisiblePolling } from "@/lib/visiblePolling";
 
 // 默认保留服务端渲染：刷新当前页仍随 HTML 直接呈现内容；仅客户端代码按页签拆包。
 // 已预读代码直接呈现；首次下载仅使用延迟显露的轻量占位，不显示打开提示。
@@ -178,6 +180,7 @@ export default function RecordsApp({
   const [recordsError, setRecordsError] = useState("");
   const recordsRef = useRef(records);
   const recordsSyncRef = useRef<ReturnType<typeof createRecordsRefresh> | null>(null);
+  const accountChangeStamp = useRef<string | undefined>(undefined);
   recordsRef.current = records;
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const quotesRef = useRef<Record<string, Quote>>({});
@@ -683,7 +686,7 @@ export default function RecordsApp({
   useEffect(() => {
     const sync = createRecordsRefresh(user.id, async signal => {
       setRecordsError("");
-      const res = await fetch("/api/records", { signal, cache: "no-store" });
+      const res = await fetch("/api/records", { signal, cache: "no-store", headers: accountReadHeaders(user.id) });
       if (!res.ok) throw new Error("记录读取失败");
       const records: unknown = await res.json();
       if (!Array.isArray(records)) throw new Error("记录格式无效");
@@ -716,6 +719,32 @@ export default function RecordsApp({
       window.removeEventListener("fire:records-updated", changed);
     };
   }, [user.id, router]);
+
+  const watchesAccountChanges = activeTab === "data-management" || RECORDS_WORKSPACES.has(activeTab);
+  useEffect(() => {
+    if (!watchesAccountChanges) return;
+    const polling = startVisiblePolling({
+      interval: () => 15_000,
+      read: async signal => {
+        const state = await platformRequest<{
+          userId: string; instanceId: string; epoch: string; revisions: Record<string, number | null>;
+          domains?: Record<string, { lastChangedAt?: string | null }>;
+        }>("/api/account/changes", {
+          signal, headers: { ...accountReadHeaders(user.id), "X-CSRF-Token": sessionCsrf },
+        }, 8000);
+        if (signal.aborted || state.userId !== user.id || !state.revisions) return;
+        const domains = ["portfolio", "brokers", "watch", "authorization"];
+        const stamp = JSON.stringify([state.instanceId, state.epoch, ...domains.map(domain => state.revisions[domain])]);
+        const previous = accountChangeStamp.current;
+        accountChangeStamp.current = stamp;
+        const changedSinceRender = domains.some(domain => Date.parse(state.domains?.[domain]?.lastChangedAt ?? "") > initialNow);
+        if (previous === undefined ? changedSinceRender : stamp !== previous) {
+          window.dispatchEvent(new Event("fire:records-updated"));
+        }
+      },
+    });
+    return polling.stop;
+  }, [watchesAccountChanges, initialNow, sessionCsrf, user.id]);
 
   useEffect(() => {
     recordsSyncRef.current?.setActive(!document.hidden && (activeTab === "data-management" || RECORDS_WORKSPACES.has(activeTab) || activeTab === "settings" && settingsSub === "profile" && searchParams.get("anchor") === "danger"));
@@ -1172,7 +1201,7 @@ export default function RecordsApp({
             /></MobileBackGesture>
           )}
           {activeTab === "activities" && <ActivitiesView userLogs={userLogs} systemLogs={systemLogs} isAdmin={user?.role === "admin"} onRefresh={reloadActivities} initialCheckedAt={initialTab === "activities" && initialWorkspace.logs ? initialNow : 0} />}
-          {activeTab === "data-management" && <DataManagementView key={user.id} ownerId={user.id} admin={user.role === "admin"} recordsCount={recordsReady ? records.length : null} onExport={exportJson} />}
+          {activeTab === "data-management" && <DataManagementView key={user.id} ownerId={user.id} sessionCsrf={sessionCsrf} admin={user.role === "admin"} recordsCount={recordsReady ? records.length : null} onExport={exportJson} />}
           {activeTab === "global" && <GlobalPreviewView initialFx={initialWorkspace.global?.fx} initialNow={initialNow} onOpenQuotePool={() => selectTab("quote-pool")} />}
           {activeTab === "quote-pool" && <div className="global-economy-page flex flex-col gap-6">
             <GlobalSectionNav section="quote-pool" onSelect={section => { if (section !== "quote-pool") navigateWorkspace(`/global?section=${section}`); }} />

@@ -13,8 +13,9 @@ import { useWorkspaceSearchParams } from "@/lib/workspacePanel";
 type Counts = { records?: number; tradeOrders?: number; watchGroups?: number };
 type ImportPlan = { requestId: string; previewId: string; state: string; confirmSupported: boolean; counts?: Counts; blocked?: unknown[] };
 
-export default function DataManagementView({ ownerId, admin, recordsCount, onExport }: {
+export default function DataManagementView({ ownerId, sessionCsrf, admin, recordsCount, onExport }: {
   ownerId: string;
+  sessionCsrf: string;
   admin: boolean;
   recordsCount: number | null;
   onExport: () => void;
@@ -104,7 +105,7 @@ export default function DataManagementView({ ownerId, admin, recordsCount, onExp
   return (
     <section className="data-management-page mx-auto w-full min-w-0 max-w-[1100px]" aria-labelledby="data-management-title">
       <h1 id="data-management-title" className="mb-5 text-2xl font-semibold text-ink">数据管理</h1>
-      <InvestmentDataManager key={ownerId} ownerId={ownerId} resumeBackup={resumeBackup} archiveActions={
+      <InvestmentDataManager key={ownerId} ownerId={ownerId} sessionCsrf={sessionCsrf} resumeBackup={resumeBackup} archiveActions={
           <>
             <InvestmentArchiveAction icon={<IconDatabaseExport size={18} />} title="旧版网站档案">
               <Capsule variant="secondary" size="sm" type="button" disabled={backupBusy !== null} onClick={exportSiteBackup}>{backupBusy === "export" ? "导出中…" : "导出 JSON"}</Capsule>

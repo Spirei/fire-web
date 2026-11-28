@@ -32,7 +32,7 @@ SECTIONS = {
     "trades": (
         "trade_operations", "trade_ledger", "trade_registration_contexts",
         "trade_presentation_ids", "native_synced_fills", "native_synced_orders", "personal_order_declarations",
-        "native_ledger_heads", "native_ledger_transactions", "native_ledger_transferred_orders",
+        "native_ledger_heads", "native_ledger_transactions", "native_ledger_transferred_orders", "native_ledger_valuation_inputs",
         "owner_ledger_checkpoints", "owner_ledger_events",
         "internal_order_collections", "internal_orders", "internal_order_contexts",
         "internal_order_actions", "internal_order_families", "internal_order_family_legs",
@@ -71,8 +71,13 @@ def native_files_discovery():
 
 
 async def investment_file_actor(request, db):
-    if request.url.path.startswith("/api/v2/investment-files/") and not request.headers.get("authorization", "").startswith("Bearer fat_"):
-        raise HTTPException(401, "请通过 App 授权查看")
+    if request.url.path.startswith("/api/v2/investment-files/"):
+        if not request.headers.get("authorization", "").startswith("Bearer fat_"):
+            raise HTTPException(401, "请通过 App 授权查看")
+    elif "authorization" not in request.headers and request.headers.get("x-csrf-token"):
+        from .fire_web import bound_member
+
+        return await bound_member(request)
     return await actor(request, db)
 
 

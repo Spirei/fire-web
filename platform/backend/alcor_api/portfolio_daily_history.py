@@ -1,8 +1,8 @@
 """Prepare closed sessions using the ledger owner's installed history source."""
 
+import logging
 from dataclasses import asdict
 from datetime import datetime, time, timedelta
-import logging
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -15,19 +15,30 @@ from .market_contract import ZONES, Query, digest, series_fingerprint
 DAY = timedelta(days=1)
 LOG = logging.getLogger(__name__)
 
+HELD_SECURITIES = """
+    SELECT p.owner_id,p.market,p.code
+    FROM portfolio_records p JOIN broker_accounts b ON b.owner_id=p.owner_id AND b.id=p.broker_account_id
+    WHERE p.deleted_at IS NULL AND p.qty>0 AND b.deleted_at IS NULL AND b.account_kind='real'
+      AND b.holding_source<>'official'
+      AND NOT EXISTS (SELECT 1 FROM native_ledger_heads h WHERE h.owner_id=p.owner_id)
+    UNION ALL
+    SELECT h.owner_id,p->>'market',p->>'code'
+    FROM native_ledger_heads h CROSS JOIN LATERAL jsonb_array_elements(h.snapshot->'positions') p
+    WHERE (p->>'quantity')::numeric>0
+"""
+
 
 async def prepare_due(authority, settled_through):
     db = authority.db
     async with db.connection() as conn:
         if await external_delivery_blocked(conn):
             return
-        candidates = await (await conn.execute("""
+        candidates = await (await conn.execute(f"""
+            WITH held AS ({HELD_SECURITIES})
             SELECT DISTINCT p.owner_id,p.market,p.code,c.next_check_at
-            FROM portfolio_records p JOIN broker_accounts b ON b.owner_id=p.owner_id AND b.id=p.broker_account_id
-            JOIN users u ON u.id=p.owner_id AND u.active
+            FROM held p JOIN users u ON u.id=p.owner_id AND u.active
             LEFT JOIN portfolio_daily_source_checks c ON c.owner_id=p.owner_id AND c.market=p.market AND c.code=p.code
-            WHERE p.deleted_at IS NULL AND p.qty>0 AND b.deleted_at IS NULL AND b.account_kind='real'
-                AND b.holding_source<>'official' AND p.market IN ('US','HK','CN')
+            WHERE p.market IN ('US','HK','CN')
                 AND (c.next_check_at IS NULL OR c.next_check_at<=clock_timestamp())
             ORDER BY c.next_check_at NULLS FIRST,p.owner_id,p.market,p.code LIMIT 12
         """)).fetchall()
@@ -133,8 +144,7 @@ async def demand_alive(conn, stream):
     if (query.get("kind"), query.get("frame"), query.get("adjust"), query.get("session"), query.get("instrument")) != (
             "bars", "day", "none", "REGULAR", "equity"):
         return False
-    return bool(await (await conn.execute("""
-        SELECT 1 FROM portfolio_records p JOIN broker_accounts b ON b.owner_id=p.owner_id AND b.id=p.broker_account_id
-        WHERE p.owner_id=%s AND p.market=%s AND p.code=%s AND p.deleted_at IS NULL AND p.qty>0
-        AND b.deleted_at IS NULL AND b.account_kind='real' AND b.holding_source<>'official' LIMIT 1
+    return bool(await (await conn.execute(f"""
+        WITH held AS ({HELD_SECURITIES})
+        SELECT 1 FROM held WHERE owner_id=%s AND market=%s AND code=%s LIMIT 1
     """, (stream["owner_id"], query["market"], query["code"]))).fetchone())

@@ -215,10 +215,10 @@ class AccountSignals:
     def __init__(self, db):
         self.db = db
 
-    async def read(self, who, expected_context=None, *, devices=False, legacy_watermarks=False):
+    async def read(self, who, expected_context=None, *, devices=False, legacy_watermarks=False, allow_fire_web=False):
         async with self.db.connection() as conn, conn.transaction():
             await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            scope, context, device = await guard(conn, who)
+            scope, context, device = await guard(conn, who, allow_fire_web=allow_fire_web)
             if expected_context is not None and expected_context != context:
                 raise HTTPException(403, "读取身份或实例已变化，请撤下旧内容")
             metadata = await (
@@ -284,14 +284,15 @@ class AccountSignals:
                     )
                 ).fetchall()
                 if cacheable:
-                    setattr(self.db, "_account_signal_catalog", (capture_verified, registrations))
+                    self.db._account_signal_catalog = capture_verified, registrations
             else:
                 capture_verified, registrations = cached
             domains = {}
             for domain in DOMAINS:
                 # The original App sync permission grants only these owner's
                 # opaque change cursors, never the contents of another domain.
-                authorized = legacy_watermarks or "new-web-owner" in scope["scopes"] or DOMAIN_SCOPES[domain] in scope["scopes"]
+                fire_web_scope = "legacy-web-owner" in scope["scopes"] and domain in {"portfolio", "watch", "brokers", "authorization"}
+                authorized = legacy_watermarks or "new-web-owner" in scope["scopes"] or fire_web_scope or DOMAIN_SCOPES[domain] in scope["scopes"]
                 sources = [row for row in registrations if row["domain"] == domain]
                 registered = {row["source_table"]: row for row in sources}
                 required = {

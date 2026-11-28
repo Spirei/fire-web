@@ -121,6 +121,47 @@ async def fx_inputs(conn, currencies, day, cutoff):
                                        "frozenAt": row["frozen_at"], "originalSha256": row["raw_sha256"]} for row in rows}
 
 
+async def native_valuation_input(conn, owner, cutoff):
+    adopted = await (await conn.execute("""
+        SELECT 1 FROM native_ledger_transactions WHERE owner_id=%s AND revision=1 AND created_at<%s
+    """, (owner, cutoff))).fetchone()
+    if not adopted:
+        return None, False
+    snapshot = await (await conn.execute("""
+        SELECT revision,recorded_at,positions,owner_cash FROM native_ledger_valuation_inputs
+        WHERE owner_id=%s AND recorded_at<%s ORDER BY recorded_at DESC,revision DESC LIMIT 1
+    """, (owner, cutoff))).fetchone()
+    return snapshot, True
+
+
+async def native_day_bridge(conn, owner, earlier, current, lower, cutoff):
+    """A newly booked fill explains the boundary only on its actual accounting day."""
+    from .native_trade_sync import order_time
+
+    rows = await (await conn.execute("""
+        SELECT request_id,event FROM native_ledger_transactions
+        WHERE owner_id=%s AND revision>%s AND revision<=%s ORDER BY revision LIMIT %s
+    """, (owner, earlier["revision"], current["revision"], MAX_POSTINGS + 1))).fetchall()
+    if len(rows) != current["revision"] - earlier["revision"] or len(rows) > MAX_POSTINGS:
+        return None
+    deltas = defaultdict(Decimal)
+    for row in rows:
+        event = row["event"]
+        if event["kind"] == "merge":
+            continue  # A presentation merge leaves the financial executions intact.
+        if event["kind"] != "trade":
+            return None
+        for order in event["orders"]:
+            status = order["status"]
+            if status == "deleted" and order.get("deletedFrom") == "filled":
+                return None
+            if status == "filled" and (order.get("editHistory") or not lower <= order_time(order["filledAt"]) < cutoff):
+                return None
+        for change in event["positions"]:
+            deltas[change["recordId"]] += Decimal(change["quantityAfter"]) - Decimal(change["quantityBefore"])
+    return deltas, [row["request_id"] for row in rows]
+
+
 async def calculate(conn, history, owner, kind, day):
     cutoff = boundary(day)
     lower = cutoff - DAY
@@ -144,8 +185,7 @@ async def calculate(conn, history, owner, kind, day):
     if len(accounts) > MAX_POSITIONS:
         issue("account_limit")
     account_ids = [row["id"] for row in accounts[:MAX_POSITIONS]]
-    if not account_ids:
-        issue("missing_account")
+
     records = await (await conn.execute("""
         SELECT p.id,p.code,p.name,p.market,p.qty,p.cost,p.broker_account_id,p.revision,p.source,p.updated_at,
                p.trade_tip_id,p.amendment_tip_id,p.fee_projection_id,p.position_transfer_id,
@@ -165,6 +205,31 @@ async def calculate(conn, history, owner, kind, day):
     if len(records) > MAX_POSITIONS:
         issue("position_limit")
     accounts_by_id = {row["id"]: row for row in accounts}
+    native, adopted = await native_valuation_input(conn, owner, cutoff) if kind == "real" else (None, False)
+    if adopted:
+        if native is None:
+            issue("native_valuation_input_missing")
+        else:
+            managed = {row["id"] for row in accounts if row["holding_source"] == "manual"}
+            records = [row for row in records if row["broker_account_id"] is not None
+                       and row["broker_account_id"] not in managed]
+            for position in native["positions"]:
+                quantity, cost = position["quantity"], position["unitCost"]
+                if quantity == "0":
+                    continue
+                records.append({
+                    "id": position["recordId"], "code": position["code"], "name": position["name"],
+                    "market": position["market"], "broker_account_id": position["brokerAccountId"],
+                    "qty": Decimal(quantity) if quantity is not None else None,
+                    "cost": Decimal(cost) if cost is not None else None,
+                    "revision": None, "source": "native_ledger", "updated_at": native["recorded_at"],
+                    "trade_tip_id": None, "amendment_tip_id": None, "fee_projection_id": None,
+                    "position_transfer_id": None, "scoped_revision": True,
+                })
+            if len(records) > MAX_POSITIONS and not any(item["reason"] == "position_limit" for item in missing):
+                issue("position_limit")
+    if not account_ids and not adopted:
+        issue("missing_account")
     for row in records[:MAX_POSITIONS]:
         rid = row["id"]
         same_revision = row["scoped_revision"]
@@ -179,9 +244,9 @@ async def calculate(conn, history, owner, kind, day):
         positions.append(item)
         if not same_revision:
             issue("position_revision_after_cutoff", recordId=rid)
-        elif row["broker_account_id"] is None:
+        elif row["broker_account_id"] not in accounts_by_id and row["source"] != "native_ledger":
             issue("unassigned_position", recordId=rid)
-        elif accounts_by_id[row["broker_account_id"]]["holding_source"] == "official":
+        elif accounts_by_id.get(row["broker_account_id"], {}).get("holding_source") == "official":
             issue("official_position_needs_statement", recordId=rid)
         elif row["qty"] is None:
             issue("missing_position_quantity", recordId=rid)
@@ -203,6 +268,8 @@ async def calculate(conn, history, owner, kind, day):
     opened = {(row["account_id"], row["currency"]) for row in openings}
     for account in accounts:
         for currency in account["currencies"]:
+            if native is not None and account["holding_source"] == "manual":
+                continue
             if (account["id"], currency) not in opened:
                 issue("missing_cash_opening", accountId=account["id"], currency=currency)
     balances = await (await conn.execute("""
@@ -211,7 +278,16 @@ async def calculate(conn, history, owner, kind, day):
         FROM cash_ledger_entries WHERE owner_id=%s AND account_kind=%s AND occurred_at<%s GROUP BY currency
         ORDER BY currency
     """, (lower, prior["captured_at"] if prior else None, owner, kind, cutoff))).fetchall()
-    cash.update({row["currency"]: row["balance"] for row in balances if row["balance"] is not None})
+    if native is not None:
+        if not native["owner_cash"]:
+            issue("missing_cash_opening")
+        for row in native["owner_cash"]:
+            if row["balance"] is None:
+                issue("missing_cash_opening", currency=row["currency"])
+            else:
+                cash[row["currency"]] = Decimal(row["balance"])
+    else:
+        cash.update({row["currency"]: row["balance"] for row in balances if row["balance"] is not None})
     postings = await (await conn.execute("""
         SELECT id,account_id,currency,kind,amount,occurred_at,created_at,request_id,source_trade_id,
                trade_amendment_id,affects_owner
@@ -237,6 +313,15 @@ async def calculate(conn, history, owner, kind, day):
         issue("missing_prior_equity")
     elif any(row["changed_prior"] for row in balances):
         issue("prior_period_posting_changed")
+    native_deltas, native_transactions = {}, []
+    if native is not None and prior and prior["result"].get("nativeLedgerRevision") != native["revision"]:
+        earlier, _ = await native_valuation_input(conn, owner, lower)
+        bridge = (await native_day_bridge(conn, owner, earlier, native, lower, cutoff)
+                  if earlier and earlier["revision"] == prior["result"].get("nativeLedgerRevision") else None)
+        if bridge is None:
+            issue("native_period_not_verified")
+        else:
+            native_deltas, native_transactions = bridge
     if any(row["affects_owner"] and row["kind"] not in (
         "opening", "external_deposit", "external_withdrawal", "trade_buy", "trade_sell", "trade_dividend", "allocation"
     ) for row in daily_postings):
@@ -245,7 +330,7 @@ async def calculate(conn, history, owner, kind, day):
         prior_qty = {row["recordId"]: Decimal(row["quantity"]) for row in prior["result"]["positions"] if row["quantity"] is not None}
         qty = {row["recordId"]: Decimal(row["quantity"]) for row in positions if row["quantity"] is not None}
         trade_ids = [row["source_trade_id"] for row in daily_postings if row["source_trade_id"]]
-        deltas = defaultdict(Decimal)
+        deltas = defaultdict(Decimal, native_deltas)
         if trade_ids:
             trades = await (await conn.execute("SELECT id,record_id,after_quantity-before_quantity AS delta FROM trade_ledger WHERE owner_id=%s AND id=ANY(%s)", (owner, trade_ids))).fetchall()
             for trade in trades:
@@ -258,13 +343,15 @@ async def calculate(conn, history, owner, kind, day):
     calendar = await calendar_result(conn, owner, kind, day, prior["result"]["positions"],
                                      positions, daily_postings) if pnl is not None and kind == "real" else None
     return packed({"day": day, "cutoff": cutoff, "accountKind": kind, "currency": "USD", "rule": "utc_close_nav_less_net_external_cash_v1",
-                   "state": "complete" if pnl is not None else "partial" if positions or balances else "missing",
+                   "state": "complete" if pnl is not None else "partial" if positions or cash or balances else "missing",
                    "pnl": pnl, "equity": value, "priorEquity": old_value, "externalFlow": flow,
                    "priorRevision": prior["revision"] if prior else None,
                    "positions": positions, "cashByCurrency": dict(cash), "closeValueByCurrency": dict(stock_values),
                    "externalFlowByCurrency": dict(external), "cashOpenings": openings, "cashPostings": daily_postings,
                    "cashPostingCount": sum(row["count"] for row in balances), "cashPostingsSha256": digest(packed(daily_postings)),
-                   "fx": fx, "missing": missing, **({"calendar": calendar} if calendar is not None else {})})
+                   "fx": fx, "missing": missing, **({"calendar": calendar} if calendar is not None else {}),
+                   **({"nativeLedgerRevision": native["revision"] if native else None,
+                       "nativeTransactionIds": native_transactions} if adopted else {})})
 
 
 async def capture_day(db, history, owner, kind, day, *, now=None):
@@ -306,8 +393,13 @@ async def capture_due(db, history, *, now=None, backfill=False):
     day = (now - CAPTURE_DELAY).date() - DAY
     async with db.connection() as conn:
         rows = await (await conn.execute("""
+            WITH scopes AS (
+                SELECT owner_id,account_kind,created_at,deleted_at FROM broker_accounts
+                UNION ALL
+                SELECT owner_id,'real',created_at,NULL FROM native_ledger_transactions WHERE revision=1
+            )
             SELECT b.owner_id,b.account_kind,d.day::date AS day
-            FROM broker_accounts b JOIN users u ON u.id=b.owner_id AND u.active
+            FROM scopes b JOIN users u ON u.id=b.owner_id AND u.active
             CROSS JOIN generate_series(%s::date::timestamp,%s::date::timestamp,interval '1 day') d(day)
             LEFT JOIN portfolio_daily_checks c ON c.owner_id=b.owner_id AND c.account_kind=b.account_kind AND c.valuation_day=d.day::date
             WHERE b.account_kind IN ('real','simulated') AND b.created_at<(d.day+interval '1 day') AT TIME ZONE 'UTC'

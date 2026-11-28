@@ -78,6 +78,7 @@ type FileDetail = { selection: Selection; kind: AccountKind; data: DailyDetail |
 
 const LABELS: Record<string, string> = {
   position: "持仓", trade: "成交", appFill: "App 成交", appOrder: "App 订单", declaration: "历史订单",
+  nativeOrder: "App 原生订单", nativeCash: "App 原生资金变动", nativeCorrection: "App 原生成交更正",
   cash: "资金分录", amendment: "成交更正", feeCorrection: "费用更正", fundReversal: "资金冲回", cashCorrection: "余额更正",
   transfer: "转仓", statement: "券商账单", orderFile: "订单原件", financialImport: "账本导入原件", historyImport: "迁移原件",
   buy: "买入", sell: "卖出", dividend: "股息", opening: "期初",
@@ -108,7 +109,8 @@ const REASONS: Record<string, string> = {
   unattributed_position_change: "持仓变动缺少相应成交依据", close_source_ambiguous: "收盘价有多个候选来源",
   close_source_unavailable: "行情授权不可用", unverified_close: "收盘价原件未通过验证", unsupported_market: "市场暂不支持日终估值",
   account_limit: "账户超过本次读取范围", position_limit: "持仓超过本次读取范围", cash_posting_limit: "流水超过本次读取范围",
-  missing_account: "缺少有效券商账户",
+  missing_account: "缺少有效券商账户", native_valuation_input_missing: "缺少日终时点的 App 账本记录",
+  native_period_not_verified: "App 账本变动尚缺当日盈亏核对依据",
 };
 const TRANSLATED: Record<string, string> = { same_currency: "同币种", native_per_usd: "每美元对应原币", same_day: "当日发布",
   weekend_carry_forward: "周末沿用周五报价", none: "不复权", REGULAR: "常规时段" };
@@ -119,6 +121,7 @@ const status = (value: string) => LABELS[value] ?? value;
 function rowTitle(row: LedgerRow) {
   const data = row.data;
   if (row.type === "position") return `${display(data.name)} · ${display(data.code)}`;
+  if (row.type === "nativeOrder") return `${display(data.name)} · ${display(data.side)} · ${display(data.status)}`;
   if (row.type === "trade") return `${display(data.side)} · ${display(data.quantity)} 股`;
   if (row.type === "cash") return `${display(data.kind)} · ${display(data.amount)} ${display(data.currency)}`;
   if (row.type === "orderFile") return display(data.filename);
@@ -127,8 +130,10 @@ function rowTitle(row: LedgerRow) {
   return status(row.type);
 }
 
-async function ownRequest(ownerId: string, path: string, signal: AbortSignal) {
-  const response = await fetch(`${ROOT}${path}`, { signal, cache: "no-store", headers: { "X-Alcor-Expected-Account": ownerId } });
+async function ownRequest(ownerId: string, path: string, signal: AbortSignal, sessionCsrf?: string) {
+  const headers: Record<string, string> = { "X-Alcor-Expected-Account": ownerId };
+  if (sessionCsrf) headers["X-CSRF-Token"] = sessionCsrf;
+  const response = await fetch(`${ROOT}${path}`, { signal, cache: "no-store", headers });
   if (!response.ok) {
     const value = await response.json().catch(() => null);
     throw Object.assign(new Error(typeof value?.error === "string" ? value.error : "读取失败，请重试"), { status: response.status });
@@ -392,7 +397,7 @@ export function InvestmentArchiveAction({ icon, title, description, children }: 
   </div>;
 }
 
-export default function InvestmentDataManager({ ownerId, archiveActions, resumeBackup }: { ownerId: string; archiveActions?: ReactNode; resumeBackup?: boolean }) {
+export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveActions, resumeBackup }: { ownerId: string; sessionCsrf: string; archiveActions?: ReactNode; resumeBackup?: boolean }) {
   const workspaceActive = useWorkspaceActive();
   const foreground = useWorkspaceForeground();
   const [folder, setFolder] = useState<Folder>(resumeBackup ? "archive" : "daily");
@@ -418,9 +423,9 @@ export default function InvestmentDataManager({ ownerId, archiveActions, resumeB
   const listItems = useRef<HTMLDivElement>(null);
   const path = directoryPath(folder, kind, { year, month }, pagination.starts[pagination.index] ?? null, positionMarket);
   const readDirectory = useCallback(async (key: string, signal: AbortSignal): Promise<DirectoryPage> => {
-    const response = await ownRequest(ownerId, key, signal);
+    const response = await ownRequest(ownerId, key, signal, sessionCsrf);
     return response.json();
-  }, [ownerId]);
+  }, [ownerId, sessionCsrf]);
   const { page, accessBlocked, error: listError, recheck, preload } = useInvestmentDirectoryPages({ path, foreground, read: readDirectory, resetPage });
   const next = page?.next;
   const loading = !page && !listError;
@@ -467,13 +472,13 @@ export default function InvestmentDataManager({ ownerId, archiveActions, resumeB
     const params = new URLSearchParams(daily ? { kind, day: selection.day, revision: String(selection.revision) }
       : { type: selection.type, id: selection.id });
     if (!daily && selection.revision !== undefined) params.set("revision", String(selection.revision));
-    void ownRequest(ownerId, `${daily ? "/daily-results" : "/records"}?${params}`, controller.signal)
+    void ownRequest(ownerId, `${daily ? "/daily-results" : "/records"}?${params}`, controller.signal, sessionCsrf)
       .then((response) => response.text()).then((source) => {
         if (!controller.signal.aborted) setDetail({ selection, kind, data: JSON.parse(source), source });
       })
       .catch((error) => { if (!controller.signal.aborted) setDetailError(error.message); });
     return () => controller.abort();
-  }, [kind, ownerId, selection]);
+  }, [kind, ownerId, selection, sessionCsrf]);
 
   function closeFile() {
     setSelection(null);

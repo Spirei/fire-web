@@ -493,6 +493,11 @@ async def test_private_ticker_binds_security_kind_owner_and_does_not_collect(quo
     items=response.json()['items'];assert items[0]['price']==120 and items[0]['secid']=='100.DJIA'
     assert items[1]['price'] is None and response.json()['collectionOnRead'] is False
     assert await hashes(app)==before and transport.calls==calls
+    app.state.db.settings.public_ticker = {}
+    fallback = await client.get('/api/fire/ticker')
+    assert fallback.status_code == 200, fallback.text
+    assert next(item for item in fallback.json()['items'] if item['secid'] == '100.DJIA')['price'] == 120
+    assert transport.calls == calls
     client.cookies.clear()
     assert (await client.get('/api/fire/ticker')).status_code==401
 

@@ -157,7 +157,8 @@
 .pagedRows { max-height: min(55dvh, 32rem); overflow-y: auto; }
 .pageNav { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 10px; border-top: 1px solid var(--data-edge); }
 .pageNav > span { min-width: 3.5rem; text-align: center; color: var(--data-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.placeholder { display: grid; gap: 16px; padding: 16px; }
+.placeholder { display: grid; gap: 16px; padding: 16px; animation: directory-loading-reveal 0s 180ms both; }
+@keyframes directory-loading-reveal { from { opacity: 0; } to { opacity: 1; } }
 .placeholder i { display: block; width: min(48%, 190px); height: 12px; border-radius: 4px; background: var(--data-hover); }
 .placeholder i:nth-child(2) { width: min(39%, 164px); }
 .placeholder i:nth-child(3) { width: min(43%, 178px); }

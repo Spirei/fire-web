@@ -14,12 +14,16 @@ def collection_revision(legacy, head):
     return min(MAX_REVISION, (1 << 52) + legacy + head['revision'])
 
 
+def changed_position_ids(head):
+    return {order['recordId'] for order in head['snapshot']['orders']
+            if order.get('deletedFrom', order['status']) == 'filled'} if head else set()
+
+
 def position_rows(rows, head):
     if not head:
         return rows
     existing = {row['id']: row for row in rows}
-    changed = {order['recordId'] for order in head['snapshot']['orders']
-               if order.get('deletedFrom', order['status']) == 'filled'}
+    changed = changed_position_ids(head)
     for item in head['snapshot']['positions']:
         identifier = item['recordId']
         if identifier not in changed:

@@ -11,7 +11,7 @@ from .fire_web import bound_member
 from .legacy_identity import assert_native_origin, envelope, native_identity
 from .market_contract import CURRENCIES, ZONES
 from .portfolio_series import packed
-from .security import lock_read_identity
+from .security import assert_expected_account, lock_read_identity
 
 PATH = "/api/v2/account-assets/analysis-days"
 WEB_PATH = "/api/fire/asset-analysis/trend"
@@ -131,11 +131,15 @@ def mount(app, db, authority):
                     ARRAY(SELECT DISTINCT v->'close'->>'marketCalendarRevision'
                         FROM jsonb_array_elements(l.result->'positions') v WHERE v->'close'->>'marketCalendarRevision' IS NOT NULL) AS calendars,
                     EXISTS(SELECT 1 FROM cash_ledger_entries e WHERE e.owner_id=%s AND e.account_kind='real'
-                        AND e.occurred_at<((l.valuation_day+1)::timestamp AT TIME ZONE 'UTC') AND e.created_at>l.captured_at) AS changed,
+                        AND e.occurred_at<((l.valuation_day+1)::timestamp AT TIME ZONE 'UTC') AND e.created_at>l.captured_at)
+                        OR (NOT l.result ? 'nativeLedgerRevision' AND EXISTS(
+                            SELECT 1 FROM native_ledger_transactions t WHERE t.owner_id=%s AND t.revision=1
+                            AND t.created_at<((l.valuation_day+1)::timestamp AT TIME ZONE 'UTC')
+                        )) AS changed,
                     (SELECT revision FROM market_calendar_active WHERE singleton) AS "activeCalendar"
                 FROM latest l ORDER BY l.valuation_day DESC
             """, (who.id, day + DAY if day is not None else before or date.max, 2 if day else MAX_DAYS + 1,
-                  web, day is not None, who.id))).fetchall()
+                  web, day is not None, who.id, who.id))).fetchall()
             if day is not None and (not rows or rows[0]["day"] != day):
                 rows = []
             allowed = set()
@@ -183,6 +187,7 @@ def mount(app, db, authority):
     async def web_trend(request: Request, response: Response):
         assert_native_origin(request, db.settings, web_session_cookies=True)
         who = await bound_member(request)
+        assert_expected_account(request, who.id)
         if request.query_params:
             raise HTTPException(400, "日终趋势查询参数无效")
         response.headers["Cache-Control"] = "no-store, private"

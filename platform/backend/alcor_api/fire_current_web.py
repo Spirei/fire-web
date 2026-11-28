@@ -40,9 +40,18 @@ Member = Annotated[Identity, Depends(member)]
 
 
 def ticker_items(config):
-    from .market_indices import index_identity
-    presentation=config.get('legacyPresentation',{})
-    configured=presentation.get('items') or config.get('items',[])
+    from .market_index_reads import NAMES
+    from .market_indices import INDEXES, index_identity
+
+    presentation = config.get('legacyPresentation', {})
+    configured = presentation.get('items', config.get('items'))
+    if configured is None:
+        # The signed-in workspace can use the licensed quote pool even when
+        # anonymous redistribution has not been configured.
+        configured = [
+            {'key': key, 'label': NAMES[key], 'market': market, 'secid': secid}
+            for key, (market, _, _, secid) in INDEXES.items()
+        ]
     items=[]
     for item in configured[:20]:
         identified=index_identity(item.get('market'),item.get('secid',item.get('legacySecid')))
@@ -51,7 +60,7 @@ def ticker_items(config):
 
 
 async def index_demand(request,who,items):
-    from .market_subscription_writes import Subscriptions,subscription_items
+    from .market_subscription_writes import Subscriptions, subscription_items
     raw=await body(request,('requestId',))
     if set(raw)!={'requestId'}:raise HTTPException(400,'指数需求字段无效')
     try:rid=UUID(str(raw['requestId']))
@@ -83,7 +92,6 @@ async def workspace_ticker(request: Request, who: Member):
     db = request.app.state.db
     config = getattr(db.settings, "public_ticker", {})
     presentation = config.get("legacyPresentation", {})
-    configured = presentation.get("items") or config.get("items", [])
     configured,items=ticker_items(config)
     result = await BatchQuotes(request.app.state.market_authority).read(
         who, items, include_market_cap=False, strict_sources=False, instrument="index",

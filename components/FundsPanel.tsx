@@ -96,7 +96,7 @@ export default function FundsPanel({ ownerId = "", holdingAssets, balanceOverrid
         if (!active()) return;
         if (json.code!==0 || !json.data?.balances || Array.isArray(json.data.balances) || Object.values(json.data.balances).some(value=>value!==null && (typeof value!=="number" || !Number.isFinite(value)))) throw Error("资金数据格式无效");
         recordsCache.current.clear(); setRecordsReadVersion(value=>value+1);
-        const next={...EMPTY,...json.data.balances};
+        const next=json.data.balances;
         const cash=json.data.cardCash ?? {USD:null};
         balanceReceiptAt.current=Date.now();
         setBalances(next); setSummaries({...EMPTY_SUMMARY,...json.data.summaries}); setReadError(""); onBalancesChange(next,cash);

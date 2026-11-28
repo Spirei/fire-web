@@ -4,7 +4,7 @@ const esbuild=require('esbuild'),postcss=require('postcss'),tailwind=require('ta
 const {chromium}=require('@playwright/test');
 const root=path.resolve(__dirname,'..');
 (async()=>{
- const fixture=`import React,{useState,useCallback} from 'react';import {createRoot} from 'react-dom/client';import QuotesView from '@/components/views/QuotesView';import FxConverter from '@/components/FxConverter';import AssetPnlAnalysis from '@/components/AssetPnlAnalysis';import AssetAnalysisView from '@/components/views/AssetAnalysisView';import {FUND_CURRENCIES} from '@/lib/fundCurrencies';import {quoteInstrumentKey} from '@/lib/quoteBatches';import {intradayCacheKey} from '@/lib/intradayCache';
+ const fixture=`import React,{useState,useCallback} from 'react';import {createRoot} from 'react-dom/client';import QuotesView from '@/components/views/QuotesView';import FxConverter from '@/components/FxConverter';import AssetPnlAnalysis from '@/components/AssetPnlAnalysis';import AssetAnalysisView from '@/components/views/AssetAnalysisView';import {FUND_CURRENCIES} from '@/lib/fundCurrencies';import {quoteInstrumentKey} from '@/lib/quoteBatches';import {intradayCacheKey} from '@/lib/intradayCache';import {useInvestmentDirectoryPages} from '@/lib/useInvestmentDirectoryPages';
  window.chartReads=0;window.rateReads=0;window.reads=0;window.writes=0;window.writePaths=[];window.fundFailure=true;window.chartMode='ready';window.rateMode='ready';window.fixtureRates={USD:1};window.owner='owner-uuid';
  const record={id:'row-uuid',market:'HK',code:'00700',name:'Synthetic Holding',qty:10,cost:10,price:20,type:'holdings',watchlist:true,group:'Synthetic',updatedAt:'2026-10-01T00:00:00Z'};
  const chart={date:'2026-11-12',source:'controlled',points:[{time:'09:30',price:10},{time:'09:31',price:15}]};
@@ -20,7 +20,20 @@ const root=path.resolve(__dirname,'..');
  if(url.includes('/settings'))return Response.json({settings:{}});
  if(url.includes('/assets'))return Response.json({assets:[]});
  if(url==='/api/records')return Response.json([record]);return Response.json({code:0,data:[],items:[]});};
- function Harness(){const[rows,setRows]=useState([record]);window.changeCode=()=>setRows([{...record,code:'00005'}]);window.changeOwner=()=>setRows([{...record,name:'Changed'}]);const onAdd=useCallback(async()=>true,[]);return <div className="records-app"><div className="records-content"><div className="tab-panel" data-workspace="assets">{location.search.includes('fx')?<FxConverter/>:location.search.includes('dashboard')?<AssetAnalysisView records={rows} quotes={{}} livePrice={r=>r.price} user={{id:window.owner,username:'synthetic',role:'user'}}/>:location.search.includes('pnl')?<AssetPnlAnalysis ownerId={window.owner} initialRecords={rows} initialQuotes={{}}/>:<QuotesView ownerId={window.owner} initialNow={Date.now()} records={rows} quotes={{}} quoteAt="" refreshing={false} refreshQuotes={()=>{}} onAddMatch={onAdd} groups={[]} onToggleWatch={onAdd}/>}</div></div></div>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
+ function Directory(){
+   const [foreground,setForeground]=useState(true);
+   const [stamp,setStamp]=useState(0);
+   window.showDirectory=setForeground;
+   window.expireDirectory=()=>window.dispatchEvent(new Event('fire:records-updated'));
+   const read=useCallback(async ()=>{
+     if(window.directoryDenied) throw Object.assign(new Error('账号已变化'),{status:403});
+     if(!window.directoryHold)return '2026';
+     return new Promise(resolve=>window.releaseDirectory=()=>resolve('2027'));
+   },[]);
+   const {page,error}=useInvestmentDirectoryPages({path:'/daily-results?folders=true',foreground,read,resetPage:useCallback(()=>setStamp(v=>v+1),[])});
+   return <div hidden={!foreground} data-attempt={stamp}>{error||page||'正在读取文件列表'}</div>;
+ }
+ function Harness(){const[rows,setRows]=useState([record]);window.changeCode=()=>setRows([{...record,code:'00005'}]);window.changeOwner=()=>setRows([{...record,name:'Changed'}]);const onAdd=useCallback(async()=>true,[]);return <div className="records-app"><div className="records-content"><div className="tab-panel" data-workspace="assets">{location.search.includes('directory')?<Directory/>:location.search.includes('fx')?<FxConverter/>:location.search.includes('dashboard')?<AssetAnalysisView records={rows} quotes={{}} livePrice={r=>r.price} user={{id:window.owner,username:'synthetic',role:'user'}}/>:location.search.includes('pnl')?<AssetPnlAnalysis ownerId={window.owner} initialRecords={rows} initialQuotes={{}}/>:<QuotesView ownerId={window.owner} initialNow={Date.now()} records={rows} quotes={{}} quoteAt="" refreshing={false} refreshQuotes={()=>{}} onAddMatch={onAdd} groups={[]} onToggleWatch={onAdd}/>}</div></div></div>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
  const workspace=`export const useWorkspaceActive=()=>true;export const useWorkspaceSearchParams=()=>new URLSearchParams(location.search);export const useWorkspaceLocationGuard=()=>()=>true;export const useWorkspaceScrollRef=()=>({current:null});export const useWorkspaceState=()=>null;`;
  const js=await esbuild.build({stdin:{contents:fixture,resolveDir:root,loader:'tsx'},bundle:true,write:false,outfile:'fixture.js',jsx:'automatic',alias:{'@':root},define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'context',setup(b){b.onResolve({filter:/^(?:@\/lib\/workspacePanel|.*\/workspacePanel)$/},()=>({path:'workspace',namespace:'mock'}));b.onResolve({filter:/^next\/navigation$/},()=>({path:'next',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},args=>({contents:args.path==='workspace'?workspace:`export const useRouter=()=>({push:()=>{},replace:()=>{},refresh:()=>{}});export const useSearchParams=()=>new URLSearchParams(location.search);export const usePathname=()=>location.pathname;`,loader:'js'}));}}]});
  const mod={exports:{}};new Function('exports','require',ts.transpileModule(fs.readFileSync('tailwind.config.ts','utf8'),{compilerOptions:{module:1}}).outputText)(mod.exports,require);
@@ -32,6 +45,18 @@ const root=path.resolve(__dirname,'..');
   browser=await chromium.launch({headless:true,executablePath:process.platform==='darwin'?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':undefined});
   const page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const base='http://127.0.0.1:'+server.address().port;
+  await page.goto(base+'/?directory');
+  await page.getByText('2026',{exact:true}).waitFor();
+  await page.evaluate(()=>window.showDirectory(false));
+  await page.getByText('2026',{exact:true}).waitFor({state:'hidden'});
+  await page.evaluate(()=>{window.directoryHold=true;window.expireDirectory();window.showDirectory(true);});
+  await page.waitForFunction(()=>typeof window.releaseDirectory==='function');
+  assert(await page.getByText('2026',{exact:true}).isVisible(),'re-entering while a stale directory refreshes keeps the last page visible');
+  assert.equal(await page.getByText('正在读取文件列表',{exact:true}).count(),0);
+  await page.evaluate(()=>window.releaseDirectory());await page.getByText('2027',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.directoryDenied=true;window.expireDirectory();});
+  await page.getByText('账号已变化',{exact:true}).waitFor();
+  assert.equal(await page.getByText('2027',{exact:true}).count(),0,'denied access retires the cached page');
   await page.goto(base);await page.getByText('Synthetic Holding',{exact:true}).waitFor();
   await page.waitForFunction(()=>window.chartReads===1);await page.locator('.mini-trend-line').waitFor();
   assert.equal(await page.locator('.mini-trend-line').count(),1);

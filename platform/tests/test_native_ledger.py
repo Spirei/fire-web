@@ -3,6 +3,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import httpx
 import pytest
 import pytest_asyncio
 from psycopg.errors import CheckViolation
@@ -74,7 +75,7 @@ async def adopt(client, headers, baseline):
 
 
 @pytest.mark.asyncio
-async def test_backdated_trade_changes_all_views_once_across_devices(client, admin, db):
+async def test_backdated_trade_changes_all_views_once_across_devices(client, admin, db, app, monkeypatch):
     broker, record = await setup(client, amount='0', qty='18', cost=None)
     identifier = record['id']
     phone = await native_headers(db, admin, SCOPES)
@@ -88,6 +89,7 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
     async with db.connection() as conn:
         assert not await (await conn.execute('SELECT 1 FROM native_ledger_heads')).fetchone()
     await adopt(client, phone, baseline)
+    signals_before = (await client.get('/api/account/changes')).json()['revisions']['portfolio']
     at = '2026-10-28T22:50:00+08:00'
     fill = order(identifier, broker, at=at)
     body = trade(1, fill, '18', '33', '0', '-4501.05')
@@ -135,6 +137,50 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
     flat = await data(client.get('/api/v2/orders?includeAppOrders=1', headers=other_phone))
     assert [(item['id'], item['orderNo']) for item in flat['orders']] == [(fill['tradeId'], number)]
     assert flat['coverage']['available'] == 1
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url='http://testserver',
+                                 headers={'Origin': 'http://testserver'}) as web:
+        login = await web.post('/api/auth/login', json={'username': 'AdminOne', 'password': 'Synthetic9Pass'})
+        assert login.status_code == 200, login.text
+        session = (await web.get('/api/fire/session')).json()
+        web.headers.update({'X-CSRF-Token': session['csrf'], 'X-Alcor-Expected-Account': admin})
+        changes = await web.get('/api/account/changes')
+        assert changes.status_code == 200, changes.text
+        assert changes.json()['revisions']['portfolio'] > signals_before
+        assert (await web.get('/api/fire/funds')).json()['balances'] == {'USD': -4501.05}
+        for suffix in ('?balancesOnly=1', '?limit=1'):
+            assert (await data(web.get('/api/v1/funds' + suffix)))['balances'] == {'USD': -4501.05}
+        assert (await web.get('/api/records')).json()[0]['qty'] == 33
+        records = '/api/personal-data-transfer/records'
+        archived = await web.get(records, params={'type': 'position', 'id': identifier})
+        assert archived.status_code == 200, archived.text
+        assert archived.json()['data']['qty'] == '33'
+        folders = await web.get(records, params={'section': 'positions', 'groupBy': 'market'})
+        assert folders.json()['items'] == [{'market': 'US', 'count': 1}]
+        for section, expected_id in [('positions', identifier), ('trades', fill['tradeId']), ('funds', body['requestId'])]:
+            listing = await web.get(records, params={'section': section})
+            assert listing.status_code == 200, listing.text
+            assert any(row['id'] == expected_id for row in listing.json()['items'])
+        assert (await web.get(records, params={'section': 'positions'},
+                              headers={'X-Alcor-Expected-Account': 'different'})).status_code == 403
+
+        from alcor_api import portfolio_daily
+
+        async def observed_close(_conn, _history, _owner, _row, day):
+            return {'currency': 'USD', 'value': '200', 'tradeDay': day.isoformat()}, None
+
+        monkeypatch.setattr(portfolio_daily, 'close_input', observed_close)
+        day = datetime.now(UTC).date()
+        for valuation_day in (day, day + timedelta(days=1)):
+            value = await portfolio_daily.capture_day(db, None, admin, 'real', valuation_day,
+                                                       now=portfolio_daily.boundary(valuation_day) + timedelta(hours=1))
+            assert value['nativeLedgerRevision'] == 2
+            assert value['cashByCurrency'] == {'USD': '-4501.05'}
+            assert value['equity'] == '2098.95'
+        history = await web.get('/api/fire/asset-analysis/trend')
+        assert history.status_code == 200, history.text
+        assert [(row['equity'], row['pnl']) for row in history.json()['items'][:2]] == [('2098.95', '0.00'), ('2098.95', None)]
+
     other_owner = await create_user(db.settings, 'other-ledger', 'other-ledger-test-password-1')
     unauthorized = await native_headers(db, other_owner, 'portfolio.read')
     await data(client.get(path, headers=unauthorized), 404)

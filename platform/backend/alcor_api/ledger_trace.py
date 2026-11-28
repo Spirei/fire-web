@@ -12,6 +12,9 @@ from fastapi.responses import Response
 from psycopg import sql
 
 from .card_preferences_protocol import wire_response
+from .native_ledger import ledger_head
+from .native_ledger_projection import changed_position_ids, position_rows
+from .native_trade_sync import order_projection
 from .personal_ledger_archive import PRIVATE, investment_file_actor
 from .portfolio_series import packed
 from .security import assert_expected_account, lock_read_identity
@@ -31,6 +34,8 @@ TYPES = {
     "trade": RecordType("trades", "trade_ledger", "id", "occurred_at", "side quantity price amount fees currency source record_id account_id"),
     "appFill": RecordType("trades", "native_synced_fills", "trade_id", "occurred_at", "fill synced_at"),
     "appOrder": RecordType("trades", "native_synced_orders", "order_id", "occurred_at", "status item synced_at"),
+    "nativeCash": RecordType("funds", "native_ledger_transactions", "request_id", "created_at", "event revision"),
+    "nativeCorrection": RecordType("corrections", "native_ledger_transactions", "request_id", "created_at", "event revision"),
     "declaration": RecordType("trades", "personal_order_declarations", "id", "created_at", "record_id raw"),
     "cash": RecordType("funds", "cash_ledger_entries", "id", "occurred_at", "kind amount currency account_id request_id source_trade_id"),
     "amendment": RecordType("corrections", "trade_amendments", "id", "created_at", "action trade_id record_id previous_amendment_id request_id"),
@@ -43,6 +48,13 @@ TYPES = {
     "financialImport": RecordType("originals", "financial_import_sources", "id", "created_at", "source_instance source_version sha256"),
     "historyImport": RecordType("originals", "database_migration_history_imports", "request_id", "created_at", "source_instance source_sha256 result"),
 }
+
+NATIVE_ORDER = "nativeOrder"
+NATIVE_CASH_FILTER = sql.SQL("jsonb_array_length(COALESCE(event->'cash', '[]'::jsonb)) > 0")
+NATIVE_CORRECTION_FILTER = sql.SQL(
+    """jsonb_path_exists(event, '$.orders[*] ? (@.editHistory != null || @.deletedFrom == "filled")')"""
+)
+
 
 # List only actual identifiers found in storage. A manually registered row may
 # have no external original, and the API never assigns one by matching names.
@@ -112,6 +124,10 @@ async def original_file(conn, owner, kind, identifier):
     return raw, row["filename"], row["checksum"]
 
 
+def native_event_filter(kind):
+    return {"nativeCash": NATIVE_CASH_FILTER, "nativeCorrection": NATIVE_CORRECTION_FILTER}.get(kind)
+
+
 def summary_sql(kind, spec):
     pairs = [sql.SQL("{}, to_jsonb(t)->{}").format(sql.Literal(field), sql.Literal(field))
              for field in spec.fields.split()]
@@ -124,6 +140,8 @@ def summary_sql(kind, spec):
         query += sql.SQL(" AND NOT EXISTS (SELECT 1 FROM native_synced_orders o WHERE o.owner_id=t.owner_id AND o.order_id=t.trade_id)")
     if kind == "appOrder":
         query += sql.SQL(" AND t.status<>'deleted'")
+    if condition := native_event_filter(kind):
+        query += sql.SQL(" AND ") + condition
     return query
 
 
@@ -131,22 +149,70 @@ def decoded(row):
     return {**row, "data": json.loads(row["data"], parse_float=Decimal, parse_int=Decimal)}
 
 
-async def list_position_folders(conn, owner):
+async def native_positions(conn, owner, head):
+    ids = sorted(changed_position_ids(head))
+    if not ids:
+        return []
+    prior = await (await conn.execute(
+        "SELECT id,revision FROM portfolio_records WHERE owner_id=%s AND id=ANY(%s)", (owner, ids),
+    )).fetchall()
+    return position_rows(prior, head)
+
+
+def position_market(row):
+    return "brokers" if row["market"] == "US" and row["code"].upper() in {"IBKR", "SCHW"} else row["market"]
+
+
+def position_entry(row):
+    fields = TYPES["position"].fields.split() + ["code", "account_market"]
+    return {"type": "position", "id": row["id"], "at": row["updated_at"],
+            "data": {field: row.get(field) for field in fields}}
+
+
+def order_entries(head):
+    if head:
+        for item in head["snapshot"]["orders"]:
+            if item["status"] != "deleted":
+                yield {"type": NATIVE_ORDER, "id": item["tradeId"],
+                       "at": datetime.fromisoformat(item.get("filledAt") or item["createdAt"]),
+                       "data": {key: item[key] for key in ("recordId", "name", "code", "market", "side", "status")}}
+
+
+def entry_key(row):
+    return row["at"], row["type"], row["id"]
+
+
+async def list_position_folders(conn, owner, head):
+    positions = await native_positions(conn, owner, head)
     rows = await (await conn.execute(sql.SQL(
-        "SELECT {} AS market, COUNT(*) AS count FROM portfolio_records t WHERE owner_id=%s GROUP BY 1 ORDER BY 1"
-    ).format(POSITION_FOLDER), (owner,))).fetchall()
-    return {"items": rows, "next": None}
+        "SELECT {} AS market, COUNT(*) AS count FROM portfolio_records t "
+        "WHERE owner_id=%s AND NOT (id=ANY(%s)) GROUP BY 1"
+    ).format(POSITION_FOLDER), (owner, [row["id"] for row in positions]))).fetchall()
+    counts = {row["market"]: row["count"] for row in rows}
+    for row in positions:
+        market = position_market(row)
+        counts[market] = counts.get(market, 0) + 1
+    return {"items": [{"market": market, "count": counts[market]} for market in sorted(counts)], "next": None}
 
 
-async def list_records(conn, owner, section, before, market=None):
+async def list_records(conn, owner, section, before, market=None, head=None):
     kinds = {kind: spec for kind, spec in TYPES.items() if spec.section == section}
     if not kinds:
         raise HTTPException(400, "未知数据分类")
+    positions = await native_positions(conn, owner, head) if section == "positions" else []
+    orders = list(order_entries(head)) if section == "trades" else []
+    native_order_ids = [item["tradeId"] for item in head["snapshot"]["orders"]] if head and section == "trades" else []
     queries = []
     params = []
     for kind, spec in kinds.items():
         query = summary_sql(kind, spec)
         params.append(owner)
+        if kind == "position" and positions:
+            query += sql.SQL(" AND NOT (t.id=ANY(%s))")
+            params.append([row["id"] for row in positions])
+        if kind in ("appOrder", "appFill", "trade") and native_order_ids:
+            query += sql.SQL(" AND NOT ({}::text=ANY(%s))").format(sql.Identifier(spec.key))
+            params.append(native_order_ids)
         if market is not None:
             query += sql.SQL(" AND ({})=%s").format(POSITION_FOLDER)
             params.append(market)
@@ -157,18 +223,35 @@ async def list_records(conn, owner, section, before, market=None):
         queries.append(sql.SQL("({} ORDER BY at DESC,id DESC LIMIT {})").format(query, sql.Literal(LIMIT + 1)))
     rows = await (await conn.execute(sql.SQL("SELECT * FROM ({}) entries ORDER BY at DESC,type DESC,id DESC LIMIT {}").format(
         sql.SQL(" UNION ALL ").join(queries), sql.Literal(LIMIT + 1)), params)).fetchall()
-    tail = rows[LIMIT - 1] if len(rows) > LIMIT else None
-    return packed({"items": [decoded(row) for row in rows[:LIMIT]],
-                   "next": [tail[key] for key in ("at", "type", "id")] if tail else None})
+    projected = orders + [position_entry(row) for row in positions if market is None or position_market(row) == market]
+    items = [decoded(row) for row in rows] + [row for row in projected if before is None or entry_key(row) < before]
+    items.sort(key=entry_key, reverse=True)
+    return packed({"items": items[:LIMIT], "next": entry_key(items[LIMIT - 1]) if len(items) > LIMIT else None})
 
 
-async def detail(conn, owner, kind, identifier, revision=None):
+async def detail(conn, owner, kind, identifier, revision=None, head=None):
+    if kind == NATIVE_ORDER:
+        if head:
+            snapshot = head["snapshot"]
+            for item in snapshot["orders"]:
+                if item["tradeId"] == identifier and item["status"] != "deleted":
+                    data = order_projection(item, history=snapshot.get("orderHistory", {}).get(identifier),
+                                            order_number=snapshot.get("orderNumbers", {}).get(identifier))
+                    links = [{"type": "position", "id": item["recordId"], "field": "record_id"}]
+                    return packed({"type": kind, "id": identifier, "data": {**data, "item": item}, "links": links})
+        raise HTTPException(404, "找不到本人的这条记录")
+    if kind == "position" and identifier in changed_position_ids(head):
+        row = next(row for row in await native_positions(conn, owner, head) if row["id"] == identifier)
+        if revision is None or revision == row["revision"]:
+            return packed({"type": kind, "id": identifier, "data": position_entry(row)["data"], "links": []})
     spec = TYPES.get(kind)
     if not spec:
         raise HTTPException(400, "未知记录类型")
     query = sql.SQL("SELECT (to_jsonb(t) - ARRAY['raw','source_bytes','evidence_raw','authorization_binding','originals','rows']::text[])::text AS data "
                     "FROM {} t WHERE owner_id=%s AND {}::text=%s").format(
         sql.Identifier(spec.table), sql.Identifier(spec.key))
+    if condition := native_event_filter(kind):
+        query += sql.SQL(" AND ") + condition
     if kind == "appOrder":
         query += sql.SQL(" AND t.status<>'deleted'")
     if kind == "appFill":
@@ -261,7 +344,7 @@ def mount_ledger_trace(app, db):
             who = await investment_file_actor(request, db)
             assert_expected_account(request, who.id)
             cursor = (beforeAt, beforeType, beforeId) if beforeAt else None
-            if (beforeAt and (beforeAt.tzinfo is None or beforeType not in TYPES or not beforeId)
+            if (beforeAt and (beforeAt.tzinfo is None or (beforeType not in TYPES and beforeType != NATIVE_ORDER) or not beforeId)
                     or not beforeAt and (beforeId or beforeType) or len(id) > 200 or len(beforeId) > 200
                     or (not section and not (type and id)) or (section and (type or id))
                     or (groupBy and (groupBy != "market" or section != "positions" or beforeAt or market is not None))
@@ -271,12 +354,13 @@ def mount_ledger_trace(app, db):
             async with db.connection() as conn, conn.transaction():
                 await conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                 await lock_read_identity(conn, who)
+                head = await ledger_head(conn, who.id) if section in {"positions", "trades"} or type in {"position", NATIVE_ORDER} else None
                 if groupBy:
-                    value = await list_position_folders(conn, who.id)
+                    value = await list_position_folders(conn, who.id, head)
                 elif section:
-                    value = await list_records(conn, who.id, section, cursor, market)
+                    value = await list_records(conn, who.id, section, cursor, market, head)
                 else:
-                    value = await detail(conn, who.id, type, id, revision)
+                    value = await detail(conn, who.id, type, id, revision, head)
             return wire_response(value, PRIVATE)
         except HTTPException as exc:
             return wire_response({"error": exc.detail}, {**PRIVATE, **(exc.headers or {})}, exc.status_code)

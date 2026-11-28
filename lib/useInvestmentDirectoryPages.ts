@@ -60,11 +60,14 @@ export function useInvestmentDirectoryPages<Page>({ path, foreground, read, rese
   useEffect(() => () => {
     cancel();
     cache.current.clear();
-  }, [cancel, foreground, read]);
+  }, [cancel, read]);
+  useEffect(() => {
+    if (!foreground) cancel();
+  }, [cancel, foreground]);
   useEffect(() => {
     const invalidate = () => {
       cancel();
-      cache.current.clear();
+      for (const saved of cache.current.values()) saved.at = 0;
       resetPage();
       setAttempt(value => value + 1);
     };
@@ -102,7 +105,8 @@ export function useInvestmentDirectoryPages<Page>({ path, foreground, read, rese
     error: accessError ?? (error?.path === path ? error.message : undefined),
     recheck,
     preload: useCallback(async (key: string) => {
-      if (!cache.current.has(key)) await load(key);
+      const saved = cache.current.get(key);
+      if (!saved || Date.now() - saved.at >= FRESH_FOR) await load(key);
     }, [load]),
   };
 }

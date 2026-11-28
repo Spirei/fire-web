@@ -1,6 +1,8 @@
 "use client";
 import { GlobalSettingsEditor, mergeVisibleOrder } from "@/lib/globalSettingsEditor";
-import { platformRequest } from "@/lib/platformRequest";
+import { PlatformRequestError, platformRequest } from "@/lib/platformRequest";
+import { accountReadHeaders } from "@/lib/privateReadContext";
+import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
 import Pagination from "@/components/Pagination";
 import { IconButton, Capsule } from "@/components/Capsule";
 
@@ -8,7 +10,6 @@ import { usePersistedState } from "@/lib/usePersistedState";
 
 import { useWorkspaceSearchParams as useSearchParams, useWorkspaceLocationGuard, useWorkspaceActive } from "@/lib/workspacePanel";
 
-import { sharedRead } from "@/lib/sharedRead";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fmtMoney, fmtMoneyCompact, fmtPct, fmtPrice, fmtQty } from "@/lib/format";
 import {
@@ -284,26 +285,37 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
     window.dispatchEvent(new Event("fire:rates-updated"));
   }, []);
 
+  const foreground = useWorkspaceForeground();
+  const cashRequest = useRef<AbortController | null>(null);
   const loadFundBalances = useCallback(async () => {
+    cashRequest.current?.abort();
+    const controller = new AbortController();
+    cashRequest.current = controller;
     try {
-      const res = await sharedRead("/api/v1/funds?limit=1");
-      const json = res.ok ? await res.json() : null;
-      if (json?.data?.balances) setFundBalances(json.data.balances); else setFundBalances({});
-    } catch {
-      setFundBalances({});
+      const response = await platformRequest<{ data: { balances: Record<string, number | null> } }>(
+        "/api/v1/funds?balancesOnly=1", { signal: controller.signal, headers: accountReadHeaders(ownerId) }, 10000,
+      );
+      if (!controller.signal.aborted && response?.data?.balances) setFundBalances(response.data.balances);
+    } catch (error) {
+      if (!controller.signal.aborted && error instanceof PlatformRequestError && [401, 403].includes(error.status ?? 0)) {
+        setFundBalances({});
+      }
+    } finally {
+      if (cashRequest.current === controller) cashRequest.current = null;
     }
-  }, []);
+  }, [ownerId]);
 
   useEffect(() => {
-    void loadFundBalances();
+    if (!foreground) return;
     const refresh = () => void loadFundBalances();
-    window.addEventListener("fire:orders-updated", refresh);
-    window.addEventListener("fire:records-updated", refresh);
+    refresh();
+    const events = ["fire:orders-updated", "fire:records-updated", "fire:funds-updated"];
+    for (const event of events) window.addEventListener(event, refresh);
     return () => {
-      window.removeEventListener("fire:orders-updated", refresh);
-      window.removeEventListener("fire:records-updated", refresh);
+      cashRequest.current?.abort();
+      for (const event of events) window.removeEventListener(event, refresh);
     };
-  }, [loadFundBalances]);
+  }, [foreground, loadFundBalances]);
 
   const refreshAccount = useCallback(async () => {
     await Promise.allSettled([loadRates(), loadFundBalances(), refreshQuotes?.({ force: true }) ?? Promise.resolve()]);
@@ -713,20 +725,30 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
     }
   }
 
-  const loadOrders = async (recordId = selectedHolding?.id) => {
-    if (!recordId) return;
+  const orderRequest = useRef<AbortController | null>(null);
+  const loadOrders = useCallback(async (recordId: string) => {
+    orderRequest.current?.abort();
+    const controller = new AbortController();
+    orderRequest.current = controller;
     setOrdersLoading(true);
     try {
-      const res = await fetch(`/api/v1/orders?scope=all&recordId=${encodeURIComponent(recordId)}&limit=500`, { cache: "no-store" });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || data?.code !== 0) throw new Error(data?.message || "订单加载失败");
-      setOrders(Array.isArray(data?.data?.orders) ? data.data.orders : []);
+      const data = await platformRequest<{ code: number; data: { orders: TradeOrder[] } }>(
+        `/api/v1/orders?scope=all&recordId=${encodeURIComponent(recordId)}&limit=500&includeAppOrders=1`,
+        { signal: controller.signal, headers: accountReadHeaders(ownerId) }, 10000,
+      );
+      if (data.code !== 0 || !Array.isArray(data.data?.orders)) throw new Error("订单加载失败");
+      if (!controller.signal.aborted) setOrders(data.data.orders);
     } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error instanceof PlatformRequestError && [401, 403].includes(error.status ?? 0)) setOrders([]);
       showToast(error instanceof Error ? error.message : "订单加载失败", "err");
     } finally {
-      setOrdersLoading(false);
+      if (orderRequest.current === controller) {
+        orderRequest.current = null;
+        setOrdersLoading(false);
+      }
     }
-  };
+  }, [ownerId]);
 
   async function deleteHoldingOrder(order: TradeOrder) {
     if (!selectedHolding) return;
@@ -750,10 +772,17 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
     }
   }
 
+  const selectedRecordId = selectedHolding?.id;
   useEffect(() => {
-    if (selectedHolding) void loadOrders(selectedHolding.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedHolding?.id]);
+    if (!selectedRecordId || !foreground) return;
+    const refresh = () => void loadOrders(selectedRecordId);
+    refresh();
+    window.addEventListener("fire:records-updated", refresh);
+    return () => {
+      orderRequest.current?.abort();
+      window.removeEventListener("fire:records-updated", refresh);
+    };
+  }, [selectedRecordId, foreground, loadOrders]);
 
   useEffect(() => {
     function syncHoldingFromUrl() {

@@ -139,6 +139,28 @@ class LegacyFunds:
         overview = await self.overview.on_connection(conn, who)
         from .legacy_registered_cash import read_registered_cash
         registered = await read_registered_cash(conn, who, self.db.settings, overview)
+        from .native_ledger import ledger_head
+        from .native_ledger_projection import cash_overview
+
+        head = await ledger_head(conn, who.id)
+        if head:
+            effective = cash_overview(overview, head)
+            real = next(book for book in effective['books'] if book['accountKind'] == 'real')
+            values = {row['currency']: legacy_amount(row['ownerBalance']) for row in real['currencies']}
+            simulated = next(book for book in effective['books'] if book['accountKind'] == 'simulated')
+            balances = values or dict.fromkeys(CURRENCIES)
+            if simulated['currencies']:
+                balances = dict.fromkeys(balances.keys() | {row['currency'] for row in simulated['currencies']})
+            card = registered.dto if registered and registered.dto['accountKind'] == 'real' else {}
+            return {
+                'balances': balances, 'summaries': {code: dict.fromkeys(
+                    ('openingAsset', 'cashNetFlow', 'stockNetFlow', 'otherNetFlow')) for code in balances},
+                'cardCash': card.get('cardCash', dict.fromkeys(CURRENCIES)),
+                'cardCashCoverageKnown': card.get('cardCashCoverageKnown', False),
+                'snapshotRevision': effective['snapshotRevision'],
+                'coverageScope': 'app_native_ledger', 'historicalCoverageKnown': False,
+                'unboundLegacyGlobalCashIncluded': False, 'accountKindsCombined': False,
+            }
         if registered is not None:
             return registered.dto
         scopes = {}

@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .account_signals import AccountSignals
 from .legacy_identity import assert_native_origin, native_identity
-from .security import identity
+from .security import assert_expected_account, identity
 
 
 def mount_account_signals(app, settings, db):
@@ -19,7 +19,7 @@ def mount_account_signals(app, settings, db):
         try:
             from .legacy_optional_credentials import credentials_present
             credentials_present(request, platform=not native)
-            assert_native_origin(request, settings)
+            assert_native_origin(request, settings, web_session_cookies=not native and not devices)
             if request.query_params:
                 raise HTTPException(400, "不支持查询参数")
             expected = request.headers.get("x-alcor-context")
@@ -30,8 +30,13 @@ def mount_account_signals(app, settings, db):
             else:
                 if "authorization" in request.headers:
                     raise HTTPException(403, "请使用当前网页登录会话")
-                who = await identity(request)
-            result = await service.read(who, expected, devices=devices)
+                if devices:
+                    who = await identity(request)
+                else:
+                    from .fire_web import bound_member
+                    who = await bound_member(request)
+            assert_expected_account(request, who.id)
+            result = await service.read(who, expected, devices=devices, allow_fire_web=not native and not devices)
             return JSONResponse(result, headers=headers)
         except HTTPException as exc:
             if exc.status_code in (401, 403):
