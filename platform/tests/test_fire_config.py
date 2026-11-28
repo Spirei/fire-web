@@ -126,10 +126,14 @@ def test_template_keys_are_supported_and_instance_identity_is_explicit():
         if line and not line.startswith("#")
     }
     runtime = {"FIRE_PYTHON", "FIRE_WORKER", "FIRE_NETWORK", "FIRE_PRIVATE_DIR", "FIRE_SETUP_TOKEN"}
-    assert {key for key in env if key.startswith("FIRE_")} <= runtime | {
+    compose_only = {"FIRE_DEPLOYMENT_PROJECT_DIR", "FIRE_DOCKER_SOCKET_GID", "FIRE_UPDATER_IMAGE_TAG"}
+    compose_source = (root / "docker-compose.ghcr.yml").read_text()
+    assert compose_only <= env
+    assert all("${" + key in compose_source for key in compose_only)
+    assert {key for key in env if key.startswith("FIRE_")} <= runtime | compose_only | {
         "FIRE_" + key.upper() for key in Settings.model_fields
     }
-    compose = yaml.safe_load((root / "docker-compose.ghcr.yml").read_text())
+    compose = yaml.safe_load(compose_source)
     conf = compose["services"]["fire"]["environment"]
     assert conf["FIRE_INSTANCE_ID"].startswith("${FIRE_INSTANCE_ID:?")
     for key in ["FIRE_FILE_ROOT", "FIRE_BACKUP_DIR", "FIRE_BACKUP_SECRET_DIR", "FIRE_CONNECTION_SECRET_DIR"]:
