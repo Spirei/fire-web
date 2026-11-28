@@ -15,8 +15,12 @@ def collection_revision(legacy, head):
 
 
 def changed_position_ids(head):
-    return {order['recordId'] for order in head['snapshot']['orders']
-            if order.get('deletedFrom', order['status']) == 'filled'} if head else set()
+    if not head:
+        return set()
+    snapshot = head['snapshot']
+    recorded = {order['recordId'] for order in snapshot['orders']
+                if order.get('deletedFrom', order['status']) == 'filled'}
+    return recorded | {row['recordId'] for row in snapshot.get('registeredOrderVoids', {}).values()}
 
 
 def position_rows(rows, head):

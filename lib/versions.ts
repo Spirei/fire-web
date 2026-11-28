@@ -8499,6 +8499,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "fix", title: "数据管理目录切换", desc: "返回数据管理时保留已读目录和页码，按需在后台更新。" },
     { kind: "fix", title: "网页指数与 App 账本同步", desc: "顶部指数读取已授权的行情观察。数据管理、账户资产及资产分析同步使用本人 App 原生账本的持仓、成交与原币现金，日终趋势读取已核对的估值。" },
     { kind: "feature", title: "订单历史与日终持仓视图", desc: "订单详情和更正显示已保存的版本。日终文件沿用 App 的市场汇总、双行持仓明细及行内盈亏入口，可切换原始 JSON。" },
+    { kind: "feature", title: "迁入成交核销", desc: "核对完整的迁入成交可由 App 提交核销。订单核销、持仓和原币现金一次保存，迁入原件和回执继续保留。" },
   ],
 };
 

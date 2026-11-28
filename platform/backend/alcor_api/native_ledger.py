@@ -32,7 +32,8 @@ ITEM_LIMIT = 100
 def discovery():
     return {'version': 1, 'snapshot_path': PATH, 'transactions_path': TRANSACTIONS,
             'receipt_path': TRANSACTIONS + '/{requestId}', 'read_scope': 'portfolio.read',
-            'write_scope': 'portfolio.write', 'source_revision_field': 'sourceRevision'}
+            'write_scope': 'portfolio.write', 'source_revision_field': 'sourceRevision',
+            'registered_void_version': 1}
 
 
 def text(value, maximum):
@@ -157,6 +158,12 @@ def validate_transaction(raw):
             raise ValueError
         order_time(raw['filledAt'])
         return rid, {}, {}, {}
+    if raw['kind'] == 'registered_void':
+        from .registered_order_voids import selected_ids
+        if raw.keys() != common | {'registeredOrderIds', 'positions', 'cash'}:
+            raise ValueError
+        selected_ids(raw['registeredOrderIds'])
+        return rid, {}, index(raw['positions'], validate_position), index(raw['cash'], validate_cash)
     if raw['kind'] != 'trade' or raw.keys() != common | {'orders', 'positions', 'cash'}:
         raise ValueError
     if not isinstance(raw['orders'], list) or not 1 <= len(raw['orders']) <= ITEM_LIMIT:
@@ -520,6 +527,7 @@ async def commit(conn, db, who, raw):
     kind = raw['kind']
     now = (await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
     transfers = {}
+    audit_orders = raw.get('orders', [])
     if kind == 'adopt':
         state, transfers = await legacy_baseline(conn, db, who, lock_orders=True)
         if fingerprint(state) != raw['legacyRevision']:
@@ -537,6 +545,12 @@ async def commit(conn, db, who, raw):
             if kind == 'merge':
                 state = apply_merge(head['snapshot'], raw, now, request_id)
                 await assign_order_numbers(conn, state, (raw['mergedOrderId'],))
+            elif kind == 'registered_void':
+                from .registered_order_voids import apply_void, evidence
+                proof = await evidence(conn, db, who, head, raw['registeredOrderIds'])
+                state = apply_void(head['snapshot'], proof, positions, cash, request_id, now)
+                audit_orders = [{**state['registeredOrderVoids'][identifier], 'status': 'voided_registered'}
+                                for identifier in raw['registeredOrderIds']]
             else:
                 state = apply_trade(head['snapshot'], orders, positions, cash, now, request_id)
                 await assign_order_numbers(conn, state, orders)
@@ -559,8 +573,8 @@ async def commit(conn, db, who, raw):
 
     await append_ledger_event(
         conn, who.id,
-        request_id=request_id, kind=kind, ledger_revision=next_revision,
-        orders=raw.get('orders', []) if isinstance(raw.get('orders'), list) else [],
+        request_id=request_id, kind='trade' if kind == 'registered_void' else kind, ledger_revision=next_revision,
+        orders=audit_orders,
         positions=raw.get('positions', []) if isinstance(raw.get('positions'), list) else [],
         cash=raw.get('cash', []) if isinstance(raw.get('cash'), list) else [],
         occurred_at=now,
@@ -571,7 +585,7 @@ async def commit(conn, db, who, raw):
 def mount_native_ledger(app):
     db = app.state.db
 
-    async def execute(request, request_id=None):
+    async def execute(request, request_id=None, *, registered_void=False):
         headers = {'Cache-Control': 'no-store, private', 'Vary': 'Authorization', 'X-Alcor-API-Version': '2'}
         write = request.method == 'POST'
         try:
@@ -581,7 +595,12 @@ def mount_native_ledger(app):
             who, grant = await native_identity(request, db, 'portfolio.write' if write else 'portfolio.read')
             if grant['client_id'] != CLIENT:
                 raise HTTPException(401, '需要有效的 App 连接')
-            if request.query_params:
+            if registered_void:
+                from .registered_order_voids import selected_ids
+                if set(request.query_params) != {'orderId'}:
+                    raise ValueError
+                selected = selected_ids(request.query_params.getlist('orderId'))
+            elif request.query_params:
                 raise ValueError
             if write:
                 if request.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
@@ -596,7 +615,10 @@ def mount_native_ledger(app):
                     value = await commit(conn, db, who, raw)
                 else:
                     await lock_read_identity(conn, who)
-                    if request_id is not None:
+                    if registered_void:
+                        from .registered_order_voids import evidence
+                        value = await evidence(conn, db, who, await ledger_head(conn, who.id), selected)
+                    elif request_id is not None:
                         old = await receipt(conn, who.id, request_id)
                         if not old:
                             raise HTTPException(404, '未找到已提交回执')
@@ -623,6 +645,10 @@ def mount_native_ledger(app):
     @app.get(PATH)
     async def snapshot(request: Request):
         return await execute(request)
+
+    @app.get(PATH + '/registered-void')
+    async def preview_registered_void(request: Request):
+        return await execute(request, registered_void=True)
 
     @app.post(TRANSACTIONS)
     async def transaction(request: Request):

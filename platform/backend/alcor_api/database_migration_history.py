@@ -165,12 +165,14 @@ async def execute(db,task,*,finalize=True):
 
 async def registered_orders(conn,owner,*,native_records=None,trading_start=None):
     from .legacy_order_projection import native_fields
+    from .registered_order_voids import voided_references
 
     rows=await(await conn.execute('SELECT originals,source_sha256,source_instance,source_owner FROM database_migration_history_imports WHERE owner_id=%s ORDER BY created_at,request_id',(owner,))).fetchall()
+    voids = await voided_references(conn, owner) if rows else set()
     output=[]
     for stored in rows:
         packet=stored['originals'];maps=packet['maps']
-        orders = packet['orders']
+        orders = [row for row in packet['orders'] if (stored['source_sha256'], row['id']) not in voids]
         if trading_start is not None:
             def relevant(row):
                 if row['status'] != 'filled' or row['side'] not in ('buy', 'sell'):
@@ -203,6 +205,12 @@ async def registered_orders(conn,owner,*,native_records=None,trading_start=None)
             if projection is not None:
                 output[-1]['migrationMappedBrokerAccountId']=output[-1]['brokerAccountId']
                 output[-1].update(projection[row['id']])
+            if native_records is not None and trading_start is None and (
+                row['status'] == 'filled' and row['side'] in ('buy', 'sell')
+                and normalized['accountKind'] == 'real' and normalized['settlementCurrency'] == normalized['currency']
+                and row['settlement_amount'] is None and output[-1].get('parentOrderId') is None
+            ):
+                output[-1]['registeredVoidCandidate'] = True
     return output
 
 
@@ -233,6 +241,8 @@ def _registered_funds_for(data):
 
 async def registered_funds(conn,owner):
     stored=await(await conn.execute('SELECT originals,request_id,source_sha256 FROM database_migration_history_imports WHERE owner_id=%s ORDER BY created_at,request_id',(owner,))).fetchall()
+    from .registered_order_voids import voided_references
+    voids = await voided_references(conn, owner) if stored else set()
     output=[]
     for batch in stored:
         key=(owner,str(batch['request_id']),batch['source_sha256'])
@@ -246,5 +256,5 @@ async def registered_funds(conn,owner):
             _registered_funds_cache.move_to_end(key)
         # Cached rows are read-only projections; callers sort and filter into
         # new lists without mutating the rows.
-        output.extend(rows)
+        output.extend(row for row in rows if (batch['source_sha256'], row['sourceOrderId']) not in voids)
     return output

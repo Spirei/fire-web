@@ -1,6 +1,7 @@
 import asyncio
 import re
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -72,6 +73,45 @@ async def adopt(client, headers, baseline):
     receipt = await data(client.post(TRANSACTIONS, headers=headers, json=body))
     assert receipt['sourceRevision'] == 1
     return receipt
+
+
+@pytest.mark.asyncio
+async def test_registered_void_reads_and_commits_only_once_for_owner(client, admin, db, monkeypatch):
+    broker, record = await setup(client, amount='321.30', qty='44', cost=None)
+    identifier = record['id']
+    phone = await native_headers(db, admin, SCOPES)
+    other_phone = await native_headers(db, admin, SCOPES)
+    await adopt(client, phone, await data(client.get(LEDGER, headers=phone)))
+    original = 'source-registered-sale'
+    position = {'recordId': identifier, 'market': 'US', 'accountMarket': 'US', 'code': 'AAPL',
+                'name': record['name'], 'brokerAccountId': broker, 'quantityBefore': '44',
+                'quantityDelta': '30', 'unitCostBefore': None, 'unitCostAfter': '1.25'}
+    cash = {'currency': 'USD', 'balanceBefore': '321.30', 'delta': '-321.30'}
+    fill = {'id': original, 'orderNo': 'test-original-number', 'recordId': identifier, 'market': 'US',
+            'accountMarket': 'US', 'code': 'AAPL', 'side': 'sell', 'brokerAccountId': broker, 'currency': 'USD',
+            'quantity': '30', 'price': '10.73', 'fees': '0.60', 'tradedAt': '2026-10-01T16:00:00+00:00'}
+    proof = {'ownerId': admin, 'sourceRevision': 1, 'orders': [fill], 'positions': [position], 'cash': [cash],
+             'sourceFingerprint': 'a' * 64}
+    review = AsyncMock(return_value=proof)
+    monkeypatch.setattr('alcor_api.registered_order_voids.evidence', review)
+    assert await data(client.get(LEDGER + '/registered-void', params={'orderId': original}, headers=phone)) == proof
+    await data(client.get(LEDGER + '/registered-void', params={'orderId': original}, headers={}), 401)
+    await data(client.get(LEDGER + '/registered-void', params=[('orderId', original)] * 2, headers=phone), 400)
+    assert (await data(client.get(LEDGER, headers=other_phone)))['sourceRevision'] == 1
+    change = {k: v for k, v in position.items() if k not in ('quantityDelta', 'unitCostBefore')}
+    body = {'requestId': str(uuid4()), 'kind': 'registered_void', 'baseRevision': 1,
+            'registeredOrderIds': [original], 'positions': [{**change, 'quantityAfter': '74'}],
+            'cash': [{'currency': 'USD', 'balanceBefore': '321.30', 'balanceAfter': '0'}]}
+    await data(client.post(TRANSACTIONS, headers=phone, json={**body, 'cash': []}), 409)
+    first, second = await asyncio.gather(data(client.post(TRANSACTIONS, headers=phone, json=body)),
+                                         data(client.post(TRANSACTIONS, headers=other_phone, json=body)))
+    assert first == second == await data(client.get(TRANSACTIONS + '/' + body['requestId'], headers=other_phone))
+    result = await data(client.get(LEDGER, headers=other_phone))
+    assert result['sourceRevision'] == 2
+    assert result['registeredOrderVoids'][original]['cashDelta'] == '-321.3'
+    assert [(row['quantity'], row['unitCost']) for row in result['positions']] == [('74', '1.25')]
+    assert {row['brokerAccountId']: row['balance'] for row in result['cash']} == {None: '0', broker: '321.3'}
+    await data(client.post(TRANSACTIONS, headers=phone, json={**body, 'requestId': str(uuid4())}), 409)
 
 
 @pytest.mark.asyncio
