@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { IconChevronLeft, IconFilter, IconRefresh } from "@tabler/icons-react";
 import { Capsule, IconButton } from "@/components/Capsule";
 import SafeAssetImage from "@/components/SafeAssetImage";
-import { fmtNum, fmtQty } from "@/lib/format";
+import { fmtNum, fmtQty, fmtTradePrice } from "@/lib/format";
 import { MARKET_CURRENCY } from "@/lib/currency";
 import { orderDateKey } from "@/lib/orderTime";
 import { platformRequest, PlatformRequestError } from "@/lib/platformRequest";
@@ -76,6 +76,7 @@ export default function SnapshotPositionProfit({ position, day, cutoff, captured
   const currency = String(position.close?.currency || MARKET_CURRENCY[market] || "");
   const { stockIcons } = useAssetIcons(["stock"]);
   const revision = usePrivateReadRevision();
+  const panel = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [period, setPeriod] = useState<Period>("全部");
   const [custom, setCustom] = useState("");
@@ -89,7 +90,10 @@ export default function SnapshotPositionProfit({ position, day, cutoff, captured
   const start = custom || startDate(period, day);
   const headers = useMemo(() => ({ "X-Alcor-Expected-Account": ownerId, "X-CSRF-Token": sessionCsrf }), [ownerId, sessionCsrf]);
 
-  useEffect(() => { heading.current?.focus({ preventScroll: true }); }, []);
+  useLayoutEffect(() => {
+    panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
+    heading.current?.focus({ preventScroll: true });
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     const query = new URLSearchParams({ scope: "all", recordId: position.recordId, limit: "5000", includeAppOrders: "1", includeOrderHistory: "1" });
@@ -187,18 +191,18 @@ export default function SnapshotPositionProfit({ position, day, cutoff, captured
     ["持仓市值", close], ...(start ? [["期初市值", opening] as [string, number | null]] : []),
     ["累计入账金额", incoming], ["累计出账金额", outgoing], ["已登记费用", fees],
   ];
-  return <section className={styles.snapshotProfit} aria-label="个股盈亏详情">
+  return <section ref={panel} className={styles.snapshotProfit} aria-label="个股盈亏详情">
     <div className={styles.snapshotProfitHeader}>
       <IconButton size="md" framed type="button" label="返回持仓视图" onClick={onBack}><IconChevronLeft size={19} /></IconButton>
       <div className="min-w-0 text-center">
-        <h3 ref={heading} tabIndex={-1} className="flex items-center justify-center gap-1.5 text-sm font-semibold">
+        <h3 ref={heading} tabIndex={-1} className={styles.snapshotProfitName}>
           <SafeAssetImage src={stockIcons[`${market}:${code.toUpperCase()}`]} className="h-5 w-5 rounded-full"
-            fallback={<span className="grid h-5 w-5 place-items-center text-[11px]">{name.slice(0, 1)}</span>} />
-          <span className="truncate">{name} {code}</span>
+            fallback={<span className={styles.snapshotProfitIcon}>{name.slice(0, 1)}</span>} />
+          <span className="truncate" title={name}>{name}</span> {code && code !== name && <span className="shrink-0">{code}</span>}
         </h3>
         <p className={`mt-0.5 text-[11px] ${styles.snapshotMuted}`}>日终快照 {day}</p>
       </div>
-      <IconButton size="md" framed type="button" label="重新读取盈亏" onClick={() => setRefresh(value => value + 1)}><IconRefresh size={18} /></IconButton>
+      <IconButton size="md" framed type="button" label="重新读取盈亏" busy={loading} onClick={() => setRefresh(value => value + 1)}><IconRefresh size={18} /></IconButton>
     </div>
     <div className={styles.snapshotProfitPeriods}>
       {periods.map(item => <button key={item} type="button" aria-pressed={period === item && !custom}
@@ -232,7 +236,7 @@ export default function SnapshotPositionProfit({ position, day, cutoff, captured
             <tbody>{lines.slice(0, limit).map(line => <tr key={line.id}>
               <td>{line.day.slice(5).replace("-", ".")}<small>{line.day.slice(0, 4)}</small></td>
               <td className={line.order?.side === "buy" ? styles.snapshotPositive : line.order?.side === "sell" ? styles.snapshotNegative : undefined}>{line.title}</td>
-              <td>{line.order ? fmtQty(known(line.order.qty) ?? "") : "—"}<small>{line.order ? amount(known(line.order.price)) : "—"}</small></td>
+              <td>{line.order ? fmtQty(known(line.order.qty) ?? "") : "—"}<small>{line.order ? fmtTradePrice(known(line.order.price)) : "—"}</small></td>
               <td>{line.incoming ? "入账" : "出账"}</td>
               <td>{amount(line.amount)}{line.currency !== currency && <small>{line.currency}</small>}</td>
             </tr>)}</tbody>

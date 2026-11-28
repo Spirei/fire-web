@@ -409,7 +409,16 @@
 .snapshotMuted, .snapshotIconFallback { color: var(--snapshot-muted); }
 .snapshotIconFallback { border-radius: 50%; background: var(--snapshot-control); }
 .snapshotMarket { padding: 3px 12px 8px; }
-.snapshotHoldingRow:hover { background: color-mix(in srgb, var(--snapshot-control), transparent 45%); }
+.snapshotHoldingName {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+@media (hover: hover) {
+  .snapshotHoldingRow:hover { background: color-mix(in srgb, var(--snapshot-control), transparent 45%); }
+}
 .snapshotMarket + .snapshotMarket { border-top: 1px solid var(--data-edge, #e5e7eb); }
 .snapshotMarketMetrics {
   display: grid;
@@ -451,6 +460,7 @@
   --snapshot-line: #dfe4e8;
   color: var(--snapshot-ink);
   max-width: 680px;
+  scroll-margin-block-start: 12px;
   margin-inline: auto;
   padding: clamp(8px, 2vw, 14px);
   border-radius: 16px;
@@ -467,7 +477,29 @@
   color-scheme: dark;
   --snapshot-line: #34414d;
 }
+@media (max-width: 1023px) {
+  .snapshotProfit { scroll-margin-block-start: calc(76px + env(safe-area-inset-top, 0px)); }
+}
 .snapshotProfitHeader { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-block: 4px 13px; }
+.snapshotProfitName {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.snapshotProfitIcon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--snapshot-control);
+  color: var(--snapshot-muted);
+  font-size: 10px;
+}
 html:root[data-palette] body .snapshotProfitHeader > button:global(.capsule-icon-control) {
   width: 38px;
   height: 38px;
@@ -480,12 +512,12 @@ html:root[data-palette] body .snapshotProfitHeader > button:global(.capsule-icon
   background: var(--snapshot-control);
   color: var(--snapshot-ink);
 }
-.snapshotProfitPeriods { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.snapshotProfitPeriods { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
 .snapshotProfitPeriods > button { border-radius: 999px; color: var(--snapshot-muted); }
-.snapshotProfitPeriods > button[aria-pressed] { min-height: 28px; padding: 2px 8px; background: var(--snapshot-control); font-size: 11px; }
+.snapshotProfitPeriods > button[aria-pressed] { min-height: 30px; padding: 2px clamp(5px, 1.8vw, 10px); background: var(--snapshot-control); font-size: 11px; white-space: nowrap; }
 .snapshotProfitPeriods > button[aria-pressed="true"] { background: var(--snapshot-card); color: var(--snapshot-ink); box-shadow: inset 0 0 0 1px var(--snapshot-line); }
 .snapshotProfitPeriods > button:last-child { margin-inline-start: auto; }
-.snapshotProfitDate { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; white-space: nowrap; font-size: 11px; }
+.snapshotProfitDate { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; white-space: nowrap; font-size: 11px; }
 .snapshotProfitDate input { min-width: 0; padding: 5px 8px; border: 1px solid var(--snapshot-line); border-radius: 8px; background: var(--snapshot-control); }
 .snapshotProfitCard { border-radius: 15px; background: var(--snapshot-card); margin-bottom: 8px; padding: 14px; font-size: 13px; }
 .snapshotProfitCard:last-child { margin-bottom: 0; }
@@ -494,7 +526,9 @@ html:root[data-palette] body .snapshotProfitHeader > button:global(.capsule-icon
 .snapshotCashflow { width: 100%; table-layout: fixed; color: var(--snapshot-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
 .snapshotCashflow thead { color: var(--snapshot-muted); }
 .snapshotCashflow th { padding: 0 2px 6px 0; text-align: start; font-size: 10px; font-weight: 500; }
-.snapshotCashflow th:nth-child(2) { width: 25%; }
+.snapshotCashflow th:first-child { width: 15%; }
+.snapshotCashflow th:nth-child(2), .snapshotCashflow th:nth-child(3) { width: 23%; }
+.snapshotCashflow th:nth-child(4) { width: 17%; }
 .snapshotCashflow :is(th, td):nth-child(n + 3) { text-align: end; }
 .snapshotCashflow td { border-top: 1px solid var(--snapshot-line); padding: 9px 2px 9px 0; vertical-align: top; overflow-wrap: anywhere; }
-.snapshotCashflow small { display: block; color: var(--snapshot-muted); font-size: 10px; }
+.snapshotCashflow small { display: block; margin-top: 2px; color: var(--snapshot-muted); font-size: 10px; }

@@ -428,6 +428,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const previewContent = useRef<HTMLDivElement>(null);
   const previewTitle = useRef<HTMLHeadingElement>(null);
   const openedBy = useRef<HTMLButtonElement>(null);
+  const profitReturn = useRef<{ trigger: HTMLButtonElement; scroller: HTMLElement | null; scrollTop: number; pageTop: number } | null>(null);
   const listItems = useRef<HTMLDivElement>(null);
   const path = showOrderQuery ? null : directoryPath(folder, kind, { year, month }, pagination.starts[pagination.index] ?? null, positionMarket);
   const readDirectory = useCallback(async (key: string, signal: AbortSignal): Promise<DirectoryPage> => {
@@ -445,8 +446,19 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
     if (showFile) previewTitle.current?.focus();
     else if (openedBy.current?.getClientRects().length) openedBy.current.focus({ preventScroll: true });
   }, [showFile]);
+  useLayoutEffect(() => {
+    if (profitRecord || !showFile || !profitReturn.current) return;
+    const { trigger, scroller, scrollTop, pageTop } = profitReturn.current;
+    profitReturn.current = null;
+    if (!trigger.getClientRects().length) return;
+    scroller?.scrollTo({ top: scrollTop, behavior: "instant" });
+    window.scrollTo({ top: pageTop, behavior: "instant" });
+    trigger.focus({ preventScroll: true });
+  }, [profitRecord, showFile]);
   useEffect(() => {
     if (!accessBlocked) return;
+    profitReturn.current = null;
+    setProfitRecord(null);
     setSelection(null);
     setDetail(null);
     setPrevious([]);
@@ -489,6 +501,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   }, [kind, ownerId, selection, sessionCsrf]);
 
   function closeFile() {
+    profitReturn.current = null;
     setProfitRecord(null);
     setSelection(null);
     setDetail(null);
@@ -516,7 +529,13 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
     setView(nextView);
     previewContent.current?.scrollTo(0, 0);
   }
+  function openProfit(recordId: string, trigger: HTMLButtonElement) {
+    const scroller = trigger.closest<HTMLElement>(".records-content");
+    profitReturn.current = { trigger, scroller, scrollTop: scroller?.scrollTop ?? 0, pageTop: window.scrollY };
+    setProfitRecord(recordId);
+  }
   function readFile(item: Selection, nextView: FileView) {
+    profitReturn.current = null;
     setProfitRecord(null);
     setDetailError("");
     setSelection({ ...item });
@@ -707,7 +726,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
             {view === "file" && snapshot && <InvestmentSnapshotHoldings key={`${snapshot.day}:${snapshot.revision}`}
               positions={snapshot.positions} calendar={snapshot.calendar}
               onOpen={(id, revision) => choose({ type: "position", id, revision })}
-              onProfit={id => setProfitRecord(id)} />}
+              onProfit={openProfit} />}
             {(view === "json" || view === "file" && !original && !snapshot) && <JsonPreview key={"day" in detail ? `${detail.day}:${detail.revision}` : `${detail.id}:${detail.version?.revision ?? "current"}`} source={activeFile.source} format />}
             {view === "file" && original && "type" in detail && <OriginalPreview key={detail.id} ownerId={ownerId} detail={detail} file={original} />}
             {view === "sources" && ("day" in detail ? <DailyEvidence result={detail} choose={choose} /> : <Values data={{ "记录编号": detail.id, ...detail.data }} />)}

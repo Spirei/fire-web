@@ -51,7 +51,7 @@ export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen
   positions: Position[];
   calendar?: { rows?: Data[] } | null;
   onOpen: (id: string, revision?: number) => void;
-  onProfit: (id: string) => void;
+  onProfit: (id: string, trigger: HTMLButtonElement) => void;
 }) {
   const { stockIcons } = useAssetIcons(["stock"]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -154,7 +154,7 @@ export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen
                         <EtfDoubleBadge market={market} code={code} name={name} className="!-bottom-1 !h-3.5 !w-3.5 !text-[7px]" />
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate" title={name}>{name}</span>
+                        <span className={styles.snapshotHoldingName} title={name}>{name}</span>
                         <small className={`block truncate ${styles.snapshotMuted}`}>{code}</small>
                       </span>
                     </button>
@@ -175,7 +175,7 @@ export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen
                       onClick={() => onOpen(position.recordId, typeof position.recordRevision === "number" ? position.recordRevision : undefined)}>
                       <IconFileDescription size={16} aria-hidden="true" />持仓记录
                     </button>
-                    <button type="button" onClick={() => onProfit(position.recordId)}>
+                    <button type="button" onClick={event => onProfit(position.recordId, event.currentTarget)}>
                       <IconArrowUpRight size={16} aria-hidden="true" />盈亏
                     </button>
                   </div>

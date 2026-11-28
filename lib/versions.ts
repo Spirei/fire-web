@@ -8502,6 +8502,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "feature", title: "迁入成交核销", desc: "核对完整的迁入成交可由 App 提交核销。订单核销、持仓和原币现金一次保存，迁入原件和回执继续保留。" },
     { kind: "fix", title: "统一原生账本能力发现", desc: "App 通过一个协议版本和一份列表读取可用交易操作，已安装版本仍可识别迁入成交核销。" },
     { kind: "feature", title: "个股盈亏与只读订单查询", desc: "沿用 App 的盈亏配色与订单详情卡，统一筛选控件与页签间距，可切回原始文件和 JSON。" },
+    { kind: "fix", title: "订单与盈亏窄屏浏览", desc: "长证券名称支持两行，盈亏明细保留成交价精度，返回持仓时恢复原行位置。" },
     { kind: "fix", title: "原生账本读取与写入并行", desc: "写入进行时，App 仍可读取已提交的订单、持仓、原币现金和回执。已完成请求可直接恢复原回执。" },
   ],
 };

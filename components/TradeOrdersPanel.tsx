@@ -14,9 +14,10 @@ import MobileExplanation from "@/components/MobileExplanation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconFilter } from "@tabler/icons-react";
-import { fmtMoney, fmtNum, fmtPrice, fmtQty } from "@/lib/format";
+import { fmtMoney, fmtNum, fmtPrice, fmtQty, fmtTradePrice } from "@/lib/format";
 import { marketMeta, type Quote, type TradeOrder } from "@/lib/types";
 import MarketIcon from "@/components/MarketIcon";
+import SafeAssetImage from "@/components/SafeAssetImage";
 import { showToast } from "@/lib/toast";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { FlatCheckbox } from "@/components/HoldingColumnManager";
@@ -49,8 +50,6 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
 };
 const VALIDITY_LABEL: Record<string, string> = { day: "当日有效", gtc: "撤单前有效", custom: "自定义有效期" };
 const STATUS_LABEL: Record<string, string> = { filled: "已成交", pending: "待成交", cancelled: "已撤销", expired: "已失效", imported_suspended: "已暂停", rejected: "已拒绝" };
-const orderPriceFormat = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 8 });
-
 function orderTypeLabel(order: TradeOrder): string {
   if (order.side === "dividend") return "股息入账";
   return ORDER_TYPE_LABEL[order.orderType] ?? "限价单";
@@ -1057,29 +1056,33 @@ export default function TradeOrdersPanel({
 
   function compactRow(order: TradeOrder) {
     const date = formatOrderTime(order.tradedAt, order.market);
-    const split = date.indexOf(" ");
+    const [orderDay, clock, zone] = date.split(" ");
     const today = tab === "today";
     const icon = stockIcons[`${order.market.toUpperCase()}:${order.code.toUpperCase()}`];
     const side = order.side === "buy" ? "买入" : order.side === "sell" ? "卖出" : "股息";
     const price = order.orderPrice === undefined
       ? (order.executionModel === "source_registered_history" ? null : order.price) : order.orderPrice;
     const filled = order.filledQty ?? (order.status === "filled" ? order.qty : null);
-    return <button className={styles.orderQueryRow} type="button" key={order.id} onClick={() => setDetailOrder(order)} aria-label={`查看 ${order.name} 订单详情`}>
+    return <button className={styles.orderQueryRow} type="button" key={order.id} aria-label={`查看 ${order.name} 订单详情`}
+      onClick={event => { event.currentTarget.focus({ preventScroll: true }); setDetailOrder(order); }}>
       <span className={styles.orderQueryIdentity}>
         <span className="relative flex-none">
-          {icon ? <img src={icon} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className={styles.orderQueryIcon}>{order.name.slice(0, 1)}</span>}
+          <SafeAssetImage src={icon} className="h-6 w-6 rounded-full object-cover"
+            fallback={<span className={styles.orderQueryIcon}>{order.name.slice(0, 1)}</span>} />
           <EtfDoubleBadge market={order.market} code={order.code} name={order.name} className="!-bottom-1 !h-3.5 !w-3.5 !text-[7px]" />
         </span>
-        <span className="min-w-0"><strong className="block truncate font-medium">{order.name}</strong><small className="block truncate"><span className={styles.orderMarket}>{order.market}</span> {order.code}</small></span>
+        <span className="min-w-0"><strong className={styles.orderQueryName} title={order.name}>{order.name}</strong><small className="block truncate"><span className={styles.orderMarket}>{order.market}</span> {order.code}</small></span>
       </span>
       {today ? <>
-        <span>{price == null ? "—" : orderPriceFormat.format(price)}<small>{fmtNum(quotes?.[order.recordId]?.price ?? "")}</small></span>
+        <span>{fmtTradePrice(price)}<small>{fmtTradePrice(quotes?.[order.recordId]?.price)}</small></span>
         <span>{fmtQty(order.qty)}<small>{fmtQty(filled ?? "")}</small></span>
         <span><b className={order.side === "buy" ? styles.orderBuy : order.side === "sell" ? styles.orderSell : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
       </> : <>
-        <span>{fmtQty(order.qty)}<small>{price == null ? "—" : orderPriceFormat.format(price)}</small></span>
+        <span>{fmtQty(order.qty)}<small>{fmtTradePrice(price)}</small></span>
         <span><b className={order.side === "buy" ? styles.orderBuy : order.side === "sell" ? styles.orderSell : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
-        <time dateTime={order.tradedAt}>{split < 0 ? date || "—" : date.slice(0, split).replaceAll("/", ".")}<small>{split < 0 ? "" : date.slice(split + 1)}</small></time>
+        <time dateTime={order.tradedAt}>{clock ? orderDay.replaceAll("/", ".") : orderDay || "—"}
+          {clock && <small><span>{clock}</span>{zone && <> <span>{zone}</span></>}</small>}
+        </time>
       </>}
     </button>;
   }
@@ -1187,7 +1190,7 @@ export default function TradeOrdersPanel({
             )}
           </div>
           {!readOnly && tab !== "strategy" && <span className="text-xs text-muted">{searchedOrders.length} 笔</span>}
-          {onRefresh && tab !== "strategy" && <RefreshButton onClick={() => void onRefresh()} title="刷新订单" className={readOnly ? styles.orderQueryRefresh : undefined} />}
+          {onRefresh && tab !== "strategy" && <RefreshButton onClick={() => void onRefresh()} title="刷新订单" busy={readOnly && loading} className={readOnly ? styles.orderQueryRefresh : undefined} />}
           {!readOnly && tab !== "strategy" && <>
           <button
             type="button"
@@ -1794,7 +1797,7 @@ export default function TradeOrdersPanel({
         const icon = stockIcons[`${detail.market.toUpperCase()}:${detail.code.toUpperCase()}`];
         const money = (value: number | null | undefined, unit = currency) => value == null || !Number.isFinite(value) ? "—" : `${unit} ${fmtNum(value)}`;
         const unitPrice = (value: number | null | undefined) => value == null || !Number.isFinite(value)
-          ? "—" : `${currency} ${orderPriceFormat.format(value)}`;
+          ? "—" : `${currency} ${fmtTradePrice(value)}`;
         const filled = detail.status === "filled";
         const actualFee = detail.actualFeeKnown !== false && filled
           && (detail.actualFeeKnown === true || detail.feeSource === "owner_recorded" || detail.feeSource === "broker_reported");
@@ -1828,15 +1831,18 @@ export default function TradeOrdersPanel({
         return <AppModal title="订单详情" size="md" className={styles.orderModal} onClose={() => setDetailOrder(null)}>
           <section className={styles.orderDetail}>
             <div className={styles.orderDetailIdentity}>
-              {icon ? <img src={icon} alt="" className="h-8 w-8 rounded-full object-cover" /> : <MarketIcon market={detail.market} size={28} />}
-              <span className="min-w-0"><strong className="block truncate font-semibold">{detail.name}</strong><small>{detail.market} {detail.code}</small></span>
+              <SafeAssetImage src={icon} className="h-8 w-8 shrink-0 rounded-full object-cover"
+                fallback={<MarketIcon market={detail.market} size={28} />} />
+              <span className="min-w-0"><strong className={styles.orderDetailName}>{detail.name}</strong><small>{detail.market} {detail.code}</small></span>
             </div>
             <h4>交易信息</h4>
-            <dl className={styles.orderDetailCard}>{rows.map(([label, value]) =>
+            <dl className={`${styles.orderDetailCard} ${styles.orderDetailValues}`}>{rows.map(([label, value]) =>
               <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
             <div className={styles.orderDetailHistory}><OrderHistory order={detail} /></div>
-            <h4>费用明细</h4>
-            <dl className={styles.orderDetailCard}><div><dt>合计费用</dt><dd>{actualFee ? money(detail.fees) : "待核对"}</dd></div></dl>
+            <div className={styles.orderDetailFees}>
+              <h4>费用明细</h4>
+              <dl className={styles.orderDetailValues}><div><dt>合计费用</dt><dd>{actualFee ? money(detail.fees) : "待核对"}</dd></div></dl>
+            </div>
             {!readOnly && !detail.apiManaged && !detail.historyLocked && (onEdit || onDelete || detail.status === "pending") && <div className="mt-4 flex flex-wrap justify-end gap-2">
               {detail.status === "pending" && <Capsule size="sm" variant="secondary" onClick={() => void handleCancel(detail)}>撤单</Capsule>}
               {onEdit && <Capsule size="sm" variant="secondary" onClick={() => { setDetailOrder(null); onEdit(detail); }}>编辑</Capsule>}

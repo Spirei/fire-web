@@ -3,6 +3,12 @@ export function fmtNum(n: number | "", digits = 2) {
   return Number(n).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+const tradePriceFormat = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 8 });
+
+export function fmtTradePrice(price: number | null | undefined) {
+  return price != null && Number.isFinite(price) ? tradePriceFormat.format(price) : "—";
+}
+
 /** 价格数字按市场取小数位：美股（US）3 位，其余 2 位 */
 export function fmtNumMarket(n: number | "", market?: string) {
   return fmtNum(n, market === "US" ? 3 : 2);

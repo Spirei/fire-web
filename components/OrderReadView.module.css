@@ -148,30 +148,43 @@ html:root .archivedOrders .orderTabs button[aria-pressed="true"] { color: var(--
 .orderQueryColumns, .orderQueryRow {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, .82fr) minmax(0, .78fr) minmax(0, 1fr);
-  gap: 5px;
+  align-items: start;
+  gap: clamp(6px, 1.7vw, 14px);
   text-align: end;
 }
 .compactOrders[data-tab="history"] :is(.orderQueryColumns, .orderQueryRow) {
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, .8fr) minmax(0, .68fr) minmax(70px, 1fr);
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, .86fr) minmax(39px, .68fr) minmax(70px, 1fr);
 }
 .orderQueryColumns { padding-block: 9px; color: var(--order-muted); font-size: 10px; }
+.orderQueryColumns span { white-space: nowrap; }
 .orderQueryColumns span:first-child { text-align: start; }
-.orderQueryRow { align-items: center; width: 100%; min-height: 56px; padding-block: 8px; border-top: 1px solid var(--order-line); font-size: 11px; font-variant-numeric: tabular-nums; }
-.orderQueryRow:hover { background: var(--order-control); }
+.orderQueryRow { width: 100%; min-height: 56px; padding-block: 10px; border-top: 1px solid var(--order-line); font-size: 11px; font-variant-numeric: tabular-nums; }
+.orderQueryRow:focus-visible { background: var(--order-control); }
+@media (hover: hover) { .orderQueryRow:hover { background: var(--order-control); } }
 .orderQueryRow > :is(span, time) { min-width: 0; overflow-wrap: anywhere; }
-.orderQueryRow time small { white-space: nowrap; }
-.orderQueryRow small { display: block; color: var(--order-muted); font-size: 10px; }
-.orderQueryIdentity { display: flex; min-width: 0; align-items: center; gap: 5px; text-align: start; }
+.orderQueryRow time small span { display: inline-block; white-space: nowrap; }
+.orderQueryRow small { display: block; margin-top: 2px; color: var(--order-muted); font-size: 10px; }
+.orderQueryIdentity { display: flex; min-width: 0; align-items: start; gap: 5px; text-align: start; }
+.orderQueryName {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-weight: 550;
+}
 .orderQueryIcon { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--order-control); color: var(--order-muted); }
-.orderDetailIdentity, .orderDetailCard, .orderDetailHistory { border-radius: 16px; background: var(--order-control); padding: 12px 13px; }
+.orderDetailIdentity, .orderDetailCard, .orderDetailHistory, .orderDetailFees { border-radius: 16px; background: var(--order-control); padding: 12px 13px; }
 .orderDetailIdentity { display: flex; align-items: center; gap: 8px; }
+.orderDetailName { display: block; overflow-wrap: anywhere; font-weight: 650; }
 .orderDetailIdentity small { display: block; color: var(--order-muted); font-size: 11px; }
 .orderDetail > h4 { margin: 15px 0 7px; color: var(--order-muted); font-size: 12px; font-weight: 600; }
-.orderDetailCard { display: grid; gap: 10px; font-size: 12px; }
-.orderDetailCard > div { display: flex; justify-content: space-between; gap: 10px; }
-.orderDetailCard dt { color: var(--order-muted); white-space: nowrap; }
-.orderDetailCard dd { min-width: 0; overflow-wrap: anywhere; text-align: end; font-variant-numeric: tabular-nums; }
-.orderDetailHistory { margin-top: 12px; }
+.orderDetailValues { display: grid; gap: 10px; font-size: 12px; }
+.orderDetailValues > div { display: flex; justify-content: space-between; gap: 10px; }
+.orderDetailValues dt { color: var(--order-muted); white-space: nowrap; }
+.orderDetailValues dd { min-width: 0; overflow-wrap: anywhere; text-align: end; font-variant-numeric: tabular-nums; }
+.orderDetailHistory, .orderDetailFees { margin-top: 12px; }
+.orderDetailFees > h4 { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
 .orderDetailHistory > section { margin: 0; padding: 0; border: none; }
 @media (max-width: 639px) {
   .orderTools { order: -1; width: 100%; flex-wrap: wrap; }
