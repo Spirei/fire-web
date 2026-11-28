@@ -48,6 +48,30 @@ type ImageVersion = {
 };
 type RuntimeVersion = { sha: string; shortSha: string; matchesImage: boolean; matchesMain: boolean };
 
+type DeploymentSnapshot = {
+  repository: string;
+  configured?: boolean;
+  runs?: Run[] | null;
+  heatmap?: Record<string, number> | null;
+  imageProgress?: ImageProgress | null;
+  check?: Pick<Run, "sha" | "status" | "conclusion" | "url"> | null;
+  source?: SourceVersion | null;
+  image?: ImageVersion | null;
+  runtime?: RuntimeVersion | null;
+  packageName?: string;
+  workflowRunCount?: number | null;
+  checkedAt?: string;
+};
+
+const SNAPSHOT_KEY = "alcor:deployment-status:v1";
+
+function storeDeploymentSnapshot(snapshot: DeploymentSnapshot | null) {
+  try {
+    if (snapshot) sessionStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+    else sessionStorage.removeItem(SNAPSHOT_KEY);
+  } catch { /* Storage is optional. */ }
+}
+
 function stateOf(run: Run) {
   if (run.status !== "completed") return { label: run.event === "push" ? "检查中" : "发布中", className: "bg-slate-400", ring: "ring-slate-400/15" };
   if (run.conclusion === "cancelled") return { label: "已取消", className: "bg-slate-400", ring: "ring-slate-400/15" };
@@ -200,24 +224,24 @@ const readApiJson = async <T extends Record<string, unknown>>(response: Response
 };
 
 export default function DeployStatusPage() {
-  const [runs, setRuns] = useState<Run[]>([]);
-  const [heatmap, setHeatmap] = useState<Record<string, number>>({});
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [imageProgress, setImageProgress] = useState<ImageProgress | null>(null);
-  const [sourceVersion, setSourceVersion] = useState<SourceVersion | null>(null);
-  const [imageVersion, setImageVersion] = useState<ImageVersion | null>(null);
-  const [runtimeVersion, setRuntimeVersion] = useState<RuntimeVersion | null>(null);
-  const [packageName, setPackageName] = useState("fire-web");
-  const [workflowRunCount, setWorkflowRunCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [repository, setRepository] = useState("owner/repository");
-  const [checkedAt, setCheckedAt] = useState("");
   const [error, setError] = useState("");
   const [runsError, setRunsError] = useState("");
   const [buildError, setBuildError] = useState("");
-  const [observedCheck, setObservedCheck] = useState<Pick<Run, "sha" | "status" | "conclusion" | "url"> | null>(null);
   const loadController = useRef<AbortController | null>(null);
-  const loadedRepository = useRef("");
+  const snapshot = useRef<DeploymentSnapshot | null>(null);
+  const [display, setDisplay] = useState<DeploymentSnapshot | null>(null);
+  const {
+    repository = "owner/repository", source: sourceVersion, image: imageVersion,
+    runtime: runtimeVersion, check: observedCheck, imageProgress, checkedAt = "",
+    packageName = "fire-web",
+  } = display ?? {};
+  const runs = display?.runs ?? [];
+  const heatmap = display?.heatmap ?? {};
+  const workflowRunCount = display?.workflowRunCount ?? 0;
+  const [showingSavedStatus, setShowingSavedStatus] = useState(false);
+  const [managedUpdater, setManagedUpdater] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshTurns, setRefreshTurns] = useState(0);
   const [triggering, setTriggering] = useState(false);
@@ -240,6 +264,19 @@ export default function DeployStatusPage() {
   const [configOpen, setConfigOpen] = useState(false);
   const [token, setToken] = useState("");
   const [configError, setConfigError] = useState("");
+  const displaySnapshot = useCallback((value: DeploymentSnapshot | null) => {
+    snapshot.current = value;
+    setDisplay(value);
+  }, []);
+  useEffect(() => {
+    try {
+      const saved: DeploymentSnapshot | null = JSON.parse(sessionStorage.getItem(SNAPSHOT_KEY) || "null");
+      if (saved?.repository && saved.checkedAt) {
+        displaySnapshot(saved);
+        setShowingSavedStatus(true);
+      }
+    } catch { /* An unavailable snapshot does not prevent loading live status. */ }
+  }, [displaySnapshot]);
   const load = useCallback(async () => {
     loadController.current?.abort();
     const controller = new AbortController();
@@ -247,37 +284,54 @@ export default function DeployStatusPage() {
     setRefreshing(true);
     try {
       const response = await fetch("/api/deploy-status", { cache: "no-store", signal: controller.signal });
-      const data = await readApiJson<{
-        runsError?: string | null; buildError?: string | null; heatmapError?: string | null; sourceError?: string | null; releaseError?: string | null; configured?: boolean; check?: Pick<Run, "sha" | "status" | "conclusion" | "url"> | null;
+      if ([401, 403].includes(response.status)) {
+        storeDeploymentSnapshot(null);
+        displaySnapshot(null);
+        setShowingSavedStatus(false);
+      }
+      const data = await readApiJson<Partial<DeploymentSnapshot> & {
+        runsError?: string | null; buildError?: string | null; heatmapError?: string | null; sourceError?: string | null; releaseError?: string | null;
         schemaError?: string | null; canUpdate?: boolean;
-        repository?: string; error?: string; release?: Record<string,string> | null; runs?: Run[]; imageProgress?: ImageProgress | null;
-        source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
-        packageName?: string; workflowRunCount?: number; checkedAt?: string; heatmap?: Record<string, number>;
+        error?: string; release?: Record<string,string> | null;
         updateRequests?: Array<Record<string, unknown>>;
         updater?: { available?: boolean; managed?: boolean; reason?: string; observedAt?: string | null };
       }>(response);
       if (controller.signal.aborted) return;
-      const changedRepository = !!loadedRepository.current && loadedRepository.current !== data.repository;
-      if (data.repository) { setRepository(data.repository); loadedRepository.current = data.repository; }
       if (!response.ok) throw new Error(data.error || "读取失败");
+      const previous = data.configured !== false && data.repository === snapshot.current?.repository ? snapshot.current : null;
+      const progress = data.imageProgress;
+      const previousProgress = previous?.imageProgress;
+      const useSavedProgress = Boolean(data.buildError && previousProgress && (
+        !progress || (previousProgress.id === progress.id && !progress.jobs)
+      ));
+      const current: DeploymentSnapshot = {
+        repository: data.repository || "",
+        runs: data.runs ?? previous?.runs,
+        heatmap: data.heatmap ?? previous?.heatmap,
+        imageProgress: useSavedProgress
+          ? progress ? { ...progress, jobs: previousProgress?.jobs ?? null } : previousProgress
+          : progress,
+        check: data.sourceError ? previous?.check : data.check,
+        source: data.source ?? (data.sourceError ? previous?.source : null),
+        image: data.releaseError ? previous?.image : data.image,
+        runtime: data.runtime,
+        packageName: data.packageName,
+        workflowRunCount: data.workflowRunCount ?? previous?.workflowRunCount,
+        checkedAt: data.checkedAt,
+      };
+      displaySnapshot(current);
+      storeDeploymentSnapshot(data.configured === false ? null : current);
+      setShowingSavedStatus(Boolean(previous && (
+        data.runsError || data.heatmapError || useSavedProgress || data.sourceError || data.releaseError
+      )));
       setRelease(data.release || null);
       setServerCanUpdate(data.canUpdate === true);
       setSchemaError(data.schemaError || "");
-      if (Array.isArray(data.runs)) setRuns(data.runs);
-      else if (changedRepository || data.configured === false) setRuns([]);
       setRunsError(data.runsError || (data.configured === false ? "尚未配置发布仓库" : ""));
-      if (data.heatmap) setHeatmap(data.heatmap);
-      else if (changedRepository || data.configured === false) setHeatmap({});
-      if (!data.buildError || changedRepository) setImageProgress(data.imageProgress || null);
       setBuildError(data.buildError || "");
-      setObservedCheck(data.check || null);
-      setSourceVersion(data.source || null);
-      setImageVersion(data.image || null);
-      setRuntimeVersion(data.runtime || null);
-      if (data.updater) {
-        setUpdaterAvailable(Boolean(data.updater.available));
-        setUpdaterReason(data.updater.reason || "更新服务不可用");
-      }
+      setManagedUpdater(data.updater?.managed === true);
+      setUpdaterAvailable(data.updater?.available === true);
+      setUpdaterReason(data.updater?.reason || "更新服务不可用");
       const updates = Array.isArray(data.updateRequests) ? data.updateRequests : [];
       const update = updates.find(item => item.request_id === commands.update.requestId)
         || updates.find(item => deploymentPending(item.status));
@@ -291,14 +345,17 @@ export default function DeployStatusPage() {
         setContainerUpdateState(pending ? "watching" : update.status === "succeeded" ? "healthy" : "failed");
         setNotice(typeof update.message === "string" ? update.message : pending ? "正在核对原更新请求与运行版本" : update.status === "succeeded" ? "目标容器与后台服务已就绪，版本校验通过" : "原更新请求已结束，请核对结果");
       }
-      setPackageName(data.packageName || "fire-web");
-      if (typeof data.workflowRunCount === "number") setWorkflowRunCount(data.workflowRunCount);
-      else if (changedRepository || data.configured === false) setWorkflowRunCount(0);
-      setCheckedAt(data.checkedAt || "");
       setError([data.sourceError, data.releaseError, data.schemaError, data.heatmapError].filter(Boolean).join("；"));
-    } catch (err) { if (!controller.signal.aborted) { setNotice(""); setError(err instanceof Error ? err.message : "暂时无法读取发布状态"); } }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setRelease(null);
+        setServerCanUpdate(false);
+        setShowingSavedStatus(Boolean(snapshot.current?.checkedAt));
+        setError(err instanceof Error ? err.message : "暂时无法读取发布状态");
+      }
+    }
     finally { if (loadController.current === controller) { setRefreshing(false); setHasLoaded(true); } }
-  }, [commands]);
+  }, [commands, displaySnapshot]);
   const currentMainCheck = observedCheck?.sha === sourceVersion?.sha ? observedCheck : runs.find((run) => run.workflowPath === ".github/workflows/docker-publish.yml" && run.event === "push" && run.sha === sourceVersion?.shortSha);
   // GitHub's own run/step updates lag by tens of seconds. Poll quickly only
   // while an image build is live; a source check or an idle page needs less.
@@ -438,13 +495,14 @@ export default function DeployStatusPage() {
     : runtimeVersion?.sha && runtimeVersion.sha !== "unknown"
       ? { label: runtimeVersion.matchesImage ? `运行旧镜像 ${runtimeVersion.shortSha}` : `待更新 ${runtimeVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
       : { label: "线上版本未知", dot: "bg-slate-400", text: "text-slate-500" };
-  const canUpdateContainer = serverCanUpdate && updaterAvailable && Boolean(imageVersion?.matchesMain) && !runtimeVersion?.matchesImage && !imageBuilding;
+  const waitingForLegacyBuild = imageBuilding && !buildError && !managedUpdater;
+  const canUpdateContainer = serverCanUpdate && updaterAvailable && Boolean(release) && !runtimeVersion?.matchesImage && !waitingForLegacyBuild;
   const updateTitle = resumeRelease ? "沿用原请求编号和镜像继续发布" : commands.update.pending ? "核对原更新请求与运行版本"
     : !updaterAvailable ? updaterReason
-    : imageBuilding ? "请等待镜像构建完成"
-    : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像"
+    : waitingForLegacyBuild ? "请等待镜像构建完成"
+    : !release ? "尚未核对可部署的已发布镜像"
     : runtimeVersion?.matchesImage ? "Watchtower 在线，容器已运行最新镜像"
-    : schemaError || (serverCanUpdate ? "拉取最新 GHCR 镜像并重启 Alcor" : "更新暂不可执行，请核对发布状态");
+    : schemaError || (serverCanUpdate ? `部署已发布镜像 ${release.revision.slice(0, 7)}` : "更新暂不可执行，请核对发布状态");
   const showImageProgress = Boolean(imageProgress && ["schedule", "workflow_dispatch"].includes(imageProgress.event || ""));
   const updaterDot = updaterReason === "正在检查更新服务" ? "bg-slate-400" : updaterAvailable ? "bg-emerald-500" : "bg-red-500";
   const runActionLabel = (run: Run) => {
@@ -490,6 +548,7 @@ export default function DeployStatusPage() {
             <button onClick={() => void updateContainer()} disabled={(!canUpdateContainer && !commands.update.pending) || containerUpdateState === "triggering"} title={updateTitle} className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 disabled:cursor-not-allowed sm:w-auto dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-white/[.04]"><span className={`h-2.5 w-2.5 rounded-full ${updaterDot}`} /><IconServerCog aria-hidden="true" className={containerBusy ? "animate-pulse" : ""} size={16} stroke={1.8} />{containerBusy ? containerButtonLabel : updaterReason === "正在检查更新服务" ? "服务检测中" : !updaterAvailable ? "服务离线" : runtimeVersion?.matchesImage ? "容器已是最新" : schemaError ? "迁移待核对" : "推送新镜像"}</button>
           </div>
         </section>
+        {showingSavedStatus && <p role="status" className="mb-4 text-sm text-slate-500">部分状态来自上次读取，正在等候实时核对</p>}
         {buildError && <p role="alert" className="deploy-observation-error mb-4 text-sm">{buildError}{imageProgress ? " · 显示上次记录" : ""}</p>}
         {imageProgress && showImageProgress && <DeploymentBuildProgress key={imageProgress.id} progress={imageProgress} checkedAt={buildError ? imageProgress.updatedAt : checkedAt} />}
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#121923] dark:shadow-none">
