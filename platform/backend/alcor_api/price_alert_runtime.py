@@ -26,30 +26,33 @@ def from_settings(db, quote_reader=None):
     return service
 
 
-async def discovery(service, version, *, connection=None):
+async def discovery(service, version, *, connection=None, quarantined=None):
+    from . import __version__
+    from .fx_reference import external_delivery_blocked
+
     base = f"/api/v{version}/price-alerts"
+    reader = service.reader
 
-    async def read(conn):
-        from . import __version__
-
-        fingerprint = getattr(service.reader, "fingerprint", None)
+    async def monitoring_available(conn):
+        if reader is None:
+            return False
+        blocked = await external_delivery_blocked(conn) if quarantined is None else quarantined
+        if blocked:
+            return False
         worker = await (
             await conn.execute(
                 """SELECT 1 FROM price_alert_worker_heartbeats WHERE observed_at>clock_timestamp()-interval '30 seconds'
             AND origin_instance=%s AND release_version=%s AND source_fingerprint=%s LIMIT 1""",
-                (service.db.settings.instance_id, __version__, fingerprint),
+                (service.db.settings.instance_id, __version__, getattr(reader, "fingerprint", None)),
             )
         ).fetchone()
-        from .fx_reference import external_delivery_blocked
-
-        quarantined = await external_delivery_blocked(conn)
-        return worker, quarantined
+        return bool(worker)
 
     if connection is not None:
-        worker, quarantined = await read(connection)
+        available = await monitoring_available(connection)
     else:
         async with service.db.connection() as conn:
-            worker, quarantined = await read(conn)
+            available = await monitoring_available(conn)
     return {
         "version": 1,
         "snapshot_path": base,
@@ -62,5 +65,5 @@ async def discovery(service, version, *, connection=None):
         "channels": ["app", "email", "telegram"],
         "wechat": {"version": 1, "binding": "verification-code"},
         "messengers": {"version": 1, "binding": "verification-code", "channels": ["feishu", "discord", "qq"]},
-        "monitoring_available": bool(worker and service.reader is not None and not quarantined),
+        "monitoring_available": available,
     }

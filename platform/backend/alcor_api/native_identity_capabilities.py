@@ -4,7 +4,10 @@ from urllib.parse import urlsplit
 
 from fastapi import HTTPException
 
+from .accounts import REGISTRATION_STATUS_QUERY
+from .db import TargetMismatch
 from .identity_mail import mail_configured
+from .site_registration import MIGRATION as SITE_SETTINGS_MIGRATION, installed as site_settings_installed
 from .site_settings import domain
 
 
@@ -29,10 +32,14 @@ async def email_verification_availability(conn, settings):
     blocked = await (
         await conn.execute("SELECT 1 FROM restore_quarantine WHERE category='external_delivery_disabled'")
     ).fetchone()
+    return email_verification_state(settings, bool(blocked))
+
+
+def email_verification_state(settings, blocked):
     return {
         "protocolSupported": True,
         "configured": mail_configured(settings),
-        "deliveryAllowed": not bool(blocked),
+        "deliveryAllowed": not blocked,
         "verificationLinkAvailable": verification_link_available(settings),
         "deliveryHealth": "not_checked",
     }
@@ -50,18 +57,46 @@ def email_verification_capable(scope, availability):
     )
 
 
-async def native_email_registration_discovery(conn, settings, availability=None):
-    from .accounts import registration_status
-    from .site_registration import registration_open
+async def discovery_identity_inputs(conn):
+    # The public configuration is one ordinary PG snapshot. Actual account
+    # insertion still uses the shared transactional registration gate.
+    installed = SITE_SETTINGS_MIGRATION in getattr(conn, "_alcor_schema_names", ())
+    if not installed:
+        installed = await site_settings_installed(conn)
+    registration_gate = (
+        "(SELECT allow_register FROM public.site_settings WHERE singleton)" if installed else "TRUE"
+    )
+    inputs = await (
+        await conn.execute(
+            f"""
+            SELECT rp_id, origin, ({REGISTRATION_STATUS_QUERY}) AS first_user,
+                   {registration_gate} AS registration_open,
+                   EXISTS (
+                       SELECT 1 FROM restore_quarantine WHERE category='external_delivery_disabled'
+                   ) AS mail_blocked,
+                   EXISTS (
+                       SELECT 1 FROM restore_quarantine
+                       WHERE category='external_delivery_disabled' AND payload->>'disabled'='true'
+                   ) AS external_delivery_blocked
+            FROM identity_passkey_config WHERE singleton=true
+            """
+        )
+    ).fetchone()
+    if inputs is None:
+        raise TargetMismatch("Passkey discovery configuration is missing")
+    if inputs["first_user"] is None:
+        raise TargetMismatch("Registration state is missing")
+    if inputs["registration_open"] is None:
+        raise HTTPException(503, "站点注册配置缺失")
+    return inputs
 
-    availability = availability or await email_verification_availability(conn, settings)
-    state = await registration_status(conn)
-    opened = await registration_open(conn)
+
+def native_email_registration_discovery(availability, *, opened, first_user):
     # Existing native clients accept ordinary-user registration receipts only.
     # First-account role assignment stays in the shared PG transaction; the new
     # Web supports that bootstrap rather than mislabelling an admin receipt.
     ready = bool(
-        opened and not state["first_user"] and availability["configured"] and availability["deliveryAllowed"]
+        opened and not first_user and availability["configured"] and availability["deliveryAllowed"]
     )
     return {
         "supported": ready,
@@ -76,7 +111,7 @@ async def native_email_registration_discovery(conn, settings, availability=None)
         "readiness": {
             "protocolSupported": True,
             "registrationOpen": opened,
-            "firstAccountRequiresWeb": state["first_user"],
+            "firstAccountRequiresWeb": first_user,
             "configured": availability["configured"],
             "deliveryAllowed": availability["deliveryAllowed"],
             "deliveryHealth": "not_checked",

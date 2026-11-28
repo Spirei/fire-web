@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
+from .app_api import APP_PREFIX, app_discovery
 from .models import LoginInput
 from .fx_provider_parser import unique
 from .passwords import DUMMY_HASH, verify_password
@@ -289,21 +290,21 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
     async def native_config_operation(version: int, request: Request, response: Response):
         assert_native_origin(request, settings)
         from .native_business_discovery import discovery as business_discovery
-        from .native_identity_capabilities import email_verification_availability, native_email_registration_discovery
-        # One checkout serves the whole identity/mail discovery; these reads
-        # share the same snapshot and do not authorize any write.
+        from .native_identity_capabilities import (
+            discovery_identity_inputs, email_verification_state, native_email_registration_discovery,
+        )
         async with db.connection() as conn:
-            config = await (await conn.execute('SELECT * FROM identity_passkey_config WHERE singleton=true')).fetchone()
-            mail_availability = await email_verification_availability(conn, settings)
+            config = await discovery_identity_inputs(conn)
+            mail_availability = email_verification_state(settings, config["mail_blocked"])
             value = discovery(version, config)
             value.update(business_discovery(version, native_ledger_enabled=settings.native_ledger_enabled))
             value['security']['email_verification_delivery'] = mail_availability
-            value['native_login']['email_registration'] = await native_email_registration_discovery(conn, settings, mail_availability)
-            # Price-alert and calendar discovery share this snapshot instead of
-            # checking out (and re-verifying) two more pooled connections.
+            value['native_login']['email_registration'] = native_email_registration_discovery(
+                mail_availability, opened=config["registration_open"], first_user=config["first_user"],
+            )
             from .price_alert_runtime import discovery as price_alerts_discovery
             value['price_alerts'] = await price_alerts_discovery(
-                app.state.price_alerts, version, connection=conn
+                app.state.price_alerts, version, connection=conn, quarantined=config["external_delivery_blocked"]
             )
             from .market_calendar import Calendars
             calendar = await Calendars(db).discovery(connection=conn)
@@ -324,7 +325,12 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
     @app.get('/api/v{version}/auth/config', tags=['legacy-native-identity'])
     async def native_config(version: int, request: Request, response: Response):
         native_version(request)
-        return envelope(await native_config_operation(version, request, response), request, response)
+        value = await native_config_operation(version, request, response)
+        if version == 2:
+            value["canonical_app_path"] = APP_PREFIX
+            if getattr(request.state, "stable_app_api", False):
+                value = app_discovery(value)
+        return envelope(value, request, response)
 
     @app.get('/api/client/config', tags=['client-identity'])
     async def client_native_config(request: Request, response: Response):

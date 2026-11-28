@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 /** 固定转交给 Fire 内置服务；业务路由、授权和请求预算由同一服务核验。 */
 async function route(request: Request) {
   const url = new URL(request.url);
-  const version = /^\/api\/v([12])\//.exec(url.pathname)?.[1];
+  const appApi = url.pathname === "/api/app" || url.pathname.startsWith("/api/app/");
+  const appRaw = /^\/api\/app\/(?:market\/(?:sources|history)|portfolio\/series|auth\/register(?:\/email\/(?:request|confirm))?)$/.test(url.pathname);
+  const version = appApi ? "2" : /^\/api\/v([12])\//.exec(url.pathname)?.[1];
   const native = Boolean(version) || url.pathname.startsWith("/api/client/");
   try {
     const { publicOrigin } = platformConfig();
@@ -27,6 +29,7 @@ async function route(request: Request) {
     });
     if (
       response.status >= 400 &&
+      (!appApi || appRaw) &&
       !/^\/api\/(?:v\d+|fire)\//.test(url.pathname) &&
       response.headers.get("content-type")?.includes("application/json")
     ) {

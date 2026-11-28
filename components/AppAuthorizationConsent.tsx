@@ -39,7 +39,7 @@ export default function AppAuthorizationConsent({ authorization, account, userna
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 15_000);
     try {
-      const response = await fetch("/api/v1/auth/authorize", { method: "POST", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...authorization, decision: nextDecision }), signal: controller.signal });
+      const response = await fetch("/api/app/auth/authorize", { method: "POST", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...authorization, decision: nextDecision }), signal: controller.signal });
       const body = await readLimitedResponseJson<any>(response, 8192);
       if (response.status === 401) setNeedsLogin(true);
       if (!response.ok || body?.code !== 0 || !validAppAuthorizationCallback(body.data?.callback, authorization.state, nextDecision)) throw new Error("授权结果无效，请返回 App 重新连接");

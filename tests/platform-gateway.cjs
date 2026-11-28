@@ -52,6 +52,10 @@ const server = http.createServer(async (req, res) => {
     "fire_session=fake; HttpOnly; Path=/",
     "other=value; Path=/",
   ]);
+  if (["/api/market/history", "/api/app/market/history"].includes(req.url)) {
+    res.statusCode = 403;
+    return res.end(JSON.stringify({ error: { code: 40301, message: "来源未授权" } }));
+  }
   if (req.url === "/api/not-a-declared-route") res.statusCode = 404;
   else if (req.method === "DELETE") res.statusCode = 405;
   res.end(JSON.stringify({ ok: true }));
@@ -179,6 +183,11 @@ const server = http.createServer(async (req, res) => {
     assert.equal(fixed.status, 200);
     await fixed.text();
     assert.equal(seen.at(-1).url, "/assets/system/pwa-icon?size=180");
+    for (const prefix of ["/api", "/api/app"]) {
+      const denied = await proxy.GET(new Request(`https://fire.example.invalid${prefix}/market/history`));
+      assert.equal(denied.status, 403);
+      assert.deepEqual(await denied.json(), { error: "来源未授权" });
+    }
     const publicCount = seen.length;
     assert.equal(
       (
@@ -196,8 +205,8 @@ const server = http.createServer(async (req, res) => {
     await assert.rejects(() => platformRequest("/\\attacker.invalid/api"));
     process.env.FIRE_PUBLIC_ORIGIN = "https://name:secret@fire.example.invalid";
     assert.throws(platformConfig);
-    for (const version of [1,2]) {
-      const failed = await proxy.POST(new Request(`https://fire.example.invalid/api/v${version}/auth/token`, {
+    for (const [base, version] of [["/api/v1", 1], ["/api/v2", 2], ["/api/app", 2]]) {
+      const failed = await proxy.POST(new Request(`https://fire.example.invalid${base}/auth/token`, {
         method: "POST", headers: { "content-type": "application/json" }, body: '{}',
       }));
       assert.equal(failed.status,503);

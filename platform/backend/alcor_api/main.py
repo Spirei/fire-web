@@ -1,4 +1,5 @@
 import contextlib
+from .app_api import APP_PREFIX, AppAPIRouting, app_route_patterns
 from .profile_http import body_budget, profile_limits
 from .fee_http import fee_body_budget
 from .legacy_profile_api import mount_profile_compatibility
@@ -43,6 +44,15 @@ log = logging.getLogger("alcor.api")
 Admin = Annotated[Identity, Depends(administrator)]
 Member = Annotated[Identity, Depends(identity)]
 PREFIX = "/api"
+
+
+def native_wire_version(path):
+    match = re.match(r"^/api/v([12])/", path)
+    if match:
+        return match[1]
+    if path == APP_PREFIX or path.startswith(APP_PREFIX + "/"):
+        return "2"
+    return None
 
 
 async def rate_limit(db, key, maximum, *, window_seconds=900):
@@ -254,9 +264,9 @@ def create_app(settings: Settings | None = None):
             response=Response(status_code=204)
         else:
             response = await call_next(request)
-        native = re.match(r"^/api/v([12])/", request.url.path)
-        if native:
-            response.headers["X-Alcor-API-Version"] = native[1]
+        version = "2" if getattr(request.state, "stable_app_api", False) else native_wire_version(request.url.path)
+        if version:
+            response.headers["X-Alcor-API-Version"] = version
             vary = [value.strip() for value in response.headers.get("Vary", "").split(",") if value.strip()]
             if not any(value.lower() in {"authorization", "*"} for value in vary):
                 response.headers["Vary"] = ", ".join([*vary, "Authorization"])
@@ -288,9 +298,9 @@ def create_app(settings: Settings | None = None):
         return response
 
     def error(request, status, code, message):
-        if re.match(r'^/api/v[12]/',request.url.path):
+        if version := native_wire_version(request.url.path):
             return JSONResponse(status_code=status,content={'code':50001 if status>=500 else 40002,'message':message},headers={
-                'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6],
+                'Cache-Control':'no-store','X-Alcor-API-Version':version,
                 'Vary':'Authorization','X-Content-Type-Options':'nosniff',
                 'X-Request-ID':getattr(request.state,'request_id',''),
                 **({'Retry-After':'3'} if status==503 else {})})
@@ -307,9 +317,9 @@ def create_app(settings: Settings | None = None):
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request, exc):
-        if re.match(r'^/api/v[12]/',request.url.path):
+        if version := native_wire_version(request.url.path):
             code=getattr(exc,'business_code',{400:40002,401:40101 if '需要有效的 App 连接' in str(exc.detail) else 40102,403:40301,404:40401,405:40501,408:40801,409:40901,413:41301,415:41501,422:40003,429:42901}.get(exc.status_code,50001))
-            return JSONResponse(status_code=exc.status_code,content={'code':code,'message':str(exc.detail)},headers={**(exc.headers or {}),'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6]})
+            return JSONResponse(status_code=exc.status_code,content={'code':code,'message':str(exc.detail)},headers={**(exc.headers or {}),'Cache-Control':'no-store','X-Alcor-API-Version':version})
         if request.url.path in LEGACY_WEB_PATHS:
             payload = {'error': str(exc.detail)}
             if exc.headers and exc.headers.get('X-Alcor-Reauthentication') == 'required':
@@ -321,8 +331,8 @@ def create_app(settings: Settings | None = None):
 
     @app.exception_handler(RequestValidationError)
     async def input_error(request, exc):
-        if re.match(r'^/api/v[12]/',request.url.path):
-            return JSONResponse(status_code=400,content={'code':40002,'message':'请求参数无效'},headers={'Cache-Control':'no-store','X-Alcor-API-Version':request.url.path[6]})
+        if version := native_wire_version(request.url.path):
+            return JSONResponse(status_code=400,content={'code':40002,'message':'请求参数无效'},headers={'Cache-Control':'no-store','X-Alcor-API-Version':version})
         return error(request, 422, "invalid_input", "输入格式或范围不符合要求")
 
     @app.exception_handler(PoolTimeout)
@@ -989,6 +999,7 @@ def create_app(settings: Settings | None = None):
 
     app.add_middleware(ObserveRequests, observations=observations, routes=app.routes)
     app.add_middleware(CountAccountRequests, activity=request_activity)
+    app.add_middleware(AppAPIRouting, patterns=app_route_patterns(app.routes))
     if settings.trusted_proxy_ips:
         from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
         app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_ips)

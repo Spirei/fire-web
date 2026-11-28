@@ -4,6 +4,25 @@
 
 App 是主要服务对象，Web 可视化用于维护、配置和排查。现有正式 App 的接口稳定、延迟、字段与数据一致性优先，兼容修复由共享服务承接。
 
+## App 统一入口
+
+新 App 只需同源读取一次 `GET /api/app/auth/config`。配置使用原 App 的 `{code,message,data}` 信封，`data.app_api_base_path` 固定为 `/api/app`。`version=2`、`app_api_version=2` 与 `api_versions_supported` 保留供现有 DTO 解码。地址选择直接使用固定入口。
+
+| App 用途 | 相对 `/api/app` 的地址 |
+| --- | --- |
+| 配置、登录、二步验证和令牌 | `auth/config`、`auth/login`、`auth/login/totp`、`auth/me`、`auth/token`、`auth/revoke`、`auth/permissions`、`auth/consent` |
+| 本人数据与同步 | `account-assets`、`records`、`watch-groups`、`broker-accounts`、`app-state`、`app-state/operations/{requestId}` |
+| 原生账本与回执 | `account-assets/native-ledger`、`account-assets/native-ledger/transactions`、`account-assets/native-ledger/transactions/{requestId}`、`account-assets/native-ledger/registered-void` |
+| 行情、历史和市场日历 | `quotes`、`search`、`stock-detail`、`charts`、`chart-series`、`kline`、`market-calendar` |
+| 已授权来源原始读取 | `GET market/sources`、`GET market/history`、`GET portfolio/series`，沿原 JSON 结构 |
+| 注册 | `POST auth/register`、`POST auth/register/email/request`、`POST auth/register/email/confirm`，沿原注册响应字段 |
+
+已支持的业务直接使用原 App 相对路径、方法、请求及回执结构。系统授权页仍使用 `/app/authorize`，提交使用 `POST /api/app/auth/authorize`，回调 URI 保持现有约定。授权页使用 Web 会话和原 PKCE/CSRF 核对，App 私有业务使用当前 Bearer 授权。配置只声明能力，实际请求继续核对账户、授权范围、回执及数据库版本。
+
+旧安装仍可调用原 v1/v2 路径。新版 v2 发现额外声明 `canonical_app_path: "/api/app"`。新 App 连接旧服务时，只有新入口明确返回 404 才按原发现合同兼容。网络失败、认证拒绝和服务不可用按原状态处理，业务写入不跨地址自动重放。
+
+匿名配置合并读取通行密钥、注册政策及邮件禁用状态，注册写入继续使用原事务核对。市场日历活动版本和提醒 Worker 可用性继续读取当前状态。设置提交后，下次配置读取即可核对。
+
 ## 单地址接入与兼容演进
 
 用户只填写一个 Alcor 网站地址；现有 App 已按同源发现结果确认版本并拼接业务路径，无需分别填写行情、账户、汇率或图表接口。供应商连接配置由服务端管理。新能力沿 v2 主线演进，现有 v1 与其他已公布入口共用业务服务并保留兼容；本约定不删除入口，也不让既有凭据自动换版本。
@@ -14,7 +33,7 @@ App 是主要服务对象，Web 可视化用于维护、配置和排查。现有
 
 ## 连接与身份
 
-- 新连接先匿名读取固定 `/api/v1/auth/config`，验证声明后读取同源固定 `/api/v2/auth/config`。来源、版本、grant 与权限绑定保存；网络失败、无效结构和 v2 不可用不能触发跨版本降级或改用 Web Cookie。
+- 兼容旧 App 时先匿名读取固定 `/api/v1/auth/config`，核对后按已声明能力打开同源 v2。新版直接读取统一入口。来源、grant 与权限绑定保存；网络失败、无效结构和 v2 不可用不能触发跨版本降级或改用 Web Cookie。
 - App 私有请求只使用当前连接的 `Bearer fat_…`。服务端逐次验证实际令牌、期限、账号状态、权限与撤销记录；Redis 不保存认证成功结果。
 - 原生登录、续期和撤销凭据请求可以不带 Origin 或 Authorization。网页入口按固定 v1/v2 与 client 路径转交内置服务，由同一后端校验实际来源及凭据；其他网页写入继续核对 Origin。转发服务暂不可用时，版本化接口仍返回统一 JSON、请求编号及恢复提示。
 - 同一连接的令牌续期共用一个在途操作，凭据成对原子保存。续期不扩大 scope、不变更选定 API 版本；旧 refresh token 的重放规则保持。连接替换后的迟到结果不能覆盖新凭据。

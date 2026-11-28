@@ -9,13 +9,14 @@ class LoginConflict(ValueError):
     pass
 
 
+REGISTRATION_STATUS_QUERY = (
+    "SELECT NOT bootstrap_completed AND NOT EXISTS (SELECT 1 FROM users) AS first_user "
+    "FROM registration_state WHERE singleton=true"
+)
+
+
 async def registration_status(conn):
-    row = await (
-        await conn.execute(
-            "SELECT NOT bootstrap_completed AND NOT EXISTS (SELECT 1 FROM users) AS first_user "
-            "FROM registration_state WHERE singleton=true"
-        )
-    ).fetchone()
+    row = await (await conn.execute(REGISTRATION_STATUS_QUERY)).fetchone()
     if not row:
         raise TargetMismatch("Registration state is missing")
     return row
