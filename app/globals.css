@@ -7548,6 +7548,29 @@ button.asset-image-control{cursor:pointer}.asset-image-control.is-card{width:80p
 }
 @media(prefers-reduced-motion:reduce) { .market-source-row,.market-source-moves button { transition:none; } }
 
+/* The Data Management handle uses the same grip as Asset Analysis. */
+@media (min-width:1280px) {
+  html[data-platform-align] .records-content > .tab-panel[data-workspace="data-management"] > .data-management-page {
+    max-width: none;
+  }
+  .data-management-frame {
+    position: relative;
+    width: 100%;
+    max-width: var(--data-management-width, calc(var(--platform-content-width, 1100px) + 20px));
+    padding-inline-end: 20px;
+  }
+  html[data-platform-align="center"] .data-management-frame { margin-inline: auto; }
+  .data-management-frame[data-resizing] { cursor: col-resize; user-select: none; }
+  .asset-analysis-resizer.data-management-resizer {
+    position: absolute;
+    inset-block: 44px 0;
+    inset-inline-end: 2px;
+    width: 16px;
+    min-height: 0;
+  }
+  .data-management-resizer > i { position: relative; top: auto; }
+}
+
 /* Analysis uses the available workspace; keep the saved left split and give its tables more room. */
 @media (min-width:1280px) {
   html[data-platform-align] .records-content > .tab-panel[data-workspace="assets"] > .asset-analysis-page { max-width:none; }

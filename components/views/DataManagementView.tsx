@@ -1,14 +1,20 @@
 "use client";
 
 import { IconBriefcase, IconDatabaseExport, IconDatabaseImport, IconShieldCheck } from "@tabler/icons-react";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { Capsule } from "@/components/Capsule";
 import InvestmentDataManager, { InvestmentArchiveAction } from "@/components/InvestmentDataManager";
 import MigrationReadinessCard from "@/components/MigrationReadinessCard";
 import PlatformBackups from "@/components/PlatformBackups";
 import { platformRequest } from "@/lib/platformRequest";
 import { clientRequestId } from "@/lib/randomId";
+import { usePersistedState } from "@/lib/usePersistedState";
 import { useWorkspaceSearchParams } from "@/lib/workspacePanel";
+
+const MIN_WIDTH = 680;
+const WIDTH_STEP = 32;
+
+type WidthDrag = { pointerId: number; startX: number; startWidth: number; multiplier: number; width: number };
 
 type Counts = { records?: number; tradeOrders?: number; watchGroups?: number };
 type ImportPlan = { requestId: string; previewId: string; state: string; confirmSupported: boolean; counts?: Counts; blocked?: unknown[] };
@@ -23,11 +29,60 @@ export default function DataManagementView({ ownerId, sessionCsrf, admin, record
   const [backupBusy, setBackupBusy] = useState<"export" | "import" | null>(null);
   const [pending, setPending] = useState<{ name: string; plan: ImportPlan }>();
   const [notice, setNotice] = useState<{ message: string; error?: boolean }>();
+  const available = useRef<HTMLElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const drag = useRef<WidthDrag | null>(null);
+  const [savedWidth, setSavedWidth] = usePersistedState<number | null>("fire:data-management:width", null);
+  const [draftWidth, setDraftWidth] = useState<number | null>(null);
+  const width = draftWidth ?? savedWidth;
+  const widthStyle = typeof width === "number" && Number.isFinite(width) && width >= MIN_WIDTH
+    ? { "--data-management-width": `${width}px` } as CSSProperties : undefined;
   const importBackupRef = useRef<HTMLInputElement>(null);
   const importReviewId = useId();
   const params = useWorkspaceSearchParams();
   const resumeBackup = admin && /^[a-f0-9-]{36}$/i.test(params?.get("backupRequest") ?? "");
   const ownerHeaders = { "X-Alcor-Expected-Account": ownerId };
+
+  function boundedWidth(value: number) {
+    return Math.min(available.current?.clientWidth ?? MIN_WIDTH, Math.max(MIN_WIDTH, Math.round(value)));
+  }
+
+  function startResize(event: PointerEvent<HTMLButtonElement>) {
+    if (!frame.current || event.button !== 0) return;
+    const width = Math.round(frame.current.getBoundingClientRect().width);
+    drag.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: width, width,
+      multiplier: document.documentElement.dataset.platformAlign === "center" ? 2 : 1 };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  function moveResize(event: PointerEvent<HTMLButtonElement>) {
+    const active = drag.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    active.width = boundedWidth(active.startWidth + (event.clientX - active.startX) * active.multiplier);
+    setDraftWidth(active.width);
+  }
+
+  function finishResize(event: PointerEvent<HTMLButtonElement>) {
+    const active = drag.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    drag.current = null;
+    if (event.type === "pointerup" && active.width !== active.startWidth) setSavedWidth(active.width);
+    setDraftWidth(null);
+  }
+
+  function resizeWithKeyboard(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!frame.current) return;
+    const width = frame.current.getBoundingClientRect().width;
+    switch (event.key) {
+      case "ArrowLeft": setSavedWidth(boundedWidth(width - WIDTH_STEP)); break;
+      case "ArrowRight": setSavedWidth(boundedWidth(width + WIDTH_STEP)); break;
+      case "End": setSavedWidth(available.current?.clientWidth ?? MIN_WIDTH); break;
+      case "Home": setSavedWidth(null); break;
+      default: return;
+    }
+    event.preventDefault();
+  }
 
   async function exportSiteBackup() {
     setBackupBusy("export");
@@ -103,7 +158,8 @@ export default function DataManagementView({ ownerId, sessionCsrf, admin, record
   }
 
   return (
-    <section className="data-management-page mx-auto w-full min-w-0 max-w-[1100px]" aria-labelledby="data-management-title">
+    <section ref={available} className="data-management-page mx-auto w-full min-w-0 max-w-[1100px]" aria-labelledby="data-management-title">
+      <div ref={frame} className="data-management-frame" style={widthStyle} data-resizing={draftWidth !== null || undefined}>
       <h1 id="data-management-title" className="mb-5 text-2xl font-semibold text-ink">数据管理</h1>
       <InvestmentDataManager key={ownerId} ownerId={ownerId} sessionCsrf={sessionCsrf} resumeBackup={resumeBackup} archiveActions={
           <>
@@ -139,6 +195,14 @@ export default function DataManagementView({ ownerId, sessionCsrf, admin, record
             {notice && <p role={notice.error ? "alert" : "status"} className={`border-t border-edge px-4 py-2 text-xs ${notice.error ? "text-down" : "text-muted"}`}>{notice.message}</p>}
           </>
       } />
+      <button type="button" className="asset-analysis-resizer data-management-resizer" aria-label="调整数据管理页面宽度"
+        title="拖动调整宽度，双击恢复默认" aria-keyshortcuts="ArrowLeft ArrowRight Home End"
+        onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={finishResize}
+        onPointerCancel={finishResize} onLostPointerCapture={finishResize}
+        onDoubleClick={() => setSavedWidth(null)} onKeyDown={resizeWithKeyboard}>
+        <span aria-hidden="true" /><i aria-hidden="true">⋮</i>
+      </button>
+      </div>
     </section>
   );
 }
