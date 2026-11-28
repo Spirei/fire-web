@@ -45,6 +45,15 @@ await update.execute({release:{revision:'different-preview'}});
 assert(update.pending);
 assert.equal(calls.length,2);
 assert(!calls[1].init.method);
+const retainedRelease = {image:'ghcr.io/fixture/fire@sha256:approved', revision:'original'};
+global.fetch=async(url,init={})=>{
+  assert.equal(url,'/container-update');
+  assert.equal(init.method,'POST');
+  assert.deepEqual(JSON.parse(init.body), {release:retainedRelease,request_id:recoveredId});
+  return Response.json({status:'unknown',request_id:recoveredId,stage:'backup_verified'});
+};
+assert.equal((await update.resume({release:retainedRelease})).stage,'backup_verified');
+assert.equal(update.requestId,recoveredId);
 let unblock;
 calls=[];
 global.fetch=(url,init={})=>{

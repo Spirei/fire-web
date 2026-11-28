@@ -113,6 +113,7 @@ class Settings(BaseSettings):
     deployment_running_image: str = Field(default='', pattern=r'^(?:ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64})?$')
     source_revision: str = Field(default="", pattern=r"^(?:[a-f0-9]{40})?$")
     deployment_updater_url: str = ""
+    deployment_managed_updater: bool = False
 
     @field_validator("trusted_proxy_ips")
     @classmethod

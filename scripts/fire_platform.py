@@ -121,10 +121,12 @@ async def command(mode, args):
         parser = argparse.ArgumentParser(prog="fire platform:migrate")
         parser.add_argument("--database", required=True)
         parser.add_argument("--initialize-empty", action="store_true")
+        parser.add_argument("--require-target-schema", action="store_true")
         flags = parser.parse_args(args)
         from alcor_api.migrate import migrate
 
-        await migrate(settings, flags.database, initialize_empty=flags.initialize_empty)
+        await migrate(settings, flags.database, initialize_empty=flags.initialize_empty,
+                      require_target_schema=flags.require_target_schema)
         return {"migrated": True, "instance_id": str(settings.instance_id)}
     if mode == "repair-native-ledger":
         import argparse

@@ -7,6 +7,7 @@ COPY . .
 RUN test -s public/fire-assets/clownfish-family.png && npm run build
 
 FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
+FROM docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c AS docker-cli
 FROM python:3.12-slim-bookworm AS backend
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /platform
@@ -30,6 +31,8 @@ RUN case "$PG_MAJOR" in 16|17|18) ;; *) exit 1 ;; esac \
     && apt-get purge -y --auto-remove curl gnupg && rm -rf /var/lib/apt/lists/*
 ENV FIRE_PG_TOOLS_DIR=/usr/lib/postgresql/${PG_MAJOR}/bin
 COPY --from=web /usr/local/bin/node /usr/local/bin/node
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY --from=web /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 WORKDIR /app

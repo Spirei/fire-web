@@ -234,6 +234,7 @@ export default function DeployStatusPage() {
     update: new DeploymentCommand("/api/deploy-status/container-update", "POST", "/api/deploy-status/requests"),
   }), []);
   const [release, setRelease] = useState<Record<string,string> | null>(null);
+  const [resumeRelease, setResumeRelease] = useState<Record<string,string> | null>(null);
   const [serverCanUpdate, setServerCanUpdate] = useState(false);
   const [schemaError, setSchemaError] = useState("");
   const [configOpen, setConfigOpen] = useState(false);
@@ -253,7 +254,7 @@ export default function DeployStatusPage() {
         source?: SourceVersion | null; image?: ImageVersion | null; runtime?: RuntimeVersion | null;
         packageName?: string; workflowRunCount?: number; checkedAt?: string; heatmap?: Record<string, number>;
         updateRequests?: Array<Record<string, unknown>>;
-        updater?: { available?: boolean; reason?: string; observedAt?: string | null };
+        updater?: { available?: boolean; managed?: boolean; reason?: string; observedAt?: string | null };
       }>(response);
       if (controller.signal.aborted) return;
       const changedRepository = !!loadedRepository.current && loadedRepository.current !== data.repository;
@@ -280,10 +281,15 @@ export default function DeployStatusPage() {
       const updates = Array.isArray(data.updateRequests) ? data.updateRequests : [];
       const update = updates.find(item => item.request_id === commands.update.requestId)
         || updates.find(item => deploymentPending(item.status));
+      const releaseKeys = ["image", "version", "revision", "schema_hash"];
+      setResumeRelease(data.updater?.managed && update && deploymentPending(update.status) &&
+        [undefined, "failed", "maintenance_required"].includes(update.updater_status as string | undefined)
+        && releaseKeys.every(key => typeof update[key] === "string")
+        ? Object.fromEntries(releaseKeys.map(key => [key, update[key] as string])) : null);
       if (update && commands.update.observe(update)) {
         const pending = deploymentPending(update.status);
         setContainerUpdateState(pending ? "watching" : update.status === "succeeded" ? "healthy" : "failed");
-        setNotice(pending ? "正在核对原更新请求与运行版本" : update.status === "succeeded" ? "目标容器与后台服务已就绪，版本校验通过" : "原更新请求已结束，请核对结果");
+        setNotice(typeof update.message === "string" ? update.message : pending ? "正在核对原更新请求与运行版本" : update.status === "succeeded" ? "目标容器与后台服务已就绪，版本校验通过" : "原更新请求已结束，请核对结果");
       }
       setPackageName(data.packageName || "fire-web");
       if (typeof data.workflowRunCount === "number") setWorkflowRunCount(data.workflowRunCount);
@@ -360,7 +366,9 @@ export default function DeployStatusPage() {
     setContainerUpdateState("triggering"); setNotice(""); setError("");
     try {
       if (!release && !commands.update.pending) throw new Error("尚未读取到已发布的镜像，请刷新核对");
-      const data = await commands.update.execute(release ? { release } : {});
+      const data = resumeRelease
+        ? await commands.update.resume({ release: resumeRelease })
+        : await commands.update.execute(release ? { release } : {});
       if (["failed", "rejected"].includes(String(data.status))) throw new Error("更新未完成，请核对原请求");
       setContainerUpdateState(deploymentPending(data.status) ? "watching" : data.status === "succeeded" ? "healthy" : "failed");
       setNotice(typeof data.message === "string" ? data.message : "更新请求已记录，正在核对运行版本");
@@ -371,7 +379,7 @@ export default function DeployStatusPage() {
     }
   };
   const containerBusy = containerUpdateState === "triggering" || commands.update.pending;
-  const containerButtonLabel = containerUpdateState === "triggering" ? "正在核对…" : "核对更新";
+  const containerButtonLabel = containerUpdateState === "triggering" ? "正在核对…" : resumeRelease ? "继续原发布" : "核对更新";
   // Progress is read separately from the history page; keep the release card
   // on the newer of the two so a slow history response cannot show stale steps.
   const progressRun: Run | null = imageProgress && ["schedule", "workflow_dispatch"].includes(imageProgress.event || "")
@@ -431,7 +439,7 @@ export default function DeployStatusPage() {
       ? { label: runtimeVersion.matchesImage ? `运行旧镜像 ${runtimeVersion.shortSha}` : `待更新 ${runtimeVersion.shortSha}`, dot: "bg-slate-400", text: "text-slate-600 dark:text-slate-300" }
       : { label: "线上版本未知", dot: "bg-slate-400", text: "text-slate-500" };
   const canUpdateContainer = serverCanUpdate && updaterAvailable && Boolean(imageVersion?.matchesMain) && !runtimeVersion?.matchesImage && !imageBuilding;
-  const updateTitle = commands.update.pending ? "仅核对原更新请求与运行版本"
+  const updateTitle = resumeRelease ? "沿用原请求编号和镜像继续发布" : commands.update.pending ? "核对原更新请求与运行版本"
     : !updaterAvailable ? updaterReason
     : imageBuilding ? "请等待镜像构建完成"
     : !imageVersion?.matchesMain ? "当前 main 尚无可部署镜像"

@@ -1,6 +1,7 @@
 """Private Watchtower notification and observed-runtime convergence; never a Docker executor."""
 
 import asyncio
+import json
 import socket
 import urllib.error
 import urllib.request
@@ -32,12 +33,21 @@ def configured(settings):
 
 
 def probe(settings):
-    result = {"configured": configured(settings), "online": False, "kind": "watchtower",
+    managed = getattr(settings, "deployment_managed_updater", False)
+    result = {"configured": configured(settings), "online": False,
+              "kind": "fire-release-updater" if managed else "watchtower",
               "observed_at": None, "reason": "尚未配置独立 Watchtower"}
     if not result["configured"]:
         return result
     result["observed_at"] = datetime.now(UTC)
     target = urlsplit(endpoint(settings))
+    if managed:
+        try:
+            if updater_request(settings, "/v1/health").get("kind") == "fire-release-updater":
+                result.update(online=True, reason="独立发布更新器就绪")
+        except (OSError, ValueError):
+            result["reason"] = "无法连接独立发布更新器"
+        return result
     try:
         # GET /v1/update is an action, never a health probe.
         with socket.create_connection((target.hostname, target.port or 80), timeout=1.5):
@@ -50,6 +60,61 @@ def probe(settings):
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *_args, **_kwargs):
         return None
+
+
+def updater_request(settings, path, approval=None):
+    target = urlsplit(endpoint(settings))
+    request = urllib.request.Request(
+        f"{target.scheme}://{target.netloc}{path}",
+        data=json.dumps(approval).encode() if approval else None,
+        headers={"Authorization": "Bearer " + settings.deployment_runner_token.get_secret_value(),
+                 "Content-Type": "application/json", "Accept": "application/json"},
+    )
+    with urllib.request.build_opener(NoRedirect).open(request, timeout=4) as response:
+        payload = json.loads(response.read(8192))
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid private updater response")
+    return payload
+
+
+async def managed_progress(settings, request_id):
+    if not getattr(settings, "deployment_managed_updater", False) or not configured(settings):
+        return {}
+    try:
+        result = await asyncio.to_thread(updater_request, settings, "/v1/update/" + str(request_id))
+    except (OSError, ValueError):
+        return {}
+    if result.get("request_id") != str(request_id):
+        return {}
+    return {"stage": result.get("stage"), "message": result.get("message"),
+            "updater_status": result.get("status")}
+
+
+async def dispatch_managed(db, settings, record_id):
+    async with db.connection() as conn, conn.transaction():
+        await conn.execute(LOCK)
+        row = await (await conn.execute(
+            "SELECT * FROM deployment_requests WHERE id=%s FOR UPDATE", (record_id,),
+        )).fetchone()
+        if row["status"] in {"succeeded", "cancelled"}:
+            return {"receipt": row, "message": "仅核对原更新请求"}
+        actual = await (await conn.execute(
+            "SELECT current_database() AS database, instance_id, environment "
+            "FROM public.alcor_instance WHERE singleton=true",
+        )).fetchone()
+        row = await (await conn.execute(
+            "UPDATE deployment_requests SET status='unknown',claimed_at=COALESCE(claimed_at,clock_timestamp()),"
+            "finished_at=NULL WHERE id=%s RETURNING *", (record_id,),
+        )).fetchone()
+        approval = {key: str(row[key]) for key in
+                    ("id", "request_id", "owner_id", "image", "version", "revision", "schema_hash")}
+        approval.update({key: str(value) for key, value in actual.items()})
+    try:
+        accepted = await asyncio.to_thread(updater_request, settings, "/v1/update", approval)
+    except (OSError, ValueError):
+        return {"receipt": row, "message": "发布提交结果待核对，请使用原请求续接"}
+    return {"receipt": row, "message": accepted.get("message") or "已提交独立发布更新器",
+            "stage": accepted.get("stage"), "updater_status": accepted.get("status")}
 
 
 def notify(settings):
@@ -92,6 +157,8 @@ async def runtime_ready(conn, *, version):
 
 async def dispatch(db, settings, record_id):
     """Commit uncertainty before the one network action, so replay can only observe."""
+    if getattr(settings, "deployment_managed_updater", False):
+        return await dispatch_managed(db, settings, record_id)
     async with db.connection() as conn, conn.transaction():
         await conn.execute(LOCK)
         row = await (await conn.execute("SELECT * FROM deployment_requests WHERE id=%s FOR UPDATE", (record_id,))).fetchone()
@@ -129,7 +196,7 @@ async def dispatch(db, settings, record_id):
 
 async def reconcile(db, settings, *, version, schema):
     """Only current API, verified PG and a fresh matching Worker can complete an approval."""
-    if not settings.source_revision:
+    if getattr(settings, "deployment_managed_updater", False) or not settings.source_revision:
         return []
     async with db.connection() as conn, conn.transaction():
         await conn.execute(LOCK)

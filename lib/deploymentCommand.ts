@@ -21,11 +21,16 @@ export class DeploymentCommand {
   execute<T extends Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {
     return (this.running ??= this.perform(body).finally(() => { this.running = undefined; })) as Promise<T>;
   }
-  private async perform(body: Record<string, unknown>) {
+  resume(body: Record<string, unknown>) {
+    if (!this.id) return Promise.reject(Error("尚未找到需要继续的原发布请求"));
+    return this.running ??= this.perform(body, true).finally(() => { this.running = undefined; });
+  }
+  private async perform(body: Record<string, unknown>, resume = false) {
     const recovering = Boolean(this.id), id = this.id ?? clientRequestId();
     this.id = id;
     try {
-      const data = await platformRequest<Record<string, unknown>>(recovering ? `${this.receipts}/${id}` : this.path, recovering ? {} : {
+      const lookup = recovering && !resume;
+      const data = await platformRequest<Record<string, unknown>>(lookup ? `${this.receipts}/${id}` : this.path, lookup ? {} : {
         method: this.method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, request_id: id }),
       });
       if (!data || typeof data !== "object") throw Error("保存结果尚未确认，请稍后核对");

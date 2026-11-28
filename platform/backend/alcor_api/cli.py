@@ -42,6 +42,7 @@ def main():
     m = sub.add_parser("migrate")
     m.add_argument("--database", required=True, help="Exact confirmed target database name")
     m.add_argument("--initialize-empty", action="store_true")
+    m.add_argument("--require-target-schema", action="store_true")
     a = sub.add_parser("create-admin")
     a.add_argument("--username", required=True)
     a.add_argument("--password-stdin", action="store_true")
@@ -178,7 +179,8 @@ def main():
 
             print(json.dumps(asyncio.run(run_repair()), ensure_ascii=False))
         elif args.command == "migrate":
-            asyncio.run(migrate(Settings(), args.database, args.initialize_empty))
+            asyncio.run(migrate(Settings(), args.database, args.initialize_empty,
+                                require_target_schema=args.require_target_schema))
             print("Migration complete; target identity verified.")
         else:
             password = (

@@ -216,6 +216,7 @@ def mount_legacy_deployment(app, settings, db):
             },
             "updater": {
                 "available": bool(state["runner"].get("configured") and state["runner"].get("online")),
+                "managed": state["runner"].get("kind") == "fire-release-updater",
                 "configured": bool(state["runner"].get("configured")),
                 "reachable": bool(state["runner"].get("online")),
                 "observedAt": state["runner"].get("observed_at"),

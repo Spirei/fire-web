@@ -120,6 +120,38 @@ async def test_no_runner_schema_mismatch_stale_release_and_csrf(client, admin, a
     assert not (await client.get(P)).json()["schema_compatible"]
     assert (await client.post(P + "/requests", json=data)).status_code == 409
 
+
+async def test_existing_release_endpoint_reuses_approval_for_managed_migration(client, admin, app, monkeypatch):
+    release, _, _ = configure(app, monkeypatch)
+    release.schema_hash = "d" * 64
+    app.state.settings.deployment_managed_updater = True
+    sent = []
+
+    def private_updater(settings, path, approval=None):
+        if approval:
+            sent.append(approval)
+            assert path == "/v1/update"
+        return {"request_id": sent[-1]["request_id"], "stage": "backup_verified",
+                "status": "running", "message": "Verified isolated backup"}
+
+    monkeypatch.setattr(bridge, "updater_request", private_updater)
+    monkeypatch.setattr(bridge, "notify", lambda _: pytest.fail("Managed deployment must not notify Watchtower"))
+    payload = {"request_id": str(uuid4()), "release": release.model_dump()}
+    first = await client.post(P + "/requests", json=payload)
+    assert first.status_code == 202, first.text
+    assert first.json()["stage"] == "backup_verified" and first.json()["status"] == "unknown"
+    approval = sent[0]
+    assert approval["request_id"] == payload["request_id"] and approval["owner_id"] == admin
+    assert approval["image"] == release.image and approval["schema_hash"] == release.schema_hash
+    assert approval["instance_id"] == str(app.state.settings.instance_id) and approval["environment"] == "test"
+    assert (await client.post(P + "/requests", json=payload)).json()["id"] == first.json()["id"]
+    assert len(sent) == 2 and sent[0] == sent[1]
+    assert (await client.post(P + "/requests", json={**payload, "request_id": str(uuid4())})).status_code == 409
+    receipt = (await client.get(P + "/requests/" + payload["request_id"])).json()
+    assert receipt["updater_status"] == "running" and receipt["stage"] == "backup_verified"
+    assert receipt["status"] != "succeeded"
+
+
 async def test_manual_migration_enables_deployment_without_relaxing_other_routes(
     client, legacy, app, monkeypatch, tmp_path,  # noqa: F811
 ):

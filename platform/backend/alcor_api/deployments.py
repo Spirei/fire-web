@@ -184,8 +184,13 @@ async def status(request: Request, who: Admin):
         ready = await bridge.runtime_ready(conn, version=__version__)
         applied = await applied_migrations(conn) if release else None
     runner = await asyncio.to_thread(bridge.probe, settings)
+    if settings.deployment_managed_updater:
+        owned = next((row for row in rows if row["status"] in {"queued", "running", "unknown"}), None)
+        if owned:
+            owned.update(await bridge.managed_progress(settings, owned["request_id"]))
+            active = True
     schema_error = None
-    if release:
+    if release and not settings.deployment_managed_updater:
         try:
             await require_release_schema(settings, release, applied)
         except HTTPException as exc:
@@ -201,7 +206,7 @@ async def status(request: Request, who: Admin):
         "running_revision": settings.source_revision or None,
         "runtime_ready": ready,
         "runtime_matches_release": matches,
-        "matches_release": matches and ready,
+        "matches_release": matches and ready and (not settings.deployment_managed_updater or not active),
         "release": release,
         "release_published_at": release_published_at,
         "release_error": release_error,
@@ -242,13 +247,17 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
     if old:
         if any(old[k] != getattr(data.release, k) for k in ("image", "version", "revision", "schema_hash")):
             raise HTTPException(409, "此请求编号已用于不同版本")
+        if settings.deployment_managed_updater and old["status"] not in {"succeeded", "cancelled"}:
+            outcome = await bridge.dispatch(db, settings, old["id"])
+            return {**public_receipt(outcome["receipt"]), **{k: v for k, v in outcome.items() if k != "receipt"}}
         return public_receipt(old)
     release, _published = await discover(settings)
     if release != data.release:
         raise HTTPException(409, "发布版本已变化，请重新检查")
     async with db.connection() as conn:
         applied = await applied_migrations(conn)
-    await require_release_schema(settings, release, applied)
+    if not settings.deployment_managed_updater:
+        await require_release_schema(settings, release, applied)
     if already_running(settings, release):
         raise HTTPException(409, "此镜像已在运行")
     if not bridge.configured(settings):
@@ -278,6 +287,8 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
         ).fetchall()
         if any(row["owner_id"] != who.id for row in active):
             raise HTTPException(409, "其他管理员已有更新请求，请先核对回执")
+        if active and settings.deployment_managed_updater:
+            raise HTTPException(409, "已有发布请求，请使用原编号继续")
         # A fresh UUID is an explicit manual retry. Keep prior observations and
         # audits; a late Watchtower response cannot overwrite the new request.
         for prior in active:
@@ -308,14 +319,14 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
             (who.id, str(row["id"]), data.request_id),
         )
     outcome = await bridge.dispatch(db, settings, row["id"])
-    return {**public_receipt(outcome["receipt"]), "message": outcome["message"]}
+    return {**public_receipt(outcome["receipt"]), **{k: v for k, v in outcome.items() if k != "receipt"}}
 
 
 def public_receipt(row):
     return {
         k: row[k]
         for k in ("id", "request_id", "image", "version", "revision", "schema_hash", "status", "created_at", "claimed_at", "finished_at")
-    }
+    } | {k: row[k] for k in ("stage", "message", "updater_status") if k in row}
 
 
 @router.get("/requests/{request_id}", dependencies=[Depends(deployment_schema_scope)])
@@ -332,7 +343,7 @@ async def receipt(request_id: UUID, request: Request, who: Admin):
         ).fetchone()
     if not row:
         raise HTTPException(404, "未查到此更新请求")
-    return public_receipt(row)
+    return {**public_receipt(row), **await bridge.managed_progress(settings, request_id)}
 
 
 class CloseInput(InputModel):
@@ -342,6 +353,8 @@ class CloseInput(InputModel):
 @router.post("/requests/{request_id}/close", dependencies=[Depends(deployment_schema_scope)])
 async def close_request(request_id: UUID, data: CloseInput, request: Request, who: Admin):
     """Explicitly close observation; never cancels or repeats a Watchtower action."""
+    if request.app.state.db.settings.deployment_managed_updater:
+        raise HTTPException(409, "独立发布更新器须按原编号继续")
     async with request.app.state.db.connection() as conn, conn.transaction():
         await lock_mutation_identity(conn, who, require_admin=True)
         await conn.execute(bridge.LOCK)

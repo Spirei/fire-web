@@ -24,6 +24,7 @@ services:
       FIRE_BACKUP_DIR: /private/backups
       FIRE_BACKUP_SECRET_DIR: /private/backup-key
       FIRE_DEPLOYMENT_UPDATER_URL: http://fire-updater:8080/v1/update
+      FIRE_DEPLOYMENT_MANAGED_UPDATER: "true"
       FIRE_DEPLOYMENT_RUNNER_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:?请填写独立更新器令牌}
       FIRE_PYTHON: /platform/.venv/bin/python
     env_file:
@@ -40,7 +41,7 @@ services:
       - ${ICONS_DIR:-./icons}:/app/public/icons:ro
       - ${SHARE_DIR:-./share}:/app/public/share:ro
     labels:
-      com.centurylinklabs.watchtower.enable: "true"
+      com.centurylinklabs.watchtower.enable: "false"
       com.centurylinklabs.watchtower.scope: "fire"
     networks:
       - platform
@@ -54,20 +55,30 @@ services:
   fire-updater:
     networks:
       - platform
-    image: containrrr/watchtower:1.7.1
+    image: ${GHCR_IMAGE:?请在 .env 中设置 GHCR_IMAGE}:${FIRE_UPDATER_IMAGE_TAG:-latest}
     container_name: fire-updater
     restart: unless-stopped
+    command: ["/platform/.venv/bin/python", "-m", "alcor_api.deployment_runner"]
+    group_add:
+      - "${FIRE_DOCKER_SOCKET_GID:-0}"
     environment:
-      WATCHTOWER_HTTP_API_UPDATE: "true"
-      WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:?请在 .env 中设置 WATCHTOWER_HTTP_API_TOKEN}
-      WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_SCOPE: fire
-      WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_NO_STARTUP_MESSAGE: "true"
+      PYTHONPATH: /app/platform/backend
+      FIRE_PUBLIC_ORIGIN: ${FIRE_PUBLIC_ORIGIN:?请填写实际访问地址}
+      FIRE_ENVIRONMENT: ${FIRE_ENVIRONMENT:?请填写与数据库一致的环境}
+      FIRE_INSTANCE_ID: ${FIRE_INSTANCE_ID:?请先核对并填写数据库实例UUID}
+      FIRE_DATABASE_URL: ${FIRE_DATABASE_URL:?请填写实际PG连接}
+      FIRE_DEPLOYMENT_RUNNER_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:?请填写独立更新器令牌}
+      FIRE_UPDATER_REPOSITORY_IMAGE: ${GHCR_IMAGE:?请在 .env 中设置 GHCR_IMAGE}
+      FIRE_DEPLOYMENT_PROJECT_DIR: ${FIRE_DEPLOYMENT_PROJECT_DIR:?请填写群晖 Compose 项目的绝对目录}
+      FIRE_DEPLOYMENT_STATE_DIR: /private/state/deployments
       DOCKER_CONFIG: /config
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DOCKER_CONFIG_DIR:-/root/.docker}:/config:ro
+      - ${FIRE_PRIVATE_DIR:?请填写私有运行目录}:/private
+      - ${FIRE_DEPLOYMENT_PROJECT_DIR:?请填写群晖 Compose 项目的绝对目录}:${FIRE_DEPLOYMENT_PROJECT_DIR}:ro
+    healthcheck:
+      disable: true
     labels:
       com.centurylinklabs.watchtower.enable: "false"
       com.centurylinklabs.watchtower.scope: "fire"
