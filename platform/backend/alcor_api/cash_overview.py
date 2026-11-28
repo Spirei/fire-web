@@ -20,10 +20,9 @@ class CashOverview(BrokerMetadata):
         async with self.context(who,shared_read=True) as conn:
             return await self.on_connection(conn, who)
 
-    async def on_connection(self, conn, who):
+    async def on_connection(self, conn, who, *, include_availability=True):
         # No collection rows, openings or zero-balance accounts are initialized by reads.
-        # The shared broker/identity locks above exclude account mutations, so
-        # this one row set is the whole directory the loop below may read.
+        # The caller provides a stable view through the owner lock or MVCC.
         accounts = await (await conn.execute(
             "SELECT id,account_kind,currencies,revision,name,holding_source FROM broker_accounts "
             "WHERE owner_id=%s AND deleted_at IS NULL ORDER BY created_at,id LIMIT 101",
@@ -64,11 +63,12 @@ class CashOverview(BrokerMetadata):
             if account['account_kind'] in currencies:
                 currencies[account['account_kind']].update(account['currencies'])
                 currencies[account['account_kind']].update(row['currency'] for row in snapshot['currencies'])
-                for currency in account['currencies']:
-                    capacities[currency] = await self.cash.withdrawal_capacity_on_connection(
-                        conn, who, account['id'], currency, account_kind=account['account_kind'],
-                        account=account, evidence=evidence.get(currency),
-                    )
+                if include_availability:
+                    for currency in account['currencies']:
+                        capacities[currency] = await self.cash.withdrawal_capacity_on_connection(
+                            conn, who, account['id'], currency, account_kind=account['account_kind'],
+                            account=account, evidence=evidence.get(currency),
+                        )
             snapshots.append({'accountId': account['id'], 'accountRevision': account['revision'],
                               'name': account['name'], 'accountKind': account['account_kind'],
                               'holdingSource': account['holding_source'], 'snapshot': snapshot,
@@ -91,8 +91,9 @@ class CashOverview(BrokerMetadata):
                     )
                     scope_known[(kind, currency)] = scope_complete
                 complete = opened and scope_complete
-                reservation = await pending_reservations(conn, who.id, kind, currency, shared_read=True)
-                reservations_known = reservation['complete'] and reservation['cash'] is not None
+                reservation = (await pending_reservations(conn, who.id, kind, currency, shared_read=True)
+                               if include_availability else None)
+                reservations_known = reservation is not None and reservation['complete'] and reservation['cash'] is not None
                 total, allocated, _ = await self.cash.balances(conn, who.id, currency, None, kind)
                 with localcontext() as decimal_context:
                     decimal_context.prec = 80

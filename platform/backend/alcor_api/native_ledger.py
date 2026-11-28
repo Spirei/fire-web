@@ -18,10 +18,9 @@ from .broker_metadata import fingerprint
 from .cash_overview import CashOverview
 from .fx_provider_parser import unique
 from .legacy_identity import assert_native_origin, native_identity
-from .native_app_auth import CLIENT
+from .native_app_auth import CLIENT, lock_native_identity
 from .native_trade_sync import CURRENCIES, extends_fill_history, order_time, same_fill, validate_amount, validate_order
 from .profile_http import body_budget, bounded_body
-from .security import lock_mutation_identity, lock_read_identity
 
 PATH = '/api/v2/account-assets/native-ledger'
 TRANSACTIONS = PATH + '/transactions'
@@ -215,7 +214,8 @@ async def legacy_baseline(conn, db, who, *, lock_orders=False):
             'quantity': decimal_text(r['qty']),
             'unitCost': decimal_text(Decimal(cost)) if cost is not None else None,
         })
-    overview = await CashOverview(db).on_connection(conn, who)
+    # The opening balance does not depend on withdrawal limits or order reserves.
+    overview = await CashOverview(db).on_connection(conn, who, include_availability=False)
     real = next(book for book in overview['books'] if book['accountKind'] == 'real')
     registered = await read_registered_cash(conn, who, db.settings, overview)
     owner_cash = {
@@ -513,14 +513,27 @@ async def assign_order_numbers(conn, state, order_ids):
         state['orderNumbers'] = {**numbers, **{row['order_id']: row['number'] for row in rows}}
 
 
+def replay_receipt(old, expected):
+    if old['fingerprint'] != expected:
+        conflict('原请求编号已用于不同内容')
+    return old['receipt']
+
+
 async def commit(conn, db, who, raw):
     request_id, orders, positions, cash = validate_transaction(raw)
     expected = fingerprint(raw)
     old = await receipt(conn, who.id, request_id)
     if old:
-        if old['fingerprint'] != expected:
-            conflict('原请求编号已用于不同内容')
-        return old['receipt']
+        await lock_native_identity(conn, who, shared=True)
+        return replay_receipt(old, expected)
+
+    await serialize_brokers(conn, who.id)
+    # The business lock serializes ledger mutations. A shared credential lock
+    # still fences revocation through commit and lets readers use the prior head.
+    await lock_native_identity(conn, who, shared=True)
+    old = await receipt(conn, who.id, request_id)
+    if old:
+        return replay_receipt(old, expected)
     await require_domain(conn, who.id, request_id, 'native_ledger')
     head = await ledger_head(conn, who.id)
     revision = head['revision'] if head else 0
@@ -611,12 +624,13 @@ def mount_native_ledger(app):
                     raise HTTPException(429, '同步频率过高，请稍后再试')
                 raw = json.loads(await bounded_body(request, body_budget(TRANSACTIONS)), object_pairs_hook=unique)
             async with db.connection() as conn, conn.transaction():
-                await serialize_brokers(conn, who.id, shared_read=not write)
                 if write:
-                    await lock_mutation_identity(conn, who, require_admin=False)
                     value = await commit(conn, db, who, raw)
                 else:
-                    await lock_read_identity(conn, who)
+                    # Read one committed snapshot, including the old baseline
+                    # and its evidence, without joining the owner write queue.
+                    await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+                    await lock_native_identity(conn, who, shared=True)
                     if registered_void:
                         from .registered_order_voids import evidence
                         value = await evidence(conn, db, who, await ledger_head(conn, who.id), selected)

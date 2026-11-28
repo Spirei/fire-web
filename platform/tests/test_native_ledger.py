@@ -9,9 +9,12 @@ import pytest
 import pytest_asyncio
 from psycopg.errors import CheckViolation
 
+from alcor_api import native_ledger
+from alcor_api.broker_accounts import serialize_brokers
 from alcor_api.cli import create_user
 from alcor_api.internal_orders import pending_reservations
 from alcor_api.main import create_app
+from alcor_api.native_app_auth import CLIENT
 from alcor_api.native_trading_cycle import cycle_range
 from test_legacy_trade_corrections import native_headers
 from test_trading import setup
@@ -129,9 +132,12 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
     assert baseline['positions'][0]['quantity'] == '18' and baseline['positions'][0]['unitCost'] is None
     assert baseline['positions'][0]['brokerAccountId'] == broker
     assert {item['brokerAccountId']: item['balance'] for item in baseline['cash']} == {None: '0', broker: '0'}
+    async with db.connection() as conn, conn.transaction():
+        await serialize_brokers(conn, admin)
+        assert await data(client.get(LEDGER, headers=other_phone)) == baseline
     async with db.connection() as conn:
         assert not await (await conn.execute('SELECT 1 FROM native_ledger_heads')).fetchone()
-    await adopt(client, phone, baseline)
+    adoption = await adopt(client, phone, baseline)
     signals_before = (await client.get('/api/account/changes')).json()['revisions']['portfolio']
     at = '2026-10-28T22:50:00+08:00'
     fill = order(identifier, broker, at=at)
@@ -141,12 +147,59 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
     await data(client.get(path, headers=other_phone), 404)
     await data(client.post(TRANSACTIONS, headers=phone,
                            json={**body, 'cash': [dict(body['cash'][0], balanceAfter='-4500')]}), 400)
-    assert (await data(client.get(LEDGER, headers=other_phone)))['sourceRevision'] == 1
+    ahead = {**body, 'requestId': str(uuid4()), 'baseRevision': 2}
+    await data(client.post(TRANSACTIONS, headers=phone, json=ahead), 409)
+    await data(client.get(TRANSACTIONS + '/' + ahead['requestId'], headers=phone), 404)
+    opening = await data(client.get(LEDGER, headers=other_phone))
+    assert opening['sourceRevision'] == 1
+
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    has_written = asyncio.Event()
+    can_commit = asyncio.Event()
+    commit = native_ledger.commit
+
+    async def pause_before_commit(conn, database, who, raw):
+        result = await commit(conn, database, who, raw)
+        if raw['requestId'] == body['requestId']:
+            has_written.set()
+            await can_commit.wait()
+        return result
+
+    class LostAcknowledgement(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            accepted = await transport.handle_async_request(request)
+            assert accepted.status_code == 200
+            await accepted.aclose()
+            raise httpx.ReadTimeout('Synthetic ledger acknowledgement timeout', request=request)
+
+    async with httpx.AsyncClient(transport=LostAcknowledgement(), base_url='http://testserver',
+                                 headers={'Origin': 'http://testserver', **phone}) as interrupted:
+        with monkeypatch.context() as paused:
+            paused.setattr(native_ledger, 'commit', pause_before_commit)
+            submission = asyncio.create_task(interrupted.post(TRANSACTIONS, json=body))
+            try:
+                await asyncio.wait_for(has_written.wait(), timeout=10)
+                original_adopt = {
+                    'requestId': adoption['requestId'], 'kind': 'adopt', 'baseRevision': 0,
+                    'legacyRevision': baseline['legacyRevision'],
+                }
+                visible, receipt, retry, _ = await asyncio.gather(
+                    data(client.get(LEDGER, headers=other_phone)),
+                    data(client.get(TRANSACTIONS + '/' + adoption['requestId'], headers=other_phone)),
+                    data(client.post(TRANSACTIONS, headers=other_phone, json=original_adopt)),
+                    data(client.get(path, headers=other_phone), 404),
+                )
+                assert visible == opening and receipt == retry == adoption
+            finally:
+                can_commit.set()
+                with pytest.raises(httpx.ReadTimeout):
+                    await submission
+    recovered = await data(client.get(path, headers=phone))
     first, retry = await asyncio.gather(
         data(client.post(TRANSACTIONS, headers=phone, json=body)),
         data(client.post(TRANSACTIONS, headers=other_phone, json=body)),
     )
-    assert first == retry == await data(client.get(path, headers=other_phone))
+    assert first == retry == recovered == await data(client.get(path, headers=other_phone))
     assert first == {'sourceRevision': 2, 'requestId': body['requestId'], 'kind': 'trade', 'ownerId': admin}
     await data(client.post(TRANSACTIONS, headers=phone, json={**body, 'baseRevision': 2}), 409)
     await data(client.post(TRANSACTIONS, headers=phone, json={**body, 'requestId': str(uuid4())}), 409)
@@ -180,7 +233,6 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
     flat = await data(client.get('/api/v2/orders?includeAppOrders=1', headers=other_phone))
     assert [(item['id'], item['orderNo']) for item in flat['orders']] == [(fill['tradeId'], number)]
     assert flat['coverage']['available'] == 1
-    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url='http://testserver',
                                  headers={'Origin': 'http://testserver'}) as web:
         login = await web.post('/api/auth/login', json={'username': 'AdminOne', 'password': 'Synthetic9Pass'})
@@ -229,10 +281,41 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
         assert history.status_code == 200, history.text
         assert [(row['equity'], row['pnl']) for row in history.json()['items'][:2]] == [('2098.95', '0.00'), ('2098.95', None)]
 
+    # The replacement device has no session, snapshot or queued request from
+    # the original installation. Its only input is a new grant for the owner.
+    fresh_grant = await native_headers(db, admin, SCOPES)
+    async with httpx.AsyncClient(transport=transport, base_url='http://testserver',
+                                 headers={'Origin': 'http://testserver', **fresh_grant}) as replacement:
+        assert await data(replacement.get(path)) == first
+        assert await data(replacement.get(LEDGER)) == snapshot
+        async with db.connection() as conn, conn.transaction():
+            await serialize_brokers(conn, admin)
+            assert await data(replacement.get(LEDGER)) == snapshot
+            assert await data(replacement.get(path)) == first
+
     other_owner = await create_user(db.settings, 'other-ledger', 'other-ledger-test-password-1')
-    unauthorized = await native_headers(db, other_owner, 'portfolio.read')
-    await data(client.get(path, headers=unauthorized), 404)
-    assert (await data(client.get(LEDGER, headers=unauthorized)))['orders'] == []
+    other_grant = await native_headers(db, other_owner, SCOPES)
+    await data(client.get(path, headers=other_grant), 404)
+    empty = await data(client.get(LEDGER, headers=other_grant))
+    assert (empty['ownerId'], empty['source'], empty['sourceRevision']) == (other_owner, 'legacy', 0)
+    assert empty['orders'] == empty['positions'] == []
+    assert all(row['balance'] is None for row in empty['cash'])
+    await adopt(client, other_grant, empty)
+    held = await data(client.get(LEDGER, headers=other_grant))
+    assert held['sourceRevision'] == body['baseRevision']
+    await data(client.post(TRANSACTIONS, headers=other_grant, json=body), 409)
+    switched = await client.post(TRANSACTIONS, json=body, headers={
+        **other_grant, 'X-Alcor-Expected-Account': admin,
+    })
+    assert switched.status_code == 403 and switched.headers['X-Alcor-Retire-Context'] == 'true'
+    assert await data(client.get(LEDGER, headers=other_grant)) == held
+
+    await data(client.post('/api/v2/auth/revoke', json={
+        'client_id': CLIENT, 'token': phone['authorization'].removeprefix('Bearer '),
+    }))
+    await data(client.post(TRANSACTIONS, headers=phone, json=body), 401)
+    assert await data(client.get(LEDGER, headers=fresh_grant)) == snapshot
+    assert await data(client.get(path, headers=fresh_grant)) == first
     async with db.connection() as conn:
         head = await (await conn.execute('SELECT count(*) AS n FROM native_ledger_transactions WHERE owner_id=%s', (admin,))).fetchone()
         assert head['n'] == 2
