@@ -987,6 +987,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
             ownerId={ownerId}
             bare
             orders={orders}
+            quotes={quotes}
             stockIcons={stockIcons}
             storageKey="fire:holdings:order-tab"
             loading={ordersLoading}

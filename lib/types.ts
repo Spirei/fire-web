@@ -72,6 +72,11 @@ export interface TradeOrder {
   executionModel?: string;
   historicalCoverageKnown?: boolean;
   actualFeeKnown?: boolean;
+  feeSource?: string;
+  orderPrice?: number | null;
+  executedPrice?: number | null;
+  filledQty?: number | null;
+  mergedFromOrderIds?: string[];
   orderActivity?: TradeOrderActivity[];
   recordId: string;
   market: Market;

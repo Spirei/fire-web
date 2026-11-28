@@ -431,3 +431,44 @@
 :global(.dark) .snapshotHoldingActions button:hover,
 :global(.dark) .snapshotHoldingActions button[aria-expanded="true"] { color: var(--data-accent, #d3e6ff); }
 @media (min-width: 640px) { .snapshotMarket { padding-inline: 20px; } }
+
+.snapshotProfit {
+  --snapshot-ink: #17232d;
+  --snapshot-muted: #68717e;
+  --snapshot-control: #edf0f3;
+  --snapshot-card: #fff;
+  --snapshot-panel: #f6f7f8;
+  --snapshot-line: #dfe4e8;
+  color: var(--snapshot-ink);
+  max-width: 680px;
+  margin-inline: auto;
+  padding: clamp(8px, 2vw, 14px);
+  border-radius: 16px;
+  background: var(--snapshot-panel);
+}
+:global(.dark) .snapshotProfit {
+  --snapshot-ink: #edf1f6;
+  --snapshot-muted: #a3acb7;
+  --snapshot-control: #2a343d;
+  --snapshot-card: #1d1f21;
+  --snapshot-panel: #0f1821;
+  color-scheme: dark;
+  --snapshot-line: #34414d;
+}
+.snapshotProfitHeader { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-block: 4px 13px; }
+.snapshotProfitPeriods { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; margin-bottom: 10px; }
+.snapshotProfitPeriods > button { border-radius: 999px; color: var(--snapshot-muted); }
+.snapshotProfitPeriods > button[aria-pressed] { min-height: 26px; padding: 2px 7px; background: var(--snapshot-control); font-size: 11px; }
+.snapshotProfitPeriods > button[aria-pressed="true"] { background: var(--snapshot-card); color: var(--snapshot-ink); box-shadow: inset 0 0 0 1px var(--snapshot-line); }
+.snapshotProfitPeriods > button:last-child { margin-inline-start: auto; }
+.snapshotProfitDate { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; white-space: nowrap; font-size: 11px; }
+.snapshotProfitDate input { min-width: 0; padding: 5px 8px; border: 1px solid var(--snapshot-line); border-radius: 8px; background: var(--snapshot-control); }
+.snapshotProfitCard { border-radius: 13px; background: var(--snapshot-card); margin-bottom: 8px; padding: 13px; font-size: 13px; }
+.snapshotProfitTotal { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--snapshot-line); padding-top: 10px; }
+.snapshotCashflow { width: 100%; table-layout: fixed; color: var(--snapshot-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+.snapshotCashflow thead { color: var(--snapshot-muted); }
+.snapshotCashflow th { padding: 0 2px 6px 0; text-align: start; font-size: 10px; font-weight: 500; }
+.snapshotCashflow th:nth-child(2) { width: 25%; }
+.snapshotCashflow :is(th, td):nth-child(n + 3) { text-align: end; }
+.snapshotCashflow td { border-top: 1px solid var(--snapshot-line); padding: 8px 2px 8px 0; vertical-align: top; overflow-wrap: anywhere; }
+.snapshotCashflow small { display: block; color: var(--snapshot-muted); font-size: 10px; }

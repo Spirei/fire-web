@@ -47,14 +47,14 @@ function holdingValue(position: Position, currency: string) {
   return value === 0 || position.close?.currency === currency ? value : null;
 }
 
-export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen }: {
+export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen, onProfit }: {
   positions: Position[];
   calendar?: { rows?: Data[] } | null;
   onOpen: (id: string, revision?: number) => void;
+  onProfit: (id: string) => void;
 }) {
   const { stockIcons } = useAssetIcons(["stock"]);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [profitOpen, setProfitOpen] = useState<string | null>(null);
   const [sorts, setSorts] = useState<Record<string, Sort | undefined>>({});
   const markets = useMemo(() => {
     const groups = new Map<string, Position[]>();
@@ -144,7 +144,6 @@ export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen
               return <tbody key={position.recordId}>
                 <tr className="cursor-pointer align-middle" onClick={() => {
                   setExpanded(isExpanded ? null : position.recordId);
-                  setProfitOpen(null);
                 }}>
                   <th scope="row" className="py-2.5 text-left font-medium">
                     <button type="button" className={`flex w-full min-w-0 items-center gap-1.5 text-left sm:gap-2 ${styles.snapshotInk}`}
@@ -176,16 +175,10 @@ export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen
                       onClick={() => onOpen(position.recordId, typeof position.recordRevision === "number" ? position.recordRevision : undefined)}>
                       <IconFileDescription size={16} aria-hidden="true" />持仓记录
                     </button>
-                    <button type="button" aria-expanded={profitOpen === position.recordId}
-                      onClick={() => setProfitOpen(profitOpen === position.recordId ? null : position.recordId)}>
+                    <button type="button" onClick={() => onProfit(position.recordId)}>
                       <IconArrowUpRight size={16} aria-hidden="true" />盈亏
                     </button>
                   </div>
-                  {profitOpen === position.recordId && <dl className={`mt-2 grid grid-cols-[1fr_auto] gap-1 ${styles.snapshotMuted}`}>
-                    <dt>日终盈亏</dt><dd className={tone(profit)}>{signed(profit, 2)}{profit !== null && currency ? ` ${currency}` : ""}</dd>
-                    <dt>日终收益率</dt><dd className={tone(percent)}>{signed(percent, 2, "%")}</dd>
-                    {position.close && <><dt>收盘价来源</dt><dd>{String(position.close.source ?? "—")} · {String(position.close.tradeDay ?? "—")}</dd></>}
-                  </dl>}
                 </td></tr>}
               </tbody>;
             })}

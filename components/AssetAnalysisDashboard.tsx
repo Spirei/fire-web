@@ -1134,6 +1134,7 @@ export default function AssetAnalysisDashboard({ initialModuleOrder, readSignatu
           {ordersError && !displayOrders.length ? <div role="alert" className="rounded-2xl border border-edge bg-white p-4 text-sm text-muted"><span>{ordersError}</span><button type="button" className="ml-3 font-semibold text-ink" disabled={ordersLoading} onClick={()=>void handleRefresh("orders")}>{ordersLoading?"读取中…":"重新读取"}</button></div> : <TradeOrdersPanel
             ownerId={ownerId}
             orders={displayOrders}
+            quotes={quotes}
             loading={ordersLoading}
             stockIcons={stockIcons}
             storageKey="fire:asset-order-tab"

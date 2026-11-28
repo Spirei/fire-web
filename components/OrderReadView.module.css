@@ -1,0 +1,66 @@
+.archivedOrders, .compactOrders, .orderModal {
+  --order-ink: #17232d;
+  --order-muted: #62717f;
+  --order-surface: #fff;
+  --order-control: #f0f3f5;
+  --order-line: #e4e9ee;
+  color: var(--order-ink);
+}
+:global(.dark) .archivedOrders, :global(.dark) .compactOrders, :global(.dark) .orderModal {
+  --order-ink: #edf1f6;
+  --order-muted: #a3acb7;
+  --order-surface: #1b252f;
+  --order-control: #2a343d;
+  --order-line: #34414d;
+}
+.archivedOrders { border-radius: 14px; background: var(--order-surface); border: 1px solid var(--order-line); }
+.archivedOrders .orderTools { order: -1; width: 100%; }
+.archivedOrders .orderSearch { flex: 1; min-width: 0; }
+.archivedOrders .orderSearch input { width: 100%; }
+.archivedOrders .desktopOrders, .compactOrders { display: none; }
+.archivedOrders .compactOrders { display: block; }
+.orderHistoryShortcut { display: none; padding: 8px 0 14px; text-align: center; }
+.archivedOrders .orderHistoryShortcut { display: block; }
+html:root[data-palette] body .orderModal:global(.app-modal-panel) {
+  background: var(--order-surface);
+  color: var(--order-ink);
+  border-color: var(--order-line);
+}
+html:root .orderModal :global(.text-ink) { color: var(--order-ink); }
+html:root .orderModal :global(.text-muted) { color: var(--order-muted); }
+html:root .orderModal .orderDetailHistory :global(.text-brand-deep) { color: #aa6716; }
+html:root:global(.dark) .orderModal .orderDetailHistory :global(.text-brand-deep) { color: #ffd074; }
+.orderTabs button { white-space: nowrap; }
+.compactOrders { padding-inline: clamp(10px, 3vw, 18px); background: var(--order-surface); }
+.orderQueryColumns, .orderQueryRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, .82fr) minmax(0, .78fr) minmax(0, 1fr);
+  gap: 5px;
+  text-align: end;
+}
+.orderQueryColumns { padding-block: 8px; color: var(--order-muted); font-size: 10px; }
+.orderQueryColumns span:first-child { text-align: start; }
+.orderQueryRow { align-items: center; width: 100%; min-height: 51px; padding-block: 7px; border-top: 1px solid var(--order-line); font-size: 11px; font-variant-numeric: tabular-nums; }
+.orderQueryRow:hover { background: var(--order-control); }
+.orderQueryRow > :is(span, time) { min-width: 0; overflow-wrap: anywhere; }
+.orderQueryRow small { display: block; color: var(--order-muted); font-size: 10px; }
+.orderQueryIdentity { display: flex; min-width: 0; align-items: center; gap: 5px; text-align: start; }
+.orderQueryIcon { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--order-control); color: var(--order-muted); }
+.orderDetailIdentity, .orderDetailCard, .orderDetailHistory { border-radius: 13px; background: var(--order-control); padding: 11px 13px; }
+.orderDetailIdentity { display: flex; align-items: center; gap: 8px; }
+.orderDetailIdentity small { display: block; color: var(--order-muted); font-size: 11px; }
+.orderDetail > h4 { margin: 15px 0 7px; color: var(--order-muted); font-size: 12px; font-weight: 600; }
+.orderDetailCard { display: grid; gap: 8px; font-size: 12px; }
+.orderDetailCard > div { display: flex; justify-content: space-between; gap: 10px; }
+.orderDetailCard dt { color: var(--order-muted); white-space: nowrap; }
+.orderDetailCard dd { min-width: 0; overflow-wrap: anywhere; text-align: end; font-variant-numeric: tabular-nums; }
+.orderDetailHistory { margin-top: 12px; }
+.orderDetailHistory > section { margin: 0; padding: 0; border: none; }
+@media (max-width: 639px) {
+  .orderTools { order: -1; width: 100%; flex-wrap: wrap; }
+  .orderSearch { flex: 1; min-width: 0; }
+  .orderSearch input { width: 100%; }
+  .orderTabs { max-width: 100%; gap: 12px; }
+  .compactOrders, .orderHistoryShortcut { display: block; }
+  .desktopOrders { display: none; }
+}

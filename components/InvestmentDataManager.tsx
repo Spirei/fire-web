@@ -2,10 +2,12 @@
 
 import { IconArchive, IconArrowsExchange, IconBriefcase, IconChartLine, IconChecklist, IconChevronLeft, IconChevronRight, IconCopy, IconFileDescription, IconFolder, IconDownload, IconHistory, IconReceipt, IconRefresh } from "@tabler/icons-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import AppSelect from "@/components/AppSelect";
 import { Capsule } from "@/components/Capsule";
 import LedgerReconcilePanel from "@/components/LedgerReconcilePanel";
 import InvestmentSnapshotHoldings from "@/components/InvestmentSnapshotHoldings";
+import SnapshotPositionProfit from "@/components/SnapshotPositionProfit";
 import { copyText } from "@/lib/clipboard";
 import { MARKET_BADGE_ITEMS } from "@/lib/marketBadge";
 import { useWorkspaceActive } from "@/lib/workspacePanel";
@@ -14,6 +16,7 @@ import { useInvestmentDirectoryPages } from "@/lib/useInvestmentDirectoryPages";
 import styles from "./InvestmentDataManager.module.css";
 
 const ROOT = "/api/personal-data-transfer";
+const ArchivedOrderQuery = dynamic(() => import("@/components/ArchivedOrderQuery"));
 const FOLDERS = [
   { key: "daily", title: "每日盈亏", icon: IconChartLine },
   { key: "positions", title: "持仓", icon: IconBriefcase },
@@ -404,6 +407,8 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const foreground = useWorkspaceForeground();
   const [folder, setFolder] = useState<Folder>(resumeBackup ? "archive" : "daily");
   const [kind, setKind] = useState<AccountKind>("real");
+  const [tradeView, setTradeView] = useState<"query" | "files">("query");
+  const showOrderQuery = folder === "trades" && tradeView === "query";
   const [dailyPaths, setDailyPaths] = useState<Record<AccountKind, DailyPath>>({ real: {}, simulated: {} });
   const { year, month } = dailyPaths[kind];
   const [positionMarket, setPositionMarket] = useState<string>();
@@ -413,6 +418,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const [file, setDetail] = useState<FileDetail | null>(null);
   const [detailError, setDetailError] = useState("");
   const [view, setView] = useState<FileView>("file");
+  const [profitRecord, setProfitRecord] = useState<string | null>(null);
   const [previous, setPrevious] = useState<{ selection: Selection; view: FileView }[]>([]);
   const [exporting, setExporting] = useState(false);
   const [fileStatus, setFileStatus] = useState("");
@@ -423,7 +429,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const previewTitle = useRef<HTMLHeadingElement>(null);
   const openedBy = useRef<HTMLButtonElement>(null);
   const listItems = useRef<HTMLDivElement>(null);
-  const path = directoryPath(folder, kind, { year, month }, pagination.starts[pagination.index] ?? null, positionMarket);
+  const path = showOrderQuery ? null : directoryPath(folder, kind, { year, month }, pagination.starts[pagination.index] ?? null, positionMarket);
   const readDirectory = useCallback(async (key: string, signal: AbortSignal): Promise<DirectoryPage> => {
     const response = await ownRequest(ownerId, key, signal, sessionCsrf);
     return response.json();
@@ -483,6 +489,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   }, [kind, ownerId, selection, sessionCsrf]);
 
   function closeFile() {
+    setProfitRecord(null);
     setSelection(null);
     setDetail(null);
     setPrevious([]);
@@ -510,6 +517,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
     previewContent.current?.scrollTo(0, 0);
   }
   function readFile(item: Selection, nextView: FileView) {
+    setProfitRecord(null);
     setDetailError("");
     setSelection({ ...item });
     showView(nextView);
@@ -549,6 +557,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const detail = activeFile?.data;
   const dailySelection = selection && "day" in selection ? selection : null;
   const snapshot = detail && "day" in detail ? detail : null;
+  const profitPosition = snapshot?.positions.find(position => position.recordId === profitRecord);
   const dailyVersions = dailySelection && file?.kind === kind && "day" in file.data && file.data.day === dailySelection.day
     ? file.data.revisions : [];
   const original = detail && "type" in detail ? detail.file : undefined;
@@ -574,11 +583,15 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
         <Capsule size="sm" variant="ghost" aria-label="刷新账本核准" title="刷新账本核准" onClick={() => setReconcileToken((v) => v + 1)}>
           <IconRefresh size={16} aria-hidden="true" />
         </Capsule>
-      ) : folder !== "archive" && <Capsule size="sm" variant="ghost" aria-label="重新读取列表" title="重新读取列表" disabled={loading} onClick={recheck}>
+      ) : folder !== "archive" && !showOrderQuery && <Capsule size="sm" variant="ghost" aria-label="重新读取列表" title="重新读取列表" disabled={loading} onClick={recheck}>
         <IconRefresh size={16} aria-hidden="true" />
       </Capsule>}
     </div>
-    {folder === "reconcile" ? <LedgerReconcilePanel ownerId={ownerId} refreshToken={reconcileToken} /> : folder === "archive" ? <div className={styles.archive}>
+    {folder === "trades" && !showFile && <nav className={styles.previewNav} aria-label="成交与订单视图">
+      <button type="button" aria-pressed={showOrderQuery} onClick={() => setTradeView("query")}>订单查询</button>
+      <button type="button" aria-pressed={!showOrderQuery} onClick={() => setTradeView("files")}>文件目录</button>
+    </nav>}
+    {showOrderQuery ? <ArchivedOrderQuery ownerId={ownerId} /> : folder === "reconcile" ? <LedgerReconcilePanel ownerId={ownerId} refreshToken={reconcileToken} /> : folder === "archive" ? <div className={styles.archive}>
       <InvestmentArchiveAction icon={<IconArchive size={18} />} title="完整个人账本" description="持仓、成交、资金流水、更正和日终快照。">
         <Capsule size="sm" variant="secondary" busy={exporting} onClick={() => void download()}><IconDownload size={15} />下载 JSON</Capsule>
       </InvestmentArchiveAction>
@@ -662,6 +675,10 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
     </div>}
     <section id="investment-file-preview" aria-label="文件预览" hidden={!showFile} className={styles.filePreview}>
     {showFile && selection && <>
+      {snapshot && profitPosition && <SnapshotPositionProfit position={profitPosition} day={snapshot.day} kind={kind}
+        cutoff={snapshot.cutoff} capturedAt={snapshot.capturedAt} ownerId={ownerId} sessionCsrf={sessionCsrf}
+        onBack={() => setProfitRecord(null)} />}
+      <div hidden={!!profitPosition}>
       <div className={styles.fileHeader}>
         <Capsule size="sm" variant="ghost" onClick={closeFile}><IconChevronLeft size={16} aria-hidden="true" />返回列表</Capsule>
         {previous.length > 0 && <Capsule size="sm" variant="ghost" onClick={returnToSource}>返回上一条</Capsule>}
@@ -689,7 +706,8 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
             {snapshot && <DailySnapshot result={snapshot} />}
             {view === "file" && snapshot && <InvestmentSnapshotHoldings key={`${snapshot.day}:${snapshot.revision}`}
               positions={snapshot.positions} calendar={snapshot.calendar}
-              onOpen={(id, revision) => choose({ type: "position", id, revision })} />}
+              onOpen={(id, revision) => choose({ type: "position", id, revision })}
+              onProfit={id => setProfitRecord(id)} />}
             {(view === "json" || view === "file" && !original && !snapshot) && <JsonPreview key={"day" in detail ? `${detail.day}:${detail.revision}` : `${detail.id}:${detail.version?.revision ?? "current"}`} source={activeFile.source} format />}
             {view === "file" && original && "type" in detail && <OriginalPreview key={detail.id} ownerId={ownerId} detail={detail} file={original} />}
             {view === "sources" && ("day" in detail ? <DailyEvidence result={detail} choose={choose} /> : <Values data={{ "记录编号": detail.id, ...detail.data }} />)}
@@ -698,6 +716,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
             {!("day" in detail) && detail.versions && detail.versions.length > 1 && <Evidence title="持仓版本">{detail.versions.map((version) => <button type="button" className={styles.link}
               disabled={version.revision === detail.version?.revision} key={version.revision} onClick={() => choose({ type: detail.type, id: detail.id, revision: version.revision })}>第 {version.revision} 版{version.action === "baseline" ? " · 首次留存" : ""}</button>)}</Evidence>}
           </>}
+      </div>
       </div>
     </>}
     </section>

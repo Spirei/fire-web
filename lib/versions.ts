@@ -8501,6 +8501,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
     { kind: "feature", title: "订单历史与日终持仓视图", desc: "订单详情和更正显示已保存的版本。日终文件沿用 App 的市场汇总、双行持仓明细及行内盈亏入口，可切换原始 JSON。" },
     { kind: "feature", title: "迁入成交核销", desc: "核对完整的迁入成交可由 App 提交核销。订单核销、持仓和原币现金一次保存，迁入原件和回执继续保留。" },
     { kind: "fix", title: "统一原生账本能力发现", desc: "App 通过一个协议版本和一份列表读取可用交易操作，已安装版本仍可识别迁入成交核销。" },
+    { kind: "feature", title: "个股盈亏与只读订单查询", desc: "沿用 App 的个股盈亏构成、订单列表、历史版本及费用明细，可切回原始文件和 JSON。" },
   ],
 };
 

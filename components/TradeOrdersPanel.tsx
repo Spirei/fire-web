@@ -13,8 +13,8 @@ import MobileExplanation from "@/components/MobileExplanation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { fmtMoney, fmtPrice, fmtQty } from "@/lib/format";
-import { marketMeta, type TradeOrder } from "@/lib/types";
+import { fmtMoney, fmtNum, fmtPrice, fmtQty } from "@/lib/format";
+import { marketMeta, type Quote, type TradeOrder } from "@/lib/types";
 import MarketIcon from "@/components/MarketIcon";
 import { showToast } from "@/lib/toast";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -23,8 +23,10 @@ import RefreshButton from "@/components/RefreshButton";
 import DeleteIcon from "@/components/DeleteIcon";
 import EtfDoubleBadge from "@/components/EtfDoubleBadge";
 import { appConfirm } from "@/lib/appDialog";
+import { ensureStockIcons } from "@/lib/useAssetIcons";
+import styles from "./OrderReadView.module.css";
 
-type OrderTab = "today" | "history";
+type OrderTab = "today" | "history" | "strategy";
 type StatusFilter = "all" | "filled" | "pending" | "cancelled" | "expired";
 
 const CURRENCY_BY_MARKET: Record<string, string> = {
@@ -46,6 +48,8 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
 };
 const VALIDITY_LABEL: Record<string, string> = { day: "当日有效", gtc: "撤单前有效", custom: "自定义有效期" };
 const STATUS_LABEL: Record<string, string> = { filled: "已成交", pending: "待成交", cancelled: "已撤销", expired: "已失效", imported_suspended: "已暂停", rejected: "已拒绝" };
+const orderPriceFormat = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 8 });
+
 function orderTypeLabel(order: TradeOrder): string {
   if (order.side === "dividend") return "股息入账";
   return ORDER_TYPE_LABEL[order.orderType] ?? "限价单";
@@ -383,7 +387,9 @@ export default function TradeOrdersPanel({
   loading = false,
   bare = false,
   recordId,
-  onRefresh
+  onRefresh,
+  quotes,
+  readOnly = false,
 }: {
   orders: TradeOrder[];
   ownerId: string;
@@ -400,6 +406,8 @@ export default function TradeOrdersPanel({
   recordId?: string;
   /** 刷新订单（实际重取数据） */
   onRefresh?: () => Promise<void> | void;
+  quotes?: Record<string, Quote>;
+  readOnly?: boolean;
 }) {
   const [tab, setTab] = usePersistedState<OrderTab>(storageKey, "today");
   const [marketFilter, setMarketFilter] = usePersistedState<string>(`${storageKey}:market`, "ALL");
@@ -477,6 +485,7 @@ export default function TradeOrdersPanel({
   }, [orders]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
+    if (tab === "strategy") return false;
     if (tab === "today" ? !isOrderToday(order.tradedAt,order.market) : isOrderToday(order.tradedAt,order.market)) return false;
     if (marketFilter !== "ALL" && holdingAccountMarket(order).toUpperCase() !== marketFilter) return false;
     if (typeFilter !== "all" && orderTypeOf(order) !== typeFilter) return false;
@@ -580,6 +589,7 @@ export default function TradeOrdersPanel({
     () => searchedOrders.slice(safePage * pageSize, safePage * pageSize + pageSize),
     [searchedOrders, safePage, pageSize]
   );
+  useEffect(() => { if (readOnly && pageOrders.length) void ensureStockIcons(pageOrders); }, [pageOrders, readOnly]);
   // 筛选/搜索变化时回到第一页
   const prevSearch = useRef(searchKeyword);
   useEffect(() => {
@@ -1000,7 +1010,7 @@ export default function TradeOrdersPanel({
           <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
             <span />
             <span className="inline-flex items-center gap-1">
-              {order.status === "pending" && !order.apiManaged && (
+              {!readOnly && order.status === "pending" && !order.apiManaged && (
                 <IconButton size="sm" framed
                   type="button"
                   onClick={() => void handleCancel(order)}
@@ -1040,16 +1050,46 @@ export default function TradeOrdersPanel({
     }
   };
 
+  function compactRow(order: TradeOrder) {
+    const date = formatOrderTime(order.tradedAt, order.market);
+    const split = date.indexOf(" ");
+    const today = tab === "today";
+    const icon = stockIcons[`${order.market.toUpperCase()}:${order.code.toUpperCase()}`];
+    const side = order.side === "buy" ? "买入" : order.side === "sell" ? "卖出" : "股息";
+    const price = order.orderPrice === undefined
+      ? (order.executionModel === "source_registered_history" ? null : order.price) : order.orderPrice;
+    const filled = order.filledQty ?? (order.status === "filled" ? order.qty : null);
+    return <button className={styles.orderQueryRow} type="button" key={order.id} onClick={() => setDetailOrder(order)} aria-label={`查看 ${order.name} 订单详情`}>
+      <span className={styles.orderQueryIdentity}>
+        <span className="relative flex-none">
+          {icon ? <img src={icon} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className={styles.orderQueryIcon}>{order.name.slice(0, 1)}</span>}
+          <EtfDoubleBadge market={order.market} code={order.code} name={order.name} className="!-bottom-1 !h-3.5 !w-3.5 !text-[7px]" />
+        </span>
+        <span className="min-w-0"><strong className="block truncate font-medium">{order.name}</strong><small className="block truncate">{order.market} {order.code}</small></span>
+      </span>
+      {today ? <>
+        <span>{price == null ? "—" : orderPriceFormat.format(price)}<small>{fmtNum(quotes?.[order.recordId]?.price ?? "")}</small></span>
+        <span>{fmtQty(order.qty)}<small>{fmtQty(filled ?? "")}</small></span>
+        <span><b className={order.side === "buy" ? "text-up" : order.side === "sell" ? "text-down" : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
+      </> : <>
+        <span>{fmtQty(order.qty)}<small>{price == null ? "—" : orderPriceFormat.format(price)}</small></span>
+        <span><b className={order.side === "buy" ? "text-up" : order.side === "sell" ? "text-down" : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
+        <time dateTime={order.tradedAt}>{split < 0 ? date || "—" : date.slice(0, split).replaceAll("/", ".")}<small>{split < 0 ? "" : date.slice(split + 1)}</small></time>
+      </>}
+    </button>;
+  }
+
   const Wrapper = bare ? "div" : "section";
   return (
-    <Wrapper className={bare ? "overflow-hidden" : "card overflow-hidden"}>
-      <div className="trade-orders-toolbar flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3.5">
-        <div className="flex items-center gap-6">
-          {([["today", "当日订单"], ["history", "历史订单"]] as const).map(([key, label]) => (
+    <Wrapper className={`${bare ? "overflow-hidden" : "card overflow-hidden"} ${readOnly ? styles.archivedOrders : ""}`}>
+      <div className={`trade-orders-toolbar flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3.5`}>
+        <div className={`${styles.orderTabs} flex items-center gap-5`}>
+          {([["today", "当日订单"], ["history", "历史订单"], ["strategy", "策略订单"]] as const).map(([key, label]) => (
             <button
               key={key}
               type="button"
               onClick={() => setTab(key)}
+              aria-pressed={tab === key}
               className={`relative px-0.5 pb-2.5 text-sm font-semibold transition-colors ${
                 tab === key ? "text-ink dark:text-white" : "text-muted hover:text-ink"
               }`}
@@ -1059,8 +1099,8 @@ export default function TradeOrdersPanel({
             </button>
           ))}
         </div>
-        <div className="trade-orders-actions flex items-center gap-2">
-          <div ref={searchRef} className="relative">
+        <div className={`${styles.orderTools} trade-orders-actions flex items-center gap-2`}>
+          <div ref={searchRef} className={`relative ${styles.orderSearch}`}>
             <div className="relative">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint">
                 <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
@@ -1085,7 +1125,8 @@ export default function TradeOrdersPanel({
                     setSearchOpen(false);
                   }
                 }}
-                placeholder="搜索代码/名称/订单号"
+                placeholder="搜索证券名称或代码"
+                aria-label="搜索证券名称或代码"
                 className="h-8 w-[180px] rounded-[9px] border border-edge bg-white pl-8 pr-2.5 text-xs text-ink placeholder:text-faint transition-colors focus:border-edge-strong dark:border-white/10 dark:bg-[#1c222d] dark:text-white"
               />
               {searchInput && (
@@ -1120,8 +1161,9 @@ export default function TradeOrdersPanel({
               </div>
             )}
           </div>
-          <span className="text-xs text-muted">{searchedOrders.length} 笔</span>
-          {onRefresh && <RefreshButton onClick={() => void onRefresh()} title="刷新订单" />}
+          {tab !== "strategy" && <span className="text-xs text-muted">{searchedOrders.length} 笔</span>}
+          {onRefresh && tab !== "strategy" && <RefreshButton onClick={() => void onRefresh()} title="刷新订单" />}
+          {!readOnly && tab !== "strategy" && <>
           <button
             type="button"
             onClick={() => setExportOpen(true)}
@@ -1161,10 +1203,11 @@ export default function TradeOrdersPanel({
               <path d="M4 5h16l-6.35 7.15v5.25l-3.3 1.65v-6.9L4 5Z" />
             </svg>
           </button>
+          </>}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-edge px-5 py-2.5">
+      {tab !== "strategy" && <div className="flex flex-wrap items-center gap-2.5 border-b border-edge px-5 py-2.5">
         <FilterSelect
           display={marketFilter === "ALL" ? "市场" : `市场:${marketMeta(marketFilter).label}`}
           value={marketFilter}
@@ -1370,18 +1413,27 @@ export default function TradeOrdersPanel({
             <path d="M3 6h18M8 6V4h8v2m-9 2 1 12h8l1-12" />
           </svg>
         </button>
-      </div>
+      </div>}
 
-      {loading && orders.length === 0 ? (
+      {tab === "strategy" ? (
+        <p className="px-5 py-12 text-center text-sm text-muted">股票定投策略保存在 App 本机，Fire 暂无可读取的策略。</p>
+      ) : loading && orders.length === 0 ? (
         <div className="py-14 text-center text-sm text-faint">正在加载订单…</div>
       ) : searchedOrders.length === 0 ? (
         <div className="py-16 text-center text-sm text-muted">
-          {searchKeyword ? "没有匹配的订单（试试代码/名称/订单号）" : tab === "today" ? "当日暂无成交订单" : "暂无历史订单"}
+          {searchKeyword ? "没有匹配的订单（试试代码/名称/订单号）" : tab === "today" ? "当日暂无订单" : "暂无历史订单"}
           {(marketFilter !== "ALL" || statusFilter !== "all") && "（可调整上方筛选查看全部）"}
         </div>
       ) : (
         <>
-        <div className="orders-scroll">
+        <div className={styles.compactOrders}>
+          <div className={styles.orderQueryColumns} aria-hidden="true">
+            {(tab === "today" ? ["名称/代码", "委托/现价", "总量/已成", "方向/状态"]
+              : ["名称/代码", "总量/委托", "方向/状态", "时间"]).map(label => <span key={label}>{label}</span>)}
+          </div>
+          {pageOrders.map(compactRow)}
+        </div>
+        <div className={`orders-scroll ${styles.desktopOrders}`}>
           <table className="w-full table-fixed whitespace-nowrap text-xs" style={{ minWidth: `${totalColumnWidth + 8}px` }}>
             <thead>
               <tr className="bg-bg-gray text-[11px] font-semibold text-muted dark:bg-white/5">
@@ -1527,6 +1579,10 @@ export default function TradeOrdersPanel({
         ,
         document.body
       )}
+
+      {tab === "today" && <div className={styles.orderHistoryShortcut}>
+        <Capsule size="sm" variant="secondary" onClick={() => setTab("history")}>全部订单</Capsule>
+      </div>}
 
       {exportOpen && (
         <AppModal title="导出订单" desc="Excel · .xlsx" size="lg" onClose={() => setExportOpen(false)} footer={
@@ -1713,137 +1769,60 @@ export default function TradeOrdersPanel({
 
       {detailOrder && (() => {
         const detail = detailOrder;
-        const meta = marketMeta(detail.market);
-        const currency = meta.currency;
+        const currency = detail.currency || currencyCode(detail.market);
         const icon = stockIcons[`${detail.market.toUpperCase()}:${detail.code.toUpperCase()}`];
-        const rows: Array<[string, React.ReactNode]> = [
-          ["证券账户", <span key="a" className="text-ink">{detail.broker || "—"}</span>],
-          ["委托单号", (
-            <span key="b" className="inline-flex items-center gap-1.5">
-              <span className="font-mono tabular-nums text-ink">{detail.orderNo || "—"}</span>
-              {detail.orderNo && (
-                <IconButton size="sm"
-                  type="button"
-                  onClick={() => void copyOrderNo(detail)}
-                  title="复制订单号"
-                  label="复制订单号"
-                  className=""
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
-                    <rect x="9" y="9" width="12" height="12" rx="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                </IconButton>
-              )}
-            </span>
-          )],
-          ["订单类型", <span key="c" className="text-ink">{orderTypeLabel(detail)}</span>],
-          ["方向", (
-            <span key="d" className={`font-bold ${detail.side === "buy" ? "text-up" : detail.side === "sell" ? "text-down" : "text-brand-deep"}`}>
-              {detail.side === "buy" ? "买入" : detail.side === "sell" ? "卖出" : "股息"}
-            </span>
-          )],
-          ["委托价格", <span key="e" className="tabular-nums text-ink">{fmtPrice(detail.price, currency, detail.market)}</span>],
-          ["委托数量", <span key="f" className="tabular-nums text-ink">{fmtQty(detail.qty)}</span>],
-          ["成交价格", <span key="g" className="tabular-nums text-ink">{detail.status === "imported_suspended" ? "—" : fmtPrice(detail.price, currency, detail.market)}</span>],
-          ["成交数量", (
-            <span key="h" className="inline-flex items-center gap-1.5 tabular-nums text-ink">
-              <span className={`h-1.5 w-1.5 flex-none rounded-full ${detail.status === "filled" ? "bg-down" : detail.status === "pending" ? "bg-[#3297f6]" : detail.status === "imported_suspended" ? "bg-bg-gray" : "bg-up"}`} />
-              {detail.status === "filled" ? fmtQty(detail.qty) : detail.status === "imported_suspended" ? "—" : "0"}
-            </span>
-          )],
-          ["成交金额", <span key="i" className="font-semibold tabular-nums text-ink">{detail.status === "imported_suspended" ? "—" : fmtMoney(detail.amount, currency)}</span>],
-          ["有效期", <span key="l" className="text-ink">{validityLabel(detail)}</span>],
-          ["时段", <span key="m" className="text-ink">{detail.session || "盘中+盘前盘后"}</span>],
-          ["结算货币", <span key="o" className="font-mono text-ink">{currencyCode(detail.market)}</span>],
-          ["订单状态", (
-            <span key="p" className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
-              detail.status === "filled" ? "text-down" : detail.status === "pending" ? "text-[#3297f6] dark:text-[#6cb6ff]" : detail.status === "imported_suspended" ? "text-muted" : "text-up"
-            }`}>
-              <span className={`flex h-4 w-4 flex-none items-center justify-center rounded-full ${detail.status === "imported_suspended" ? "text-muted" : "text-white"} ${
-                detail.status === "filled" ? "bg-down" : detail.status === "pending" ? "bg-[#3297f6]" : detail.status === "imported_suspended" ? "bg-bg-gray" : "bg-up"
-              }`}>
-                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-2.5 w-2.5">
-                  {detail.status === "filled"
-                    ? <path d="m2.5 6.4 2.4 2.4 4.7-5.4" />
-                    : detail.status === "pending"
-                      ? <><path d="M6 3v3.4l2 1.4" /><circle cx="6" cy="6" r="3.4" strokeWidth="1.6" /></>
-                      : detail.status === "imported_suspended" ? <path d="M4 3v6M8 3v6" /> : <path d="M3 3l6 6M9 3l-6 6" />}
-                </svg>
-              </span>
-              {STATUS_LABEL[detail.status] ?? "状态未知"}
-            </span>
-          )],
-          ["触发状态", <span key="q" className="text-ink">{detail.triggerStatus || "—"}</span>],
-          [detail.status === "filled" ? "成交时间" : "委托时间", <span key="n" className="tabular-nums text-ink">{formatOrderTime(detail.tradedAt, detail.market)}</span>],
-          ...(detail.executionModel === "app_order_mirror" && detail.createdAt && detail.status === "filled"
-            ? [["录入时间", <span key="entered" className="text-ink">{formatOrderTime(detail.createdAt, detail.market)}</span>] as [string, React.ReactNode]]
-            : []),
-          ["已实现盈亏", (
-            <span key="j" className={`font-semibold tabular-nums ${detail.realizedPnl == null ? "text-faint" : detail.realizedPnl >= 0 ? "text-up" : "text-down"}`}>
-              {detail.realizedPnl == null ? "—" : `${detail.realizedPnl >= 0 ? "+" : "-"}${fmtMoney(Math.abs(detail.realizedPnl), currency)}`}
-            </span>
-          )],
-          ["成交后持仓", (
-            <span key="k" className="tabular-nums text-ink">
-              {detail.status === "imported_suspended" || detail.positionQtyAfter == null ? "—" : fmtQty(detail.positionQtyAfter)}
-              {detail.status !== "imported_suspended" && <span className="ml-1 text-[11px] text-faint">@ {detail.positionCostAfter == null ? "—" : fmtPrice(detail.positionCostAfter, currency)}</span>}
-            </span>
-          )],
-          ["驳回原因", <span key="r" className="text-ink">{detail.status === "cancelled" ? "订单已撤销" : "—"}</span>],
-          ["备注", <span key="s" className="text-ink">{detail.note || "—"}</span>]
+        const money = (value: number | null | undefined, unit = currency) => value == null || !Number.isFinite(value) ? "—" : `${unit} ${fmtNum(value)}`;
+        const unitPrice = (value: number | null | undefined) => value == null || !Number.isFinite(value)
+          ? "—" : `${currency} ${orderPriceFormat.format(value)}`;
+        const filled = detail.status === "filled";
+        const actualFee = detail.actualFeeKnown !== false && filled
+          && (detail.actualFeeKnown === true || detail.feeSource === "owner_recorded" || detail.feeSource === "broker_reported");
+        const settlementCurrency = detail.settlementCurrency || currency;
+        const side = detail.side === "buy" ? "买入" : detail.side === "sell" ? "卖出" : "股息";
+        const rows: [string, React.ReactNode][] = [
+          ["交易账户", detail.broker || "—"], ["订单编号", detail.orderNo ? <span key="number" className="inline-flex items-center gap-1">
+            {detail.orderNo}<button type="button" className="text-[10px] underline" onClick={() => void copyOrderNo(detail)}>{copiedId === detail.id ? "已复制" : "复制"}</button>
+          </span> : "—"],
+          ["创建时间", detail.createdAt ? formatOrderTime(detail.createdAt, detail.market) : "—"],
+          ["成交时间", filled && detail.tradedAt ? formatOrderTime(detail.tradedAt, detail.market) : "—"],
+          ["订单类型", detail.side === "dividend" ? "股息入账" : ORDER_TYPE_LABEL[detail.orderType] ?? "—"],
+          ["方向", <span key="side" className={detail.side === "buy" ? "text-up" : detail.side === "sell" ? "text-down" : undefined}>{side}</span>],
+          ["委托价格", unitPrice(detail.orderPrice === undefined ? (detail.orderType ? detail.price : null) : detail.orderPrice)],
+          ["成交价格", unitPrice(detail.executedPrice === undefined ? (filled ? detail.price : null) : detail.executedPrice)],
+          ["成交金额", money(filled ? detail.amount : null)],
+          ["成交数量", fmtQty(detail.filledQty ?? (filled ? detail.qty : ""))],
+          ["已实现盈亏", detail.realizedPnl == null ? "待核对" : money(detail.realizedPnl, detail.realizedPnlCurrency || currency)],
+          ["结算币种", settlementCurrency],
+          ["实际结算净额", filled && detail.settlementAmount != null ? money(detail.settlementAmount, settlementCurrency) : "—"],
+          ["订单状态", STATUS_LABEL[detail.status] ?? "未知状态"],
+          ...(detail.tif ? [["有效期", VALIDITY_LABEL[detail.tif] ?? detail.tif] as [string, string]] : []),
+          ...(!readOnly ? [["委托数量", fmtQty(detail.qty)] as [string, string]] : []),
+          ...(detail.triggerPrice != null ? [["触发价", unitPrice(detail.triggerPrice)] as [string, string]] : []),
+          ...(detail.triggerStatus ? [["触发状态", detail.triggerStatus] as [string, string]] : []),
+          ...(detail.positionQtyAfter != null ? [["成交后持仓", fmtQty(detail.positionQtyAfter)
+            + (detail.positionCostAfter == null ? "" : ` @ ${unitPrice(detail.positionCostAfter)}`)] as [string, string]] : []),
+          ...(detail.session ? [["时段", detail.session] as [string, string]] : []),
+          ...(detail.note ? [["备注", detail.note] as [string, string]] : []),
         ];
-        return createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-start justify-center p-6 pt-[10vh]">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setDetailOrder(null)} />
-            <div className="relative max-h-[80vh] w-full max-w-[440px] overflow-y-auto rounded-[18px] border border-edge bg-white shadow-pop dark:bg-[#1c1c1e]">
-              <div className="flex items-center justify-between gap-2 border-b border-edge px-5 py-4">
-                <div>
-                  <h3 className="text-base font-bold text-ink">{detail.side === "buy" ? "买入" : detail.side === "sell" ? "卖出" : "股息"}订单详情</h3>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <span className="relative flex-none">
-                      {icon ? <img src={icon} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-gray text-xs font-bold text-muted">{detail.name.slice(0, 1)}</span>}
-                      <EtfDoubleBadge market={detail.market} code={detail.code} name={detail.name} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-ink">{detail.name}</p>
-                      <p className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-faint"><span>{detail.code}</span><StockConnectBadge variant="label" market={detail.market} accountMarket={detail.accountMarket} /><span className="truncate">· {meta.label} · {currency}</span></p>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDetailOrder(null)}
-                  aria-label="关闭"
-                  className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
-                    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="px-5 py-4">
-                <div className="space-y-3.5">
-                  {rows.map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between gap-4 text-xs">
-                      <span className="flex-none text-muted">{label}</span>
-                      <span className="min-w-0 text-right">{value}</span>
-                    </div>
-                  ))}
-                </div>
-                <OrderHistory order={detail} />
-                <div className="mt-5 border-t border-edge pt-4">
-                  <p className="text-xs font-bold text-ink">{detail.executionModel === "source_registered_history" ? "登记费用" : "费用明细"}</p>
-                  {detail.executionModel === "source_registered_history" ? <div className="mt-3 flex items-center justify-between gap-4 text-xs"><span className="text-muted">{detail.actualFeeKnown ? "已确认" : "未核对"}</span><span className="tabular-nums text-ink">{fmtMoney(detail.fees,currency)}</span></div> : <>
-                  <div className="mt-3 space-y-3.5 text-xs">
-                    <div className="flex items-center justify-between gap-4"><span className="flex-none text-muted">佣金</span><span className="tabular-nums text-ink">{fmtMoney(detail.fees, currency)}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="flex-none font-semibold text-ink">合计</span><span className="font-semibold tabular-nums text-ink">{fmtMoney(detail.fees, currency)}</span></div>
-                  </div></>}
-                </div>
-              </div>
+        return <AppModal title="订单详情" size="md" className={styles.orderModal} onClose={() => setDetailOrder(null)}>
+          <section className={styles.orderDetail}>
+            <div className={styles.orderDetailIdentity}>
+              {icon ? <img src={icon} alt="" className="h-8 w-8 rounded-full object-cover" /> : <MarketIcon market={detail.market} size={28} />}
+              <span className="min-w-0"><strong className="block truncate font-semibold">{detail.name}</strong><small>{detail.market} {detail.code}</small></span>
             </div>
-          </div>,document.body
-        );
+            <h4>交易信息</h4>
+            <dl className={styles.orderDetailCard}>{rows.map(([label, value]) =>
+              <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+            <div className={styles.orderDetailHistory}><OrderHistory order={detail} /></div>
+            <h4>费用明细</h4>
+            <dl className={styles.orderDetailCard}><div><dt>合计费用</dt><dd>{actualFee ? money(detail.fees) : "待核对"}</dd></div></dl>
+            {!readOnly && !detail.apiManaged && !detail.historyLocked && (onEdit || onDelete || detail.status === "pending") && <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {detail.status === "pending" && <Capsule size="sm" variant="secondary" onClick={() => void handleCancel(detail)}>撤单</Capsule>}
+              {onEdit && <Capsule size="sm" variant="secondary" onClick={() => { setDetailOrder(null); onEdit(detail); }}>编辑</Capsule>}
+              {onDelete && <Capsule size="sm" variant="ghost" disabled={deletingId === detail.id} onClick={() => onDelete(detail)}>删除</Capsule>}
+            </div>}
+          </section>
+        </AppModal>;
       })()}
     </Wrapper>
   );

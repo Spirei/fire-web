@@ -7,6 +7,8 @@ const root=path.resolve(__dirname,'..');
  const fixture=`import React,{useState,useCallback} from 'react';import {createRoot} from 'react-dom/client';import QuotesView from '@/components/views/QuotesView';import FxConverter from '@/components/FxConverter';import AssetPnlAnalysis from '@/components/AssetPnlAnalysis';import AssetAnalysisView from '@/components/views/AssetAnalysisView';import {FUND_CURRENCIES} from '@/lib/fundCurrencies';import {quoteInstrumentKey} from '@/lib/quoteBatches';import {intradayCacheKey} from '@/lib/intradayCache';import {useInvestmentDirectoryPages} from '@/lib/useInvestmentDirectoryPages';import OrderHistory from '@/components/OrderHistory';import InvestmentSnapshotHoldings from '@/components/InvestmentSnapshotHoldings';import InvestmentDataManager from '@/components/InvestmentDataManager';
  window.chartReads=0;window.rateReads=0;window.reads=0;window.writes=0;window.writePaths=[];window.fundFailure=true;window.chartMode='ready';window.rateMode='ready';window.fixtureRates={USD:1};window.owner='owner-uuid';
  const record={id:'row-uuid',market:'HK',code:'00700',name:'Synthetic Holding',qty:10,cost:10,price:20,type:'holdings',watchlist:true,group:'Synthetic',updatedAt:'2026-10-01T00:00:00Z'};
+ const order={id:'archive-fill',orderNo:'1000000042',recordId:'aapl',market:'US',code:'AAPL',name:'Daily Archive Apple',side:'buy',status:'filled',qty:10,price:15,amount:150,fees:1,currency:'USD',settlementCurrency:'USD',settlementAmount:151,positionQtyBefore:0,positionQtyAfter:10,broker:'示例券商',createdAt:'2026-11-13T16:00:00Z',tradedAt:'2026-11-13T16:00:00Z',executionModel:'app_native_ledger',apiManaged:true,actualFeeKnown:true,orderType:'limit',orderPrice:15,executedPrice:15,filledQty:10,orderActivity:[{id:'fill',kind:'filled',timestamp:'2026-11-13T16:00:00Z',quantity:10,price:15}]};
+ window.archiveOrder=order;
  const chart={date:'2026-11-12',source:'controlled',points:[{time:'09:30',price:10},{time:'09:31',price:15}]};
  localStorage.setItem(intradayCacheKey(window.owner),JSON.stringify({version:2,owner:'another-account',entries:{'row-uuid':{instrument:quoteInstrumentKey(record),chart,readAt:Date.now()}}}));
  window.fetch=async(input,init={})=>{window.reads++;const url=String(input);if(init.method==='POST'&&['/api/v1/portfolio-series/prepare','/api/kline/prepare'].includes(url))return Response.json({error:'history preparation is not available in this fixture'},{status:405});if(init.method&&init.method!=='GET'&&!['/api/charts','/api/quotes'].includes(url)){window.writes++;window.writePaths.push(url);return Response.json({error:'test has no financial writes'},{status:405});}
@@ -14,10 +16,12 @@ const root=path.resolve(__dirname,'..');
  if(url==='/api/quotes')return Response.json({quotes:{}});
  if(url==='/api/rates'){window.rateReads++;const data={base:'USD',rates:window.fixtureRates,quoted:Object.keys(window.fixtureRates),updatedAt:null};if(window.rateMode==='hold')return new Promise(resolve=>window.releaseRates=()=>{window.releaseRates=null;resolve(Response.json(data));});if(window.rateMode==='failed')return Response.json({message:'汇率服务暂时不可用'},{status:503});return Response.json(data);}
  if(url.includes('/funds')){if(window.fundFailure)return Response.json({message:'资金暂时无法读取'},{status:503});const balances=Object.fromEntries(FUND_CURRENCIES.map(c=>[c,c==='USD'?50:0]));return Response.json({code:0,data:{balances,cardCash:{USD:0},summaries:Object.fromEntries(FUND_CURRENCIES.map(c=>[c,{openingAsset:0,cashNetFlow:0,stockNetFlow:0,otherNetFlow:0}])),transactions:[],pagination:{total:0}}});}
+ if(url.startsWith('/api/v1/orders?')){const owner=new Headers(init.headers).get('X-Alcor-Expected-Account');if(owner!==window.owner)return Response.json({message:'账号已变化'},{status:403});return Response.json({code:0,data:{orders:[window.archiveOrder],coverage:{truncated:false}}});}
  if(url.startsWith('/api/personal-data-transfer/daily-results')){
   const params=new URL(url,location.origin).searchParams;
   const day={day:'2026-11-13',revision:1,state:'complete',pnl:'5',equity:'200',currency:'USD'};
-  if(params.has('day'))return Response.json({...day,revisions:[1],positions:[{recordId:'aapl',market:'US',code:'AAPL',name:'Daily Archive Apple',quantity:'10',value:'200',close:{value:'20',currency:'USD'}}],cashPostings:[],cashOpenings:[],fx:{},missing:[]});
+  if(params.get('day')==='2026-10-31')return Response.json({day:'2026-10-31',equity:'100',positions:[]});
+  if(params.has('day'))return Response.json({...day,cutoff:'2026-11-14T00:00:00Z',capturedAt:'2026-11-14T00:30:00Z',revisions:[1],positions:[{recordId:'aapl',market:'US',code:'AAPL',name:'Daily Archive Apple',quantity:'10',cost:'15',value:'200',close:{value:'20',currency:'USD'}}],cashPostings:[],cashOpenings:[],fx:{},missing:[]});
   return Response.json({items:params.has('month')?[day]:params.has('year')?[{year:2026,month:11,count:1}]:[{year:2026,count:1}],next:null});
  }
  if(url.startsWith('/api/personal-data-transfer/records'))return Response.json({items:[],next:null});
@@ -48,7 +52,7 @@ const root=path.resolve(__dirname,'..');
       {recordId:'aapl', market:'US', name:'示例苹果', code:'AAPL', quantity:'10', cost:'12.25', value:'200', close:{value:'20',currency:'USD',tradeDay:'2026-11-13',source:'controlled'}},
       {recordId:'amzn', market:'US', name:'示例亚马逊', code:'AMZN', quantity:'2', cost:'10', value:'60', close:{value:'30',currency:'USD'}},
     ]}
-    calendar={{rows:[{recordId:'aapl',market:'US',currency:'USD',profit:'5',capital:'100'}]}} onOpen={id=>window.openedSnapshotRecord=id}/></>;
+    calendar={{rows:[{recordId:'aapl',market:'US',currency:'USD',profit:'5',capital:'100'}]}} onOpen={id=>window.openedSnapshotRecord=id} onProfit={id=>window.openedProfitRecord=id}/></>;
  }
  function Harness(){const[rows,setRows]=useState([record]);window.changeCode=()=>setRows([{...record,code:'00005'}]);window.changeOwner=()=>setRows([{...record,name:'Changed'}]);const onAdd=useCallback(async()=>true,[]);return <div className="records-app"><div className="records-content"><div className="tab-panel" data-workspace="assets">{location.search.includes('dailyfile')?<InvestmentDataManager ownerId={window.owner} sessionCsrf="fixture-binding"/>:location.search.includes('snapshots')?<Snapshots/>:location.search.includes('directory')?<Directory/>:location.search.includes('fx')?<FxConverter/>:location.search.includes('dashboard')?<AssetAnalysisView records={rows} quotes={{}} livePrice={r=>r.price} user={{id:window.owner,username:'synthetic',role:'user'}}/>:location.search.includes('pnl')?<AssetPnlAnalysis ownerId={window.owner} initialRecords={rows} initialQuotes={{}}/>:<QuotesView ownerId={window.owner} initialNow={Date.now()} records={rows} quotes={{}} quoteAt="" refreshing={false} refreshQuotes={()=>{}} onAddMatch={onAdd} groups={[]} onToggleWatch={onAdd}/>}</div></div></div>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
  const workspace=`export const useWorkspaceActive=()=>true;export const useWorkspaceSearchParams=()=>new URLSearchParams(location.search);export const useWorkspaceLocationGuard=()=>()=>true;export const useWorkspaceScrollRef=()=>({current:null});export const useWorkspaceState=()=>null;`;
@@ -75,8 +79,7 @@ const root=path.resolve(__dirname,'..');
   assert.equal(await page.getByRole('columnheader',{name:'市值/数量'}).getAttribute('aria-sort'),'descending');
   await page.getByRole('button',{name:/示例苹果/}).click();
   await page.getByRole('button',{name:'盈亏',exact:true}).click();
-  assert(await page.getByText('日终收益率',{exact:true}).isVisible());
-  assert(await page.getByText('持仓盈亏',{exact:true}).isVisible());
+  assert.equal(await page.evaluate(()=>window.openedProfitRecord),'aapl');
   await page.getByRole('button',{name:'查看持仓记录'}).click();
   assert.equal(await page.evaluate(()=>window.openedSnapshotRecord),'aapl');
   for(const width of [1280,390,320])for(const dark of [false,true]){
@@ -103,8 +106,53 @@ const root=path.resolve(__dirname,'..');
   await page.getByRole('button',{name:'原始 JSON',exact:true}).click();
   await page.getByLabel('JSON 文件内容').waitFor();
   assert((await page.getByLabel('JSON 文件内容').textContent()).includes('"quantity": "10"'));
+  const rawSnapshot=await page.getByLabel('JSON 文件内容').textContent();
   await page.getByRole('button',{name:'持仓视图',exact:true}).click();
-  await page.getByRole('button',{name:/Daily Archive Apple/}).waitFor();
+  await page.getByRole('button',{name:/Daily Archive Apple/}).click();
+  await page.getByRole('button',{name:'盈亏',exact:true}).click();
+  const profit=page.getByRole('region',{name:'个股盈亏详情'});
+  await profit.getByRole('heading',{name:'累计盈亏 (USD)'}).waitFor();
+  await profit.getByText('+49.00',{exact:true}).first().waitFor();
+  assert(await profit.getByRole('row').filter({hasText:'买入费用'}).isVisible());
+  await profit.getByRole('button',{name:'本月',exact:true}).click();
+  await profit.getByText('+49.00',{exact:true}).first().waitFor();
+  await profit.getByRole('button',{name:'自定义起始日期'}).click();
+  await profit.getByLabel('开始日期').fill('2026-11-13');
+  await profit.getByText('待核对',{exact:true}).waitFor();
+  await profit.getByRole('button',{name:'全部',exact:true}).click();
+  await profit.getByText('+49.00',{exact:true}).first().waitFor();
+  for(const width of [390,320]){
+   await page.setViewportSize({width,height:900});
+   await page.evaluate(()=>document.documentElement.classList.add('dark'));
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'P&L fits mobile');
+   if(process.env.UI_CAPTURE_DIR && width===390)await profit.screenshot({path:path.join(process.env.UI_CAPTURE_DIR,'snapshot-profit-dark.png')});
+  }
+  await profit.getByRole('button',{name:'返回持仓视图'}).click();
+  await page.getByRole('button',{name:'盈亏',exact:true}).waitFor();
+  await page.getByRole('button',{name:'原始 JSON',exact:true}).click();
+  assert.equal(await page.getByLabel('JSON 文件内容').textContent(),rawSnapshot,'visual drill-down leaves the original JSON byte-for-byte unchanged');
+  await page.setViewportSize({width:390,height:900});
+  await page.getByRole('button',{name:'成交与订单',exact:true}).click();
+  await page.getByRole('button',{name:'全部订单',exact:true}).click();
+  await page.getByRole('textbox',{name:'搜索证券名称或代码'}).fill('AAPL');
+  await page.getByRole('button',{name:'查看 Daily Archive Apple 订单详情'}).click();
+  const detail=page.getByRole('dialog',{name:'订单详情'});
+  await detail.getByRole('heading',{name:'交易信息',exact:true}).waitFor();
+  assert(await detail.getByRole('heading',{name:'费用明细',exact:true}).isVisible());
+  assert(await detail.getByText('USD 1.00',{exact:true}).isVisible());
+  assert.equal(await detail.getByRole('button',{name:/编辑|撤单|删除/}).count(),0);
+  await page.evaluate(()=>{window.archiveOrder={...window.archiveOrder,qty:12,filledQty:12,amount:180,settlementAmount:181,orderActivity:[{id:'edit',kind:'amended',timestamp:'2026-11-14T12:00:00Z',quantity:12,price:15},...window.archiveOrder.orderActivity]};window.dispatchEvent(new Event('fire:records-updated'));});
+  await detail.getByText('已修改',{exact:true}).waitFor();
+  assert.equal(await detail.getByText('已修改',{exact:true}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 208, 116)');
+  assert.equal(await detail.locator('.app-modal-panel').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(27, 37, 47)');
+  if(process.env.UI_CAPTURE_DIR)await detail.screenshot({path:path.join(process.env.UI_CAPTURE_DIR,'order-detail-dark.png')});
+  await detail.getByRole('button',{name:'关闭'}).click();
+  await page.getByRole('button',{name:'策略订单',exact:true}).click();
+  await page.getByText(/股票定投策略保存在 App 本机/).waitFor();
+  await page.getByRole('button',{name:'文件目录',exact:true}).click();
+  await page.getByText('暂无记录',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.writes),0,JSON.stringify(await page.evaluate(()=>window.writePaths)));
+  await page.setViewportSize({width:1280,height:900});
   await page.goto(base+'/?directory');
   await page.getByText('2026',{exact:true}).waitFor();
   await page.evaluate(()=>window.showDirectory(false));
