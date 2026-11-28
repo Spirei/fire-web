@@ -4,7 +4,7 @@ export const RECORDS_WORKSPACES = new Set(["holdings", "watchlist", "assets", "p
 
 /** One owned read at a time; cancellation/generation protects local writes and resumed accounts. */
 export function createRecordsRefresh(ownerId: string,
-  read: (signal: AbortSignal) => Promise<{ ownerId: string; records: StockRecord[] }>,
+  read: (signal: AbortSignal) => Promise<{ ownerId: string; records: StockRecord[]; sessionChanged?: boolean }>,
   apply: (records: StockRecord[]) => void, now: () => number = Date.now, ownerChanged: () => void = () => {}, failed: () => void = () => {}, initialSnapshotAt = -Infinity) {
   let active = false, disposed = false, generation = 0, resumedAt = -Infinity;
   let pending: Promise<void> | null = null, controller: AbortController | null = null;
@@ -16,8 +16,8 @@ export function createRecordsRefresh(ownerId: string,
     controller = current;
     const operation = Promise.resolve().then(() => read(current.signal)).then(snapshot => {
       if (!disposed && active && token === generation && !current.signal.aborted) {
-        if (snapshot.ownerId === ownerId) apply(snapshot.records);
-        else if (snapshot.ownerId) ownerChanged();
+        if (snapshot.sessionChanged || (snapshot.ownerId && snapshot.ownerId !== ownerId)) ownerChanged();
+        else if (snapshot.ownerId === ownerId) apply(snapshot.records);
       }
     }).catch(() => { if (!disposed && active && token === generation && !current.signal.aborted) failed(); /* Keep confirmed data on a failed background read. */ }).finally(() => {
       if (controller === current) { controller = null; pending = null; }

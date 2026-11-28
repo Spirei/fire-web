@@ -28,7 +28,7 @@ import {
 } from "@/lib/types";
 import { showToast } from "@/lib/toast";
 import { SiteSettingsCommand } from "@/lib/siteSettingsCommand";
-import { platformRequest } from "@/lib/platformRequest";
+import { PlatformRequestError, platformRequest } from "@/lib/platformRequest";
 import { applyMarketBadges, primeMarketBadges } from "@/lib/marketBadge";
 import { activeQuoteMarkets } from "@/lib/marketSessions";
 import { applyQuoteBatches, hasLoadedQuote, quoteInstrumentKey, readQuoteBatches, restoreQuoteSnapshot, selectQuoteRecords } from "@/lib/quoteBatches";
@@ -687,6 +687,9 @@ export default function RecordsApp({
     const sync = createRecordsRefresh(user.id, async signal => {
       setRecordsError("");
       const res = await fetch("/api/records", { signal, cache: "no-store", headers: accountReadHeaders(user.id) });
+      if (res.status === 401 || res.headers.get("X-Alcor-Retire-Context") === "true") {
+        return { ownerId: "", records: [], sessionChanged: true };
+      }
       if (!res.ok) throw new Error("记录读取失败");
       const records: unknown = await res.json();
       if (!Array.isArray(records)) throw new Error("记录格式无效");
@@ -731,8 +734,13 @@ export default function RecordsApp({
           domains?: Record<string, { lastChangedAt?: string | null }>;
         }>("/api/account/changes", {
           signal, headers: { ...accountReadHeaders(user.id), "X-CSRF-Token": sessionCsrf },
-        }, 8000);
-        if (signal.aborted || state.userId !== user.id || !state.revisions) return;
+        }, 8000).catch(error => {
+          if (!signal.aborted && error instanceof PlatformRequestError && [401, 403].includes(error.status ?? 0)) {
+            void recordsSyncRef.current?.refresh();
+          }
+          return null;
+        });
+        if (signal.aborted || !state || state.userId !== user.id || !state.revisions) return;
         const domains = ["portfolio", "brokers", "watch", "authorization"];
         const stamp = JSON.stringify([state.instanceId, state.epoch, ...domains.map(domain => state.revisions[domain])]);
         const previous = accountChangeStamp.current;

@@ -32,6 +32,11 @@ let count=0;async function test(name,fn){await fn();count++;console.log('PASS '+
   const h=harness();h.sync.setActive(true);await tick();h.requests[0].resolve({ownerId:'other',records:['private']});await tick();assert.deepEqual(h.applied,[]);assert.equal(h.ownerChanges.length,1,'reload SSR identity to remount the correct account');
   h.sync.refresh();await tick();h.sync.dispose();assert(h.requests[1].signal.aborted);h.requests[1].resolve({ownerId:'other',records:['late']});await tick();assert.deepEqual(h.applied,[]);assert.equal(h.ownerChanges.length,1);
  });
+ await test('a rejected session refreshes the owner instead of applying an empty snapshot',async()=>{
+  const h=harness();h.sync.setActive(true);await tick();
+  h.requests[0].resolve({ownerId:'',records:[],sessionChanged:true});await tick();
+  assert.equal(h.ownerChanges.length,1);assert.deepEqual(h.applied,[]);h.sync.dispose();
+ });
  await test('a fresh server snapshot skips the duplicate first read but later entry and writes revalidate',async()=>{
   let at=10,reads=0;const sync=createRecordsRefresh('owner',async()=>{reads++;return{ownerId:'owner',records:[]}},()=>{},()=>at,()=>{},()=>{},10);
   sync.setActive(true);await tick();assert.equal(reads,0);sync.changed();await tick();assert.equal(reads,1);sync.setActive(false);at+=2000;sync.setActive(true);await tick();assert.equal(reads,2);sync.dispose();
