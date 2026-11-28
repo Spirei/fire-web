@@ -45,10 +45,10 @@ const root=path.resolve(__dirname,'..');
   window.appendRevision=()=>setActivity(current=>[{id:'edit',timestamp:'2026-11-14T15:00:00Z',tradeTime:'2026-11-13T20:00:00Z',quantity:125,price:11.25,kind:'amended'},...current]);
   return <><OrderHistory order={{market:'US',orderActivity:activity}}/><InvestmentSnapshotHoldings
     positions={[
-      {recordId:'aapl', market:'US', name:'Synthetic Apple', code:'AAPL', quantity:'10', cost:'12.25', value:'200', close:{value:'20',currency:'USD',tradeDay:'2026-11-13',source:'controlled'}},
-      {recordId:'amzn', market:'US', name:'Synthetic Amazon', code:'AMZN', quantity:'2', close:null},
+      {recordId:'aapl', market:'US', name:'示例苹果', code:'AAPL', quantity:'10', cost:'12.25', value:'200', close:{value:'20',currency:'USD',tradeDay:'2026-11-13',source:'controlled'}},
+      {recordId:'amzn', market:'US', name:'示例亚马逊', code:'AMZN', quantity:'2', cost:'10', value:'60', close:{value:'30',currency:'USD'}},
     ]}
-    calendar={{rows:[{recordId:'aapl',currency:'USD',profit:'5',capital:'100'}]}} onOpen={id=>window.openedSnapshotRecord=id}/></>;
+    calendar={{rows:[{recordId:'aapl',market:'US',currency:'USD',profit:'5',capital:'100'}]}} onOpen={id=>window.openedSnapshotRecord=id}/></>;
  }
  function Harness(){const[rows,setRows]=useState([record]);window.changeCode=()=>setRows([{...record,code:'00005'}]);window.changeOwner=()=>setRows([{...record,name:'Changed'}]);const onAdd=useCallback(async()=>true,[]);return <div className="records-app"><div className="records-content"><div className="tab-panel" data-workspace="assets">{location.search.includes('dailyfile')?<InvestmentDataManager ownerId={window.owner} sessionCsrf="fixture-binding"/>:location.search.includes('snapshots')?<Snapshots/>:location.search.includes('directory')?<Directory/>:location.search.includes('fx')?<FxConverter/>:location.search.includes('dashboard')?<AssetAnalysisView records={rows} quotes={{}} livePrice={r=>r.price} user={{id:window.owner,username:'synthetic',role:'user'}}/>:location.search.includes('pnl')?<AssetPnlAnalysis ownerId={window.owner} initialRecords={rows} initialQuotes={{}}/>:<QuotesView ownerId={window.owner} initialNow={Date.now()} records={rows} quotes={{}} quoteAt="" refreshing={false} refreshQuotes={()=>{}} onAddMatch={onAdd} groups={[]} onToggleWatch={onAdd}/>}</div></div></div>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
  const workspace=`export const useWorkspaceActive=()=>true;export const useWorkspaceSearchParams=()=>new URLSearchParams(location.search);export const useWorkspaceLocationGuard=()=>()=>true;export const useWorkspaceScrollRef=()=>({current:null});export const useWorkspaceState=()=>null;`;
@@ -69,14 +69,29 @@ const root=path.resolve(__dirname,'..');
   assert((await page.getByRole('table').first().innerText()).includes('07:02:56 美东'));
   assert((await page.getByRole('table').first().innerText()).includes('11.2500'));
   assert((await page.getByRole('table').first().innerText()).includes('成交于 2026/11/13'));
-  assert((await page.getByRole('row').filter({hasText:'Synthetic Apple'}).innerText()).includes('+5.00%'));
-  assert((await page.getByRole('row').filter({hasText:'Synthetic Amazon'}).innerText()).includes('—'));
-  await page.getByRole('button',{name:/Synthetic Apple/}).click();
+  assert((await page.getByRole('row').filter({hasText:'示例苹果'}).innerText()).includes('+5.00%'));
+  assert((await page.getByRole('row').filter({hasText:'示例亚马逊'}).innerText()).includes('—'));
+  await page.getByRole('button',{name:'市值/数量',exact:true}).click();
+  assert.equal(await page.getByRole('columnheader',{name:'市值/数量'}).getAttribute('aria-sort'),'descending');
+  await page.getByRole('button',{name:/示例苹果/}).click();
+  await page.getByRole('button',{name:'盈亏',exact:true}).click();
+  assert(await page.getByText('日终收益率',{exact:true}).isVisible());
+  assert(await page.getByText('持仓盈亏',{exact:true}).isVisible());
   await page.getByRole('button',{name:'查看持仓记录'}).click();
   assert.equal(await page.evaluate(()=>window.openedSnapshotRecord),'aapl');
   for(const width of [1280,390,320])for(const dark of [false,true]){
    await page.setViewportSize({width,height:900});await page.evaluate(d=>document.documentElement.classList.toggle('dark',d),dark);
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'order history and holdings fit the viewport');
+   if(dark){
+    const ink=el=>getComputedStyle(el).color;
+    assert.equal(await page.getByRole('heading',{name:'持仓分布',exact:true}).evaluate(ink),'rgb(237, 241, 246)');
+    assert.equal(await page.getByRole('button',{name:/示例苹果/}).evaluate(ink),'rgb(237, 241, 246)');
+    assert.equal(await page.getByRole('cell').filter({hasText:'200.00'}).evaluate(ink),'rgb(237, 241, 246)');
+   }
+   if(process.env.UI_CAPTURE_DIR && width===390 && dark){
+    fs.mkdirSync(process.env.UI_CAPTURE_DIR,{recursive:true});
+    await page.getByRole('region',{name:'日终持仓分布'}).screenshot({path:path.join(process.env.UI_CAPTURE_DIR,'snapshot-holdings-dark.png')});
+   }
   }
   await page.setViewportSize({width:1280,height:900});
   await page.goto(base+'/?dailyfile');

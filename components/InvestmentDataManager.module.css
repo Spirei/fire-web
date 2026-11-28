@@ -390,3 +390,44 @@
   .rate > summary > strong { grid-column: 2; grid-row: 2; }
   .rateDate { grid-column: 3; grid-row: 2; }
 }
+
+.snapshotHoldings {
+  --snapshot-ink: #17232d;
+  --snapshot-muted: #68717e;
+  --snapshot-control: #f6f6f6;
+  border: 1px solid var(--data-edge, #e5e7eb);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--snapshot-ink);
+}
+.snapshotInk { color: var(--snapshot-ink); }
+.snapshotMuted, .snapshotIconFallback { color: var(--snapshot-muted); }
+.snapshotIconFallback { background: var(--snapshot-control); }
+.snapshotMarket { padding: 3px 12px 8px; }
+.snapshotMarket + .snapshotMarket { border-top: 1px solid var(--data-edge, #e5e7eb); }
+.snapshotMarketMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  border-bottom: 1px dashed var(--data-edge, #e5e7eb);
+  padding: 1px 0 10px;
+}
+.snapshotMarketMetrics > div { min-width: 0; }
+.snapshotMarketMetrics > div:nth-child(2) { text-align: center; }
+.snapshotMarketMetrics > div:last-child { text-align: end; }
+.snapshotMarketMetrics dt { font-size: 11px; color: var(--snapshot-muted); }
+.snapshotMarketMetrics dd { margin-top: 3px; overflow-wrap: anywhere; font-size: 13px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.snapshotHoldingActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 10px; background: var(--snapshot-control); }
+.snapshotHoldingActions button { display: flex; min-height: 48px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--snapshot-muted); font-size: 11px; }
+.snapshotHoldingActions button:hover, .snapshotHoldingActions button[aria-expanded="true"] { color: var(--data-accent, #0866ff); }
+:global(.dark) .snapshotHoldings {
+  --snapshot-ink: #edf1f6;
+  --snapshot-muted: #a3acb7;
+  --snapshot-control: #2a343d;
+  background: #1b252f;
+  border-color: #34414d;
+}
+:global(.dark) .snapshotMarket + .snapshotMarket, :global(.dark) .snapshotMarketMetrics { border-color: #34414d; }
+:global(.dark) .snapshotHoldingActions button:hover,
+:global(.dark) .snapshotHoldingActions button[aria-expanded="true"] { color: var(--data-accent, #d3e6ff); }
+@media (min-width: 640px) { .snapshotMarket { padding-inline: 20px; } }
