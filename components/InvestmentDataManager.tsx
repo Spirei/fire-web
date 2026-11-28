@@ -38,7 +38,9 @@ type MarketFolder = { market: string; count: number };
 type Row = LedgerRow | DailyRow | PeriodFolder | MarketFolder;
 type Cursor = [string, string, string] | string | null;
 type DirectoryPage = { items: Row[]; next: Cursor };
-const OTHER_LISTS = FOLDERS.filter(({ key }) => key !== "daily" && key !== "archive" && key !== "reconcile").map(({ key }) => key);
+const PREVIEW_FRESH_FOR = 30_000;
+const MAX_PREVIEWS = 4;
+const MAX_PREVIEW_LENGTH = 256_000;
 const FIRST_PAGE = { index: 0, starts: [null] as Cursor[] };
 const MARKET_NAMES = new Map([...MARKET_BADGE_ITEMS.map(({ key, name }) => [key, name] as const),
   ["CN", "A 股"], ["ASSET", "其他资产"], ["brokers", "券商"]]);
@@ -63,6 +65,15 @@ function directoryPath(folder: Folder, kind: AccountKind, { year, month }: Daily
   }
   return `${daily ? "/daily-results" : "/records"}?${params}`;
 }
+function detailPath(selection: Selection, kind: AccountKind) {
+  if ("day" in selection) {
+    return `/daily-results?${new URLSearchParams({ kind, day: selection.day, revision: String(selection.revision) })}`;
+  }
+  const params = new URLSearchParams({ type: selection.type, id: selection.id });
+  if (selection.revision !== undefined) params.set("revision", String(selection.revision));
+  return `/records?${params}`;
+}
+
 type OriginalFile = { name: string; rows?: Data[] };
 type LedgerDetail = { type: string; id: string; data: Data; links: { type: string; id: string; field: string }[];
   version?: { revision: number; action: string }; versions?: { revision: number; action: string }[]; file?: OriginalFile };
@@ -79,7 +90,8 @@ type DailyDocument = DailyRow & {
 type DailyDetail = DailyDocument & { revisions: number[] };
 type Selection = { day: string; revision: number } | { type: string; id: string; revision?: number; filename?: string };
 type FileView = "file" | "json" | "sources";
-type FileDetail = { selection: Selection; kind: AccountKind; data: DailyDetail | LedgerDetail; source: string };
+type FileDetail = { path: string; scope: object; data: DailyDetail | LedgerDetail; source: string; readAt: number };
+type PreviewError = { path: string; scope: object; message: string };
 
 const LABELS: Record<string, string> = {
   position: "持仓", trade: "成交", appFill: "App 成交", appOrder: "App 订单", declaration: "历史订单",
@@ -409,6 +421,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const [kind, setKind] = useState<AccountKind>("real");
   const [tradeView, setTradeView] = useState<"query" | "files">("query");
   const showOrderQuery = folder === "trades" && tradeView === "query";
+  const [ordersOpened, setOrdersOpened] = useState(false);
   const [dailyPaths, setDailyPaths] = useState<Record<AccountKind, DailyPath>>({ real: {}, simulated: {} });
   const { year, month } = dailyPaths[kind];
   const [positionMarket, setPositionMarket] = useState<string>();
@@ -416,7 +429,8 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const resetPage = useCallback(() => setPagination(FIRST_PAGE), []);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [file, setDetail] = useState<FileDetail | null>(null);
-  const [detailError, setDetailError] = useState("");
+  const [detailError, setDetailError] = useState<PreviewError>();
+  const [fileAttempt, setFileAttempt] = useState(0);
   const [view, setView] = useState<FileView>("file");
   const [profitRecord, setProfitRecord] = useState<string | null>(null);
   const [previous, setPrevious] = useState<{ selection: Selection; view: FileView }[]>([]);
@@ -430,13 +444,22 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   const openedBy = useRef<HTMLButtonElement>(null);
   const profitReturn = useRef<{ trigger: HTMLButtonElement; scroller: HTMLElement | null; scrollTop: number; pageTop: number } | null>(null);
   const listItems = useRef<HTMLDivElement>(null);
+  const preloadTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const preloading = useRef(false);
+  const fileCache = useRef(new Map<string, FileDetail>());
+  const selectedPath = selection ? detailPath(selection, kind) : null;
+  const previewScope = useMemo(() => ({}), [ownerId, sessionCsrf]);
   const path = showOrderQuery ? null : directoryPath(folder, kind, { year, month }, pagination.starts[pagination.index] ?? null, positionMarket);
   const readDirectory = useCallback(async (key: string, signal: AbortSignal): Promise<DirectoryPage> => {
     const response = await ownRequest(ownerId, key, signal, sessionCsrf);
     return response.json();
   }, [ownerId, sessionCsrf]);
-  const { page, accessBlocked, error: listError, recheck, preload } = useInvestmentDirectoryPages({ path, foreground, read: readDirectory, resetPage });
+  const listForeground = foreground && !selection;
+  const { page, accessBlocked, error: listError, recheck, preload } = useInvestmentDirectoryPages({
+    path, foreground: listForeground, read: readDirectory, resetPage,
+  });
   const next = page?.next;
+  const nextPath = next ? directoryPath(folder, kind, { year, month }, next, positionMarket) : null;
   const loading = !page && !listError;
   const showPagination = pagination.index > 0 || pagination.starts.length > 1 || !!next;
   const showFile = workspaceActive && !accessBlocked && !!selection;
@@ -458,6 +481,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   useEffect(() => {
     if (!accessBlocked) return;
     profitReturn.current = null;
+    fileCache.current.clear();
     setProfitRecord(null);
     setSelection(null);
     setDetail(null);
@@ -465,40 +489,74 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   }, [accessBlocked]);
 
   useEffect(() => () => exportRequest.current?.abort(), []);
+  const cancelPreload = useCallback(() => {
+    if (preloadTimer.current) clearTimeout(preloadTimer.current);
+    preloadTimer.current = null;
+  }, []);
+
+  function queuePreload(target: string | null) {
+    cancelPreload();
+    if (!listForeground || accessBlocked || !target || target === path || preloading.current) return;
+    preloadTimer.current = setTimeout(() => {
+      preloadTimer.current = null;
+      preloading.current = true;
+      void preload(target).catch(() => {}).finally(() => { preloading.current = false; });
+    }, 120);
+  }
+
+  useEffect(() => cancelPreload, [cancelPreload, listForeground, path]);
   useEffect(() => {
-    if (!foreground || !page || listError) return;
-    const targets = [next ? directoryPath(folder, kind, { year, month }, next, positionMarket) : null];
-    if (folder === "positions" && positionMarket === undefined) {
-      for (const entry of page.items.slice(0, 3)) if ("market" in entry) targets.push(directoryPath("positions", kind, {}, null, entry.market));
-    }
-    targets.push(...OTHER_LISTS.map(other => directoryPath(other, kind, {}, null)));
-    let active = true;
-    const timer = setTimeout(() => {
-      void (async () => {
-        for (const target of targets) {
-          if (!active) return;
-          if (!target || target === path) continue;
-          try { await preload(target); } catch { return; }
-        }
-      })();
-    }, 150);
-    return () => { active = false; clearTimeout(timer); };
-  }, [folder, foreground, kind, listError, month, next, page, path, positionMarket, preload, year]);
+    // The preview is scoped to the current identity and preferences.
+    setDetail(null);
+    const invalidatePreviews = (event: Event) => {
+      if (event.type === "fire:settings-updated") {
+        if ((event as CustomEvent<{ dataChanged?: boolean }>).detail?.dataChanged === false) return;
+        fileCache.current.clear();
+        setDetail(null);
+      } else {
+        for (const preview of fileCache.current.values()) preview.readAt = 0;
+      }
+      setFileAttempt(value => value + 1);
+    };
+    const events = ["fire:records-updated", "fire:orders-updated", "fire:funds-updated", "fire:settings-updated"];
+    for (const event of events) window.addEventListener(event, invalidatePreviews);
+    return () => {
+      fileCache.current.clear();
+      for (const event of events) window.removeEventListener(event, invalidatePreviews);
+    };
+  }, [previewScope]);
 
   useEffect(() => {
-    if (!selection) return;
+    if (!selectedPath || !foreground || accessBlocked) return;
+    const current = fileCache.current.get(selectedPath);
+    if (current?.scope === previewScope && Date.now() - current.readAt < PREVIEW_FRESH_FOR) return;
     const controller = new AbortController();
-    const daily = "day" in selection;
-    const params = new URLSearchParams(daily ? { kind, day: selection.day, revision: String(selection.revision) }
-      : { type: selection.type, id: selection.id });
-    if (!daily && selection.revision !== undefined) params.set("revision", String(selection.revision));
-    void ownRequest(ownerId, `${daily ? "/daily-results" : "/records"}?${params}`, controller.signal, sessionCsrf)
-      .then((response) => response.text()).then((source) => {
-        if (!controller.signal.aborted) setDetail({ selection, kind, data: JSON.parse(source), source });
-      })
-      .catch((error) => { if (!controller.signal.aborted) setDetailError(error.message); });
-    return () => controller.abort();
-  }, [kind, ownerId, selection, sessionCsrf]);
+    let active = true;
+    const timeout = setTimeout(() => controller.abort(new Error("读取超时，请重试")), 15_000);
+    setDetailError(undefined);
+    void ownRequest(ownerId, selectedPath, controller.signal, sessionCsrf)
+      .then(response => response.text()).then(source => {
+        if (controller.signal.aborted) throw controller.signal.reason;
+        const result: FileDetail = { path: selectedPath, scope: previewScope, data: JSON.parse(source), source, readAt: Date.now() };
+        if (source.length <= MAX_PREVIEW_LENGTH) {
+          fileCache.current.delete(selectedPath);
+          fileCache.current.set(selectedPath, result);
+          const oldest = fileCache.current.keys().next();
+          if (fileCache.current.size > MAX_PREVIEWS && !oldest.done) fileCache.current.delete(oldest.value);
+        }
+        setDetail(result);
+      }).catch((failure: unknown) => {
+        if (!active) return;
+        const reason: unknown = controller.signal.aborted ? controller.signal.reason : failure;
+        if (reason instanceof Error && reason.name === "AbortError") return;
+        if ([401, 403, 409].includes((reason as { status?: number })?.status ?? 0)) {
+          fileCache.current.clear();
+          setDetail(null);
+        }
+        setDetailError({ path: selectedPath, scope: previewScope, message: reason instanceof Error ? reason.message : "读取失败，请重试" });
+      }).finally(() => clearTimeout(timeout));
+    return () => { active = false; clearTimeout(timeout); controller.abort(); };
+  }, [accessBlocked, fileAttempt, foreground, ownerId, previewScope, selectedPath, sessionCsrf]);
 
   function closeFile() {
     profitReturn.current = null;
@@ -510,6 +568,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   function resetList(nextFolder: Folder) {
     openedBy.current = null;
     setFolder(nextFolder);
+    if (nextFolder === "trades" && tradeView === "query") setOrdersOpened(true);
     resetPage();
     closeFile();
   }
@@ -537,7 +596,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
   function readFile(item: Selection, nextView: FileView) {
     profitReturn.current = null;
     setProfitRecord(null);
-    setDetailError("");
+    setDetailError(undefined);
     setSelection({ ...item });
     showView(nextView);
   }
@@ -572,13 +631,20 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
     }
   }
 
-  const activeFile = file?.selection === selection && file.kind === kind ? file : null;
+  const cachedPreview = selectedPath ? fileCache.current.get(selectedPath) : undefined;
+  const selectedFile = file?.path === selectedPath ? file : cachedPreview;
+  const activeFile = selectedFile?.scope === previewScope ? selectedFile : undefined;
   const detail = activeFile?.data;
+  const previewError = detailError?.scope === previewScope && detailError.path === selectedPath ? detailError.message : undefined;
+  const retryPreview = () => {
+    if (selectedPath) fileCache.current.delete(selectedPath);
+    setDetailError(undefined);
+    setFileAttempt(value => value + 1);
+  };
   const dailySelection = selection && "day" in selection ? selection : null;
   const snapshot = detail && "day" in detail ? detail : null;
   const profitPosition = snapshot?.positions.find(position => position.recordId === profitRecord);
-  const dailyVersions = dailySelection && file?.kind === kind && "day" in file.data && file.data.day === dailySelection.day
-    ? file.data.revisions : [];
+  const dailyVersions = snapshot?.revisions ?? [];
   const original = detail && "type" in detail ? detail.file : undefined;
   const fileTitle = original?.name ?? (selection && ("day" in selection ? dailyFilename(selection.day)
     : selection.filename ?? (detail ? `${status(selection.type)}.json` : status(selection.type))));
@@ -607,10 +673,11 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
       </Capsule>}
     </div>
     {folder === "trades" && !showFile && <nav className={`${styles.previewNav} ${styles.tradeViewNav}`} aria-label="成交与订单视图">
-      <button type="button" aria-pressed={showOrderQuery} onClick={() => setTradeView("query")}>订单查询</button>
+      <button type="button" aria-pressed={showOrderQuery} onClick={() => { setOrdersOpened(true); setTradeView("query"); }}>订单查询</button>
       <button type="button" aria-pressed={!showOrderQuery} onClick={() => setTradeView("files")}>文件目录</button>
     </nav>}
-    {showOrderQuery ? <ArchivedOrderQuery ownerId={ownerId} /> : folder === "reconcile" ? <LedgerReconcilePanel ownerId={ownerId} refreshToken={reconcileToken} /> : folder === "archive" ? <div className={styles.archive}>
+    {ordersOpened && <ArchivedOrderQuery ownerId={ownerId} active={showOrderQuery && workspaceActive} />}
+    {showOrderQuery ? null : folder === "reconcile" ? <LedgerReconcilePanel ownerId={ownerId} refreshToken={reconcileToken} /> : folder === "archive" ? <div className={styles.archive}>
       <InvestmentArchiveAction icon={<IconArchive size={18} />} title="完整个人账本" description="持仓、成交、资金流水、更正和日终快照。">
         <Capsule size="sm" variant="secondary" busy={exporting} onClick={() => void download()}><IconDownload size={15} />下载 JSON</Capsule>
       </InvestmentArchiveAction>
@@ -662,8 +729,11 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
           if ("year" in row || "market" in row) {
             const market = "market" in row;
             const label = market ? marketName(row.market) : row.month === undefined ? `${row.year} 年` : `${row.month} 月`;
+            const target = market ? directoryPath("positions", kind, {}, null, row.market)
+              : directoryPath("daily", kind, row, null);
             return <button type="button" className={styles.listRow} key={market ? row.market : `${row.year}:${row.month ?? 0}`}
-              onClick={() => market ? openMarket(row.market) : openPeriod(row.year, row.month)}>
+              onPointerEnter={event => { if (event.pointerType === "mouse") queuePreload(target); }} onPointerLeave={cancelPreload}
+              onFocus={() => queuePreload(target)} onBlur={cancelPreload} onClick={() => market ? openMarket(row.market) : openPeriod(row.year, row.month)}>
               <span className={styles.fileName}><IconFolder size={21} stroke={1.65} aria-hidden="true" />{label}</span>
               <span className={styles.secondary}>{row.count} {market ? "项" : "天"}</span><IconChevronRight size={16} aria-hidden="true" />
             </button>;
@@ -688,7 +758,9 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
           <Capsule size="sm" variant="ghost" aria-label="上一页" disabled={pagination.index === 0}
             onClick={() => setPagination(state => ({ ...state, index: state.index - 1 }))}><IconChevronLeft size={17} aria-hidden="true" /></Capsule>
           <span aria-current="page" aria-live="polite">第 {pagination.index + 1} 页</span>
-          <Capsule size="sm" variant="ghost" aria-label="下一页" disabled={!next} onClick={nextPage}><IconChevronRight size={17} aria-hidden="true" /></Capsule>
+          <Capsule size="sm" variant="ghost" aria-label="下一页" disabled={!next}
+            onPointerEnter={event => { if (event.pointerType === "mouse") queuePreload(nextPath); }} onPointerLeave={cancelPreload}
+            onFocus={() => queuePreload(nextPath)} onBlur={cancelPreload} onClick={nextPage}><IconChevronRight size={17} aria-hidden="true" /></Capsule>
         </nav>}
       </div>
     </div>}
@@ -720,8 +792,8 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
               if (revision !== dailySelection.revision) readFile({ day: dailySelection.day, revision }, view);
             }} />}
         </div>}
-        {detailError ? <ReadError message={detailError} onRetry={() => readFile(selection, view)} /> :
-          !activeFile || !detail ? <p className={styles.notice} role="status">读取文件…</p> : <>
+        {previewError && <ReadError message={previewError} onRetry={retryPreview} />}
+        {!activeFile || !detail ? (!previewError && <p className={styles.notice} role="status">读取文件…</p>) : <>
             {snapshot && <DailySnapshot result={snapshot} />}
             {view === "file" && snapshot && <InvestmentSnapshotHoldings key={`${snapshot.day}:${snapshot.revision}`}
               positions={snapshot.positions} calendar={snapshot.calendar}
