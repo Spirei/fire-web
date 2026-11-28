@@ -61,6 +61,9 @@ def mount_earnings_calendar(app, settings, authority, rate_limit):
             headers.update(exc.headers or {})
         if status in (401,403):
             headers['X-Alcor-Retire-Context']='true'
+        if getattr(request.state, 'stable_app_api', False):
+            code = 50002 if status == 503 else status * 100 + 1
+            return JSONResponse({'code': code, 'message': message}, status_code=status, headers=headers)
         error = {'error':{'code':status*100+1,'message':message}} if versioned else {'items':[],'error':message}
         return JSONResponse(error,status_code=status,headers=headers)
 

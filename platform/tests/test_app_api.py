@@ -8,12 +8,101 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
+from psycopg.errors import LockNotAvailable
+
 from alcor_api import __version__
+from alcor_api import legacy_identity, native_app_auth
 from alcor_api.app_api import APP_PREFIX, FIXED_TARGETS, VERSIONED_PREFIX, app_route_patterns, native_family
 from alcor_api.cli import create_user
+from test_legacy_identity import prepare as prepare_factor_account
 from test_legacy_trade_corrections import native_headers
 from test_native_ledger import LEDGER, SCOPES, TRANSACTIONS, data, order, trade
 from test_trading import setup
+
+
+async def test_app_factor_rolls_back_when_login_response_cannot_be_built(client, db, settings, monkeypatch):
+    await prepare_factor_account(db, settings)
+    uid = "source-user-001"
+    base = native_app_auth.BASE_SCOPE
+    scope = base + " cash.read"
+    async with db.connection() as conn, conn.transaction():
+        user = await (await conn.execute("SELECT * FROM users WHERE id=%s FOR UPDATE", (uid,))).fetchone()
+        await native_app_auth.remember_consent(conn, user, scope)
+    challenge = await data(client.post(APP_PREFIX + "/auth/login", json={
+        "client_id": "fire-ios", "username": "SourceAdmin", "password": "SyntheticSource9",
+    }))
+    assert challenge["status"] == "requires_2fa"
+    proof = {"client_id": "fire-ios", "challenge_token": challenge["challenge_token"], "code": "ABCD-1234-5678-90EF"}
+
+    async def busy_profile(*args, **kwargs):
+        raise LockNotAvailable()
+
+    with monkeypatch.context() as fault:
+        fault.setattr(legacy_identity, "public_profile", busy_profile)
+        unavailable = await client.post(APP_PREFIX + "/auth/login/totp", json=proof)
+        assert (unavailable.status_code, unavailable.json()["code"], unavailable.headers["retry-after"]) == (503, 50001, "3")
+
+    pair = await data(client.post(APP_PREFIX + "/auth/login/totp", json=proof))
+    assert pair["scope"] == base
+    assert (await client.post(APP_PREFIX + "/auth/login/totp", json=proof)).json()["code"] == 40105
+    headers = {"Authorization": "Bearer " + pair["access_token"]}
+    consent = await data(client.get(APP_PREFIX + "/auth/consent", headers=headers))
+    assert consent["scope"] == scope
+    restored = await data(client.post(APP_PREFIX + "/auth/consent", headers=headers, json={
+        "client_id": "fire-ios", "revision": consent["revision"],
+    }))
+    assert (restored["user"]["id"], restored["replaces_grant_id"], restored["scope"]) == (uid, pair["grant_id"], scope)
+
+
+async def test_app_consent_prunes_old_grant_without_waiting_for_its_refresh(client, db, admin, monkeypatch):
+    base = native_app_auth.BASE_SCOPE
+    async with db.connection() as conn, conn.transaction():
+        user = await (await conn.execute("SELECT * FROM users WHERE id=%s FOR UPDATE", (admin,))).fetchone()
+        grants = [await native_app_auth.issue_grant(conn, user, base, "QA") for _ in range(20)]
+        await native_app_auth.remember_consent(conn, user, base + " cash.read")
+    oldest, current = grants[0], grants[-1]
+    headers = {"Authorization": "Bearer " + current["access_token"]}
+    consent = await data(client.get(APP_PREFIX + "/auth/consent", headers=headers))
+    restore_has_owner = asyncio.Event()
+    refresh_waits_for_owner = asyncio.Event()
+    issue_grant = legacy_identity.issue_grant
+    active_grant = native_app_auth.active_grant
+
+    async def pause_restoration(*args, **kwargs):
+        restore_has_owner.set()
+        await asyncio.wait_for(refresh_waits_for_owner.wait(), timeout=1)
+        return await issue_grant(*args, **kwargs)
+
+    async def observe_refresh(conn, grant_id, **kwargs):
+        if grant_id == oldest["grant_id"] and kwargs.get("lock"):
+            refresh_waits_for_owner.set()
+        return await active_grant(conn, grant_id, **kwargs)
+
+    monkeypatch.setattr(legacy_identity, "issue_grant", pause_restoration)
+    monkeypatch.setattr(native_app_auth, "active_grant", observe_refresh)
+    restore = asyncio.create_task(client.post(APP_PREFIX + "/auth/consent", headers=headers, json={
+        "client_id": "fire-ios", "revision": consent["revision"],
+    }))
+    try:
+        await asyncio.wait_for(restore_has_owner.wait(), timeout=1)
+        refresh = await client.post(APP_PREFIX + "/auth/token", json={
+            "client_id": "fire-ios", "grant_type": "refresh_token", "refresh_token": oldest["refresh_token"],
+        })
+    finally:
+        restored = await restore
+    assert (restored.status_code, refresh.status_code) == (200, 401)
+    assert restored.json()["data"]["scope"] == base + " cash.read"
+
+
+async def test_app_earnings_reports_missing_licensed_source_in_app_envelope(client):
+    query = {"market": "US", "month": "2026-11"}
+    response = await client.get(APP_PREFIX + "/earnings", params=query)
+    assert response.status_code == 503
+    assert response.json()["code"] == 50002 and "许可" in response.json()["message"]
+    assert response.headers["x-alcor-api-version"] == "2"
+    legacy = await client.get(VERSIONED_PREFIX + "/earnings", params=query)
+    assert legacy.status_code == 503
+    assert legacy.json()["error"]["message"] == response.json()["message"]
 
 
 def paths(value):

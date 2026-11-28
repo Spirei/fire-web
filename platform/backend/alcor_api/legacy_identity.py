@@ -395,15 +395,18 @@ def mount_legacy_identity(app,settings,db,factors,passkeys,management,rate_limit
             raise LegacyError(403, 40105, '验证已失效，请重新开始')
 
         async def make(conn, user, rid):
-            return await create_legacy_session(conn, user, rid, v1=True) if version == 1 else await native_session(conn, user, rid, context)
+            if version == 1:
+                return await create_legacy_session(conn, user, rid, v1=True)
+            access, pair = await native_session(conn, user, rid, context)
+            # The challenge and code must survive a failure to build the login receipt.
+            return access, await auth_result(conn, user, pair)
         try:
-            user, access, pair = await factors.finish_password(token, code, token, request.state.request_id, make)
+            user, access, result = await factors.finish_password(token, code, token, request.state.request_id, make)
         except HTTPException:
             raise LegacyError(403 if version == 2 else 401, 40104, '验证码或备用码不正确，或验证已失效') from None
         if version == 1:
             return {'user': {'id': user['id'], 'username': user['username']}, 'token': access, 'expiresIn': 604800}
-        async with db.connection() as conn:
-            return await auth_result(conn, user, pair)
+        return result
 
     @app.post('/api/v{version}/auth/login/totp', tags=['legacy-native-identity'])
     async def native_totp(version: int, request: Request, response: Response):

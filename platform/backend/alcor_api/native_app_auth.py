@@ -125,13 +125,18 @@ async def authenticate(conn,token,scope=None,*,lock=False,shared=False):
 
 async def rotate(conn,client_id,refresh):
     if client_id!=CLIENT or not re.fullmatch(r'frt_[A-Za-z0-9_-]{43}',refresh):return None
-    row=await (await conn.execute('SELECT * FROM identity_app_refresh_tokens WHERE token_hash=%s FOR UPDATE',(digest(refresh),))).fetchone()
-    grant=await active_grant(conn,row['grant_id'],lock=True) if row else None
+    token_hash=digest(refresh)
+    candidate=await (await conn.execute('SELECT grant_id FROM identity_app_refresh_tokens WHERE token_hash=%s',(token_hash,))).fetchone()
+    # Issuing or revoking a grant locks its owner before deleting grants and their
+    # dependent tokens. Use the same order, then reread the exact refresh token.
+    grant=await active_grant(conn,candidate['grant_id'],lock=True) if candidate else None
     if not grant:return None
+    row=await (await conn.execute('SELECT used_at FROM identity_app_refresh_tokens WHERE token_hash=%s AND grant_id=%s FOR UPDATE',(token_hash,grant['id']))).fetchone()
+    if not row:return None
     if row['used_at']:
         await conn.execute('UPDATE identity_app_grants SET revoked_at=clock_timestamp() WHERE id=%s',(grant['id'],))
         return None
-    await conn.execute('UPDATE identity_app_refresh_tokens SET used_at=clock_timestamp() WHERE token_hash=%s',(digest(refresh),))
+    await conn.execute('UPDATE identity_app_refresh_tokens SET used_at=clock_timestamp() WHERE token_hash=%s',(token_hash,))
     await conn.execute("UPDATE identity_app_grants SET expires_at=LEAST(created_at+interval '90 days',clock_timestamp()+interval '30 days'),last_used_at=clock_timestamp() WHERE id=%s",(grant['id'],))
     return {**await token_pair(conn,grant['id']),'scope':grant['scope']}
 

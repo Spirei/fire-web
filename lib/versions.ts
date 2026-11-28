@@ -8493,6 +8493,7 @@ export const CURRENT_VERSION_ENTRY: VersionEntry = {
   version: "v0.1.92", date: "2026-11-28", summary: "保留部分卖出后的持仓成本",
   software: V0_1_91_ENTRY.software.map(item => ({ ...item, version: "v0.1.92" })),
   changes: [
+    { kind: "fix", title: "App 两步验证与原授权恢复", desc: "回执未生成时保留原验证步骤，旧设备续期与原授权恢复沿同一顺序锁定账户。财报日历接口返回可识别的业务错误。" },
     { kind: "fix", title: "部署状态保留进度并可推送已发布镜像", desc: "main 有更新时仍可推送已通过部署核对的镜像。刷新后保留上次读取的构建进度和发布记录。" },
     { kind: "fix", title: "部分卖出后的持仓成本", desc: "Fire 对 App 提交的减仓成本做一致性校验，拒绝清空已知成本的操作。旧账本核准能按同一券商和证券重放部分卖出，恢复有依据的缺失成本。" },
     { kind: "fix", title: "原生订单跨设备同步", desc: "App 的订单新增、修改或删除与变更信号一同保存，其他设备按同一登录账户的已提交版本更新订单、持仓和资金。" },
