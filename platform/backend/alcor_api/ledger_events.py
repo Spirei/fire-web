@@ -42,9 +42,10 @@ async def append_ledger_event(
     cash=(),
     note: str = "",
     occurred_at=None,
+    return_sequence=True,
 ):
     # Callers hold the existing owner writer lock when assigning the next sequence.
-    row = await (await conn.execute("""
+    cursor = await conn.execute("""
         INSERT INTO owner_ledger_events(
             owner_id, seq, ledger_revision, request_id, kind,
             occurred_at, orders, positions, cash, note
@@ -56,8 +57,9 @@ async def append_ledger_event(
     """, (
         owner_id, ledger_revision, request_id, kind, occurred_at, Jsonb(list(orders)),
         Jsonb(list(positions)), Jsonb(list(cash)), (note or "")[:200], owner_id,
-    ))).fetchone()
-    return row["seq"]
+    ))
+    if return_sequence:
+        return (await cursor.fetchone())["seq"]
 
 
 async def recent_ledger_events(conn, owner_id: str, *, limit: int = 30):

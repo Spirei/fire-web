@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 
-from .asset_request_domains import require_domain
+from .asset_request_domains import check_domains
 from .broker_accounts import serialize_brokers
 from .broker_metadata import fingerprint
 from .cash_overview import CashOverview
@@ -521,9 +521,11 @@ def replay_receipt(old, expected):
 
 
 async def commit(conn, db, who, raw):
-    request_id, orders, positions, cash = validate_transaction(raw)
-    expected = fingerprint(raw)
-    old = await receipt(conn, who.id, request_id)
+    with measure('ledger_validate'):
+        request_id, orders, positions, cash = validate_transaction(raw)
+        expected = fingerprint(raw)
+    with measure('ledger_receipt_probe'):
+        old = await receipt(conn, who.id, request_id)
     if old:
         await lock_native_identity(conn, who, shared=True)
         return replay_receipt(old, expected)
@@ -539,15 +541,18 @@ async def commit(conn, db, who, raw):
     # Once the owner is locked, read the receipt again together with the head.
     current = await (await conn.execute("""
         SELECT t.fingerprint, t.receipt, h.revision, h.snapshot, h.updated_at,
+               b.domain AS broker_domain, a.domain AS asset_domain,
                clock_timestamp() AS at
         FROM (VALUES (%s::text, %s::uuid)) AS request(owner_id, request_id)
         LEFT JOIN native_ledger_transactions t USING (owner_id, request_id)
         LEFT JOIN native_ledger_heads h USING (owner_id)
+        LEFT JOIN broker_request_domains b USING (owner_id, request_id)
+        LEFT JOIN asset_request_domains a USING (owner_id, request_id)
     """, (who.id, request_id))).fetchone()
     if current['receipt'] is not None:
         elapsed('ledger_prepare', preparing)
         return replay_receipt(current, expected)
-    await require_domain(conn, who.id, request_id, 'native_ledger')
+    check_domains(current['broker_domain'], current['asset_domain'], 'native_ledger')
     head = current if current['revision'] is not None else None
     revision = current['revision'] or 0
     if revision != raw['baseRevision']:
@@ -583,33 +588,37 @@ async def commit(conn, db, who, raw):
                 state = apply_trade(head['snapshot'], orders, positions, cash, now, request_id)
                 await assign_order_numbers(conn, state, orders)
     elapsed('ledger_prepare', preparing)
-    writing = start()
     next_revision = revision + 1
     value = {'ownerId': who.id, 'requestId': str(request_id), 'kind': kind, 'sourceRevision': next_revision}
-    await conn.execute('''
-        INSERT INTO native_ledger_heads(owner_id,revision,snapshot) VALUES(%s,%s,%s)
-        ON CONFLICT(owner_id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot,updated_at=clock_timestamp()
-    ''', (who.id, next_revision, Jsonb(state)))
-    for order_id, legacy_revision in transfers.items():
-        await conn.execute('''
-            INSERT INTO native_ledger_transferred_orders(owner_id,order_id,legacy_revision) VALUES(%s,%s,%s)
-        ''', (who.id, order_id, legacy_revision))
-    await conn.execute("INSERT INTO asset_request_domains(owner_id,request_id,domain) VALUES(%s,%s,'native_ledger')", (who.id, request_id))
-    await conn.execute('''
-        INSERT INTO native_ledger_transactions(owner_id,request_id,revision,fingerprint,event,receipt)
-        VALUES(%s,%s,%s,%s,%s,%s)
-    ''', (who.id, request_id, next_revision, expected, Jsonb(raw), Jsonb(value)))
+    # PostgreSQL processes these commands in order in the same transaction.
+    # Pipeline synchronization surfaces any failed command before commit.
     from .ledger_events import append_ledger_event
 
-    await append_ledger_event(
-        conn, who.id,
-        request_id=request_id, kind='trade' if kind == 'registered_void' else kind, ledger_revision=next_revision,
-        orders=audit_orders,
-        positions=raw.get('positions', []) if isinstance(raw.get('positions'), list) else [],
-        cash=raw.get('cash', []) if isinstance(raw.get('cash'), list) else [],
-        occurred_at=now,
-    )
-    elapsed('ledger_write', writing)
+    with measure('ledger_write'):
+        async with conn.pipeline():
+            await conn.execute('''
+                INSERT INTO native_ledger_heads(owner_id,revision,snapshot) VALUES(%s,%s,%s)
+                ON CONFLICT(owner_id) DO UPDATE SET revision=excluded.revision,snapshot=excluded.snapshot,updated_at=clock_timestamp()
+            ''', (who.id, next_revision, Jsonb(state)))
+            if transfers:
+                await conn.execute('''
+                    INSERT INTO native_ledger_transferred_orders(owner_id,order_id,legacy_revision)
+                    SELECT %s, order_id, legacy_revision
+                    FROM unnest(%s::uuid[], %s::bigint[]) AS orders(order_id, legacy_revision)
+                ''', (who.id, list(transfers), list(transfers.values())))
+            await conn.execute("INSERT INTO asset_request_domains(owner_id,request_id,domain) VALUES(%s,%s,'native_ledger')", (who.id, request_id))
+            await conn.execute('''
+                INSERT INTO native_ledger_transactions(owner_id,request_id,revision,fingerprint,event,receipt)
+                VALUES(%s,%s,%s,%s,%s,%s)
+            ''', (who.id, request_id, next_revision, expected, Jsonb(raw), Jsonb(value)))
+            await append_ledger_event(
+                conn, who.id, request_id=request_id,
+                kind='trade' if kind == 'registered_void' else kind, ledger_revision=next_revision,
+                orders=audit_orders, positions=raw.get('positions', []), cash=raw.get('cash', []),
+                occurred_at=now, return_sequence=False,
+            )
+            flushing = start()
+        elapsed('ledger_write_flush', flushing)
     return value
 
 
@@ -671,9 +680,12 @@ def mount_native_ledger(app):
                                      'sourceRevision': head['revision'] if head else 0,
                                      'legacyRevision': None if head else fingerprint(state), **state}
             if write:
-                raw = json.loads(await bounded_body(request, body_budget(TRANSACTIONS)), object_pairs_hook=unique)
+                with measure('ledger_body'):
+                    raw = json.loads(await bounded_body(request, body_budget(TRANSACTIONS)), object_pairs_hook=unique)
                 async with db.connection() as conn:
+                    opening = start()
                     async with conn.transaction():
+                        elapsed('ledger_tx_open', opening)
                         value = await commit(conn, db, who, raw)
                         committing = start()
                     elapsed('ledger_commit', committing)

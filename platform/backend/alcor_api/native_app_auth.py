@@ -96,14 +96,27 @@ async def active_grant(conn,grant_id,*,lock=False,shared=False):
 
 async def authenticate(conn,token,scope=None,*,lock=False,shared=False):
     if not re.fullmatch(r'fat_[A-Za-z0-9_-]{43}',token):raise HTTPException(401,'需要有效的 App 连接')
+    hashed = digest(token)
+    proof = _GRANT_PROOF + ''' JOIN identity_app_access_tokens t ON t.grant_id=g.id
+        WHERE t.token_hash=%s AND t.expires_at>clock_timestamp()'''
     if lock or shared:
-        row=await (await conn.execute("SELECT grant_id FROM identity_app_access_tokens WHERE token_hash=%s AND expires_at>clock_timestamp()",(digest(token),))).fetchone()
-        grant=await active_grant(conn,row['grant_id'],lock=lock,shared=shared) if row else None
+        # Resolve the token and lock only its owner in the first statement.
+        # The second statement locks the same grant after its owner and
+        # rechecks the exact token, including expiry during the owner wait.
+        mode = 'SHARE' if shared else 'UPDATE'
+        target = await (await conn.execute('''
+            SELECT g.id AS grant_id, u.id AS owner_id
+            FROM identity_app_access_tokens t JOIN identity_app_grants g ON g.id=t.grant_id
+            JOIN users u ON u.id=g.user_id
+            WHERE t.token_hash=%s AND t.expires_at>clock_timestamp()
+        ''' + f' FOR {mode} OF u', (hashed,))).fetchone()
+        grant = None if target is None else await (await conn.execute(
+            proof + f' AND g.id=%s AND g.user_id=%s FOR {mode} OF g,u',
+            (hashed, target['grant_id'], target['owner_id']),
+        )).fetchone()
     else:
-        grant=await (await conn.execute(_GRANT_PROOF+''' JOIN identity_app_access_tokens t ON t.grant_id=g.id
-            WHERE t.token_hash=%s AND t.expires_at>clock_timestamp()''',(digest(token),))).fetchone()
-        if not grant_proof_valid(grant):grant=None
-    if not grant:raise HTTPException(401,'连接已失效，请重新连接')
+        grant = await (await conn.execute(proof, (hashed,))).fetchone()
+    if not grant_proof_valid(grant):raise HTTPException(401,'连接已失效，请重新连接')
     if scope and scope not in grant['scope'].split():raise HTTPException(403,'连接缺少此操作的授权范围')
     from .request_activity import bind_account
     bind_account(grant['user_id'])

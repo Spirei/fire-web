@@ -132,6 +132,45 @@ async def adopt(client, headers, baseline):
     return receipt
 
 
+async def test_failed_audit_append_rolls_back_pipelined_ledger_write(client, admin, db):
+    broker, record = await setup(client, amount='100', qty='1', cost='25.5')
+    headers = await native_headers(db, admin, SCOPES)
+    await adopt(client, headers, await data(client.get(LEDGER, headers=headers)))
+    executed = datetime.now(UTC).isoformat()
+    fill = order(record['id'], broker, at=executed, created=executed, quantity='2', price='25', fees='1', net='51')
+    operation = trade(1, fill, '1', '3', '100', '49', cost='25.5')
+    request_id = operation['requestId']
+
+    async with db.connection() as conn:
+        await conn.execute(
+            "ALTER TABLE owner_ledger_events ADD CONSTRAINT test_failed_event CHECK (ledger_revision <> 2)"
+        )
+    try:
+        rejected = await client.post(TRANSACTIONS, headers=headers, json=operation)
+        assert rejected.status_code == 503
+        assert (await data(client.get(LEDGER, headers=headers)))['sourceRevision'] == 1
+        await data(client.get(TRANSACTIONS + '/' + request_id, headers=headers), 404)
+        async with db.connection() as conn:
+            domain = await (await conn.execute(
+                'SELECT domain FROM asset_request_domains WHERE owner_id=%s AND request_id=%s',
+                (admin, request_id),
+            )).fetchone()
+            assert domain is None
+    finally:
+        async with db.connection() as conn:
+            await conn.execute("ALTER TABLE owner_ledger_events DROP CONSTRAINT test_failed_event")
+
+    saved = await data(client.post(TRANSACTIONS, headers=headers, json=operation))
+    assert saved['sourceRevision'] == 2
+    assert await data(client.post(TRANSACTIONS, headers=headers, json=operation)) == saved
+    async with db.connection() as conn:
+        event = await (await conn.execute(
+            'SELECT seq FROM owner_ledger_events WHERE owner_id=%s AND request_id=%s',
+            (admin, request_id),
+        )).fetchall()
+        assert event == [{'seq': 2}]
+
+
 @pytest.mark.asyncio
 async def test_registered_void_reads_and_commits_only_once_for_owner(client, admin, db, monkeypatch):
     broker, record = await setup(client, amount='321.30', qty='44', cost=None)

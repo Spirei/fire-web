@@ -11,8 +11,9 @@ PHASES = {'pool_wait', 'db_guard', 'sql_execute', 'catalogue', 'json_encode',
           'history_authorize', 'history_select', 'history_evidence_load', 'history_assemble', 'history_admission',
           'assets_records', 'assets_quotes', 'assets_fx', 'assets_actual', 'assets_declarations',
           'assets_averages', 'assets_cash', 'assets_profile', 'assets_assemble', 'assets_main',
-          'ledger_auth', 'ledger_admission', 'ledger_owner_lock', 'ledger_grant_lock',
-          'ledger_prepare', 'ledger_write', 'ledger_commit'}
+          'ledger_auth', 'ledger_admission', 'ledger_body', 'ledger_tx_open', 'ledger_owner_lock',
+          'ledger_grant_lock', 'ledger_validate', 'ledger_receipt_probe',
+          'ledger_prepare', 'ledger_write', 'ledger_write_flush', 'ledger_commit'}
 
 
 class RequestTiming:

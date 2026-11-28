@@ -119,10 +119,12 @@ class BrokerDelete(InputModel):
 async def serialize_brokers(conn, owner, *, shared_read=False):
     """Same owner domains: explicit readers share; all writers remain exclusive."""
     function = 'pg_advisory_xact_lock_shared' if shared_read else 'pg_advisory_xact_lock'
-    await conn.execute(
-        f"SELECT {function}(hashtextextended(%s,0))", ("identity-management:" + owner,)
-    )
-    await conn.execute(f"SELECT {function}(hashtextextended(%s,0))", ("broker-accounts:" + owner,))
+    # The outer SELECT runs after the materialized identity lock supplies its
+    # row. Keep the established lock order while sending a single command.
+    await conn.execute(f"""
+        WITH owner_lock AS MATERIALIZED (SELECT {function}(hashtextextended(%s,0)))
+        SELECT {function}(hashtextextended(%s,0)) FROM owner_lock
+    """, ("identity-management:" + owner, "broker-accounts:" + owner))
 
 
 async def broker_account(conn, owner, account_id, *, include_deleted=False):

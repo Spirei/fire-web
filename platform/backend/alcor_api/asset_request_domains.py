@@ -12,7 +12,11 @@ async def require_domain(conn, owner, request_id, domain):
         SELECT (SELECT domain FROM broker_request_domains WHERE owner_id=%s AND request_id=%s) AS broker,
                (SELECT domain FROM asset_request_domains WHERE owner_id=%s AND request_id=%s) AS asset
     """, (owner, request_id, owner, request_id))).fetchone()
-    if row['broker'] not in (None, 'asset'):
+    check_domains(row['broker'], row['asset'], domain)
+
+
+def check_domains(broker, asset, domain):
+    if broker not in (None, 'asset'):
         raise HTTPException(409, '原UUID已用于其他账户操作，请查询原回执')
-    if row['asset'] not in (None, domain):
+    if asset not in (None, domain):
         raise HTTPException(409, '原UUID已用于其他资金或证券操作，请查询原回执')

@@ -11,7 +11,7 @@ from psycopg.types.json import Jsonb
 
 from .fx_provider_parser import unique
 from .internal_orders import InternalOrders, fingerprint, order_dto
-from .legacy_identity import assert_native_origin, native_identity
+from .legacy_identity import assert_native_origin, native_identity, native_identity_on_connection
 from .legacy_optional_credentials import credentials_present
 from .legacy_order_projection import READ_MODEL
 from .legacy_trading_snapshot import TIME_ZONES, fee_transport, scalar, snapshot_in_transaction
@@ -22,8 +22,8 @@ from .security import lock_mutation_identity, lock_read_identity
 
 
 class NativeOrders(InternalOrders):
-    async def listing(self, who, *, scope='today', status='all', record_id=None, financial=False):
-        async with self.db.connection() as conn, conn.transaction():
+    async def listing(self, conn, who, *, scope='today', status='all', record_id=None, financial=False):
+        async with conn.transaction():
             await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
             await lock_read_identity(conn,who,require_admin=False)
             head = await ledger_head(conn, who.id)
@@ -135,30 +135,44 @@ def mount_legacy_native_orders(app):
     service = NativeOrders(app.state.db)
     app.state.legacy_native_orders = service
 
+    def fee_detail(request, headers):
+        detailed = request.headers.get('x-alcor-trade-fees')
+        if detailed not in (None, 'details-v1'):
+            raise HTTPException(400, '费用读取版本无效')
+        if detailed:
+            headers['X-Alcor-Trade-Fees'] = 'details-v1'
+        return detailed
+
+    async def read_orders(request, version, headers):
+        async with service.db.connection() as conn:
+            who, _ = await native_identity_on_connection(request, conn, 'portfolio.read')
+            detailed = fee_detail(request, headers)
+            params = request.query_params
+            allowed = {'scope', 'status', 'recordId', 'basis'} if version == 2 else {'scope', 'status', 'recordId'}
+            if set(params) - allowed or any(len(params.getlist(key)) != 1 for key in params):
+                raise HTTPException(400, '查询参数无效')
+            scope, status, record_id = params.get('scope', 'today'), params.get('status', 'all'), params.get('recordId')
+            if (scope not in ('today', 'all') or status not in ('all', 'pending', 'filled', 'cancelled', 'rejected', 'expired')
+                    or record_id is not None and not 1 <= len(record_id) <= 200):
+                raise HTTPException(400, '订单筛选无效')
+            basis = params.get('basis')
+            if basis is not None and (basis != 'financial' or status not in ('all', 'filled')):
+                raise HTTPException(400, '成交口径与订单筛选不一致')
+            value = await service.listing(conn, who, scope=scope, status=status, record_id=record_id, financial=basis == 'financial')
+            return value, detailed
+
     async def run(request, version, action, order_id=None):
         headers = {'Cache-Control':'no-store, private','Vary':'Cookie, Authorization, X-Alcor-Trade-Fees','X-Alcor-API-Version':str(version)}
         try:
             assert_native_origin(request,service.db.settings)
             credentials_present(request)
-            who,_ = await native_identity(request,service.db,'portfolio.read' if action=='list' else 'orders.write' if action.startswith('amend') else 'orders.cancel')
-            detailed = request.headers.get('x-alcor-trade-fees')
-            if detailed not in (None,'details-v1'):
-                raise HTTPException(400,'费用读取版本无效')
-            if detailed:
-                headers['X-Alcor-Trade-Fees']='details-v1'
             if action=='list':
-                params=request.query_params
-                allowed = {'scope', 'status', 'recordId', 'basis'} if version == 2 else {'scope', 'status', 'recordId'}
-                if set(params)-allowed or any(len(params.getlist(key))!=1 for key in params):
-                    raise HTTPException(400,'查询参数无效')
-                scope,status,record_id=params.get('scope','today'),params.get('status','all'),params.get('recordId')
-                if scope not in ('today','all') or status not in ('all','pending','filled','cancelled','rejected','expired') or record_id is not None and not 1<=len(record_id)<=200:
-                    raise HTTPException(400,'订单筛选无效')
-                basis = params.get('basis')
-                if basis is not None and (basis != 'financial' or status not in ('all', 'filled')):
-                    raise HTTPException(400, '成交口径与订单筛选不一致')
-                value=await service.listing(who,scope=scope,status=status,record_id=record_id,financial=basis=='financial')
+                value, detailed = await read_orders(request, version, headers)
             else:
+                who, _ = await native_identity(
+                    request, service.db, 'orders.write' if action.startswith('amend') else 'orders.cancel',
+                )
+                detailed = fee_detail(request, headers)
                 if request.query_params:
                     raise HTTPException(400,'不支持查询参数')
                 import json

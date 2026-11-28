@@ -116,10 +116,10 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
     brokers=await(await conn.execute('SELECT * FROM broker_accounts WHERE owner_id=%s AND deleted_at IS NULL AND (%s::text IS NULL OR id=%s) ORDER BY id LIMIT 10001',(who.id,scoped_account,scoped_account))).fetchall()
     if len(brokers)>10000:raise HTTPException(409,'账户范围超出本次完整交易快照预算')
     if brokers:
-        state=await FeeRepairs(None).state(conn,who,brokers[0]['id'],snapshot_revision=not orders_only)
+        state=await FeeRepairs(None).state(conn,who,brokers[0]['id'],orders_only=orders_only)
     else:
         rows=await(await conn.execute('SELECT * FROM portfolio_records WHERE owner_id=%s AND deleted_at IS NULL ORDER BY id LIMIT 10001',(who.id,))).fetchall()
-        head=await(await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
+        head=None if orders_only else await(await conn.execute('SELECT revision FROM portfolio_record_collections WHERE owner_id=%s',(who.id,))).fetchone()
         state={'fills':[],'records':rows,'cash':[],'openings':[],'corrections':[],'actualConfirmations':[],'projections':[],'cashRevision':0,'collectionRevision':head['revision'] if head else 0}
     if scoped_account is not None:
         selected={row['id'] for row in state['records'] if row['broker_account_id']==scoped_account and (scope_record_id is None or row['id']==scope_record_id)}
@@ -155,7 +155,10 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
         for row in history:
             for amendment in row.get('_record_amendments',()):amendments[amendment['id']]=amendment
     latest={row['id']:row['_latest_amendment'] for row in state['fills'] if row.get('_latest_amendment')}
-    details=await(await conn.execute('SELECT * FROM trade_fee_details WHERE owner_id=%s ORDER BY trade_id LIMIT 10001',(who.id,))).fetchall();details={row['trade_id']:row['detail'] for row in details}
+    details={}
+    if not orders_only or state['fills']:
+        details=await(await conn.execute('SELECT * FROM trade_fee_details WHERE owner_id=%s ORDER BY trade_id LIMIT 10001',(who.id,))).fetchall()
+        details={row['trade_id']:row['detail'] for row in details}
     presentation=await(await conn.execute('SELECT target_kind,target_id,number FROM trade_presentation_ids WHERE owner_id=%s ORDER BY number LIMIT 20001',(who.id,))).fetchall()
     if len(presentation)>20000:raise HTTPException(409,'交易展示标识超过本次完整读取预算')
     presentation={(row['target_kind'],str(row['target_id'])):str(row['number']) for row in presentation}

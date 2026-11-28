@@ -136,8 +136,8 @@ class FeeRepairs:
         self.db = db
         self.trading = Trading(db)
 
-    async def state(self, conn, who, account_id, *, snapshot_revision=True):
-        account = await broker_account(conn, who.id, account_id)
+    async def state(self, conn, who, account_id, *, orders_only=False):
+        account = None if orders_only else await broker_account(conn, who.id, account_id)
 
         async def rows(table, order):
             return await (
@@ -150,10 +150,11 @@ class FeeRepairs:
         from .trade_amendment_history import attach_amendments
         await attach_amendments(conn,who.id,fills)
         from .actual_projection import pending_fee_rows
-        pending={row['id']:row['calculated'] for row in await pending_fee_rows(conn,who.id)}
-        for row in fills:
-            row['actual_fee_pending']=row['id'] in pending
-            row['calculated_fee_pending']=pending.get(row['id'],False)
+        if fills:
+            pending={row['id']:row['calculated'] for row in await pending_fee_rows(conn,who.id)}
+            for row in fills:
+                row['actual_fee_pending']=row['id'] in pending
+                row['calculated_fee_pending']=pending.get(row['id'],False)
         records = await rows("portfolio_records", "id")
         from .position_transfer_checkpoint import attach_openings
         await attach_openings(conn,who.id,records)
@@ -161,8 +162,27 @@ class FeeRepairs:
             raise HTTPException(409, "完整历史超出本次范围")
         corrections = await rows("trade_fee_corrections", "id")
         from .actual_projection import confirmed_actual_fees
-        actual_confirmations = await confirmed_actual_fees(conn,who.id)
+        actual_confirmations = await confirmed_actual_fees(conn,who.id) if fills or not orders_only else []
         projections = await rows("trade_fee_projections", "id")
+        if orders_only:
+            # Order reads need cash book kinds and enforce the same source
+            # budgets. Amounts, fee import evidence and collection hashes are
+            # only used by the full financial snapshot.
+            cash = await (await conn.execute("""
+                SELECT account_id, account_kind FROM cash_ledger_entries
+                WHERE owner_id=%s ORDER BY id LIMIT 10001
+            """, (who.id,))).fetchall()
+            limits = await (await conn.execute("""
+                SELECT EXISTS (SELECT 1 FROM trade_fee_import_evidence WHERE owner_id=%s OFFSET 10000)
+                    OR EXISTS (SELECT 1 FROM cash_ledger_accounts WHERE owner_id=%s OFFSET 10000) AS exceeded
+            """, (who.id, who.id))).fetchone()
+            if limits['exceeded'] or any(len(values) > 10000 for values in (corrections, projections, cash)):
+                raise HTTPException(409, "完整证据或现金范围超限")
+            return {
+                "fills": fills, "records": records, "corrections": corrections,
+                "actualConfirmations": actual_confirmations, "projections": projections,
+                "cash": cash, "openings": [],
+            }
         evidence = await rows("trade_fee_import_evidence", "trade_id")
         cash = await rows("cash_ledger_entries", "id")
         openings = await rows("cash_ledger_accounts", "account_id,currency")
@@ -191,8 +211,7 @@ class FeeRepairs:
             "openings": openings,
             "cashRevision": revision["revision"] if revision else 0,
         }
-        if snapshot_revision:
-            state["snapshotRevision"] = hashed(state)
+        state["snapshotRevision"] = hashed(state)
         return state
 
     async def snapshot(self, who, account_id):
