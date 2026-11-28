@@ -841,6 +841,16 @@ async def test_adoption_preserves_legacy_cost_registered_cash_and_clears_past_cy
     assert cash['complete'] is True
     assert cash['balances']['USD'] == 4605.92
 
+    current_funds = await data(client.get('/api/app/funds?limit=1', headers=headers))
+    historical = await data(client.get('/api/app/funds?analysis=1&limit=1', headers=headers))
+    assert current_funds['coverageScope'] == 'app_native_ledger' and current_funds['balances']['USD'] == 4605.92
+    assert historical['sourceComplete'] and historical['accountKind'] == 'real'
+    assert historical['sourceAuthority'] == 'sealed_legacy_registered_book_with_platform_postings'
+    assert historical['balances']['USD'] == 12110.51
+    assert all(value == 0 for value in historical['cardCash'].values())
+    assert (historical['transactions'], historical['pagination']) == (current_funds['transactions'], current_funds['pagination'])
+    assert (await client.get('/api/app/funds?analysis=1')).status_code == 401
+
     summary = await data(client.get(ASSETS + '/summary', headers=headers))
     assert summary['summary']['costComplete'] is True
     assert summary['summary']['cashComplete'] is True

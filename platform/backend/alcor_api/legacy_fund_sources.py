@@ -135,12 +135,12 @@ class LegacyFunds:
     def __init__(self, db):
         self.db, self.funds, self.overview = db, FundSources(db), CashOverview(db)
 
-    async def state_on_connection(self, conn, who):
+    async def state_on_connection(self, conn, who, *, analysis=False):
         from .native_ledger import ledger_head
         from .native_ledger_projection import cash_overview
 
         overview = await self.overview.on_connection(conn, who)
-        head = await ledger_head(conn, who.id)
+        head = None if analysis else await ledger_head(conn, who.id)
         if head:
             effective = cash_overview(overview, head)
             real = next(book for book in effective['books'] if book['accountKind'] == 'real')
@@ -162,6 +162,9 @@ class LegacyFunds:
         registered = await read_registered_cash(conn, who, self.db.settings, overview)
         if registered is not None:
             return registered.dto
+        if analysis:
+            # A current balance cannot establish a history of funds postings.
+            return {'sourceComplete': False}
         scopes = {}
         for book in overview['books']:
             for row in book['currencies']:
@@ -197,6 +200,7 @@ class LegacyFunds:
                 state = await self.state_on_connection(conn, who)
                 return {key: state[key] for key in ('balances', 'cardCash')} | {'cardCashCoverageKnown': state['cardCashCoverageKnown']}
             limit, offset, currency, text = paging(query)
+            analysis = query.get('analysis') == '1'
             joins = """ FROM cash_ledger_entries e LEFT JOIN fund_sources f ON f.owner_id=e.owner_id AND f.cash_entry_id=e.id
                 LEFT JOIN trade_ledger t ON t.owner_id=e.owner_id AND t.id=e.source_trade_id
                 LEFT JOIN portfolio_records p ON p.owner_id=t.owner_id AND p.id=t.record_id
@@ -218,7 +222,8 @@ class LegacyFunds:
                     combined=[row for row in combined if search_match({'note':row.get('note') or '','occurred_at':row.get('occurredAt'),'currency':row['currency'],'origin_type':row['type'],'kind':row['type'],'stock_code':row.get('stockCode'),'stock_name':row.get('stockName'),'stock_market':row.get('stockMarket')},text)]
                 combined.sort(key=lambda row:(row.get('occurredAt') or '',row.get('createdAt') or '',row['id']),reverse=True)
                 result={'transactions':combined[offset:offset+limit],'pagination':{'limit':limit,'offset':offset,'total':len(combined),'hasMore':offset+limit<len(combined)}}
-                if query.get('recordsOnly')!='1':result.update(await self.state_on_connection(conn,who))
+                if query.get('recordsOnly') != '1':
+                    result.update(await self.state_on_connection(conn, who, analysis=analysis))
                 return result
             if text:
                 rows, total = [], 0
@@ -235,7 +240,7 @@ class LegacyFunds:
                 rows = await (await conn.execute(sql + ' LIMIT %s OFFSET %s', (*args, limit, offset))).fetchall()
             result = {'transactions': [transaction(row) for row in rows], 'pagination': {'limit': limit, 'offset': offset, 'total': total, 'hasMore': offset + limit < total}}
             if query.get('recordsOnly') != '1':
-                result.update(await self.state_on_connection(conn, who))
+                result.update(await self.state_on_connection(conn, who, analysis=analysis))
             return result
 
     async def outcome_snapshot(self, conn, who, result, identifier, source_id, generated):
