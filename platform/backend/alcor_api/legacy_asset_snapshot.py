@@ -74,6 +74,8 @@ async def averages(conn,owner,records,actual):
     if not ids:return {},{}
     rows=await (await conn.execute('SELECT * FROM trade_ledger WHERE owner_id=%s AND record_id=ANY(%s) ORDER BY record_id,before_record_revision LIMIT 10001',(owner,ids))).fetchall()
     if len(rows)>10000:raise HTTPException(409,'完整成交成本超过读取上限')
+    if not rows:
+        return {}, {}
     await attach_amendments(conn,owner,rows)
     paid=await confirmed_actual_fees(conn,owner,[row['id'] for row in rows])
     fees={row['trade_id']:row['actual_fee'] for row in paid}

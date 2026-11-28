@@ -53,3 +53,43 @@ async def test_owner_cash_read_is_pure_and_kind_and_official_sources_remain_sepa
     before = await business_snapshot(db)
     assert await read() == after
     assert await business_snapshot(db) == before
+
+
+async def test_shared_scope_keeps_registered_postings_separate_from_actual_cash(client, admin, monkeypatch):
+    first = await account(client, 'First allocated account')
+    second = await account(client, 'Second allocated account')
+    await submit(client, command(None, amount='1000'))
+    for identifier, amount in ((first, '200'), (second, '300')):
+        await submit(client, command(identifier, amount=amount, openingBasis='allocate_verified_unallocated_checkpoint'))
+
+    async def read():
+        response = await client.get('/api/account/cash-overview')
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def usd_book(data):
+        real = next(book for book in data['books'] if book['accountKind'] == 'real')
+        return next(row for row in real['currencies'] if row['currency'] == 'USD')
+
+    known = usd_book(await read())
+    assert known['ownerBalance'] == '1000'
+    assert known['registeredAttributedBalance'] == '500'
+    assert known['unallocatedBalance'] == '500'
+
+    from alcor_api import actual_projection
+    original = actual_projection.actual_cash_known
+
+    async def unresolved_owner_fees(conn, owner, kind, currency, account=None):
+        if (kind, currency, account) == ('real', 'USD', None):
+            return False
+        return await original(conn, owner, kind, currency, account)
+
+    monkeypatch.setattr(actual_projection, 'actual_cash_known', unresolved_owner_fees)
+    unresolved = await read()
+    usd = usd_book(unresolved)
+    assert usd['registeredOwnerBalance'] == '1000'
+    assert usd['registeredAttributedBalance'] == '500'
+    assert usd['registeredUnallocatedBalance'] == '500'
+    assert usd['complete'] is False
+    assert usd['ownerBalance'] is usd['unallocatedBalance'] is usd['availableOwnerBalance'] is None
+    assert all(not row['ledgerWithdrawalCapacities']['USD']['complete'] for row in unresolved['accounts'])

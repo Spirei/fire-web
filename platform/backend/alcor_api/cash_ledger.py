@@ -15,6 +15,32 @@ from .security import digest, lock_mutation_identity
 from .trade_accounting import MAX_VALUE, AccountingError, number
 
 
+def cash_balance_totals(rows):
+    """Reduce posted cash by owner and account without dropping attribution."""
+    with localcontext() as context:
+        context.prec = 80
+        total = attributed = Decimal(0)
+        accounts = {}
+        for row in rows:
+            amount, account = row["amount"], row["account_id"]
+            if row["affects_owner"]:
+                total += amount
+            if account is not None:
+                attributed += amount
+            accounts[account] = accounts.get(account, Decimal(0)) + amount
+        return total, attributed, accounts
+
+
+async def book_reservations(conn, owner, kind, currency, snapshots):
+    """Within the existing owner lock, all accounts share the same book reserve."""
+    from .internal_orders import pending_reservations
+
+    key = kind, currency
+    if key not in snapshots:
+        snapshots[key] = await pending_reservations(conn, owner, kind, currency, shared_read=True)
+    return snapshots[key]
+
+
 def add(a, b):
     with localcontext() as context:
         context.prec = 80
@@ -140,12 +166,8 @@ class CashLedger:
                 (owner, currency, account_kind),
             )
         ).fetchall()
-        with localcontext() as context:
-            context.prec = 80
-            total = sum((r["amount"] for r in rows if r["affects_owner"]), Decimal(0))
-            attributed = sum((r["amount"] for r in rows if r["account_id"] is not None), Decimal(0))
-            balance = sum((r["amount"] for r in rows if r["account_id"] == account), Decimal(0))
-            return total, attributed, balance
+        total, attributed, accounts = cash_balance_totals(rows)
+        return total, attributed, accounts.get(account, Decimal(0))
 
     async def plan(self, conn, who, data, *, financial_source=False):
         from .native_ledger import require_legacy_write
@@ -274,7 +296,10 @@ class CashLedger:
             revision = collection["revision"] if collection else 0
             return await self.snapshot_on_connection(conn, who, account_id, revision)
 
-    async def snapshot_on_connection(self, conn, who, account_id, revision, *, account=None, evidence=None):
+    async def snapshot_on_connection(
+        self, conn, who, account_id, revision, *, account=None, evidence=None,
+        scope_balances=None, scope_proofs=None,
+    ):
         """Caller holds the owner/session and broker locks in one read transaction.
 
         Passing an evidence dict lets the caller reuse the coverage checks for
@@ -283,6 +308,7 @@ class CashLedger:
         account = account or await broker_account(conn, who.id, account_id)
         from .scope_coverage import account_status, scope_status
 
+        kind = account["account_kind"]
         values = []
         for currency in account["currencies"]:
             opening = await (
@@ -291,11 +317,21 @@ class CashLedger:
                     (who.id, account_id, currency),
                 )
             ).fetchone()
-            total, _attributed, balance = await self.balances(conn, who.id, currency, account_id, account["account_kind"])
+            key = kind, currency
+            if scope_balances is None:
+                total, _attributed, balance = await self.balances(conn, who.id, currency, account_id, kind)
+            else:
+                total, _, accounts = scope_balances.get(key, (Decimal(0), Decimal(0), {}))
+                balance = accounts.get(account_id, Decimal(0))
             account_complete = await account_status(conn, who.id, account_id, currency)
-            actual_account = await self.actual_known(conn, who.id, account["account_kind"], currency, account_id)
-            scope_ok = await scope_status(conn, who.id, account["account_kind"], currency)
-            actual_owner = await self.actual_known(conn, who.id, account["account_kind"], currency)
+            actual_account = await self.actual_known(conn, who.id, kind, currency, account_id)
+            if scope_proofs is not None and key in scope_proofs:
+                scope_ok, actual_owner = scope_proofs[key]
+            else:
+                scope_ok = await scope_status(conn, who.id, kind, currency)
+                actual_owner = await self.actual_known(conn, who.id, kind, currency)
+                if scope_proofs is not None:
+                    scope_proofs[key] = (scope_ok, actual_owner)
             actual_complete = bool(opening) and account_complete and actual_account
             values.append(
                 {
@@ -335,7 +371,10 @@ class CashLedger:
                 )
         return {"accountId": account_id, "revision": revision, "currencies": values}
 
-    async def withdrawal_capacity_on_connection(self, conn, who, account_id, currency, *, account_kind, account=None, evidence=None):
+    async def withdrawal_capacity_on_connection(
+        self, conn, who, account_id, currency, *, account_kind, account=None, evidence=None,
+        scope_reservations=None,
+    ):
         """Verified internal book limit only; caller holds the owner/source read lock.
 
         This does not include manual cards, local ledgers, provider buying power or
@@ -393,7 +432,10 @@ class CashLedger:
             ) or not await self.actual_known(conn, who.id, account_kind, currency):
                 return result
             total, _attributed, balance = await self.balances(conn, who.id, currency, account_id, account_kind)
-        reservations = await pending_reservations(conn, who.id, account_kind, currency, account_id=account_id, shared_read=True)
+        if scope_reservations is None:
+            reservations = await pending_reservations(conn, who.id, account_kind, currency, account_id=account_id, shared_read=True)
+        else:
+            reservations = await book_reservations(conn, who.id, account_kind, currency, scope_reservations)
         if not reservations["complete"] or reservations["cash"] is None:
             return result
         owner_free = add(total, reservations["cash"].copy_negate())
