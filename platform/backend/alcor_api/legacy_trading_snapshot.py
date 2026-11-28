@@ -71,7 +71,29 @@ async def require_order_coverage(conn, owner, account=None):
         raise HTTPException(409, '原委托范围尚未核对，不能返回虚假的空订单')
 
 
-async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,strict=True,exact=False,scope_record_id=None,scope_account_id=None,registered_order_read_model=False,orders_only=False):
+def recorded_order_activities(originals, amendments):
+    result = defaultdict(list)
+    for amendment in amendments:
+        for member in amendment["_members"]:
+            root = member["trade_id"]
+            before = member["before_event"]
+            active = member["disposition"] == "retained"
+            values = amendment["replacement"] if active else before
+            kind = {"amend": "amended", "merge": "merged", "delete": "deleted"}[amendment["action"]]
+            event = {"id": str(amendment["id"]), "timestamp": amendment["created_at"], "kind": kind,
+                     "quantity": Decimal(values["quantity"]), "price": Decimal(values["price"])}
+            if active and datetime.fromisoformat(values["occurred_at"]) != datetime.fromisoformat(before["occurred_at"]):
+                event["tradeTime"] = values["occurred_at"]
+            result[root].append(event)
+    for root, events in result.items():
+        original = originals[root]
+        events.append({"id": str(root), "timestamp": original["occurred_at"], "kind": "filled",
+                       "quantity": original["quantity"], "price": original["price"]})
+        events.sort(key=lambda event: event["timestamp"], reverse=True)
+    return result
+
+
+async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,strict=True,exact=False,scope_record_id=None,scope_account_id=None,registered_order_read_model=False,orders_only=False,include_order_history=False):
     scope_record=None
     if scope_record_id is not None and scope_account_id is not None:
         raise HTTPException(400,'记录与账户范围不能混用')
@@ -146,6 +168,7 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
     from .flat_order_notes import current_notes, note_projection
     note_declarations=await current_notes(conn,who.id,[row['id'] for row in state['fills']])
     orders=[]
+    order_activities = recorded_order_activities(raw_by_id, amendments.values()) if include_order_history else {}
     def item(row,record,*,identifier,parameters,projection,status='filled',revision=1,correction=None,origin_amendment=None):
         account=by_broker.get(row['account_id']);fee=parameters['fees'];detail=details.get(row['id']);confirmed=actual.get(row['id'])
         if correction and correction['state']=='replacement':
@@ -175,6 +198,9 @@ async def snapshot_in_transaction(conn,who,*,allow_uncommitted_amendment=False,s
           'filledQty':Decimal(parameters['quantity']) if status=='filled' else 0,'filledQtySource':'atomic_order_status','tif':context['tif'] if context else None,'expiresAt':context.get('expiresAt') if context else None,'session':context['session'] if context else None,'triggerStatus':None,
           'tradedAt':parameters['occurred_at'],'createdAt':row['created_at'],'broker':context['brokerNameAtEntry'] if context else None,'note':row['note'],
           'currentPrice':None,'currentPriceSource':'unavailable','currentPriceAt':None,'cancellable':False,**({'correction':correction} if correction else {})}
+        removed_root = identifier == str(row['id']) and correction and correction.get('replacementId') is None
+        if row['id'] in order_activities and (status == 'filled' or removed_root):
+            value['orderActivity'] = order_activities[row['id']]
         return note_projection(value,note_declarations.get(str(row['id']))) if status=='filled' else value
     for row in state['fills']:
         record=by_record[row['record_id']]

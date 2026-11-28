@@ -109,9 +109,9 @@ async def order_identity(request, db, *, write=False):
     return (await web_identity(request, db, allow_platform="authorization" not in request.headers, allow_legacy_bearer=True))[0]
 
 
-async def snapshot(conn, who, *, exact=False):
+async def snapshot(conn, who, *, exact=False, include_order_history=False):
     await lock_mutation_identity(conn, who, require_admin=False)
-    return (await snapshot_in_transaction(conn, who, strict=False, exact=exact))[1]
+    return (await snapshot_in_transaction(conn, who, strict=False, exact=exact, include_order_history=include_order_history))[1]
 
 
 def select_orders(value, query, *, maximum=5000):
@@ -498,7 +498,8 @@ def mount_legacy_flat_orders(app):
             who = await order_identity(request, db, write=action != "list")
             if action == "list":
                 async with db.connection() as conn, conn.transaction():
-                    orders = await snapshot(conn, who)
+                    include_history = request.query_params.get("includeOrderHistory") == "1"
+                    orders = await snapshot(conn, who, include_order_history=include_history)
                     if request.query_params.get("includeAppOrders") == "1":
                         from .native_trade_sync import fetch_orders, order_projection, order_time
 
@@ -506,7 +507,8 @@ def mount_legacy_flat_orders(app):
                         existing = {order["id"] for order in orders["orders"]}
                         orders["orders"] = sorted(
                             orders["orders"] + [
-                                order_projection(row["item"], history=row["history"], order_number=row["order_number"])
+                                order_projection(row["item"], history=row["history"], order_number=row["order_number"],
+                                                 include_mirror_history=include_history)
                                 for row in mirrored if str(row["order_id"]) not in existing
                             ],
                             key=lambda item: (order_time(item["tradedAt"]), item["id"]),

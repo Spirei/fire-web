@@ -48,6 +48,15 @@ export type OrderStatus = "filled" | "cancelled" | "pending" | "expired" | "impo
 export type OrderType = "limit" | "market" | "trigger_buy" | "trigger_sell" | "rebound_buy" | "rebound_sell";
 export type OrderValidity = "day" | "gtc" | "custom";
 
+export interface TradeOrderActivity {
+  id: string;
+  timestamp: string;
+  kind: string;
+  quantity: number | null;
+  price: number | null;
+  tradeTime?: string;
+}
+
 /** 成交订单账本；持仓是订单执行后的汇总快照，订单是不可丢失的历史依据。 */
 export interface TradeOrder {
   currency?: string;
@@ -63,6 +72,7 @@ export interface TradeOrder {
   executionModel?: string;
   historicalCoverageKnown?: boolean;
   actualFeeKnown?: boolean;
+  orderActivity?: TradeOrderActivity[];
   recordId: string;
   market: Market;
   code: string;

@@ -68,6 +68,12 @@ async def test_manual_fill_edits_preserve_original_and_reject_divergent_revision
     assert [(item['id'], item['editCount'], item['qty'], item['price'], item['tradedAt']) for item in orders] == [
         (original['tradeId'], 2, 6, 95, original['filledAt']),
     ]
+    web = await client.get('/api/v1/orders?includeAppOrders=1&includeOrderHistory=1')
+    assert web.status_code == 200, web.text
+    order = next(row for row in web.json()['data']['orders'] if row['id'] == revised['tradeId'])
+    assert [(row['kind'], row['quantity'], row['price']) for row in order['orderActivity']] == [
+        ('amended', 6, 95), ('amended', 6, 92), ('filled', 5, 90),
+    ]
     active_fill = (await client.get(PATH, headers=headers)).json()['data']['items'][0]
     assert active_fill['price'] == '95'
     async with db.connection() as conn:

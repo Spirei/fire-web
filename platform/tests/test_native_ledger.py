@@ -147,9 +147,16 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
         changes = await web.get('/api/account/changes')
         assert changes.status_code == 200, changes.text
         assert changes.json()['revisions']['portfolio'] > signals_before
-        assert (await web.get('/api/fire/funds')).json()['balances'] == {'USD': -4501.05}
-        for suffix in ('?balancesOnly=1', '?limit=1'):
-            assert (await data(web.get('/api/v1/funds' + suffix)))['balances'] == {'USD': -4501.05}
+        from alcor_api import legacy_registered_cash, portfolio_daily
+
+        async def unreadable_historical_cash(*_args, **_kwargs):
+            raise AssertionError('adopted accounts must read their current balance directly')
+
+        with monkeypatch.context() as unavailable:
+            unavailable.setattr(legacy_registered_cash, 'read_registered_cash', unreadable_historical_cash)
+            assert (await web.get('/api/fire/funds')).json()['balances'] == {'USD': -4501.05}
+            for suffix in ('?balancesOnly=1', '?limit=1'):
+                assert (await data(web.get('/api/v1/funds' + suffix)))['balances'] == {'USD': -4501.05}
         assert (await web.get('/api/records')).json()[0]['qty'] == 33
         records = '/api/personal-data-transfer/records'
         archived = await web.get(records, params={'type': 'position', 'id': identifier})
@@ -163,8 +170,6 @@ async def test_backdated_trade_changes_all_views_once_across_devices(client, adm
             assert any(row['id'] == expected_id for row in listing.json()['items'])
         assert (await web.get(records, params={'section': 'positions'},
                               headers={'X-Alcor-Expected-Account': 'different'})).status_code == 403
-
-        from alcor_api import portfolio_daily
 
         async def observed_close(_conn, _history, _owner, _row, day):
             return {'currency': 'USD', 'value': '200', 'tradeDay': day.isoformat()}, None

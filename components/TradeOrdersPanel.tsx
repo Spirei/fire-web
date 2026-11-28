@@ -6,6 +6,7 @@ import { clientRequestId } from "@/lib/randomId";
 import { accountReadHeaders } from "@/lib/privateReadContext";
 import { PlatformRequestError, platformRequest } from "@/lib/platformRequest";
 import { formatOrderTime,isOrderToday,orderDateKey } from "@/lib/orderTime";
+import OrderHistory from "@/components/OrderHistory";
 import { holdingAccountMarket } from "@/lib/stockAccount";
 import StockConnectBadge from "@/components/StockConnectBadge";
 import MobileExplanation from "@/components/MobileExplanation";
@@ -438,7 +439,8 @@ export default function TradeOrdersPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importBinding = useRef<{ csrf: string; requestId: string } | null>(null);
   const readyCount = importPreview?.rows.filter(row => row.state === "ready").length ?? 0;
-  const [detailOrder, setDetailOrder] = useState<TradeOrder | null>(null);
+  const [openedOrder, setDetailOrder] = useState<TradeOrder | null>(null);
+  const detailOrder = openedOrder && (orders.find(order => order.id === openedOrder.id) ?? (loading ? openedOrder : null));
   const dragIndex = useRef<number | null>(null);
   const timeBtnRef = useRef<HTMLButtonElement>(null);
   const timeDragRef = useRef<{ pointerId: number; startX: number; startY: number; originDx: number; originDy: number; moved: boolean } | null>(null);
@@ -1829,6 +1831,7 @@ export default function TradeOrdersPanel({
                     </div>
                   ))}
                 </div>
+                <OrderHistory order={detail} />
                 <div className="mt-5 border-t border-edge pt-4">
                   <p className="text-xs font-bold text-ink">{detail.executionModel === "source_registered_history" ? "登记费用" : "费用明细"}</p>
                   {detail.executionModel === "source_registered_history" ? <div className="mt-3 flex items-center justify-between gap-4 text-xs"><span className="text-muted">{detail.actualFeeKnown ? "已确认" : "未核对"}</span><span className="tabular-nums text-ink">{fmtMoney(detail.fees,currency)}</span></div> : <>

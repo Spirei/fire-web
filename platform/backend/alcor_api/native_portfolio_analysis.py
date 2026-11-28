@@ -98,9 +98,10 @@ async def calendar_result(conn, owner, kind, day, opening, positions, postings):
             return None
         amount = Decimal(current["value"]) - before + sum(fill["cash_delta"] for fill in fills)
         total[currency] += amount
-        capital[currency] += before + sum(fill["amount"] for fill in fills if fill["side"] == "buy")
+        basis = before + sum(fill["amount"] for fill in fills if fill["side"] == "buy")
+        capital[currency] += basis
         rows.append({"recordId": rid, "market": row["market"], "code": row["code"],
-                     "brokerAccountId": row["brokerAccountId"], "currency": currency, "profit": amount,
+                     "brokerAccountId": row["brokerAccountId"], "currency": currency, "profit": amount, "capital": basis,
                      "turnover": sum((fill["amount"] for fill in fills if fill["side"] in ("buy", "sell")), Decimal(0))})
     if not total:
         return None

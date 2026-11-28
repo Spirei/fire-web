@@ -149,6 +149,7 @@ async def test_daily_results_retain_exact_inputs_keep_versions_and_explain_a_gap
     assert len(detail.json()["data"]["items"]) == 1
     [gain] = detail.json()["data"]["items"][0]["calendar"]["rows"]
     assert gain["recordId"] == record["id"] and Decimal(gain["profit"]) == 6
+    assert Decimal(gain["capital"]) > 0
     (tmp_path / "native-prepared-analysis.json").write_bytes(prepared.content)
     assert (await client.get(path, headers=headers, params={"day": "2026-10-20", "before": "2026-10-21"})).status_code == 400
     other = await create_user(db.settings, "OtherDaily", "Synthetic9Pass", email="other-daily@example.invalid")

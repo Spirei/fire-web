@@ -3,6 +3,7 @@ import { GlobalSettingsEditor, mergeVisibleOrder } from "@/lib/globalSettingsEdi
 import { PlatformRequestError, platformRequest } from "@/lib/platformRequest";
 import { accountReadHeaders } from "@/lib/privateReadContext";
 import { useWorkspaceForeground } from "@/lib/useWorkspaceForeground";
+import OrderHistory from "@/components/OrderHistory";
 import Pagination from "@/components/Pagination";
 import { IconButton, Capsule } from "@/components/Capsule";
 
@@ -733,7 +734,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
     setOrdersLoading(true);
     try {
       const data = await platformRequest<{ code: number; data: { orders: TradeOrder[] } }>(
-        `/api/v1/orders?scope=all&recordId=${encodeURIComponent(recordId)}&limit=500&includeAppOrders=1`,
+        `/api/v1/orders?scope=all&recordId=${encodeURIComponent(recordId)}&limit=500&includeAppOrders=1&includeOrderHistory=1`,
         { signal: controller.signal, headers: accountReadHeaders(ownerId) }, 10000,
       );
       if (data.code !== 0 || !Array.isArray(data.data?.orders)) throw new Error("订单加载失败");
@@ -1026,6 +1027,7 @@ export default function HoldingsView({ ownerId = "", isAdmin = false, assetMarke
             <div className="mt-4 rounded-[12px] border border-edge bg-bg-gray/60 px-4 py-3 text-xs text-muted">{tradeSide === "dividend" ? "股息总额" : "成交金额"}：<strong className="text-ink">{fmtMoney((Number(tradeForm.qty) || 0) * (Number(tradeForm.price) || 0), marketMeta(tradeRecord.market).currency)}</strong>{tradeSide === "dividend" ? " · 按持仓股数 × 每股股息记为现金收入，计入已实现收益，不改变持仓数量与成本" : tradeSide === "buy" ? " · 买入后按含费用的加权成本更新" : " · 卖出回款冲减投入并摊薄剩余成本，费用计入已实现盈亏"}</div>
             {editingOrder && <p className="mt-3 text-xs leading-relaxed text-muted">更正会按成交时间重算全部订单；超卖时无法保存。</p>}
             <div className="mt-5 flex justify-end gap-2.5"><Capsule variant="ghost" size="sm" type="button" onClick={() => { setTradeRecord(null); setEditingOrder(null); }} className="">取消</Capsule><Capsule variant="secondary" size="sm" type="button" disabled={tradeSaving} onClick={() => void submitTrade()} className="disabled:opacity-60">{tradeSaving ? (editingOrder ? "保存中…" : "成交中…") : (editingOrder ? "保存更正" : "确认交易")}</Capsule></div>
+            {editingOrder && <OrderHistory order={orders.find(order => order.id === editingOrder.id) ?? editingOrder} />}
           </AppModal>
         )}
       </div>

@@ -4,7 +4,7 @@ import { platformRequest } from "./platformRequest";
 
 /** v1 keeps its response envelope; an invalid read is never an empty history. */
 export async function readAnalysisOrders(ownerId: string, signal?: AbortSignal, includeAppOrders = false): Promise<TradeOrder[]> {
-  const path = "/api/v1/orders?scope=all&limit=5000" + (includeAppOrders ? "&includeAppOrders=1" : "");
+  const path = "/api/v1/orders?scope=all&limit=5000" + (includeAppOrders ? "&includeAppOrders=1&includeOrderHistory=1" : "");
   const result = await platformRequest<{code:number;data?:{orders:TradeOrder[]}}>(path, {
     signal, headers: accountReadHeaders(ownerId)
   }, 20000);

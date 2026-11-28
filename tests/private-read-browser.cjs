@@ -4,7 +4,7 @@ const esbuild=require('esbuild'),postcss=require('postcss'),tailwind=require('ta
 const {chromium}=require('@playwright/test');
 const root=path.resolve(__dirname,'..');
 (async()=>{
- const fixture=`import React,{useState,useCallback} from 'react';import {createRoot} from 'react-dom/client';import QuotesView from '@/components/views/QuotesView';import FxConverter from '@/components/FxConverter';import AssetPnlAnalysis from '@/components/AssetPnlAnalysis';import AssetAnalysisView from '@/components/views/AssetAnalysisView';import {FUND_CURRENCIES} from '@/lib/fundCurrencies';import {quoteInstrumentKey} from '@/lib/quoteBatches';import {intradayCacheKey} from '@/lib/intradayCache';import {useInvestmentDirectoryPages} from '@/lib/useInvestmentDirectoryPages';
+ const fixture=`import React,{useState,useCallback} from 'react';import {createRoot} from 'react-dom/client';import QuotesView from '@/components/views/QuotesView';import FxConverter from '@/components/FxConverter';import AssetPnlAnalysis from '@/components/AssetPnlAnalysis';import AssetAnalysisView from '@/components/views/AssetAnalysisView';import {FUND_CURRENCIES} from '@/lib/fundCurrencies';import {quoteInstrumentKey} from '@/lib/quoteBatches';import {intradayCacheKey} from '@/lib/intradayCache';import {useInvestmentDirectoryPages} from '@/lib/useInvestmentDirectoryPages';import OrderHistory from '@/components/OrderHistory';import InvestmentSnapshotHoldings from '@/components/InvestmentSnapshotHoldings';import InvestmentDataManager from '@/components/InvestmentDataManager';
  window.chartReads=0;window.rateReads=0;window.reads=0;window.writes=0;window.writePaths=[];window.fundFailure=true;window.chartMode='ready';window.rateMode='ready';window.fixtureRates={USD:1};window.owner='owner-uuid';
  const record={id:'row-uuid',market:'HK',code:'00700',name:'Synthetic Holding',qty:10,cost:10,price:20,type:'holdings',watchlist:true,group:'Synthetic',updatedAt:'2026-10-01T00:00:00Z'};
  const chart={date:'2026-11-12',source:'controlled',points:[{time:'09:30',price:10},{time:'09:31',price:15}]};
@@ -14,6 +14,13 @@ const root=path.resolve(__dirname,'..');
  if(url==='/api/quotes')return Response.json({quotes:{}});
  if(url==='/api/rates'){window.rateReads++;const data={base:'USD',rates:window.fixtureRates,quoted:Object.keys(window.fixtureRates),updatedAt:null};if(window.rateMode==='hold')return new Promise(resolve=>window.releaseRates=()=>{window.releaseRates=null;resolve(Response.json(data));});if(window.rateMode==='failed')return Response.json({message:'汇率服务暂时不可用'},{status:503});return Response.json(data);}
  if(url.includes('/funds')){if(window.fundFailure)return Response.json({message:'资金暂时无法读取'},{status:503});const balances=Object.fromEntries(FUND_CURRENCIES.map(c=>[c,c==='USD'?50:0]));return Response.json({code:0,data:{balances,cardCash:{USD:0},summaries:Object.fromEntries(FUND_CURRENCIES.map(c=>[c,{openingAsset:0,cashNetFlow:0,stockNetFlow:0,otherNetFlow:0}])),transactions:[],pagination:{total:0}}});}
+ if(url.startsWith('/api/personal-data-transfer/daily-results')){
+  const params=new URL(url,location.origin).searchParams;
+  const day={day:'2026-11-13',revision:1,state:'complete',pnl:'5',equity:'200',currency:'USD'};
+  if(params.has('day'))return Response.json({...day,revisions:[1],positions:[{recordId:'aapl',market:'US',code:'AAPL',name:'Daily Archive Apple',quantity:'10',value:'200',close:{value:'20',currency:'USD'}}],cashPostings:[],cashOpenings:[],fx:{},missing:[]});
+  return Response.json({items:params.has('month')?[day]:params.has('year')?[{year:2026,month:11,count:1}]:[{year:2026,count:1}],next:null});
+ }
+ if(url.startsWith('/api/personal-data-transfer/records'))return Response.json({items:[],next:null});
  if(url.includes('/portfolio-series'))return Response.json({closes:{'row-uuid':[{d:'2026-10-01',c:10},{d:'2026-10-02',c:20}]},orders:[],days:330,at:Date.now()});
  if(url.includes('/kline/full'))return Response.json({items:[]});
  if(url.includes('/watch-groups'))return Response.json({code:0,data:{groups:[]}});
@@ -33,18 +40,56 @@ const root=path.resolve(__dirname,'..');
    const {page,error}=useInvestmentDirectoryPages({path:'/daily-results?folders=true',foreground,read,resetPage:useCallback(()=>setStamp(v=>v+1),[])});
    return <div hidden={!foreground} data-attempt={stamp}>{error||page||'正在读取文件列表'}</div>;
  }
- function Harness(){const[rows,setRows]=useState([record]);window.changeCode=()=>setRows([{...record,code:'00005'}]);window.changeOwner=()=>setRows([{...record,name:'Changed'}]);const onAdd=useCallback(async()=>true,[]);return <div className="records-app"><div className="records-content"><div className="tab-panel" data-workspace="assets">{location.search.includes('directory')?<Directory/>:location.search.includes('fx')?<FxConverter/>:location.search.includes('dashboard')?<AssetAnalysisView records={rows} quotes={{}} livePrice={r=>r.price} user={{id:window.owner,username:'synthetic',role:'user'}}/>:location.search.includes('pnl')?<AssetPnlAnalysis ownerId={window.owner} initialRecords={rows} initialQuotes={{}}/>:<QuotesView ownerId={window.owner} initialNow={Date.now()} records={rows} quotes={{}} quoteAt="" refreshing={false} refreshQuotes={()=>{}} onAddMatch={onAdd} groups={[]} onToggleWatch={onAdd}/>}</div></div></div>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
+ function Snapshots() {
+  const [activity,setActivity]=useState([{id:'fill',timestamp:'2026-11-13T12:02:56Z',quantity:150,price:11,kind:'filled'}]);
+  window.appendRevision=()=>setActivity(current=>[{id:'edit',timestamp:'2026-11-14T15:00:00Z',tradeTime:'2026-11-13T20:00:00Z',quantity:125,price:11.25,kind:'amended'},...current]);
+  return <><OrderHistory order={{market:'US',orderActivity:activity}}/><InvestmentSnapshotHoldings
+    positions={[
+      {recordId:'aapl', market:'US', name:'Synthetic Apple', code:'AAPL', quantity:'10', cost:'12.25', value:'200', close:{value:'20',currency:'USD',tradeDay:'2026-11-13',source:'controlled'}},
+      {recordId:'amzn', market:'US', name:'Synthetic Amazon', code:'AMZN', quantity:'2', close:null},
+    ]}
+    calendar={{rows:[{recordId:'aapl',currency:'USD',profit:'5',capital:'100'}]}} onOpen={id=>window.openedSnapshotRecord=id}/></>;
+ }
+ function Harness(){const[rows,setRows]=useState([record]);window.changeCode=()=>setRows([{...record,code:'00005'}]);window.changeOwner=()=>setRows([{...record,name:'Changed'}]);const onAdd=useCallback(async()=>true,[]);return <div className="records-app"><div className="records-content"><div className="tab-panel" data-workspace="assets">{location.search.includes('dailyfile')?<InvestmentDataManager ownerId={window.owner} sessionCsrf="fixture-binding"/>:location.search.includes('snapshots')?<Snapshots/>:location.search.includes('directory')?<Directory/>:location.search.includes('fx')?<FxConverter/>:location.search.includes('dashboard')?<AssetAnalysisView records={rows} quotes={{}} livePrice={r=>r.price} user={{id:window.owner,username:'synthetic',role:'user'}}/>:location.search.includes('pnl')?<AssetPnlAnalysis ownerId={window.owner} initialRecords={rows} initialQuotes={{}}/>:<QuotesView ownerId={window.owner} initialNow={Date.now()} records={rows} quotes={{}} quoteAt="" refreshing={false} refreshQuotes={()=>{}} onAddMatch={onAdd} groups={[]} onToggleWatch={onAdd}/>}</div></div></div>;}createRoot(document.getElementById('root')).render(<Harness/>);`;
  const workspace=`export const useWorkspaceActive=()=>true;export const useWorkspaceSearchParams=()=>new URLSearchParams(location.search);export const useWorkspaceLocationGuard=()=>()=>true;export const useWorkspaceScrollRef=()=>({current:null});export const useWorkspaceState=()=>null;`;
  const js=await esbuild.build({stdin:{contents:fixture,resolveDir:root,loader:'tsx'},bundle:true,write:false,outfile:'fixture.js',jsx:'automatic',alias:{'@':root},define:{'process.env.NODE_ENV':'"production"'},plugins:[{name:'context',setup(b){b.onResolve({filter:/^(?:@\/lib\/workspacePanel|.*\/workspacePanel)$/},()=>({path:'workspace',namespace:'mock'}));b.onResolve({filter:/^next\/navigation$/},()=>({path:'next',namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},args=>({contents:args.path==='workspace'?workspace:`export const useRouter=()=>({push:()=>{},replace:()=>{},refresh:()=>{}});export const useSearchParams=()=>new URLSearchParams(location.search);export const usePathname=()=>location.pathname;`,loader:'js'}));}}]});
  const mod={exports:{}};new Function('exports','require',ts.transpileModule(fs.readFileSync('tailwind.config.ts','utf8'),{compilerOptions:{module:1}}).outputText)(mod.exports,require);
  const css=await postcss([tailwind({...mod.exports.default,content:[path.join(root,'components/**/*.{tsx,ts}')]})]).process(fs.readFileSync('app/globals.css','utf8')+'\n'+fs.readFileSync('styles/palettes.css','utf8')+'\n'+fs.readFileSync('styles/capsules.css','utf8'),{from:path.join(root,'app/globals.css')});
  const styled=await esbuild.build({stdin:{contents:css.css,resolveDir:path.join(root,'app'),loader:'css'},bundle:true,write:false,external:['*.woff2','*.woff','*.svg','*.png','*.webp','*.jpg']});
- const server=http.createServer((req,res)=>{if(req.url==='/app.js'){res.setHeader('Content-Type','text/javascript');res.end(js.outputFiles[0].contents);}else if(req.url==='/app.css'){res.setHeader('Content-Type','text/css');res.end(styled.outputFiles[0].contents);}else{res.setHeader('Content-Type','text/html');res.end('<html data-palette="meta" data-platform-align="left" style="--platform-content-width:960px"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app.css"><body><main style="width:100%;padding:16px"><div id="root"></div></main><script src="/app.js"></script></body></html>');}});
+ const server=http.createServer((req,res)=>{if(req.url==='/app.js'){res.setHeader('Content-Type','text/javascript');res.end(js.outputFiles.find(file=>file.path.endsWith('.js')).contents);}else if(req.url==='/app.css'){res.setHeader('Content-Type','text/css');res.end(styled.outputFiles[0].text+'\n'+(js.outputFiles.find(file=>file.path.endsWith('.css'))?.text??''));}else{res.setHeader('Content-Type','text/html');res.end('<html data-palette="meta" data-platform-align="left" style="--platform-content-width:960px"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app.css"><body><main style="width:100%;padding:16px"><div id="root"></div></main><script src="/app.js"></script></body></html>');}});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
  try{
   browser=await chromium.launch({headless:true,executablePath:process.platform==='darwin'?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':undefined});
   const page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'});const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const base='http://127.0.0.1:'+server.address().port;
+  await page.goto(base+'/?snapshots');
+  await page.getByText('已成交',{exact:true}).waitFor();
+  await page.evaluate(()=>window.appendRevision());
+  await page.getByText('已修改',{exact:true}).waitFor();
+  assert((await page.getByRole('table').first().innerText()).includes('07:02:56 美东'));
+  assert((await page.getByRole('table').first().innerText()).includes('11.2500'));
+  assert((await page.getByRole('table').first().innerText()).includes('成交于 2026/11/13'));
+  assert((await page.getByRole('row').filter({hasText:'Synthetic Apple'}).innerText()).includes('+5.00%'));
+  assert((await page.getByRole('row').filter({hasText:'Synthetic Amazon'}).innerText()).includes('—'));
+  await page.getByRole('button',{name:/Synthetic Apple/}).click();
+  await page.getByRole('button',{name:'查看持仓记录'}).click();
+  assert.equal(await page.evaluate(()=>window.openedSnapshotRecord),'aapl');
+  for(const width of [1280,390,320])for(const dark of [false,true]){
+   await page.setViewportSize({width,height:900});await page.evaluate(d=>document.documentElement.classList.toggle('dark',d),dark);
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'order history and holdings fit the viewport');
+  }
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto(base+'/?dailyfile');
+  await page.getByRole('button',{name:/2026 年/}).click();
+  await page.getByRole('button',{name:/11 月/}).click();
+  await page.getByRole('button',{name:/20261113.json/}).click();
+  await page.getByRole('button',{name:/Daily Archive Apple/}).waitFor();
+  assert.equal(await page.getByLabel('JSON 文件内容').count(),0);
+  await page.getByRole('button',{name:'原始 JSON',exact:true}).click();
+  await page.getByLabel('JSON 文件内容').waitFor();
+  assert((await page.getByLabel('JSON 文件内容').textContent()).includes('"quantity": "10"'));
+  await page.getByRole('button',{name:'持仓视图',exact:true}).click();
+  await page.getByRole('button',{name:/Daily Archive Apple/}).waitFor();
   await page.goto(base+'/?directory');
   await page.getByText('2026',{exact:true}).waitFor();
   await page.evaluate(()=>window.showDirectory(false));

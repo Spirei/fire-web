@@ -49,7 +49,7 @@ async def test_four_old_correction_methods_share_native_history_and_frozen_origi
     order=next(row for row in current['orders'] if row['id']==trade['id'])
     assert current['positions'][0]['cost']==10.1 and current['positions'][0]['rawRecord']['cost']==10.1
     amendment={'requestId':str(uuid4()),'accountId':admin,'snapshotRevision':current['snapshotRevision'],'recordId':record['id'],'recordRevision':order['recordRevision'],'action':'amend',
-      'orders':[{'id':trade['id'],'revision':order['revision']}],'replacement':{'qty':10,'price':20,'fees':0,'tradedAt':body['tradedAt']}}
+      'orders':[{'id':trade['id'],'revision':order['revision']}],'replacement':{'qty':10,'price':20,'fees':0,'tradedAt':'2026-09-02T12:15:00Z'}}
     preview=await client.post(prefix+'/trading/corrections/preview',json=amendment,headers=headers);assert preview.status_code==200,preview.text
     value=preview.json()['data'];assert value['feeBefore']==1 and value['feeAfter']==0 and value['cashDelta']==-99 and value['cashAfter']==800,value
     assert re.fullmatch(r'[0-9]{13}\.[a-f0-9]{64}',value['previewRevision'])
@@ -59,6 +59,14 @@ async def test_four_old_correction_methods_share_native_history_and_frozen_origi
     assert result['data']['snapshot']['cash']['nativeBalancesByCurrency']['USD']==800
     replacement=next(row for row in result['data']['items'] if row['status']=='filled')
     assert replacement['fees']==0 and replacement['feeSource']=='owner_recorded' and replacement['id']!=trade['id'] and replacement['orderNo']!=trade['orderNo']
+    history_response = await client.get('/api/v1/orders?includeOrderHistory=1', headers=headers)
+    assert history_response.status_code == 200, history_response.text
+    related = next(row for row in history_response.json()['data']['orders'] if row['id'] == replacement['id'])
+    amended, original = related['orderActivity']
+    assert (amended['kind'], amended['quantity'], amended['price']) == ('amended', 10, 20)
+    assert datetime.fromisoformat(amended['tradeTime']) == datetime.fromisoformat('2026-09-02T12:15:00Z')
+    assert (original['kind'], original['quantity'], original['price']) == ('filled', 10, 10)
+    assert datetime.fromisoformat(original['timestamp']) == datetime.fromisoformat(body['tradedAt'])
     assert (await client.post(prefix+'/trading/corrections',json=payload,headers=headers)).json()['data']==result
     changed=copy.deepcopy(payload);changed['replacement']['fees']=1
     conflict=await client.post(prefix+'/trading/corrections',json=changed,headers=headers);assert conflict.status_code==409 and conflict.json()['code']==40901,conflict.text

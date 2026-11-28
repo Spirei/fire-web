@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import AppSelect from "@/components/AppSelect";
 import { Capsule } from "@/components/Capsule";
 import LedgerReconcilePanel from "@/components/LedgerReconcilePanel";
+import InvestmentSnapshotHoldings from "@/components/InvestmentSnapshotHoldings";
 import { copyText } from "@/lib/clipboard";
 import { MARKET_BADGE_ITEMS } from "@/lib/marketBadge";
 import { useWorkspaceActive } from "@/lib/workspacePanel";
@@ -69,6 +70,7 @@ type DailyDocument = DailyRow & {
   cashPostings: (Data & { id: string })[]; cashOpenings: Data[];
   cashByCurrency: Data; closeValueByCurrency: Data; externalFlowByCurrency: Data;
   fx: Record<string, Data>; cashPostingCount: number; cashPostingsSha256: string;
+  calendar?: { rows?: Data[] } | null;
   missing: (Data & { reason: string })[];
 };
 type DailyDetail = DailyDocument & { revisions: number[] };
@@ -671,8 +673,8 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
       <div ref={previewContent} className={dailySelection ? styles.snapshotContent : undefined}>
         {(dailySelection || detail) && <div className={styles.previewToolbar}>
           <nav className={styles.previewNav} aria-label="文件视图">
-            <button type="button" aria-pressed={view === "file"} onClick={() => showView("file")}>{original ? "原始文件" : "文件内容"}</button>
-            {original && <button type="button" aria-pressed={view === "json"} onClick={() => showView("json")}>记录 JSON</button>}
+            <button type="button" aria-pressed={view === "file"} onClick={() => showView("file")}>{dailySelection ? "持仓视图" : original ? "原始文件" : "文件内容"}</button>
+            {(dailySelection || original) && <button type="button" aria-pressed={view === "json"} onClick={() => showView("json")}>{dailySelection ? "原始 JSON" : "记录 JSON"}</button>}
             <button type="button" aria-pressed={view === "sources"} onClick={() => showView("sources")}>数据依据</button>
           </nav>
           {dailySelection && dailyVersions.length > 1 && <AppSelect ariaLabel="日终快照版本"
@@ -685,7 +687,10 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
         {detailError ? <ReadError message={detailError} onRetry={() => readFile(selection, view)} /> :
           !activeFile || !detail ? <p className={styles.notice} role="status">读取文件…</p> : <>
             {snapshot && <DailySnapshot result={snapshot} />}
-            {(view === "json" || view === "file" && !original) && <JsonPreview key={"day" in detail ? `${detail.day}:${detail.revision}` : `${detail.id}:${detail.version?.revision ?? "current"}`} source={activeFile.source} format />}
+            {view === "file" && snapshot && <InvestmentSnapshotHoldings key={`${snapshot.day}:${snapshot.revision}`}
+              positions={snapshot.positions} calendar={snapshot.calendar}
+              onOpen={(id, revision) => choose({ type: "position", id, revision })} />}
+            {(view === "json" || view === "file" && !original && !snapshot) && <JsonPreview key={"day" in detail ? `${detail.day}:${detail.revision}` : `${detail.id}:${detail.version?.revision ?? "current"}`} source={activeFile.source} format />}
             {view === "file" && original && "type" in detail && <OriginalPreview key={detail.id} ownerId={ownerId} detail={detail} file={original} />}
             {view === "sources" && ("day" in detail ? <DailyEvidence result={detail} choose={choose} /> : <Values data={{ "记录编号": detail.id, ...detail.data }} />)}
             {!("day" in detail) && detail.links.length > 0 && <Evidence title="关联记录">{detail.links.map((link, index) => <button type="button" className={styles.link}

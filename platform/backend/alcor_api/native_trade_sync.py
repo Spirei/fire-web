@@ -278,7 +278,19 @@ def order_activity(item, history):
     return [event for _, _, event in sorted(result, key=lambda row: row[:2], reverse=True)]
 
 
-def order_projection(item, *, history=None, order_number=None):
+def mirrored_fill_activity(item):
+    history = item.get('editHistory', [])
+    if not history:
+        return []
+    values = [{'id': item['tradeId'] + ':fill', 'timestamp': item['filledAt'], 'kind': 'filled',
+               'quantity': float(Decimal(history[0]['quantity'])), 'price': float(Decimal(history[0]['price']))}]
+    for index, (edit, after) in enumerate(zip(history, [*history[1:], item], strict=True), 1):
+        values.append({'id': f"{item['tradeId']}:edit:{index}", 'timestamp': edit['editedAt'], 'kind': 'amended',
+                       'quantity': float(Decimal(after['quantity'])), 'price': float(Decimal(after['price']))})
+    return list(reversed(values))
+
+
+def order_projection(item, *, history=None, order_number=None, include_mirror_history=False):
     filled = item.get('status', 'filled') == 'filled'
     native = 'brokerAccountId' in item
     stamp = item.get('filledAt') or item['createdAt']
@@ -310,7 +322,8 @@ def order_projection(item, *, history=None, order_number=None):
             'nativeActions': {'cancel': item['status'] == 'pending', 'delete': item['status'] in ORDER_STATES,
                               'edit': item['status'] == 'pending' or filled and item['execution'] == 'recorded'
                                 and not item.get('parentOrderId') and not item.get('mergedFromOrderIds')}}
-           if native else {}),
+           if native else {'orderActivity': mirrored_fill_activity(item)}
+           if include_mirror_history and item.get('editHistory') else {}),
     }
 
 
