@@ -33,6 +33,8 @@ def discovery():
     return {'version': 1, 'snapshot_path': PATH, 'transactions_path': TRANSACTIONS,
             'receipt_path': TRANSACTIONS + '/{requestId}', 'read_scope': 'portfolio.read',
             'write_scope': 'portfolio.write', 'source_revision_field': 'sourceRevision',
+            'operations': ['adopt', 'trade', 'merge', 'registered_void'],
+            # Compatibility with installed App versions that predate operations.
             'registered_void_version': 1}
 
 

@@ -81,6 +81,9 @@ async def test_registered_void_reads_and_commits_only_once_for_owner(client, adm
     identifier = record['id']
     phone = await native_headers(db, admin, SCOPES)
     other_phone = await native_headers(db, admin, SCOPES)
+    config = (await data(client.get('/api/v2/auth/config')))['native_ledger']
+    assert config['version'] == config['registered_void_version'] == 1
+    assert set(config['operations']) == {'adopt', 'trade', 'merge', 'registered_void'}
     await adopt(client, phone, await data(client.get(LEDGER, headers=phone)))
     original = 'source-registered-sale'
     position = {'recordId': identifier, 'market': 'US', 'accountMarket': 'US', 'code': 'AAPL',

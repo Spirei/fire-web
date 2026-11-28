@@ -1,6 +1,6 @@
 # Alcor App 原生账本 v2 合同
 
-匿名 `GET /api/v2/auth/config` 中的 `native_ledger.version == 1` 声明以下能力。使用现有同源 App Bearer 和本人账户，无需第二套登录。读权限为 `portfolio.read`，写权限为 `portfolio.write`。所有响应沿用 `{code,message,data}` 信封。
+匿名 `GET /api/v2/auth/config` 中的 `native_ledger.version == 1` 是原生账本写入协议版本，`native_ledger.operations` 列出当前可提交的 `kind`。使用现有同源 App Bearer 和本人账户，无需第二套登录。读权限为 `portfolio.read`，写权限为 `portfolio.write`。所有响应沿用 `{code,message,data}` 信封。
 
 接口默认关闭。隔离联调用 `ALCOR_NATIVE_LEDGER_ENABLED=1` 启用。App 的交易流程全部迁到原生事务并完成联调后才启用正式环境。
 
@@ -85,3 +85,5 @@ App 可按受影响币种提交本人全局 `cash`，省略 `brokerAccountId`。
 收益日历、趋势与成交标记读取 `GET /api/v2/account-assets/orders?scope=all&status=all&basis=financial`。App 可在 v2 认证发现的 `account_assets.features.financial_order_basis` 为布尔值 `true` 时使用。响应沿用订单列表信封，`data.basis` 为 `"financial"`，`items` 和 `count` 仅包含生效的已成交记录。原生汇总单展开为每笔原成交，保留原 `id`、`orderNo`、日期、股数、成交价、费用和结算。多次合并仍回到每笔实际成交。显式删除且未归入生效汇总的成交不会计入。`scope=today` 按原成交的市场本地日期筛选，也可按 `recordId` 查询。该视图用于分析，原生行的操作按钮全部关闭。省略 `basis` 时继续返回原订单展示列表及合并汇总单。
 
 单次请求支持最多 100 个订单、100 条持仓变动和 100 条现金变动，并限制请求体为 512 KiB。此版本记录已有成交和委托生命周期，独立的现金入金、出金和对账命令需要单独协议。
+
+迁入成交、原生改单以及其余订单的能力发现和写入合同见 [App 订单写入](native-ledger-order-writes.md)。

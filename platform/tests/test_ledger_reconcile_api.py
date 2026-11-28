@@ -1,5 +1,7 @@
 """Isolated PG HTTP tests for Web Data Management ledger reconciliation."""
 
+import copy
+from collections import Counter
 from uuid import uuid4
 
 import pytest
@@ -7,14 +9,18 @@ from psycopg.types.json import Jsonb
 
 from alcor_api.main import create_app
 from test_legacy_registered_cash import archive, reseal, sealed_book, store_packet
+from test_legacy_order_projection import table
 from test_legacy_trade_corrections import native_headers
 from test_native_ledger import (
     ASSETS,
     LEDGER,
     SCOPES,
+    TRANSACTIONS,
     _create_manual_broker_and_record,
+    adopt,
     data,
     order,
+    trade,
 )
 
 RECONCILE = "/api/personal-data-transfer/ledger-reconcile"
@@ -189,8 +195,6 @@ async def test_opening_checkpoint_removes_disk_archive_dependency_and_streams_ev
     client, app, admin, db, tmp_path,
 ):
     import shutil
-    from test_native_ledger import TRANSACTIONS, adopt, trade
-
     app.state.native_ledger_enabled = True
     stored = sealed_book()
     stored["originals"]["funds"][0]["amount"] = "12083.51"  # +27 = 12110.51 USD
@@ -268,6 +272,109 @@ async def test_opening_checkpoint_removes_disk_archive_dependency_and_streams_ev
     assert after["checkpoint"]["diskArchiveDependency"] is False
     assert [row["kind"] for row in after["events"]] == ["trade", "adopt", "opening_checkpoint"]
     assert [row["seq"] for row in after["events"]] == [3, 2, 1]
+
+
+@pytest.mark.asyncio
+async def test_registered_sale_void_replays_later_native_sales_from_sealed_book(client, app, admin, db, tmp_path):
+    app.state.native_ledger_enabled = True
+    broker, record = await _create_manual_broker_and_record(
+        client, name="Synthetic broker", code="SYN", qty="6", cost="10",
+    )
+    stored = sealed_book()
+    packet = stored["originals"]
+    wrong_sale = "sell"
+    buy, sell, pending = packet["orders"]
+    buy.update(qty="8", amount="80", position_qty_before="0", position_qty_after="8",
+               position_cost_before="0", position_cost_after="10", order_no="original-buy")
+    sell.update(price="25", position_qty_before="8", position_qty_after="6",
+                position_cost_before="10", position_cost_after="10", order_no="original-sale",
+                traded_at="2026-01-03T12:00:00Z")
+    pending["order_no"] = "original-pending"
+    packet["normalized_orders"][wrong_sale]["occurredAt"] = sell["traded_at"]
+    packet["maps"]["accounts"]["source-account"] = broker
+    packet["maps"]["records"]["source-record"] = record["id"]
+    packet["funds"][1].update(id="fund-order-sell", direction="1")
+    packet["raw_snapshot"]["tables"].update({
+        "records": table([{"id": "source-record", "qty": "6", "cost": "10"}]),
+        "broker_cash_order_links": table([]),
+        "trade_correction_originals": table([]),
+        "trade_correction_replacements": table([]),
+        "app_trade_metadata": table([]),
+    })
+    reseal(stored)
+    binding, _ = archive(tmp_path, stored)
+    app.state.db.settings.backup_dir = tmp_path
+    db.settings.backup_dir = tmp_path
+    await store_packet(db, admin, stored, binding)
+    originals = copy.deepcopy(packet)
+    response = await client.post(
+        RECONCILE + "/checkpoint", headers={"X-Alcor-Expected-Account": admin},
+        json={"requestId": str(uuid4()), "note": "Synthetic opening checkpoint"},
+    )
+    assert response.status_code == 200, response.text
+
+    headers = await native_headers(db, admin, SCOPES)
+    await adopt(client, headers, await data(client.get(LEDGER, headers=headers)))
+    sales = []
+    for index in range(3):
+        fill = order(
+            record["id"], broker, at=f"2026-02-0{index + 1}T16:00:00Z",
+            side="sell", quantity="1", price="12", fees="1", net="11",
+        )
+        fill.update(code="SYN", name=record["name"])
+        tx = trade(index + 1, fill, str(6 - index), str(5 - index),
+                   str(67 + 11 * index), str(78 + 11 * index), cost="10")
+        tx["cash"][0].pop("brokerAccountId")
+        await data(client.post(TRANSACTIONS, headers=headers, json=tx))
+        sales.append(fill["tradeId"])
+
+    orders = ASSETS + "/orders?scope=all&status=all"
+    relevant = {wrong_sale, *sales}
+    for path in (orders, orders + "&basis=financial"):
+        before = await data(client.get(path, headers=headers))
+        assert Counter(item["id"] for item in before["items"] if item["id"] in relevant) == Counter(relevant)
+
+    preview_path = LEDGER + "/registered-void"
+    await data(client.get(preview_path, headers=headers, params={"orderId": buy["id"]}), 409)
+    proof = await data(client.get(preview_path, headers=headers, params={"orderId": wrong_sale}))
+    assert proof["ownerId"] == admin and proof["sourceRevision"] == 4
+    assert proof["sourceFingerprint"] == stored["source_sha256"]
+    assert [item["id"] for item in proof["orders"]] == [wrong_sale]
+    expected_position = {
+        "recordId": record["id"], "market": "US", "accountMarket": "US",
+        "brokerAccountId": broker, "name": record["name"], "code": "SYN",
+    }
+    assert proof["positions"] == [{
+        **expected_position, "quantityBefore": "3", "quantityDelta": "2",
+        "unitCostBefore": "10", "unitCostAfter": "10",
+    }]
+    assert proof["cash"] == [{"currency": "USD", "balanceBefore": "100", "delta": "-48"}]
+
+    body = {
+        "requestId": str(uuid4()), "kind": "registered_void", "baseRevision": 4,
+        "registeredOrderIds": [wrong_sale],
+        "positions": [{**expected_position, "quantityBefore": "3", "quantityAfter": "5", "unitCostAfter": "10"}],
+        "cash": [{"currency": "USD", "balanceBefore": "100", "balanceAfter": "52"}],
+    }
+    receipt = await data(client.post(TRANSACTIONS, headers=headers, json=body))
+    assert receipt == {
+        "ownerId": admin, "requestId": body["requestId"], "kind": "registered_void", "sourceRevision": 5,
+    }
+    assert receipt == await data(client.get(TRANSACTIONS + "/" + body["requestId"], headers=headers))
+    assert receipt == await data(client.post(TRANSACTIONS, headers=headers, json=body))
+    state = await data(client.get(LEDGER, headers=headers))
+    assert state["positions"] == [{**expected_position, "quantity": "5", "unitCost": "10"}]
+    assert {item["brokerAccountId"]: item["balance"] for item in state["cash"] if item["currency"] == "USD"} == {
+        None: "52", broker: None,
+    }
+    for path in (orders, orders + "&basis=financial"):
+        after = await data(client.get(path, headers=headers))
+        assert Counter(item["id"] for item in after["items"] if item["id"] in relevant) == Counter(sales)
+    async with db.connection() as conn:
+        saved = await (await conn.execute(
+            "SELECT originals FROM database_migration_history_imports WHERE owner_id=%s", (admin,),
+        )).fetchone()
+    assert saved["originals"] == originals
 
 
 @pytest.mark.asyncio
