@@ -17,10 +17,11 @@ from .broker_accounts import serialize_brokers
 from .broker_metadata import fingerprint
 from .cash_overview import CashOverview
 from .fx_provider_parser import unique
-from .legacy_identity import assert_native_origin, native_identity
+from .legacy_identity import assert_native_origin, native_identity_on_connection
 from .native_app_auth import CLIENT, lock_native_identity
 from .native_trade_sync import CURRENCIES, extends_fill_history, order_time, same_fill, validate_amount, validate_order
 from .profile_http import body_budget, bounded_body
+from .request_timing import elapsed, measure, start
 
 PATH = '/api/v2/account-assets/native-ledger'
 TRANSACTIONS = PATH + '/transactions'
@@ -527,20 +528,32 @@ async def commit(conn, db, who, raw):
         await lock_native_identity(conn, who, shared=True)
         return replay_receipt(old, expected)
 
-    await serialize_brokers(conn, who.id)
+    with measure('ledger_owner_lock'):
+        await serialize_brokers(conn, who.id)
     # The business lock serializes ledger mutations. A shared credential lock
     # still fences revocation through commit and lets readers use the prior head.
-    await lock_native_identity(conn, who, shared=True)
-    old = await receipt(conn, who.id, request_id)
-    if old:
-        return replay_receipt(old, expected)
+    with measure('ledger_grant_lock'):
+        await lock_native_identity(conn, who, shared=True)
+    preparing = start()
+    # The first receipt probe serves replays without joining the write queue.
+    # Once the owner is locked, read the receipt again together with the head.
+    current = await (await conn.execute("""
+        SELECT t.fingerprint, t.receipt, h.revision, h.snapshot, h.updated_at,
+               clock_timestamp() AS at
+        FROM (VALUES (%s::text, %s::uuid)) AS request(owner_id, request_id)
+        LEFT JOIN native_ledger_transactions t USING (owner_id, request_id)
+        LEFT JOIN native_ledger_heads h USING (owner_id)
+    """, (who.id, request_id))).fetchone()
+    if current['receipt'] is not None:
+        elapsed('ledger_prepare', preparing)
+        return replay_receipt(current, expected)
     await require_domain(conn, who.id, request_id, 'native_ledger')
-    head = await ledger_head(conn, who.id)
-    revision = head['revision'] if head else 0
+    head = current if current['revision'] is not None else None
+    revision = current['revision'] or 0
     if revision != raw['baseRevision']:
         conflict()
     kind = raw['kind']
-    now = (await (await conn.execute('SELECT clock_timestamp() AS at')).fetchone())['at']
+    now = current['at']
     transfers = {}
     audit_orders = raw.get('orders', [])
     if kind == 'adopt':
@@ -569,6 +582,8 @@ async def commit(conn, db, who, raw):
             else:
                 state = apply_trade(head['snapshot'], orders, positions, cash, now, request_id)
                 await assign_order_numbers(conn, state, orders)
+    elapsed('ledger_prepare', preparing)
+    writing = start()
     next_revision = revision + 1
     value = {'ownerId': who.id, 'requestId': str(request_id), 'kind': kind, 'sourceRevision': next_revision}
     await conn.execute('''
@@ -594,6 +609,7 @@ async def commit(conn, db, who, raw):
         cash=raw.get('cash', []) if isinstance(raw.get('cash'), list) else [],
         occurred_at=now,
     )
+    elapsed('ledger_write', writing)
     return value
 
 
@@ -607,46 +623,60 @@ def mount_native_ledger(app):
             if not app.state.native_ledger_enabled and request_id is None:
                 raise HTTPException(404, '接口未启用')
             assert_native_origin(request, db.settings)
-            who, grant = await native_identity(request, db, 'portfolio.write' if write else 'portfolio.read')
-            if grant['client_id'] != CLIENT:
-                raise HTTPException(401, '需要有效的 App 连接')
-            if registered_void:
-                from .registered_order_voids import selected_ids
-                if set(request.query_params) != {'orderId'}:
+            async with db.connection() as conn:
+                with measure('ledger_auth'):
+                    who, grant = await native_identity_on_connection(
+                        request, conn, 'portfolio.write' if write else 'portfolio.read',
+                    )
+                if grant['client_id'] != CLIENT:
+                    raise HTTPException(401, '需要有效的 App 连接')
+                if registered_void:
+                    from .registered_order_voids import selected_ids
+                    if set(request.query_params) != {'orderId'}:
+                        raise ValueError
+                    selected = selected_ids(request.query_params.getlist('orderId'))
+                elif request.query_params:
                     raise ValueError
-                selected = selected_ids(request.query_params.getlist('orderId'))
-            elif request.query_params:
-                raise ValueError
-            if write:
-                if request.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
-                    raise ValueError
-                window_seconds = 60
-                if not await app.state.rate_limit(db, 'native-ledger:' + who.id, 120, window_seconds=window_seconds):
-                    raise HTTPException(429, '同步频率过高，请稍后再试',
-                                        headers={'Retry-After': str(window_seconds)})
-                raw = json.loads(await bounded_body(request, body_budget(TRANSACTIONS)), object_pairs_hook=unique)
-            async with db.connection() as conn, conn.transaction():
                 if write:
-                    value = await commit(conn, db, who, raw)
+                    if request.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
+                        raise ValueError
+                    window_seconds = 60
+                    # Charge the durable budget outside the ledger transaction,
+                    # on the already checked connection. Release it before
+                    # receiving the body so a slow upload cannot hold the pool.
+                    with measure('ledger_admission'):
+                        allowed = await app.state.rate_limit(
+                            db, 'native-ledger:' + who.id, 120, window_seconds=window_seconds, connection=conn,
+                        )
+                    if not allowed:
+                        raise HTTPException(429, '同步频率过高，请稍后再试',
+                                            headers={'Retry-After': str(window_seconds)})
                 else:
-                    # Read one committed snapshot, including the old baseline
-                    # and its evidence, without joining the owner write queue.
-                    await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
-                    await lock_native_identity(conn, who, shared=True)
-                    if registered_void:
-                        from .registered_order_voids import evidence
-                        value = await evidence(conn, db, who, await ledger_head(conn, who.id), selected)
-                    elif request_id is not None:
-                        old = await receipt(conn, who.id, request_id)
-                        if not old:
-                            raise HTTPException(404, '未找到已提交回执')
-                        value = old['receipt']
-                    else:
-                        head = await ledger_head(conn, who.id)
-                        state = head['snapshot'] if head else (await legacy_baseline(conn, db, who))[0]
-                        value = {'ownerId': who.id, 'source': 'native' if head else 'legacy',
-                                 'sourceRevision': head['revision'] if head else 0,
-                                 'legacyRevision': None if head else fingerprint(state), **state}
+                    async with conn.transaction():
+                        # Read a committed snapshot without joining the owner write queue.
+                        await conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+                        await lock_native_identity(conn, who, shared=True)
+                        if registered_void:
+                            from .registered_order_voids import evidence
+                            value = await evidence(conn, db, who, await ledger_head(conn, who.id), selected)
+                        elif request_id is not None:
+                            old = await receipt(conn, who.id, request_id)
+                            if not old:
+                                raise HTTPException(404, '未找到已提交回执')
+                            value = old['receipt']
+                        else:
+                            head = await ledger_head(conn, who.id)
+                            state = head['snapshot'] if head else (await legacy_baseline(conn, db, who))[0]
+                            value = {'ownerId': who.id, 'source': 'native' if head else 'legacy',
+                                     'sourceRevision': head['revision'] if head else 0,
+                                     'legacyRevision': None if head else fingerprint(state), **state}
+            if write:
+                raw = json.loads(await bounded_body(request, body_budget(TRANSACTIONS)), object_pairs_hook=unique)
+                async with db.connection() as conn:
+                    async with conn.transaction():
+                        value = await commit(conn, db, who, raw)
+                        committing = start()
+                    elapsed('ledger_commit', committing)
             return JSONResponse({'code': 0, 'message': 'ok', 'data': value}, headers=headers)
         except UniqueViolation as exc:
             if exc.diag.constraint_name not in ('asset_request_domain', 'asset_request_domains_pkey', 'broker_request_domain'):

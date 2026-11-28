@@ -55,13 +55,19 @@ def native_wire_version(path):
     return None
 
 
-async def rate_limit(db, key, maximum, *, window_seconds=900):
+async def rate_limit(db, key, maximum, *, window_seconds=900, connection=None):
     if not isinstance(window_seconds, int) or not 1 <= window_seconds <= 86400:
         raise ValueError('Invalid authentication budget window')
+    if connection is not None:
+        return await consume_rate_limit(connection, key, maximum, window_seconds)
     async with db.connection() as conn:
-        row = await (
-            await conn.execute(
-                """
+        return await consume_rate_limit(conn, key, maximum, window_seconds)
+
+
+async def consume_rate_limit(conn, key, maximum, window_seconds):
+    row = await (
+        await conn.execute(
+            """
             WITH attempt AS (SELECT clock_timestamp() AS at)
             INSERT INTO auth_rate_limits (bucket,window_start,attempts) SELECT %s,at,1 FROM attempt
             ON CONFLICT (bucket) DO UPDATE SET
@@ -69,9 +75,9 @@ async def rate_limit(db, key, maximum, *, window_seconds=900):
               window_start=CASE WHEN auth_rate_limits.window_start<excluded.window_start-make_interval(secs => %s) THEN excluded.window_start ELSE auth_rate_limits.window_start END
             RETURNING attempts
         """,
-                (key,window_seconds,window_seconds),
-            )
-        ).fetchone()
+            (key,window_seconds,window_seconds),
+        )
+    ).fetchone()
     return row["attempts"] <= maximum
 
 

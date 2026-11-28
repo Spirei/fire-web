@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -206,35 +207,39 @@ class Calendars:
             original=calendar_release(release)
             revision = release["revision"]
             markets = await (
-                await conn.execute(
-                    "SELECT * FROM market_calendar_markets WHERE revision=%s ORDER BY market", (revision,)
-                )
+                await conn.execute("""
+                    SELECT m.*, y.verified_at
+                    FROM market_calendar_markets m
+                    LEFT JOIN market_calendar_years y
+                      ON y.revision=m.revision AND y.market=m.market AND y.year=%s
+                    WHERE m.revision=%s ORDER BY m.market
+                """, (year, revision))
             ).fetchall()
             calendar_markets(original,markets)
+            sources_by_market = defaultdict(list)
+            for source in await (await conn.execute("""
+                SELECT * FROM market_calendar_sources
+                WHERE revision=%s AND year=%s ORDER BY market, source_id
+            """, (revision, year))).fetchall():
+                sources_by_market[source["market"]].append(source)
+            verified_markets = [m["market"] for m in markets if m["verified_at"] is not None]
+            days_by_market = defaultdict(list)
+            if verified_markets:
+                for row in await (await conn.execute("""
+                    SELECT * FROM market_calendar_days
+                    WHERE revision=%s AND market=ANY(%s) AND day BETWEEN %s AND %s
+                    ORDER BY market, day
+                """, (revision, verified_markets, date(year, 1, 1), date(year, 12, 31)))).fetchall():
+                    days_by_market[row["market"]].append(row)
             result = {}
             for m in markets:
                 market = m["market"]
                 unknown = calendar_unknown(market, year)
-                verified = await (
-                    await conn.execute(
-                        "SELECT verified_at FROM market_calendar_years WHERE revision=%s AND market=%s AND year=%s",
-                        (revision, market, year),
-                    )
-                ).fetchone()
-                sources = await (
-                    await conn.execute(
-                        "SELECT * FROM market_calendar_sources WHERE revision=%s AND market=%s AND year=%s ORDER BY source_id",
-                        (revision, market, year),
-                    )
-                ).fetchall()
+                verified = m["verified_at"]
+                sources = sources_by_market[market]
                 days = unknown["days"]
                 if verified:
-                    rows = await (
-                        await conn.execute(
-                            "SELECT * FROM market_calendar_days WHERE revision=%s AND market=%s AND day BETWEEN %s AND %s ORDER BY day",
-                            (revision, market, date(year, 1, 1), date(year, 12, 31)),
-                        )
-                    ).fetchall()
+                    rows = days_by_market[market]
                     if len(rows) != len(days):
                         raise ValueError("stored annual plan incomplete")
                     source_ids = {s['source_id'] for s in sources}
@@ -283,7 +288,7 @@ class Calendars:
                         "to": f"{year}-12-31",
                         "verifiedYears": m["verified_years"],
                         "exchanges": m["exchanges"],
-                        "verifiedAt": verified["verified_at"].isoformat() if verified else None,
+                        "verifiedAt": verified.isoformat() if verified else None,
                         "basis": "official_annual_schedule",
                         "temporaryClosures": "unknown",
                     },

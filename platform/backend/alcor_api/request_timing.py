@@ -10,7 +10,9 @@ PHASES = {'pool_wait', 'db_guard', 'sql_execute', 'catalogue', 'json_encode',
           'read_admission_redis', 'read_admission_pg', 'history_proof', 'history_proof_wait',
           'history_authorize', 'history_select', 'history_evidence_load', 'history_assemble', 'history_admission',
           'assets_records', 'assets_quotes', 'assets_fx', 'assets_actual', 'assets_declarations',
-          'assets_averages', 'assets_cash', 'assets_profile', 'assets_assemble', 'assets_main'}
+          'assets_averages', 'assets_cash', 'assets_profile', 'assets_assemble', 'assets_main',
+          'ledger_auth', 'ledger_admission', 'ledger_owner_lock', 'ledger_grant_lock',
+          'ledger_prepare', 'ledger_write', 'ledger_commit'}
 
 
 class RequestTiming:

@@ -138,13 +138,18 @@ async def web_identity(
     return who,row,token
 
 
-async def native_identity(request,db,scope=None):
-    token=request.headers.get('authorization','').removeprefix('Bearer ')
+async def native_identity(request, db, scope=None):
     async with db.connection() as conn:
-        grant=await authenticate(conn,token,scope)
+        return await native_identity_on_connection(request, conn, scope)
+
+
+async def native_identity_on_connection(request, conn, scope=None):
     from .security import assert_expected_account
+
+    token = request.headers.get('authorization', '').removeprefix('Bearer ')
+    grant = await authenticate(conn, token, scope)
     assert_expected_account(request, grant["user_id"])
-    return identity_from_grant(grant,token,scope),grant
+    return identity_from_grant(grant, token, scope), grant
 
 
 PUBLIC_PROFILE_QUERY = 'SELECT u.id,u.uid,u.is_test,u.username,u.email,u.role,u.created_at,p.display_name,(p.avatar IS NOT NULL OR p.avatar_object_id IS NOT NULL) AS has_avatar,p.revision AS profile_revision,m.metadata,s.totp_enabled,s.email_verified\n        FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id LEFT JOIN identity_source_profiles m ON m.user_id=u.id LEFT JOIN identity_security s ON s.user_id=u.id'

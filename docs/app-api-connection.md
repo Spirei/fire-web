@@ -69,6 +69,8 @@ App 是主要服务对象，Web 可视化用于维护、配置和排查。现有
 
 读取预算另记 `read_admission_redis` 和 `read_admission_pg`，用于区分 Redis 计数与故障后数据库回退；两者同时出现表示该请求尝试缓存后使用了数据库，只有数据库段也可能处于缓存失败退避中。阶段只表示实际执行过的路径，不把缓存连通当作计数能力通过。
 
+原生账本记录 `ledger_auth`、`ledger_admission`、`ledger_owner_lock`、`ledger_grant_lock`、`ledger_prepare`、`ledger_write` 和 `ledger_commit`。其中 `ledger_admission` 包含限流计数的独立持久化，`ledger_commit` 包含订单事务提交。
+
 这些阶段可能包含彼此或并行，不能相加当作总耗时。响应头发出后冻结数值；后续流式传输和后台刷新不算首字节时长。没有 SQL、绑定参数、账号、令牌、原始地址或证券标识，也不向跨源客户端开放计时许可。网页转发保留该头；浏览器或 App 的完整请求时长还包含前置转发、网络和响应体读取，应分开核对。
 
 ## 并发、恢复与取消

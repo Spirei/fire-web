@@ -43,33 +43,21 @@ async def append_ledger_event(
     note: str = "",
     occurred_at=None,
 ):
-    row = await (await conn.execute(
-        "SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq FROM owner_ledger_events WHERE owner_id=%s",
-        (owner_id,),
-    )).fetchone()
-    seq = row["next_seq"]
-    clean_note = (note or "")[:200]
-    if occurred_at is None:
-        await conn.execute('''
-            INSERT INTO owner_ledger_events(
-                owner_id, seq, ledger_revision, request_id, kind,
-                orders, positions, cash, note
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (
+    # Callers hold the existing owner writer lock when assigning the next sequence.
+    row = await (await conn.execute("""
+        INSERT INTO owner_ledger_events(
             owner_id, seq, ledger_revision, request_id, kind,
-            Jsonb(list(orders)), Jsonb(list(positions)), Jsonb(list(cash)), clean_note,
-        ))
-    else:
-        await conn.execute('''
-            INSERT INTO owner_ledger_events(
-                owner_id, seq, ledger_revision, request_id, kind,
-                occurred_at, orders, positions, cash, note
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (
-            owner_id, seq, ledger_revision, request_id, kind,
-            occurred_at, Jsonb(list(orders)), Jsonb(list(positions)), Jsonb(list(cash)), clean_note,
-        ))
-    return seq
+            occurred_at, orders, positions, cash, note
+        )
+        SELECT %s, COALESCE(MAX(seq), 0) + 1, %s, %s, %s,
+               COALESCE(%s::timestamptz, clock_timestamp()), %s, %s, %s, %s
+        FROM owner_ledger_events WHERE owner_id=%s
+        RETURNING seq
+    """, (
+        owner_id, ledger_revision, request_id, kind, occurred_at, Jsonb(list(orders)),
+        Jsonb(list(positions)), Jsonb(list(cash)), (note or "")[:200], owner_id,
+    ))).fetchone()
+    return row["seq"]
 
 
 async def recent_ledger_events(conn, owner_id: str, *, limit: int = 30):

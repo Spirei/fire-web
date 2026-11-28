@@ -78,6 +78,24 @@ async def test_app_mutation_limits_include_retry_after(client, admin, db):
         assert response.headers['Retry-After'] == '60'
 
 
+@pytest.mark.asyncio
+async def test_ledger_admission_remains_durable_without_a_business_commit(client, admin, db):
+    headers = await native_headers(db, admin, SCOPES)
+    body = {"content-type": "application/json", **headers}
+    rejected = await client.post(TRANSACTIONS, headers={**body, "X-Alcor-Expected-Account": "different"}, content="{")
+    assert rejected.status_code == 403
+    malformed = await client.post(TRANSACTIONS, headers=body, content="{")
+    assert (malformed.status_code, malformed.json()["code"]) == (400, 40001)
+    async with db.connection() as conn:
+        budget = await (await conn.execute(
+            "SELECT attempts FROM auth_rate_limits WHERE bucket=%s", ("native-ledger:" + admin,),
+        )).fetchone()
+        assert budget["attempts"] == 1
+        assert not await (await conn.execute(
+            "SELECT 1 FROM native_ledger_transactions WHERE owner_id=%s", (admin,),
+        )).fetchone()
+
+
 def order(record, broker=None, *, at, created=None, side='buy', quantity='15', price='300',
           fees='1.05', net='4501.05'):
     return {
