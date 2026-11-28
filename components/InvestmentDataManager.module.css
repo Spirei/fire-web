@@ -82,6 +82,7 @@
   padding: 0 2px;
   white-space: nowrap;
 }
+.tradeViewNav { margin-block: 4px 14px; }
 .previewNav button:hover { color: var(--data-ink); }
 .previewNav button[aria-pressed="true"] { color: var(--data-accent); font-weight: 650; }
 .previewNav button[aria-pressed="true"]::after {
@@ -186,8 +187,8 @@
   justify-content: space-between;
   column-gap: 12px;
   border-bottom: 1px solid var(--data-edge);
-  padding-bottom: 2px;
-  margin: 0 0 12px;
+  padding-bottom: 4px;
+  margin: 0 0 15px;
 }
 .previewNav button { min-height: 38px; }
 .result { background: var(--data-soft); border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; }
@@ -377,7 +378,7 @@
 .sheet th { position: sticky; top: 0; background: var(--data-soft); }
 @media (max-width: 560px) {
   .browser { padding-inline: 9px; }
-  .previewNav { gap: 10px; }
+  .previewNav { gap: 12px; }
   .previewNav button { font-size: 13px; }
   .listHead, .listRow { gap: 8px; padding-inline: 10px; }
   .fileName { gap: 7px; }
@@ -394,16 +395,21 @@
 .snapshotHoldings {
   --snapshot-ink: #17232d;
   --snapshot-muted: #68717e;
-  --snapshot-control: #f6f6f6;
+  --snapshot-control: #f1f4f6;
+  --snapshot-positive: #a83d18;
+  --snapshot-negative: #00796b;
   border: 1px solid var(--data-edge, #e5e7eb);
-  border-radius: 16px;
+  border-radius: 19px;
   background: #fff;
   color: var(--snapshot-ink);
 }
 .snapshotInk { color: var(--snapshot-ink); }
+.snapshotPositive { color: var(--snapshot-positive); }
+.snapshotNegative { color: var(--snapshot-negative); }
 .snapshotMuted, .snapshotIconFallback { color: var(--snapshot-muted); }
-.snapshotIconFallback { background: var(--snapshot-control); }
+.snapshotIconFallback { border-radius: 50%; background: var(--snapshot-control); }
 .snapshotMarket { padding: 3px 12px 8px; }
+.snapshotHoldingRow:hover { background: color-mix(in srgb, var(--snapshot-control), transparent 45%); }
 .snapshotMarket + .snapshotMarket { border-top: 1px solid var(--data-edge, #e5e7eb); }
 .snapshotMarketMetrics {
   display: grid;
@@ -417,14 +423,16 @@
 .snapshotMarketMetrics > div:last-child { text-align: end; }
 .snapshotMarketMetrics dt { font-size: 11px; color: var(--snapshot-muted); }
 .snapshotMarketMetrics dd { margin-top: 3px; overflow-wrap: anywhere; font-size: 13px; font-weight: 550; font-variant-numeric: tabular-nums; }
-.snapshotHoldingActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 10px; background: var(--snapshot-control); }
+.snapshotHoldingActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 13px; background: var(--snapshot-control); }
 .snapshotHoldingActions button { display: flex; min-height: 48px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--snapshot-muted); font-size: 11px; }
 .snapshotHoldingActions button:hover, .snapshotHoldingActions button[aria-expanded="true"] { color: var(--data-accent, #0866ff); }
 :global(.dark) .snapshotHoldings {
   --snapshot-ink: #edf1f6;
   --snapshot-muted: #a3acb7;
-  --snapshot-control: #2a343d;
-  background: #1b252f;
+  --snapshot-control: #25323c;
+  --snapshot-positive: #ff754d;
+  --snapshot-negative: #29c7ae;
+  background: #182631;
   border-color: #34414d;
 }
 :global(.dark) .snapshotMarket + .snapshotMarket, :global(.dark) .snapshotMarketMetrics { border-color: #34414d; }
@@ -437,6 +445,8 @@
   --snapshot-muted: #68717e;
   --snapshot-control: #edf0f3;
   --snapshot-card: #fff;
+  --snapshot-positive: #a83d18;
+  --snapshot-negative: #00796b;
   --snapshot-panel: #f6f7f8;
   --snapshot-line: #dfe4e8;
   color: var(--snapshot-ink);
@@ -451,24 +461,40 @@
   --snapshot-muted: #a3acb7;
   --snapshot-control: #2a343d;
   --snapshot-card: #1d1f21;
-  --snapshot-panel: #0f1821;
+  --snapshot-positive: #ff754d;
+  --snapshot-negative: #29c7ae;
+  --snapshot-panel: #0d151e;
   color-scheme: dark;
   --snapshot-line: #34414d;
 }
 .snapshotProfitHeader { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-block: 4px 13px; }
-.snapshotProfitPeriods { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; margin-bottom: 10px; }
+html:root[data-palette] body .snapshotProfitHeader > button:global(.capsule-icon-control) {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  max-width: 38px;
+  max-height: 38px;
+  border-color: transparent;
+  border-radius: 50%;
+  background: var(--snapshot-control);
+  color: var(--snapshot-ink);
+}
+.snapshotProfitPeriods { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
 .snapshotProfitPeriods > button { border-radius: 999px; color: var(--snapshot-muted); }
-.snapshotProfitPeriods > button[aria-pressed] { min-height: 26px; padding: 2px 7px; background: var(--snapshot-control); font-size: 11px; }
+.snapshotProfitPeriods > button[aria-pressed] { min-height: 28px; padding: 2px 8px; background: var(--snapshot-control); font-size: 11px; }
 .snapshotProfitPeriods > button[aria-pressed="true"] { background: var(--snapshot-card); color: var(--snapshot-ink); box-shadow: inset 0 0 0 1px var(--snapshot-line); }
 .snapshotProfitPeriods > button:last-child { margin-inline-start: auto; }
 .snapshotProfitDate { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; white-space: nowrap; font-size: 11px; }
 .snapshotProfitDate input { min-width: 0; padding: 5px 8px; border: 1px solid var(--snapshot-line); border-radius: 8px; background: var(--snapshot-control); }
-.snapshotProfitCard { border-radius: 13px; background: var(--snapshot-card); margin-bottom: 8px; padding: 13px; font-size: 13px; }
+.snapshotProfitCard { border-radius: 15px; background: var(--snapshot-card); margin-bottom: 8px; padding: 14px; font-size: 13px; }
+.snapshotProfitCard:last-child { margin-bottom: 0; }
+.snapshotProfitHeadline { display: block; margin-block: 7px 10px; font-size: clamp(26px, 6vw, 34px); line-height: 1.15; font-variant-numeric: tabular-nums; }
 .snapshotProfitTotal { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid var(--snapshot-line); padding-top: 10px; }
 .snapshotCashflow { width: 100%; table-layout: fixed; color: var(--snapshot-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
 .snapshotCashflow thead { color: var(--snapshot-muted); }
 .snapshotCashflow th { padding: 0 2px 6px 0; text-align: start; font-size: 10px; font-weight: 500; }
 .snapshotCashflow th:nth-child(2) { width: 25%; }
 .snapshotCashflow :is(th, td):nth-child(n + 3) { text-align: end; }
-.snapshotCashflow td { border-top: 1px solid var(--snapshot-line); padding: 8px 2px 8px 0; vertical-align: top; overflow-wrap: anywhere; }
+.snapshotCashflow td { border-top: 1px solid var(--snapshot-line); padding: 9px 2px 9px 0; vertical-align: top; overflow-wrap: anywhere; }
 .snapshotCashflow small { display: block; color: var(--snapshot-muted); font-size: 10px; }

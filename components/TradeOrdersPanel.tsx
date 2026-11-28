@@ -13,6 +13,7 @@ import MobileExplanation from "@/components/MobileExplanation";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { IconFilter } from "@tabler/icons-react";
 import { fmtMoney, fmtNum, fmtPrice, fmtQty } from "@/lib/format";
 import { marketMeta, type Quote, type TradeOrder } from "@/lib/types";
 import MarketIcon from "@/components/MarketIcon";
@@ -300,7 +301,8 @@ function FilterSelect({
   icon,
   options,
   onSelect,
-  highlight = false
+  highlight = false,
+  compact = false,
 }: {
   /** 按钮完整文字，如「市场:美股」「订单状态:已成交」 */
   display: string;
@@ -310,6 +312,7 @@ function FilterSelect({
   onSelect: (value: string) => void;
   /** 是否蓝色高亮（有选中值或菜单展开） */
   highlight?: boolean;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -334,7 +337,8 @@ function FilterSelect({
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
-        className={`inline-flex h-8 items-center gap-1.5 rounded-[9px] border px-3 text-xs font-medium transition-colors ${
+        data-filtered={highlight}
+        className={compact ? styles.orderStatusButton : `inline-flex h-8 items-center gap-1.5 rounded-[9px] border px-3 text-xs font-medium transition-colors ${
           open || highlight
             ? "border-[#3297f6] bg-[#3297f6]/5 text-[#3297f6] dark:bg-[#3297f6]/10 dark:text-[#8ec2ff]"
             : "border-edge bg-white text-ink hover:bg-brand-hover dark:border-white/10 dark:bg-[#1c222d] dark:text-white dark:hover:bg-white/10"
@@ -416,6 +420,7 @@ export default function TradeOrdersPanel({
   const [timeFilter, setTimeFilter] = usePersistedState<TimeFilterState>(`${storageKey}:time`, DEFAULT_TIME_FILTER);
   const [columnPrefs, setColumnPrefs] = usePersistedState<OrderColumnPref[]>(ORDER_COLUMNS_KEY, DEFAULT_ORDER_COLUMNS.map((item) => ({ ...item })));
   const [sort, setSort] = usePersistedState<OrderSort | null>(`${storageKey}:sort`, { key: "tradedAt", dir: "desc" });
+  const [showQueryFilters, setShowQueryFilters] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -1065,24 +1070,43 @@ export default function TradeOrdersPanel({
           {icon ? <img src={icon} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className={styles.orderQueryIcon}>{order.name.slice(0, 1)}</span>}
           <EtfDoubleBadge market={order.market} code={order.code} name={order.name} className="!-bottom-1 !h-3.5 !w-3.5 !text-[7px]" />
         </span>
-        <span className="min-w-0"><strong className="block truncate font-medium">{order.name}</strong><small className="block truncate">{order.market} {order.code}</small></span>
+        <span className="min-w-0"><strong className="block truncate font-medium">{order.name}</strong><small className="block truncate"><span className={styles.orderMarket}>{order.market}</span> {order.code}</small></span>
       </span>
       {today ? <>
         <span>{price == null ? "—" : orderPriceFormat.format(price)}<small>{fmtNum(quotes?.[order.recordId]?.price ?? "")}</small></span>
         <span>{fmtQty(order.qty)}<small>{fmtQty(filled ?? "")}</small></span>
-        <span><b className={order.side === "buy" ? "text-up" : order.side === "sell" ? "text-down" : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
+        <span><b className={order.side === "buy" ? styles.orderBuy : order.side === "sell" ? styles.orderSell : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
       </> : <>
         <span>{fmtQty(order.qty)}<small>{price == null ? "—" : orderPriceFormat.format(price)}</small></span>
-        <span><b className={order.side === "buy" ? "text-up" : order.side === "sell" ? "text-down" : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
+        <span><b className={order.side === "buy" ? styles.orderBuy : order.side === "sell" ? styles.orderSell : undefined}>{side}</b><small>{STATUS_LABEL[order.status] ?? "未知状态"}</small></span>
         <time dateTime={order.tradedAt}>{split < 0 ? date || "—" : date.slice(0, split).replaceAll("/", ".")}<small>{split < 0 ? "" : date.slice(split + 1)}</small></time>
       </>}
     </button>;
   }
 
+  const statusControl = (
+    <FilterSelect
+      compact={readOnly}
+      display={readOnly ? (statusFilter === "all" ? "全部" : STATUS_LABEL[statusFilter])
+        : statusFilter === "all" ? "订单状态" : `订单状态:${STATUS_LABEL[statusFilter] ?? "其他"}`}
+      value={statusFilter}
+      highlight={statusFilter !== "all"}
+      options={[
+        { value: "all", label: "全部" },
+        { value: "filled", label: "已成交" },
+        { value: "pending", label: "待成交" },
+        { value: "cancelled", label: "已撤销" },
+        { value: "expired", label: "已失效" }
+      ]}
+      onSelect={(value) => setStatusFilter(value as StatusFilter)}
+    />
+  );
+
   const Wrapper = bare ? "div" : "section";
   return (
-    <Wrapper className={`${bare ? "overflow-hidden" : "card overflow-hidden"} ${readOnly ? styles.archivedOrders : ""}`}>
-      <div className={`trade-orders-toolbar flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3.5`}>
+    <Wrapper role={readOnly && bare ? "region" : undefined} aria-label={readOnly ? "订单列表" : undefined}
+      className={readOnly ? styles.archivedOrders : bare ? "overflow-hidden" : "card overflow-hidden"}>
+      <div className={`${styles.orderToolbar} trade-orders-toolbar flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3.5`}>
         <div className={`${styles.orderTabs} flex items-center gap-5`}>
           {([["today", "当日订单"], ["history", "历史订单"], ["strategy", "策略订单"]] as const).map(([key, label]) => (
             <button
@@ -1095,13 +1119,13 @@ export default function TradeOrdersPanel({
               }`}
             >
               {label}
-              {tab === key && <span className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-[#3297f6]" />}
+              {tab === key && <span className={styles.orderTabLine} />}
             </button>
           ))}
         </div>
-        <div className={`${styles.orderTools} trade-orders-actions flex items-center gap-2`}>
+        <div className={`${styles.orderTools} ${readOnly ? "" : "trade-orders-actions"} flex items-center gap-2`}>
           <div ref={searchRef} className={`relative ${styles.orderSearch}`}>
-            <div className="relative">
+            <div className={`relative ${readOnly ? styles.orderQuerySearchField : ""}`}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint">
                 <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
               </svg>
@@ -1127,7 +1151,8 @@ export default function TradeOrdersPanel({
                 }}
                 placeholder="搜索证券名称或代码"
                 aria-label="搜索证券名称或代码"
-                className="h-8 w-[180px] rounded-[9px] border border-edge bg-white pl-8 pr-2.5 text-xs text-ink placeholder:text-faint transition-colors focus:border-edge-strong dark:border-white/10 dark:bg-[#1c222d] dark:text-white"
+                className={readOnly ? styles.orderQueryInput
+                  : "h-8 w-[180px] rounded-[9px] border border-edge bg-white pl-8 pr-2.5 text-xs text-ink placeholder:text-faint transition-colors focus:border-edge-strong dark:border-white/10 dark:bg-[#1c222d] dark:text-white"}
               />
               {searchInput && (
                 <IconButton size="sm"
@@ -1161,8 +1186,8 @@ export default function TradeOrdersPanel({
               </div>
             )}
           </div>
-          {tab !== "strategy" && <span className="text-xs text-muted">{searchedOrders.length} 笔</span>}
-          {onRefresh && tab !== "strategy" && <RefreshButton onClick={() => void onRefresh()} title="刷新订单" />}
+          {!readOnly && tab !== "strategy" && <span className="text-xs text-muted">{searchedOrders.length} 笔</span>}
+          {onRefresh && tab !== "strategy" && <RefreshButton onClick={() => void onRefresh()} title="刷新订单" className={readOnly ? styles.orderQueryRefresh : undefined} />}
           {!readOnly && tab !== "strategy" && <>
           <button
             type="button"
@@ -1207,7 +1232,15 @@ export default function TradeOrdersPanel({
         </div>
       </div>
 
-      {tab !== "strategy" && <div className="flex flex-wrap items-center gap-2.5 border-b border-edge px-5 py-2.5">
+      {readOnly && tab !== "strategy" && <div className={styles.orderFilters}>
+        {statusControl}
+        <IconButton size="sm" type="button" label="订单筛选" aria-expanded={showQueryFilters}
+          data-filtered={marketFilter !== "ALL" || typeFilter !== "all" || timeFilter.mode !== "all"}
+          className={styles.orderFilterButton} onClick={() => { setShowQueryFilters(value => !value); setTimeOpen(false); }}>
+          <IconFilter size={15} />
+        </IconButton>
+      </div>}
+      {tab !== "strategy" && (!readOnly || showQueryFilters) && <div className={`${styles.advancedOrderFilters} flex flex-wrap items-center gap-2.5 border-b border-edge px-5 py-2.5`}>
         <FilterSelect
           display={marketFilter === "ALL" ? "市场" : `市场:${marketMeta(marketFilter).label}`}
           value={marketFilter}
@@ -1229,19 +1262,7 @@ export default function TradeOrdersPanel({
           ]}
           onSelect={(value) => setTypeFilter(value as OrderTypeFilter)}
         />
-        <FilterSelect
-          display={statusFilter === "all" ? "订单状态" : `订单状态:${STATUS_LABEL[statusFilter] ?? "其他"}`}
-          value={statusFilter}
-          highlight={statusFilter !== "all"}
-          options={[
-            { value: "all", label: "全部" },
-            { value: "filled", label: "已成交" },
-            { value: "pending", label: "待成交" },
-            { value: "cancelled", label: "已撤销" },
-            { value: "expired", label: "已失效" }
-          ]}
-          onSelect={(value) => setStatusFilter(value as StatusFilter)}
-        />
+        {!readOnly && statusControl}
         <div className="relative">
           <button
             ref={timeBtnRef}
@@ -1426,7 +1447,7 @@ export default function TradeOrdersPanel({
         </div>
       ) : (
         <>
-        <div className={styles.compactOrders}>
+        <div className={styles.compactOrders} data-tab={tab}>
           <div className={styles.orderQueryColumns} aria-hidden="true">
             {(tab === "today" ? ["名称/代码", "委托/现价", "总量/已成", "方向/状态"]
               : ["名称/代码", "总量/委托", "方向/状态", "时间"]).map(label => <span key={label}>{label}</span>)}
@@ -1786,7 +1807,7 @@ export default function TradeOrdersPanel({
           ["创建时间", detail.createdAt ? formatOrderTime(detail.createdAt, detail.market) : "—"],
           ["成交时间", filled && detail.tradedAt ? formatOrderTime(detail.tradedAt, detail.market) : "—"],
           ["订单类型", detail.side === "dividend" ? "股息入账" : ORDER_TYPE_LABEL[detail.orderType] ?? "—"],
-          ["方向", <span key="side" className={detail.side === "buy" ? "text-up" : detail.side === "sell" ? "text-down" : undefined}>{side}</span>],
+          ["方向", <span key="side" className={detail.side === "buy" ? styles.orderBuy : detail.side === "sell" ? styles.orderSell : undefined}>{side}</span>],
           ["委托价格", unitPrice(detail.orderPrice === undefined ? (detail.orderType ? detail.price : null) : detail.orderPrice)],
           ["成交价格", unitPrice(detail.executedPrice === undefined ? (filled ? detail.price : null) : detail.executedPrice)],
           ["成交金额", money(filled ? detail.amount : null)],
@@ -1799,7 +1820,7 @@ export default function TradeOrdersPanel({
           ...(!readOnly ? [["委托数量", fmtQty(detail.qty)] as [string, string]] : []),
           ...(detail.triggerPrice != null ? [["触发价", unitPrice(detail.triggerPrice)] as [string, string]] : []),
           ...(detail.triggerStatus ? [["触发状态", detail.triggerStatus] as [string, string]] : []),
-          ...(detail.positionQtyAfter != null ? [["成交后持仓", fmtQty(detail.positionQtyAfter)
+          ...(!readOnly && detail.positionQtyAfter != null ? [["成交后持仓", fmtQty(detail.positionQtyAfter)
             + (detail.positionCostAfter == null ? "" : ` @ ${unitPrice(detail.positionCostAfter)}`)] as [string, string]] : []),
           ...(detail.session ? [["时段", detail.session] as [string, string]] : []),
           ...(detail.note ? [["备注", detail.note] as [string, string]] : []),

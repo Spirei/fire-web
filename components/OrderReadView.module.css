@@ -4,6 +4,12 @@
   --order-surface: #fff;
   --order-control: #f0f3f5;
   --order-line: #e4e9ee;
+  --order-buy: #a83d18;
+  --order-sell: #00796b;
+  --order-market: #1763a4;
+  --order-toolbar-fill: #f5f7fa;
+  --order-toolbar-edge: #dfe6ee;
+  --order-toolbar-hover: #eaf1f7;
   color: var(--order-ink);
 }
 :global(.dark) .archivedOrders, :global(.dark) .compactOrders, :global(.dark) .orderModal {
@@ -12,13 +18,108 @@
   --order-surface: #1b252f;
   --order-control: #2a343d;
   --order-line: #34414d;
+  --order-buy: #ff754d;
+  --order-sell: #29c7ae;
+  --order-market: #5db5ff;
+  --order-toolbar-fill: #263440;
+  --order-toolbar-edge: #384854;
+  --order-toolbar-hover: #314350;
 }
-.archivedOrders { border-radius: 14px; background: var(--order-surface); border: 1px solid var(--order-line); }
+.archivedOrders {
+  border-radius: 18px;
+  background: var(--order-surface);
+  border: 1px solid var(--order-line);
+}
+:global(.dark) .orderModal {
+  --order-surface: #131517;
+  --order-control: #202224;
+  --order-line: #323538;
+}
+.orderBuy { color: var(--order-buy); }
+.orderSell { color: var(--order-sell); }
+.orderMarket { color: var(--order-market); }
+.archivedOrders .orderToolbar {
+  row-gap: 10px;
+  padding: 12px clamp(10px, 3vw, 18px) 0;
+  border-color: var(--order-line);
+}
 .archivedOrders .orderTools { order: -1; width: 100%; }
 .archivedOrders .orderSearch { flex: 1; min-width: 0; }
-.archivedOrders .orderSearch input { width: 100%; }
+.orderQuerySearchField {
+  height: 38px;
+  border: 1px solid var(--order-toolbar-edge);
+  border-radius: 11px;
+  background: var(--order-toolbar-fill);
+}
+.orderQuerySearchField:focus-within { border-color: var(--order-market); }
+html:root[data-palette] body .archivedOrders .orderQueryInput {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--order-ink);
+  padding: 0 36px 0 31px;
+  font-size: 12px;
+}
+.orderQueryInput::placeholder { color: var(--order-muted); }
+.archivedOrders .orderFilters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px clamp(10px, 3vw, 18px) 6px;
+  border: 0;
+}
+.archivedOrders .orderStatusButton,
+html:root[data-palette] body .archivedOrders :is(.orderFilterButton, .orderQueryRefresh):global(.capsule-icon-control) {
+  border: 1px solid var(--order-toolbar-edge);
+  background: var(--order-toolbar-fill);
+  color: var(--order-ink);
+  transition: none;
+}
+.archivedOrders .orderStatusButton {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 550;
+}
+html:root[data-palette] body .archivedOrders .orderFilterButton:global(.capsule-icon-control) { border-radius: 50%; }
+html:root[data-palette] body .archivedOrders .orderQueryRefresh:global(.capsule-icon-control) {
+  width: 38px;
+  min-width: 38px;
+  max-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  max-height: 38px;
+  border-radius: 11px;
+}
+.archivedOrders .orderStatusButton:is([aria-expanded="true"], [data-filtered="true"]),
+html:root[data-palette] body .archivedOrders .orderFilterButton:is([aria-expanded="true"], [data-filtered="true"]):global(.capsule-icon-control) {
+  border-color: var(--order-market);
+  color: var(--order-market);
+}
+@media (hover: hover) {
+  .archivedOrders .orderStatusButton:hover,
+  html:root[data-palette] body .archivedOrders :is(.orderFilterButton, .orderQueryRefresh):global(.capsule-icon-control):hover {
+    background: var(--order-toolbar-hover);
+  }
+}
+.archivedOrders .advancedOrderFilters {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px clamp(10px, 3vw, 18px) 8px;
+  border: 0;
+}
 .archivedOrders .desktopOrders, .compactOrders { display: none; }
-.archivedOrders .compactOrders { display: block; }
+.archivedOrders .compactOrders { display: block; border-radius: 0 0 17px 17px; }
 .orderHistoryShortcut { display: none; padding: 8px 0 14px; text-align: center; }
 .archivedOrders .orderHistoryShortcut { display: block; }
 html:root[data-palette] body .orderModal:global(.app-modal-panel) {
@@ -26,31 +127,47 @@ html:root[data-palette] body .orderModal:global(.app-modal-panel) {
   color: var(--order-ink);
   border-color: var(--order-line);
 }
+.orderModal :global(.app-modal-header) { position: relative; min-height: 32px; justify-content: center; margin-bottom: 10px; }
+html:root[data-palette] body .orderModal :global(.app-modal-header) > button:global(.capsule-icon-control) {
+  position: absolute;
+  inset-inline-end: 0;
+  border-radius: 50%;
+  background: var(--order-control);
+}
 html:root .orderModal :global(.text-ink) { color: var(--order-ink); }
 html:root .orderModal :global(.text-muted) { color: var(--order-muted); }
 html:root .orderModal .orderDetailHistory :global(.text-brand-deep) { color: #aa6716; }
 html:root:global(.dark) .orderModal .orderDetailHistory :global(.text-brand-deep) { color: #ffd074; }
+.orderTabs { column-gap: clamp(9px, 3vw, 18px); }
 .orderTabs button { white-space: nowrap; }
+html:root .archivedOrders .orderTabs button { color: var(--order-muted); transition: none; }
+html:root .archivedOrders .orderTabs button[aria-pressed="true"] { color: var(--order-ink); }
+.orderTabLine { position: absolute; inset: auto 0 0; height: 2px; border-radius: 99px; background: #3297f6; }
+.archivedOrders .orderTabLine { width: 19px; margin-inline: auto; background: var(--order-ink); }
 .compactOrders { padding-inline: clamp(10px, 3vw, 18px); background: var(--order-surface); }
 .orderQueryColumns, .orderQueryRow {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, .82fr) minmax(0, .78fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, .82fr) minmax(0, .78fr) minmax(0, 1fr);
   gap: 5px;
   text-align: end;
 }
-.orderQueryColumns { padding-block: 8px; color: var(--order-muted); font-size: 10px; }
+.compactOrders[data-tab="history"] :is(.orderQueryColumns, .orderQueryRow) {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, .8fr) minmax(0, .68fr) minmax(70px, 1fr);
+}
+.orderQueryColumns { padding-block: 9px; color: var(--order-muted); font-size: 10px; }
 .orderQueryColumns span:first-child { text-align: start; }
-.orderQueryRow { align-items: center; width: 100%; min-height: 51px; padding-block: 7px; border-top: 1px solid var(--order-line); font-size: 11px; font-variant-numeric: tabular-nums; }
+.orderQueryRow { align-items: center; width: 100%; min-height: 56px; padding-block: 8px; border-top: 1px solid var(--order-line); font-size: 11px; font-variant-numeric: tabular-nums; }
 .orderQueryRow:hover { background: var(--order-control); }
 .orderQueryRow > :is(span, time) { min-width: 0; overflow-wrap: anywhere; }
+.orderQueryRow time small { white-space: nowrap; }
 .orderQueryRow small { display: block; color: var(--order-muted); font-size: 10px; }
 .orderQueryIdentity { display: flex; min-width: 0; align-items: center; gap: 5px; text-align: start; }
 .orderQueryIcon { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--order-control); color: var(--order-muted); }
-.orderDetailIdentity, .orderDetailCard, .orderDetailHistory { border-radius: 13px; background: var(--order-control); padding: 11px 13px; }
+.orderDetailIdentity, .orderDetailCard, .orderDetailHistory { border-radius: 16px; background: var(--order-control); padding: 12px 13px; }
 .orderDetailIdentity { display: flex; align-items: center; gap: 8px; }
 .orderDetailIdentity small { display: block; color: var(--order-muted); font-size: 11px; }
 .orderDetail > h4 { margin: 15px 0 7px; color: var(--order-muted); font-size: 12px; font-weight: 600; }
-.orderDetailCard { display: grid; gap: 8px; font-size: 12px; }
+.orderDetailCard { display: grid; gap: 10px; font-size: 12px; }
 .orderDetailCard > div { display: flex; justify-content: space-between; gap: 10px; }
 .orderDetailCard dt { color: var(--order-muted); white-space: nowrap; }
 .orderDetailCard dd { min-width: 0; overflow-wrap: anywhere; text-align: end; font-variant-numeric: tabular-nums; }

@@ -587,7 +587,7 @@ export default function InvestmentDataManager({ ownerId, sessionCsrf, archiveAct
         <IconRefresh size={16} aria-hidden="true" />
       </Capsule>}
     </div>
-    {folder === "trades" && !showFile && <nav className={styles.previewNav} aria-label="成交与订单视图">
+    {folder === "trades" && !showFile && <nav className={`${styles.previewNav} ${styles.tradeViewNav}`} aria-label="成交与订单视图">
       <button type="button" aria-pressed={showOrderQuery} onClick={() => setTradeView("query")}>订单查询</button>
       <button type="button" aria-pressed={!showOrderQuery} onClick={() => setTradeView("files")}>文件目录</button>
     </nav>}

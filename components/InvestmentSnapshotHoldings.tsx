@@ -35,7 +35,7 @@ function signed(value: number | null, digits: number, unit = "") {
   return value === null ? "—" : `${value > 0 ? "+" : ""}${amount(value, digits)}${unit}`;
 }
 
-const tone = (value: number | null) => value === null || value === 0 ? styles.snapshotInk : value > 0 ? "text-up" : "text-down";
+const tone = (value: number | null) => value === null || value === 0 ? styles.snapshotInk : value > 0 ? styles.snapshotPositive : styles.snapshotNegative;
 
 function total(values: (number | null)[]) {
   if (!values.length || values.some(value => value === null)) return null;
@@ -142,7 +142,7 @@ export default function InvestmentSnapshotHoldings({ positions, calendar, onOpen
               const percent = profit !== null && capital !== null && capital > 0 ? profit / capital * 100 : null;
               const isExpanded = expanded === position.recordId;
               return <tbody key={position.recordId}>
-                <tr className="cursor-pointer align-middle" onClick={() => {
+                <tr className={`${styles.snapshotHoldingRow} cursor-pointer align-middle`} onClick={() => {
                   setExpanded(isExpanded ? null : position.recordId);
                 }}>
                   <th scope="row" className="py-2.5 text-left font-medium">

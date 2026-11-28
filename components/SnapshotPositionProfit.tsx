@@ -55,7 +55,7 @@ function startDate(period: Period, day: string) {
 function amount(value: number | null, signed = false) {
   return value === null ? "—" : `${signed && value > 0 ? "+" : ""}${fmtNum(value)}`;
 }
-const tone = (value: number | null) => value === null ? styles.snapshotMuted : value > 0 ? "text-up" : value < 0 ? "text-down" : styles.snapshotInk;
+const tone = (value: number | null) => value === null ? styles.snapshotMuted : value > 0 ? styles.snapshotPositive : value < 0 ? styles.snapshotNegative : styles.snapshotInk;
 const feeKnown = (order: TradeOrder) => order.actualFeeKnown === true || (order.actualFeeKnown !== false
   && (order.feeSource === "owner_recorded" || order.feeSource === "broker_reported"));
 const EPSILON = 0.00000001;
@@ -212,7 +212,7 @@ export default function SnapshotPositionProfit({ position, day, cutoff, captured
     <div className={styles.snapshotProfitCard} aria-busy={loading}>
       <p className={styles.snapshotMuted}>{rangeStart && rangeStart !== day ? `${rangeStart} – ` : ""}{day}</p>
       <h4 className="mt-2 font-semibold">累计盈亏{currency ? ` (${currency})` : ""}</h4>
-      <strong className={`my-2 block text-3xl font-bold tabular-nums ${tone(profit)}`}>{profit === null ? (loading && !orderRead ? "读取中…" : "待核对") : amount(profit, true)}</strong>
+      <strong className={`${styles.snapshotProfitHeadline} ${tone(profit)}`}>{profit === null ? (loading && !orderRead ? "读取中…" : "待核对") : amount(profit, true)}</strong>
       <div className="flex justify-between gap-3 text-xs">期末持仓盈亏 <span className={tone(current)}>{amount(current, true)}</span></div>
     </div>
     <div className={styles.snapshotProfitCard}>
@@ -231,7 +231,7 @@ export default function SnapshotPositionProfit({ position, day, cutoff, captured
             <thead><tr>{["时间", "业务类型", "数量/价格", "资金方向", "金额"].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
             <tbody>{lines.slice(0, limit).map(line => <tr key={line.id}>
               <td>{line.day.slice(5).replace("-", ".")}<small>{line.day.slice(0, 4)}</small></td>
-              <td className={line.order?.side === "buy" ? "text-up" : line.order?.side === "sell" ? "text-down" : undefined}>{line.title}</td>
+              <td className={line.order?.side === "buy" ? styles.snapshotPositive : line.order?.side === "sell" ? styles.snapshotNegative : undefined}>{line.title}</td>
               <td>{line.order ? fmtQty(known(line.order.qty) ?? "") : "—"}<small>{line.order ? amount(known(line.order.price)) : "—"}</small></td>
               <td>{line.incoming ? "入账" : "出账"}</td>
               <td>{amount(line.amount)}{line.currency !== currency && <small>{line.currency}</small>}</td>
